@@ -2,7 +2,8 @@ export default {
   lang: "zh-CN",
   title: "BigWorld 引擎架构研究",
   description: "面向 MMO 游戏服务器架构学习、源码证据链与现代化取舍分析的 BigWorld 文档站",
-  cleanUrls: true,
+  base: "/BigWorld/",
+  cleanUrls: false,
   lastUpdated: true,
   ignoreDeadLinks: [
     /^\/home\/cui\/workspaces\/BigWorld\//
