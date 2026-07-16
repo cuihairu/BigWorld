@@ -1,0 +1,225 @@
+:root {
+  --vp-c-brand-1: #7a4e20;
+  --vp-c-brand-2: #99652d;
+  --vp-c-brand-3: #c08843;
+  --vp-c-bg: #fbf6ea;
+  --vp-c-bg-alt: #f2ead8;
+  --vp-c-bg-soft: #f8efd9;
+  --vp-c-text-1: #1e241b;
+  --vp-c-text-2: #4e5847;
+  --vp-c-divider: rgba(65, 54, 31, 0.18);
+  --bw-ink: #1d261d;
+  --bw-muted: #5e6657;
+  --bw-paper: #fff9eb;
+  --bw-clay: #9e5f31;
+  --bw-forest: #284331;
+  --bw-moss: #6f7f49;
+  --bw-line: rgba(42, 54, 38, 0.18);
+  --bw-shadow: 0 18px 48px rgba(48, 36, 18, 0.12);
+}
+
+.dark {
+  --vp-c-bg: #11150f;
+  --vp-c-bg-alt: #181d15;
+  --vp-c-bg-soft: #202719;
+  --vp-c-text-1: #f2ead8;
+  --vp-c-text-2: #c9bea8;
+  --vp-c-divider: rgba(232, 214, 173, 0.16);
+  --bw-ink: #f4eddc;
+  --bw-muted: #c9bea8;
+  --bw-paper: #181d15;
+  --bw-clay: #d69a58;
+  --bw-forest: #91b18b;
+  --bw-moss: #b4c46f;
+  --bw-line: rgba(232, 214, 173, 0.18);
+  --bw-shadow: 0 18px 48px rgba(0, 0, 0, 0.28);
+}
+
+.VPHome {
+  background:
+    radial-gradient(circle at 18% 12%, rgba(192, 136, 67, 0.24), transparent 32rem),
+    radial-gradient(circle at 82% 24%, rgba(111, 127, 73, 0.22), transparent 28rem),
+    linear-gradient(180deg, var(--vp-c-bg) 0%, var(--vp-c-bg-alt) 100%);
+}
+
+.VPHome .name,
+.VPHome .text {
+  letter-spacing: -0.04em;
+}
+
+.arch-hero {
+  border: 1px solid var(--bw-line);
+  border-radius: 28px;
+  padding: 28px;
+  margin: 24px 0 34px;
+  background:
+    linear-gradient(135deg, rgba(122, 78, 32, 0.12), transparent 42%),
+    linear-gradient(315deg, rgba(40, 67, 49, 0.10), transparent 42%),
+    var(--bw-paper);
+  box-shadow: var(--bw-shadow);
+}
+
+.arch-hero strong {
+  color: var(--bw-clay);
+}
+
+.evidence-grid,
+.decision-grid,
+.topology-grid {
+  display: grid;
+  gap: 16px;
+  margin: 22px 0;
+}
+
+.evidence-grid {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.decision-grid {
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+}
+
+.topology-grid {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.evidence-card,
+.decision-card,
+.topology-card,
+.source-card {
+  border: 1px solid var(--bw-line);
+  border-radius: 18px;
+  padding: 18px;
+  background: color-mix(in srgb, var(--bw-paper) 86%, transparent);
+  box-shadow: 0 10px 26px rgba(44, 34, 16, 0.08);
+}
+
+.evidence-card h3,
+.decision-card h3,
+.topology-card h3,
+.source-card h3 {
+  margin: 0 0 8px;
+  font-size: 17px;
+  color: var(--bw-forest);
+}
+
+.evidence-card p,
+.decision-card p,
+.topology-card p,
+.source-card p {
+  margin: 0;
+  color: var(--bw-muted);
+  line-height: 1.65;
+}
+
+.source-card {
+  margin: 20px 0;
+}
+
+.decision-table {
+  width: 100%;
+  display: block;
+  overflow-x: auto;
+  border: 1px solid var(--bw-line);
+  border-radius: 16px;
+  background: var(--bw-paper);
+}
+
+.decision-table table {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: collapse;
+}
+
+.decision-table th,
+.decision-table td {
+  border-bottom: 1px solid var(--bw-line);
+  padding: 12px 14px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.decision-table th {
+  color: var(--bw-forest);
+  background: rgba(111, 127, 73, 0.14);
+}
+
+.callout-hard {
+  border-left: 5px solid var(--bw-clay);
+  padding: 14px 18px;
+  margin: 22px 0;
+  background: rgba(192, 136, 67, 0.12);
+  border-radius: 0 14px 14px 0;
+}
+
+.mermaid-panel {
+  border: 1px solid var(--bw-line);
+  border-radius: 20px;
+  padding: 16px;
+  margin: 24px 0;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.44), transparent),
+    var(--bw-paper);
+  box-shadow: var(--bw-shadow);
+}
+
+.mermaid-title {
+  margin: 0 0 12px;
+  font-weight: 700;
+  color: var(--bw-forest);
+}
+
+.mermaid-canvas {
+  overflow-x: auto;
+}
+
+.mermaid-canvas svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.mermaid-slot {
+  display: none;
+}
+
+.mermaid-source {
+  margin-top: 12px;
+}
+
+.mermaid-source pre {
+  margin: 10px 0 0;
+  white-space: pre-wrap;
+}
+
+.flow-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin: 18px 0;
+}
+
+.flow-node {
+  border: 1px solid var(--bw-line);
+  border-radius: 999px;
+  padding: 8px 13px;
+  background: var(--bw-paper);
+  color: var(--bw-ink);
+  font-weight: 650;
+}
+
+.flow-arrow {
+  color: var(--bw-clay);
+  font-weight: 800;
+}
+
+@media (max-width: 720px) {
+  .arch-hero {
+    padding: 20px;
+    border-radius: 22px;
+  }
+
+  .flow-arrow {
+    display: none;
+  }
+}
