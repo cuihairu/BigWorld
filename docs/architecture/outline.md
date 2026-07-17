@@ -8,41 +8,43 @@
 
 ## 第一组：基础架构
 
-1. 研究方法与证据分级
-2. 进程拓扑与职责切分
-3. 主循环、Tick 与事件分发
-4. 网络 I/O 模型选择
-5. Mercury 协议与可靠 UDP
-6. 通信抽象、接口定义与组件间 RPC
-7. 收发路径、背压与限速
+1. [研究方法与证据分级](/architecture/research-method)
+2. [进程拓扑与职责切分](/architecture/process-topology)
+3. [主循环、Tick 与事件分发](/architecture/event-loop)
+4. [网络 I/O 模型选择](/architecture/network-io-model)
+5. [Mercury 协议与可靠 UDP](/architecture/mercury-reliable-udp)
+6. [通信抽象、接口定义与组件间 RPC](/architecture/communication-rpc)
+7. [收发路径、背压与故障注入](/architecture/network-backpressure-fault-injection)
 
 ## 第二组：游戏状态模型
 
-8. 实体模型：Base / Cell / Client 三层语义
-9. EntityDef、属性、方法与协议生成
-10. 序列化与反序列化：BinaryStream、DataType、DataDescription
-11. AOI、Witness、Ghost 与带宽调度
-12. 空间划分、Cell 分区与负载均衡
-13. 实体迁移、Cell 退休与跨进程状态移动
+8. [实体模型：Base / Cell / Client 三层语义](/architecture/entity-model)
+9. [EntityDef、属性、方法与协议生成](/architecture/entitydef-contract-generation)
+10. [序列化与反序列化：BinaryStream、DataType、DataDescription](/architecture/serialization-entitydef)
+11. [AOI、Witness、Ghost 与带宽调度](/architecture/aoi-witness-ghost)
+12. [空间划分、Cell 分区与负载均衡](/architecture/cell-partition-load-balance)
+13. [实体迁移、Cell 退休与跨进程状态移动](/architecture/entity-migration-offload)
+14. [实体生命周期状态机](/architecture/entity-lifecycle-state-machine)
 
 ## 第三组：运行时工程
 
-14. 线程架构、后台任务与 Python GIL
-15. 时间系统、Timer、GameTime 与测试可控时间
-16. 脚本热更新、解释器切换与实体迁移
-17. 持久化、一致性与数据库线程模型
-18. 动态扩展、控制面与容量治理
-19. Reviver、machined 与故障恢复边界
+15. [登录、会话与 Proxy 接管](/architecture/login-session-proxy-flow)
+16. [线程架构、后台任务与 Python GIL](/architecture/threading-background-tasks)
+17. [时间系统、Timer、GameTime 与测试可控时间](/architecture/testing-time-control)
+18. [脚本热更新、解释器切换与实体迁移](/architecture/hot-reload-script-migration)
+19. [持久化、一致性与数据库线程模型](/architecture/persistence-db-model)
+20. [动态扩展、控制面与容量治理](/architecture/scaling-fault-tolerance)
+21. [Reviver、machined 与故障恢复边界](/architecture/machined-control-plane)
 
 ## 第四组：工程质量与现代化
 
-20. 测试体系、故障注入与覆盖边界
-21. 安全、限流、加密与攻击面
-22. Watcher、Profiler、日志与可观测性
-23. 内存、对象生命周期与资源管理
-24. 构建、平台与依赖治理
-25. 当时方案与现代 MMO 架构对比
-26. Python 3.12 迁移路线
+22. 测试体系、故障注入与覆盖边界
+23. [安全、限流、加密与攻击面](/architecture/security-rate-limit)
+24. [Watcher、Profiler、日志与可观测性](/architecture/observability-watcher-profiler-logs)
+25. [内存、对象生命周期与资源管理](/architecture/memory-lifecycle)
+26. [构建、平台与依赖治理](/architecture/build-platform-dependencies)
+27. [当时方案与现代 MMO 架构对比](/architecture/modern-mmo-comparison)
+28. [Python 3.12 迁移路线](/migration/python-3-12)
 
 ## 已明确要覆盖的问题
 
@@ -62,6 +64,14 @@
   <div class="decision-card">
     <h3>测试与时间</h3>
     <p>unit_test、网络故障注入、Timer 驱动、GameTime、虚拟时钟缺口和现代仿真测试对比。</p>
+  </div>
+  <div class="decision-card">
+    <h3>登录与会话</h3>
+    <p>LoginApp、DBApp、BaseAppMgr、BaseApp、Proxy、SessionKey、PendingLogins 和 NAT/firewall 处理。</p>
+  </div>
+  <div class="decision-card">
+    <h3>实体生命周期</h3>
+    <p>Base-only、pending cell、real、ghost、offload、onload、destroy、restore 和 zombie ghost 状态。</p>
   </div>
   <div class="decision-card">
     <h3>通信与序列化</h3>
