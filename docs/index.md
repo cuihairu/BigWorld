@@ -92,12 +92,13 @@ features:
 19. [测试体系与可控时间](/architecture/testing-time-control)
 20. [动态扩展与容灾](/architecture/scaling-fault-tolerance)
 21. [machined 控制面与进程发现](/architecture/machined-control-plane)
-22. [安全、限流与加密](/architecture/security-rate-limit)
-23. [Watcher、Profiler 与日志](/architecture/observability-watcher-profiler-logs)
-24. [内存、对象生命周期与资源管理](/architecture/memory-lifecycle)
-25. [构建、平台与依赖治理](/architecture/build-platform-dependencies)
-26. [现代 MMO 架构对比](/architecture/modern-mmo-comparison)
-27. [完整专题大纲](/architecture/outline)
+22. [测试体系、故障注入与覆盖边界](/architecture/testing-fault-injection-coverage)
+23. [安全、限流与加密](/architecture/security-rate-limit)
+24. [Watcher、Profiler 与日志](/architecture/observability-watcher-profiler-logs)
+25. [内存、对象生命周期与资源管理](/architecture/memory-lifecycle)
+26. [构建、平台与依赖治理](/architecture/build-platform-dependencies)
+27. [现代 MMO 架构对比](/architecture/modern-mmo-comparison)
+28. [完整专题大纲](/architecture/outline)
 
 ## 核心判断
 
@@ -118,6 +119,7 @@ features:
 - BigWorld 的线程模型主要是主 Reactor + 后台任务回主线程提交，不是全逻辑多线程。
 - `reloadScript` 是开发调试导向的高风险迁移机制，源码明确警告不要用于生产环境。
 - 当前时间系统主要依赖真实 `timestamp()`，可控虚拟时间是后续现代化测试的重要缺口。
+- 当前测试体系在 Mercury、EntityDef、Replay、Ghost buffering 上并不薄弱，但 cluster 级黑盒回归和统一 chaos 注入仍然不足。
 - 动态扩展的核心是 Manager 接纳进程并驱动 Cell/Entity 状态迁移，不是简单拉起无状态副本。
 - machined 提供进程注册、接口发现、birth/death listener 和启动组件能力，是 BigWorld 旧式控制面的基础。
 - BigWorld 有明确的入口限流、消息预算和 Channel 加密抽象，但不是现代全链路安全体系。

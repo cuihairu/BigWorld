@@ -78,6 +78,7 @@ export default {
           text: "工程质量与现代化",
           collapsed: false,
           items: [
+            { text: "测试体系、故障注入与覆盖边界", link: "/architecture/testing-fault-injection-coverage" },
             { text: "安全、限流与加密", link: "/architecture/security-rate-limit" },
             { text: "Watcher、Profiler 与日志", link: "/architecture/observability-watcher-profiler-logs" },
             { text: "内存、对象生命周期与资源管理", link: "/architecture/memory-lifecycle" },

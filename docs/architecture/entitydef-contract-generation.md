@@ -111,6 +111,112 @@ flowchart TD
 
 属性的关键不是“字段名是什么”，而是它进入哪些数据域。一个属性可能只存在于 Cell，也可能进入 Base、Own Client、Other Clients、Ghost、Persistent 或数据库索引路径。后续所有创建、迁移、同步、保存和热更新都依赖这些标志。
 
+## `.def` 与数据库契约
+
+你提到的几个数据库问题，本质上都从 `.def` 开始。
+
+BigWorld 不是先有数据库模型再映射到实体，而是先解析 `.def`，再由 DB 层根据 persistent 子集建映射。也就是说，`.def` 在这里更像“协议 + 持久化契约”。
+
+### 实体级标签
+
+实体级至少有两个和数据库直接相关的开关：
+
+- `Persistent`：实体类型是否允许持久化，见 [entity_description.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/entitydef/entity_description.cpp:396)。
+- `ExplicitDatabaseID`：是否允许显式指定 DBID，见 [entity_description.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/entitydef/entity_description.cpp:391)。
+
+`DBApp` 侧还有一层硬约束：
+
+- `EntityDefs::isValidEntityType()` 只接受 persistent entity type，见 [db_entitydefs.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/db_storage/db_entitydefs.hpp:35)。
+
+这意味着：
+
+- 没有实体级 `Persistent`，整个类型就不进入 DB 契约。
+- 后面即使某个属性写了 `Persistent`，没有实体级持久化能力也没有意义。
+
+### 属性级标签
+
+`DataDescription::parse()` 里和数据库直接相关的标签有：
+
+- `Persistent`
+- `Identifier`
+- `Indexed`
+- `Indexed/Unique`
+- `DatabaseLength`
+
+解析入口在 [data_description.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/entitydef/data_description.cpp:220)。
+
+源码语义可以直接总结为：
+
+<div class="decision-table">
+
+| 标签 | 含义 | 关键约束 |
+| --- | --- | --- |
+| `Persistent` | 属性进入持久化子集 | 不写则不会进入 `ONLY_PERSISTENT_DATA` |
+| `Identifier` | 把该属性作为实体业务标识 | 自动推导为索引，默认唯一 |
+| `Indexed` | 为持久化属性建索引 | 非 persistent 属性不能 indexed |
+| `Indexed/Unique` | 控制索引是否唯一 | 仅在 indexed 时生效 |
+| `DatabaseLength` | 影响字符串/复合类型的 DB 长度策略 | 不是所有类型都等价使用 |
+
+</div>
+
+其中有几个容易忽略的硬规则：
+
+- `Identifier` 会把 `DATA_ID` 打开，并默认要求索引，见 [data_description.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/entitydef/data_description.cpp:228)。
+- `Indexed` 只允许出现在 persistent 属性上，否则直接报错，见 [data_description.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/entitydef/data_description.cpp:238)。
+- `Indexed/Unique` 会决定 `DATABASE_INDEXING_UNIQUE` 还是 `DATABASE_INDEXING_NON_UNIQUE`，见 [data_description.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/entitydef/data_description.cpp:250)。
+
+### Identifier 不是任意类型都能当主键
+
+DB 侧对 Identifier 有额外限制，不是任何 `Persistent` 属性都能升格为实体标识：
+
+- `EntityDefs::findIdentifier()` 明确只支持一个 Identifier。
+- 它要求该属性类型是 `STRING`、`UNICODE_STRING` 或 `BLOB`。
+
+源码见 [db_entitydefs.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/db_storage/db_entitydefs.cpp:33) 和 [db_entitydefs.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/db_storage/db_entitydefs.cpp:113)。
+
+这和很多 ORM 默认“任意标量都能当唯一键”不同。BigWorld 这里是引擎做了收敛，方便统一 lookup / cache / DBID 绑定逻辑。
+
+### `ONLY_PERSISTENT_DATA` 是真正的 DB 视图切片
+
+前面说“EntityDescription 会切出不同视图”，数据库最关键的就是 `ONLY_PERSISTENT_DATA`。
+
+证据有三层：
+
+- `EntityDescription::addToStream()` 在遍历属性时会检查 `ONLY_PERSISTENT_DATA`，只让 persistent 属性进入输出，见 [entity_description.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/entitydef/entity_description.cpp:1472)。
+- `Base::addToStream()` 写 Base 数据时显式带上 `ONLY_PERSISTENT_DATA`，见 [base.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/baseapp/base.cpp:3931)。
+- `EntityTypeMapping::visit()` 建表和写库时也只访问 `BASE_DATA | CELL_DATA | ONLY_PERSISTENT_DATA`，见 [entity_type_mapping.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/db_storage_mysql/mappings/entity_type_mapping.cpp:646)。
+
+这说明数据库 schema、数据库写入和数据库 digest 三者用的是同一份 persistent 视图，而不是三套独立规则。
+
+### `DatabaseLength`、复杂类型和表结构
+
+`.def` 写完后不一定一一落成普通列，复杂类型会进入映射器判断：
+
+- `PropertyMapping::create()` 会按 `DataType` 选择映射实现，见 [property_mapping.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/db_storage_mysql/mappings/property_mapping.cpp:132)。
+- `ARRAY` / `TUPLE` 在非索引场景下可能走 `SequenceMapping`，也可能在 `dbLen() > 0` 时走 `BlobbedSequenceMapping`，见 [property_mapping.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/db_storage_mysql/mappings/property_mapping.cpp:149)。
+- `CLASS` / `FIXED_DICT` 走 class-type mapping，见 [property_mapping.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/db_storage_mysql/mappings/property_mapping.cpp:174)。
+- 字符串类属性会检查 `DatabaseLength` 是否超限，见 [string_like_mapping.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/db_storage_mysql/mappings/string_like_mapping.cpp:122)。
+
+所以 `DatabaseLength` 不是一个“UI 提示参数”，它会真实影响底层映射策略和列定义。
+
+### `.def` 改动为什么经常意味着 DB migration
+
+从源码看，BigWorld 对 DB 契约变更是有显式签名和同步逻辑的：
+
+- `EntityDefs::init()` 会计算完整 defs digest 和 persistent properties digest，见 [db_entitydefs.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/db_storage/db_entitydefs.cpp:67)。
+- MySQL 初始化时会用 persistent properties digest 做兼容检查，见 [mysql_database.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/db_storage_mysql/mysql_database.cpp:918)。
+- `TableSynchroniser` 会通过 `sync_db` 路径做表同步，见 [table_synchroniser.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/db_storage_mysql/table_synchroniser.cpp:90)。
+
+因此下列 `.def` 变更都不只是“脚本字段调整”：
+
+- 新增或删除 `Persistent` 属性。
+- 变更 `Identifier`。
+- 变更 `Indexed` / `Indexed/Unique`。
+- 调整复杂类型结构。
+- 调整 `DatabaseLength`。
+
+它们都可能导致 persistent digest 变化、DB schema 变化或已有数据解释方式变化。
+
 ## 方法契约
 
 方法按目标端分为三组：
@@ -233,6 +339,7 @@ BigWorld 的 EntityDef 契约设计适合当时的 MMO 引擎约束：
 - 版本演进依赖顺序和编号，字段重排风险高。
 - 协议 schema 不是标准格式，生态工具弱。
 - `ClientName`、脚本存在性推断等历史兼容规则增加理解成本。
+- `.def` 同时承担网络契约和数据库契约，单点改动影响范围大。
 - `process_defs` 输出回调机制不如现代 schema artifact 直观。
 - 多进程各自解析同一套定义，部署一致性要求高。
 
@@ -243,9 +350,9 @@ BigWorld 的 EntityDef 契约设计适合当时的 MMO 引擎约束：
 1. 把 `process_defs` 输出标准化为 JSON artifact，同时保留现有 Python 回调，避免破坏工具链。
 2. 为 `entities.xml` 顺序、`clientServerFullIndex`、`internalIndex`、`exposedIndex` 和 digest 建立 golden tests。
 3. 在 CI 中增加 EntityDef 兼容性检查，区分安全变更、需要 DB migration 的变更和协议破坏性变更。
-4. 生成面向人读的实体契约文档，列出每个属性的数据域、持久化、索引、client visibility、stream size 和默认值。
+4. 生成面向人读的实体契约文档，列出每个属性的数据域、持久化、索引、`DatabaseLength`、client visibility、stream size 和默认值。
 5. 禁止新增依赖 `ClientName` 的设计，只保留兼容旧项目。
-6. 对 Python 3.12 迁移，先锁定 `process_defs` 输出和 EntityDef digest，再改 ScriptObject/DataSource/DataSink 边界。
+6. 把 persistent digest 变更和 `sync_db` 执行结果纳入 CI 审核。
 
 ## 验证重点
 

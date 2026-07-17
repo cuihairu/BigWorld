@@ -38,7 +38,7 @@
 
 ## 第四组：工程质量与现代化
 
-22. 测试体系、故障注入与覆盖边界
+22. [测试体系、故障注入与覆盖边界](/architecture/testing-fault-injection-coverage)
 23. [安全、限流、加密与攻击面](/architecture/security-rate-limit)
 24. [Watcher、Profiler、日志与可观测性](/architecture/observability-watcher-profiler-logs)
 25. [内存、对象生命周期与资源管理](/architecture/memory-lifecycle)

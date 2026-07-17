@@ -170,6 +170,79 @@ flowchart TD
 
 所以 Mercury 的 RPC 不是“异步任务自动并发”，而是“网络事件驱动的同步回调”。这点对线程模型和性能分析非常关键。
 
+## 怎么和前端通信
+
+如果把“前端”具体化为 BigWorld client，那么它不是直接连 CellApp，也不是直接连任意实体实例，而是经由 `Proxy` 所在的 BaseApp 通信。
+
+关键入口可以直接从源码看出来：
+
+- 客户端下行协议定义在 `ClientInterface`，包含 `createEntity`、`updateEntity`、`entityMethod`、`entityProperty`、`enterAoI`、`leaveAoI` 等消息，见 [client_interface.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/connection/client_interface.hpp:60)。
+- 客户端上行到服务器的外部协议定义在 `BaseAppExtInterface`，包含 `baseEntityMethod`、`cellEntityMethod`、移动同步和登录相关消息，见 [baseapp_ext_interface.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/connection/baseapp_ext_interface.hpp:26)。
+- `Proxy` 是挂着客户端连接的特殊 Base，见 [proxy.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/baseapp/proxy.hpp:49)。
+
+链路不是“浏览器请求 API”，而是“客户端连接一个 Proxy，由 Proxy 转发实体语义消息”。
+
+### 服务端到客户端
+
+服务端给客户端发消息，核心不是任意实体直接持有 socket，而是：
+
+1. 玩家连接后，客户端通道挂在某个 `Proxy` 上。
+2. `Proxy` 维护 `pClientChannel_`，并把 Cell 或 Base 的可见消息转成 `ClientInterface` 消息发给客户端，见 [proxy.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/baseapp/proxy.hpp:79)。
+3. `Proxy::createBasePlayer()` 会先发送 `ClientInterface::createBasePlayer`，再把 `FROM_BASE_TO_CLIENT_DATA` 属性流下发，见 [proxy.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/baseapp/proxy.cpp:1630)。
+4. 来自 Cell 的 `tickSync`、`avatarUpdate*`、`createEntity`、`updateEntity`、`spaceData` 等消息，由 `Proxy` 转发给客户端，见 [proxy.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/baseapp/proxy.cpp:1653) 以及 [common_client_interface.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/connection/common_client_interface.hpp:34)。
+
+客户端接收侧的入口在 `ServerConnection`：
+
+- `createEntity()` / `createEntityDetailed()` 解出实体 ID、类型、位置和剩余属性流，见 [server_connection.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/connection/server_connection.cpp:2633)。
+- `updateEntity()` 把属性流交给上层 handler，见 [server_connection.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/connection/server_connection.cpp:2697)。
+- `entityMethod()` / `entityProperty()` 用 `ClientInterface::Range` 把消息号还原成 exposed method/property id，再交给客户端实体层，见 [server_connection.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/connection/server_connection.cpp:1032)。
+
+所以前端看到的“实体创建、属性刷新、方法回调”，本质上都是 `ClientInterface` + EntityDef 共同解释出来的二进制流。
+
+### 客户端到服务端
+
+客户端上行同样不是直接找某个游戏逻辑对象，而是发给当前 `Proxy`：
+
+- `ServerConnection::startBasePlayerMessage()` 用 `BaseAppExtInterface::baseEntityMethodRange` 组包，见 [server_connection.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/connection/server_connection.cpp:833)。
+- `ServerConnection::startCellEntityMessage()` 用 `BaseAppExtInterface::cellEntityMethodRange` 组包，并把目标 `entityID` 写进流，见 [server_connection.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/connection/server_connection.cpp:875)。
+
+到服务端后，`Proxy` 分两路处理：
+
+- `Proxy::baseEntityMethod()` 直接在当前 Proxy/Base 上解析 exposed Base method 并调用脚本方法，见 [proxy.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/baseapp/proxy.cpp:2536)。
+- `Proxy::cellEntityMethod()` 则把调用包装成 `CellAppInterface::runExposedMethod`，转发到对应 Cell 实体，见 [proxy.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/baseapp/proxy.cpp:2491)。
+
+Cell 侧再由 `Entity::runExposedMethod()` 和 `runMethodHelper()` 完成真正的方法分发，见 [entity.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity.cpp:5399)。
+
+这说明客户端和“前端逻辑实体”的通信抽象其实是：
+
+- 先找到玩家所在的 Proxy。
+- 再由 Proxy 把消息导向 Base 方法或 Cell 方法。
+- 最后由 EntityDef 的 exposed method 定义完成脚本调用。
+
+### 不是所有实例都直连前端
+
+这里必须澄清一个容易误解的点。
+
+BigWorld 里很多实体实例都“支持通信”，但含义并不是“每个实例都有自己的前端网络连接”：
+
+- 对客户端来说，真正的物理连接挂在 `Proxy` 的 `Channel` 上。
+- 其他实体实例对客户端的可见性，靠 AOI 和 `Proxy` / Witness 转发。
+- 普通 Base/Cell 实体之间通信主要依赖 mailbox，不是客户端 socket。
+
+比如脚本里调用 `otherEntity.base.someMethod()`，底层会走 `BaseEntityMailBox::getStreamEx()`，包装成 `BaseAppIntInterface::callBaseMethod`，见 [mailbox.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/baseapp/mailbox.cpp:1054)。
+
+同理，`self.base`、`self.cell`、`self.client` 等通信对象，本质上都是 `PyEntityMailBox` 的不同实现，见 [mailbox_base.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/entitydef/mailbox_base.hpp:35)。
+
+### 前端拿到的不是 ORM 对象，而是连接模型
+
+客户端侧也不是拿到“服务器对象引用”。它拿到的是一套连接模型：
+
+- `ServerConnection` 负责网络收发。
+- `BWEntities` / `BWServerMessageHandler` 把实体消息分发到本地客户端实体表示。
+- `ServerEntityMailBox` 让客户端代码能按实体 ID 发回服务器方法调用，见 [server_entity_mail_box.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/connection_model/server_entity_mail_box.cpp:17)。
+
+这更接近“远端实体连接模型”，而不是 Web 前端常见的 REST/GraphQL 数据拉取。
+
 ## 接口注册
 
 服务进程启动时会把接口注册到 `NetworkInterface`。
@@ -209,6 +282,70 @@ Mercury RPC 解决“消息怎么发”，EntityDef 解决“实体属性和方�
 
 所以 BigWorld 的协议不是单一 IDL 文件能完全表达的。它是 Mercury interface + EntityDef 类型系统 + Python 脚本绑定共同形成的协议层。
 
+## 和 Actor 的相似点与区别
+
+你问“每个实例都支持通信的话，和 Actor 有什么区别”，这个问题是对的，但不能简单回答成“就是 Actor”。
+
+### 相似点
+
+BigWorld 实体和 Actor 确实有几处明显相似：
+
+- 都强调“按实例持有状态”。
+- 都主要通过消息/方法调用而不是共享内存交互。
+- 都存在“地址化”的实例引用。
+- 都天然适合分布到不同进程或机器。
+
+BigWorld 里这种“可寻址实例引用”就是 mailbox：
+
+- `PyEntityMailBox` 表示一个远端实体目标，见 [mailbox_base.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/entitydef/mailbox_base.hpp:35)。
+- 调脚本方法时，`PyEntityMailBox::callMethod()` 会校验参数、申请流、编码参数并发送，见 [mailbox_base.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/entitydef/mailbox_base.cpp:125)。
+
+从使用体验看，`entity.base.foo()`、`entity.cell.bar()`、`entity.client.baz()` 确实很像在给某个 Actor 发消息。
+
+### 本质差异
+
+但 BigWorld 不是通用 Actor runtime，至少有四个关键差异。
+
+第一，实体不是单 mailbox 单线程执行体。
+
+- Actor 模型通常强调一个 actor 只有一个 mailbox 和串行消费语义。
+- BigWorld 一个逻辑实体会拆成 Base、Cell、Client 甚至 Ghost 多个视图，每个视图的职责不同。
+- 客户端通信还要经过 `Proxy`，不是每个实例自己持有外部连接。
+
+第二，消息不是唯一的一等公民，属性同步同样是一等机制。
+
+- Actor 系统通常更强调显式消息。
+- BigWorld 除了方法调用，还有属性复制、AOI enter/leave、volatile position、ghost 更新、DB 持久化这些专门路径。
+- `PropertyChange` 是独立于方法调用的协议体系，见 [property_change.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/entitydef/property_change.cpp:139)。
+
+第三，调度目标不是“通用并发模型”，而是“游戏世界语义”。
+
+- Actor runtime 关注隔离、调度、公平性、容错监督树。
+- BigWorld 更关注空间分区、AOI、Witness、Base/Cell 分工、迁移、备份和 DB 写入。
+- 它有分布式实体运行时特征，但没有看到类似 Erlang/Akka 那种通用 supervisor tree 语义。
+
+第四，很多消息处理仍然绑定主线程 Reactor，而不是独立 actor scheduler。
+
+- `Mercury` handler 通常在 Reactor 主线程执行。
+- `Proxy::baseEntityMethod()`、`Entity::runMethodHelper()` 最终直接调用脚本逻辑，见 [proxy.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/baseapp/proxy.cpp:2536) 和 [entity.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity.cpp:5412)。
+
+所以更准确的判断是：
+
+- BigWorld 具有明显的 actor-like messaging 特征。
+- 但它是面向 MMO 实体语义定制的分布式实体运行时，不是通用 Actor 框架。
+
+### 一个更准确的类比
+
+如果一定要类比，BigWorld 更接近：
+
+- “Actor + replicated entity + AOI + authoritative simulation + custom persistence”
+
+而不是单纯：
+
+- “每个实体就是一个 Actor”
+
+这个区别很关键。前者解释了为什么它同时需要 mailbox、属性增量同步、Proxy/Witness、Base/Cell 切分和专用 DBApp；后者解释不了这些引擎级约束。
+
 ## 为什么不是 gRPC/Protobuf
 
 这是现代读者最容易误判的地方。
@@ -238,7 +375,7 @@ BigWorld 没有选择 gRPC/Protobuf，不能简单归因于“旧”。更本质
 | gRPC | 跨语言、观测和治理成熟 | TCP/HTTP2 语义重，游戏实时性弱 | 适合控制面、后台服务 |
 | FlatBuffers | 零拷贝读取，适合实时数据 | schema 迁移和动态脚本结合复杂 | 可用于新网关或客户端资源协议 |
 | Cap'n Proto | 高性能 RPC/序列化 | 生态和集成成本 | 可学习，不是低风险迁移目标 |
-| Actor mailbox | 状态归属清晰 | 调度器和消息语义需重构 | 适合现代化新模块，不应直接套旧接口 |
+| Actor mailbox | 状态归属清晰 | 不能直接覆盖 AOI、属性复制、Proxy/Witness 语义 | 适合现代化新模块，不应直接套旧接口 |
 
 </div>
 
