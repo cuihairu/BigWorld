@@ -2,7 +2,7 @@
 
 <div class="arch-hero">
 
-这章是 BigWorld 网络架构研究的第一块硬骨头。不能只说“用了 epoll”，也不能用现代 benchmark 直接否定旧方案。必须结合 Mercury 的 UDP Channel 模型、主线程 Reactor、Tick 预算、平台基线和当时技术可用性一起判断。
+这章是 BigWorld 网络架构研究的第一块硬骨头。不能只说"用了 epoll"，也不能用现代 benchmark 直接否定旧方案。必须结合 Mercury 的 UDP Channel 模型、主线程 Reactor、Tick 预算、平台基线和当时技术可用性一起判断。
 
 </div>
 
@@ -66,8 +66,8 @@ int EPoller::registerFileDescriptor( int fd, InputNotificationHandler * pHandler
     // 注册到 epoll
     if (epoll_ctl( epfd_, EPOLL_CTL_ADD, fd, &ev ) == -1)
     {
-        ERROR_MSG( “EPoller::registerFileDescriptor: “
-            “epoll_ctl failed for fd %d: %s\n”, fd, strerror(errno) );
+        ERROR_MSG( "EPoller::registerFileDescriptor: "
+            "epoll_ctl failed for fd %d: %s\n", fd, strerror(errno) );
         return -1;
     }
     
@@ -77,7 +77,7 @@ int EPoller::registerFileDescriptor( int fd, InputNotificationHandler * pHandler
 
 **流程图：**
 
-<MermaidDiagram title=”EPoller 注册与事件处理”>
+<MermaidDiagram title="EPoller 注册与事件处理">
 sequenceDiagram
     participant Handler as InputNotificationHandler
     participant EPoller as EPoller
@@ -154,9 +154,9 @@ int EPoller::processPendingEvents( double maxWait )
 
 ## 为什么 epoll 不是性能银弹
 
-Mercury 的主游戏协议不是“一玩家一个 TCP FD”的模型。UDP 路径里，一个 `NetworkInterface` 持有 UDP socket，多个 `UDPChannel` 是逻辑连接。
+Mercury 的主游戏协议不是"一玩家一个 TCP FD"的模型。UDP 路径里，一个 `NetworkInterface` 持有 UDP socket，多个 `UDPChannel` 是逻辑连接。
 
-因此，`epoll` 的收益不能简单按“百万连接 FD”模型评价。
+因此，`epoll` 的收益不能简单按"百万连接 FD"模型评价。
 
 真正热点更可能是：
 
