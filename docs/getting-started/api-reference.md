@@ -1,6 +1,6 @@
 # 核心 API 参考
 
-<div class="arch-hero>
+<div class="arch-hero">
 
 BigWorld 核心库的 API 参考，覆盖网络、实体、脚本三大子系统。
 
