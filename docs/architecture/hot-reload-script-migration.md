@@ -141,6 +141,90 @@ flowchart TD
 
 所以 BigWorld 的热更新更适合开发调试，而不是生产无停机升级。
 
+## 热更新完整调用链
+
+### CellApp 热更新流程
+
+CellApp 触发热更新的完整调用链：
+
+源码入口：[cellapp.cpp:2322](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/cellapp.cpp:2322)
+
+<div class="flow-strip">
+  <span class="flow-node">CellApp::reloadScript()</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">Script::createInterpreter()</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">加载新脚本</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">Script::swapInterpreter()</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">遍历所有 Entity</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">Entity::migrate()</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">迁移 Mailbox</span>
+</div>
+
+### BaseApp 热更新流程
+
+BaseApp 触发热更新的完整调用链：
+
+源码入口：[script_bigworld.cpp:1509](/home/cui/workspaces/BigWorld/programming/bigworld/server/baseapp/script_bigworld.cpp:1509)
+
+<div class="flow-strip">
+  <span class="flow-node">BigWorld.reloadScript()</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">Script::createInterpreter()</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">加载新脚本</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">Script::swapInterpreter()</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">遍历 bases_</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">Base::migrate()</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">迁移 Mailbox</span>
+</div>
+
+### Entity 迁移流程
+
+单个 Entity 迁移的完整调用链：
+
+源码入口：[entity.cpp:4245](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity.cpp:4245)
+
+<div class="flow-strip">
+  <span class="flow-node">Entity::migrate()</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">获取新 EntityType</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">检查 type id 一致性</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">更新 pEntityType_</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">PyObject_SetAttrString("__class__")</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">调用 onMigrate()</span>
+</div>
+
+### 失败恢复流程
+
+热更新失败时的恢复调用链：
+
+源码入口：[script_bigworld.cpp:1525](/home/cui/workspaces/BigWorld/programming/bigworld/server/baseapp/script_bigworld.cpp:1525)
+
+<div class="flow-strip">
+  <span class="flow-node">迁移失败</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">检查是否 full reload</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">EntityType::reloadScript(true)</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">恢复旧脚本</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">尝试恢复旧类型</span>
+</div>
+
 ## 与序列化的关系
 
 热更新最危险的变化不是函数体变化，而是类型契约变化：

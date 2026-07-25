@@ -250,4 +250,4 @@ sudo swapon /swapfile
 
 - [项目结构](/getting-started/project-structure)
 - [核心 API](/getting-started/api-reference)
-- [构建系统现代化](/migration/build-system-modernization)
+- [构建系统现代化](/upgrade-plan/build-system-modernization)

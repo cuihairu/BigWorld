@@ -220,6 +220,86 @@ BigWorld 的序列化承担的职责比普通网络消息编码更宽：
 - Python 对象转换、默认值、错误流状态和复杂嵌套类型都会影响同一条链路。
 - EntityDef 改动会同时影响网络、DB、热更新和迁移，不是局部序列化问题。
 
+## 序列化完整调用链
+
+### 属性序列化到网络
+
+Entity 属性序列化到客户端的完整调用链：
+
+源码入口：[entity.cpp:2475](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity.cpp:2475)
+
+<div class="flow-strip">
+  <span class="flow-node">Entity::writeClientUpdateDataToBundle()</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">遍历 DataDescription</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">DataDescription::addToStream()</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">DataType::addToStream()</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">DataSource 获取值</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">BinaryOStream 写入</span>
+</div>
+
+### 属性反序列化从网络
+
+客户端属性反序列化的完整调用链：
+
+源码入口：[entity_description.cpp:1472](/home/cui/workspaces/BigWorld/programming/bigworld/lib/entitydef/entity_description.cpp:1472)
+
+<div class="flow-strip">
+  <span class="flow-node">EntityDescription::createFromStream()</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">遍历 DataDescription</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">DataDescription::createFromStream()</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">DataType::createFromStream()</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">BinaryIStream 读取</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">DataSink 写入目标</span>
+</div>
+
+### 方法参数序列化
+
+RPC 方法参数序列化的完整调用链：
+
+源码入口：[method_args.cpp:213](/home/cui/workspaces/BigWorld/programming/bigworld/lib/entitydef/method_args.cpp:213)
+
+<div class="flow-strip">
+  <span class="flow-node">MethodArgs::addToStream()</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">遍历参数列表</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">DataType::addToStream()</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">DataSource 获取值</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">BinaryOStream 写入</span>
+</div>
+
+### 持久化序列化
+
+Entity 持久化到数据库的完整调用链：
+
+源码入口：[base.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/baseapp/base.cpp)
+
+<div class="flow-strip">
+  <span class="flow-node">Base::writeToDB()</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">Base::addToStream()</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">EntityDescription::addToStream()</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">ONLY_PERSISTENT_DATA</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">写入 persistent 属性</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">DBApp::writeEntity()</span>
+</div>
+
 ## 源码验证重点
 
 序列化测试必须覆盖 round-trip 和兼容性：

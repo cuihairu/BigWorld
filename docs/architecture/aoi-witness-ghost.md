@@ -258,6 +258,92 @@ Ghost 是 real entity 的跨 Cell 副本。它服务三个目标：
 
 源码见 [entity_ghost_maintainer.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity_ghost_maintainer.cpp:46)。
 
+## AOI 完整调用链
+
+### 实体进入 AOI
+
+实体进入玩家视野的完整调用链：
+
+源码入口：[witness.cpp:3586](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/witness.cpp:3586)
+
+<div class="flow-strip">
+  <span class="flow-node">AoITrigger::triggerEnter()</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">忽略自己和 manual AoI</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">Witness::addToAoI()</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">创建 EntityCache</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">设置 ENTER_PENDING</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">加入 entityQueue_</span>
+</div>
+
+### 实体离开 AOI
+
+实体离开玩家视野的完整调用链：
+
+源码入口：[witness.cpp:2096](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/witness.cpp:2096)
+
+<div class="flow-strip">
+  <span class="flow-node">AoITrigger::triggerLeave()</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">EntityCache::addLeaveAoIMessage()</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">发送 leaveAoI</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">写入 LoD event numbers</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">Witness::onLeaveAoI()</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">回收 ID alias</span>
+</div>
+
+### Witness 更新发送
+
+Witness 每 Tick 更新并发送实体数据的完整调用链：
+
+源码入口：[witness.cpp:1088](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/witness.cpp:1088)
+
+<div class="flow-strip">
+  <span class="flow-node">Witness::update()</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">计算 desiredPacketSize</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">发送 SpaceData changes</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">发送 reference position</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">发送 vehicle stack 实体</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">按 priority 发送 entityQueue_</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">更新 bandwidthDeficit_</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">flush 到 Proxy</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">写 tickSync</span>
+</div>
+
+### Ghost 创建与维护
+
+Ghost 实体的创建和维护调用链：
+
+源码入口：[entity_ghost_maintainer.cpp:46](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity_ghost_maintainer.cpp:46)
+
+<div class="flow-strip">
+  <span class="flow-node">EntityGhostMaintainer::check()</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">检查 offload 状态</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">标记所有 haunts</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">创建/取消标记 haunts</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">删除无效 haunts</span>
+</div>
+
 ## Offload 前的 Ghost 准备
 
 `EntityGhostMaintainer::checkEntityForOffload()` 会根据实体位置查 `Space::pCellAt(x,z)`：

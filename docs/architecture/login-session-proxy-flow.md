@@ -207,6 +207,86 @@ pLoginHandler_->login( extInterface_, srcAddr, header, args );
 
 这一步才是真正把客户端网络 Channel 绑定到 Proxy。
 
+## 登录完整调用链
+
+### 客户端首次登录
+
+客户端向 LoginApp 发起登录的完整调用链：
+
+源码入口：[loginapp.cpp:693](/home/cui/workspaces/BigWorld/programming/bigworld/server/loginapp/loginapp.cpp:693)
+
+<div class="flow-strip">
+  <span class="flow-node">LoginApp::login()</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">解密登录请求</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">验证参数</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">DBAppInterface::logOn</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">等待 DBApp 回复</span>
+</div>
+
+### DBApp 验证与 BaseApp 分配
+
+DBApp 验证并分配 BaseApp 的完整调用链：
+
+源码入口：[baseappmgr.cpp:947](/home/cui/workspaces/BigWorld/programming/bigworld/server/baseappmgr/baseappmgr.cpp:947)
+
+<div class="flow-strip">
+  <span class="flow-node">DBApp 验证账号</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">BaseAppMgr::allocateBaseApp()</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">选择负载最低的 BaseApp</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">BaseApp 创建 Proxy</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">生成 session key</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">加入 PendingLogins</span>
+</div>
+
+### 客户端二次登录
+
+客户端向 BaseApp 完成二次握手的完整调用链：
+
+源码入口：[baseapp.cpp:2985](/home/cui/workspaces/BigWorld/programming/bigworld/server/baseapp/baseapp.cpp:2985)
+
+<div class="flow-strip">
+  <span class="flow-node">BaseApp::baseAppLogin()</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">LoginHandler::login()</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">查找 pending login</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">验证 session key</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">Proxy::attachToClient()</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">发送成功回复</span>
+</div>
+
+### 登录失败处理
+
+登录失败时的处理调用链：
+
+源码入口：[loginapp.cpp:636](/home/cui/workspaces/BigWorld/programming/bigworld/server/loginapp/loginapp.cpp:636)
+
+<div class="flow-strip">
+  <span class="flow-node">登录失败</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">记录失败原因</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">LoginApp::handleFailure()</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">sendFailure()</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">不缓存失败回复</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">避免 DoS 攻击</span>
+</div>
+
 ## NAT 与防火墙语义
 
 登录链路显式处理 NAT：

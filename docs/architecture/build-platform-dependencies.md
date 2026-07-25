@@ -226,7 +226,7 @@ BaseApp 单元测试也通过 `BW_ADD_TEST( baseapp_unit_test )` 注册，见 [s
 
 ## 相关文档
 
-- Python 迁移相关，详见 [Python 3.12 路线图](/migration/python-3-12)。
-- 第三方依赖升级，详见 [第三方依赖升级清单](/migration/third-party-deps)。
-- 构建系统现代化，详见 [构建系统现代化](/migration/build-system-modernization)。
+- Python 迁移相关，详见 [Python 升级路线图](/upgrade-plan/python-upgrade-plan)。
+- 第三方依赖升级，详见 [第三方依赖升级清单](/upgrade-plan/third-party-deps)。
+- 构建系统现代化，详见 [构建系统现代化](/upgrade-plan/build-system-modernization)。
 - 技术债与风险分析，详见 [技术债与风险](/analysis/risks)。

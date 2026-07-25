@@ -27,7 +27,7 @@ export default {
       { text: "总览", link: "/" },
       { text: "快速开始", link: "/getting-started/" },
       { text: "架构研究", link: "/architecture/research-method" },
-      { text: "专题大纲", link: "/architecture/outline" }
+      { text: "项目分析", link: "/analysis/overview" }
     ],
     sidebar: {
       "/getting-started/": [
@@ -125,14 +125,14 @@ export default {
           ]
         }
       ],
-      "/migration/": [
+      "/upgrade-plan/": [
         {
-          text: "迁移专题",
+          text: "升级计划",
           items: [
-            { text: "Python 3.12 路线图", link: "/migration/python-3-12" },
-            { text: "Python C API 迁移", link: "/migration/python-c-api-guide" },
-            { text: "第三方依赖升级", link: "/migration/third-party-deps" },
-            { text: "构建系统现代化", link: "/migration/build-system-modernization" }
+            { text: "Python 升级路线图", link: "/upgrade-plan/python-upgrade-plan" },
+            { text: "Python C API 迁移", link: "/upgrade-plan/python-c-api-guide" },
+            { text: "第三方依赖升级", link: "/upgrade-plan/third-party-deps" },
+            { text: "构建系统现代化", link: "/upgrade-plan/build-system-modernization" }
           ]
         }
       ],

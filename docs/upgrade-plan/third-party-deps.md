@@ -44,7 +44,7 @@ BigWorld 内嵌了大量第三方库，版本普遍老旧。本文档盘点当�
 
 1. **Python 2.7 → 3.12**
    - 影响范围：全仓库
-   - 详见 [Python 3.12 路线图](/migration/python-3-12)
+   - 详见 [Python 升级路线图](/upgrade-plan/python-upgrade-plan)
 
 2. **OpenSSL 1.0 → 3.x**
    - 原因：安全漏洞，不再维护
@@ -167,6 +167,6 @@ SSL_CTX_new(TLS_method());
 
 ## 参考资料
 
-- [Python 3.12 路线图](/migration/python-3-12)
-- [构建系统现代化](/migration/build-system-modernization)
+- [Python 升级路线图](/upgrade-plan/python-upgrade-plan)
+- [构建系统现代化](/upgrade-plan/build-system-modernization)
 - [技术债与风险](/analysis/risks)

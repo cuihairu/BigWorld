@@ -368,7 +368,7 @@ Python 3.13 (2024 年 10 月发布) 引入了 **free-threaded 模式** (PEP 703)
 - 减少主线程瓶颈
 - 保持代码简单性
 
-详细迁移方案见 [Python 3.12 路线图](/migration/python-3-12)（可扩展到 3.13+）。
+详细迁移方案见 [Python 升级路线图](/upgrade-plan/python-upgrade-plan)（可扩展到 3.13+）。
 
 ### 何时使用多线程
 
@@ -484,7 +484,7 @@ flamegraph.pl perf.data > flame.svg
 
 - [PEP 703: Making the Global Interpreter Lock Optional](https://peps.python.org/pep-0703/)
 - [Python 3.13 Release Notes](https://docs.python.org/3.13/whatsnew/3.13.html)
-- [BigWorld Python 迁移方案](/migration/python-3-12)
+- [BigWorld Python 迁移方案](/upgrade-plan/python-upgrade-plan)
 
 ## Python GIL 与线程
 
