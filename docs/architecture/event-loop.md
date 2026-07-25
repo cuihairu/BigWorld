@@ -22,6 +22,99 @@ BigWorld 每个主要服务进程不是“每个玩家一个线程”，而是�
 
 源码入口是 [event_dispatcher.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/event_dispatcher.cpp:428)。
 
+### EventDispatcher 核心数据结构
+
+```cpp
+// event_dispatcher.hpp - EventDispatcher 类定义
+class EventDispatcher
+{
+public:
+    EventDispatcher();
+    ~EventDispatcher();
+
+    // 主循环入口
+    int processOnce( bool shouldIdle = true );
+    int processContinuously();
+    int processUntilBreak();
+
+    // Timer 管理
+    int addTimer( int microseconds, TimerHandler * pHandler, 
+                  void * pUser, const char * name );
+    int addOnceOffTimer( int microseconds, TimerHandler * pHandler,
+                         void * pUser, const char * name );
+
+    // FrequentTask 管理
+    void addFrequentTask( FrequentTask * pTask );
+    void delFrequentTask( FrequentTask * pTask );
+
+private:
+    // 核心组件
+    FrequentTasks * pFrequentTasks_;
+    TimeQueue64 * pTimeQueue_;
+    EventPoller * pPoller_;
+    
+    // 等待策略
+    double maxWait_;  // 默认 0.1 秒 (100ms)
+    bool breakProcessing_;
+    
+    // 统计
+    uint64 lastProcessTime_;
+    int numTimerCalls_;
+    int numFrequentTaskCalls_;
+};
+```
+
+**设计要点：**
+- `pFrequentTasks_` 是同步回调集合，每轮主循环都执行
+- `pTimeQueue_` 是基于 timestamp 的定时器队列，支持一次性和循环 timer
+- `pPoller_` 是 epoll/kqueue 封装，只负责 FD readiness 事件
+- `maxWait_` 默认 100ms，控制网络 poll 的最大等待时间
+- `breakProcessing_` 标志用于提前退出循环（如收到 SIGINT）
+
+### processOnce() 实现细节
+
+```cpp
+// event_dispatcher.cpp:428
+int EventDispatcher::processOnce( bool shouldIdle )
+{
+    // 1. 执行 FrequentTasks
+    if (pFrequentTasks_)
+    {
+        pFrequentTasks_->process();
+    }
+    
+    if (breakProcessing_) return 0;
+    
+    // 2. 处理 Timer
+    if (pTimeQueue_)
+    {
+        pTimeQueue_->process( timestamp() );
+    }
+    
+    if (breakProcessing_) return 0;
+    
+    // 3. 更新统计
+    this->processStats();
+    
+    if (breakProcessing_) return 0;
+    
+    // 4. 处理网络事件
+    if (pPoller_)
+    {
+        double maxWait = shouldIdle ? this->calculateWait() : 0;
+        pPoller_->processPendingEvents( maxWait );
+    }
+    
+    return 0;
+}
+```
+
+**关键细节：**
+- FrequentTasks 在 Timer 之前执行，所以频繁任务优先级更高
+- Timer 使用 `timestamp()` 驱动，不是 wall-clock
+- 网络处理在最后，受前面任务耗时影响
+- `calculateWait()` 取 `maxWait_` 和最近 timer 到期时间的较小值
+
 这说明网络事件不是孤立调度的，它被放在一轮主循环的后半段。任何 Timer、FrequentTask 或主线程消息处理耗时，都会影响网络处理的及时性。
 
 从服务进程视角看，默认入口更简单：`ServerApp::run()` 调用 `mainDispatcher_.processUntilBreak()`，运行结束后才执行 `onRunComplete()`，见 [server_app.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/server/server_app.cpp:240)。所以 BaseApp、CellApp、LoginApp、Manager 的“主线程”本质上就是围绕同一个 `EventDispatcher` 轮转。
@@ -71,23 +164,117 @@ flowchart TD
 
 ## TimerQueue 与 GameTick
 
-`EventDispatcher::addTimerCommon()` 把微秒转换成 timestamp interval，然后插入 `TimeQueue64`。一次性 timer 的 interval 为 0，循环 timer 的 interval 非 0，见 [event_dispatcher.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/event_dispatcher.cpp:264)。
+**概述：** BigWorld 的游戏循环不是固定 sleep，而是通过 Timer 驱动。每个 App 有自己的 GameTick timer，到期后执行游戏逻辑。Timer 使用 `timestamp()` 驱动，不是 wall-clock。
 
-`TimeQueueT::process()` 会持续弹出所有到期或已取消节点：
+**源码入口：** [event_dispatcher.cpp:264](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/event_dispatcher.cpp:264)
 
-- 到期且未取消的节点调用 `triggerTimer()`。
-- 如果 callback 后节点仍未取消，循环 timer 会重新入队。
-- 如果节点被取消，则释放引用并减少取消计数。
+```cpp
+// event_dispatcher.cpp:264 - 添加 Timer
+int EventDispatcher::addTimerCommon( int microseconds, 
+    TimerHandler * pHandler, void * pUser, const char * name,
+    bool isRepeating )
+{
+    // 1. 微秒转换为 timestamp interval
+    uint64 interval = uint64(microseconds) * 1000;
+    
+    // 2. 计算到期时间
+    uint64 startTime = timestamp() + interval;
+    
+    // 3. 插入 TimeQueue64
+    TimeQueue64::iterator iter = pTimeQueue_->add( startTime, 
+        pHandler, pUser, interval );
+    
+    // 4. 返回 timer ID
+    return iter->id();
+}
+```
 
-源码见 [time_queue.ipp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/cstdmf/time_queue.ipp:163)。
+**流程图：**
 
-`TimeQueueT::Node::triggerTimer()` 直接调用 `TimerHandler::handleTimeout()`。如果 `interval_ == 0` 且没有在 callback 内取消，会自动 cancel；否则把 `time_ += interval_`，回到 pending 状态，见 [time_queue.ipp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/cstdmf/time_queue.ipp:399)。
+<MermaidDiagram title="Timer 添加与触发流程">
+sequenceDiagram
+    participant App as BaseApp/CellApp
+    participant Dispatcher as EventDispatcher
+    participant TimeQueue as TimeQueue64
+    participant Timer as Timer Node
+    participant Handler as TimerHandler
 
-这解释了 GameTick 的触发方式：
+    App->>Dispatcher: addTimer(100ms)
+    Dispatcher->>TimeQueue: add(timestamp + 100ms)
+    TimeQueue->>Timer: 创建 Timer 节点
+    Timer->>Timer: 设置 interval = 100ms
+    
+    Note over Timer: 等待 100ms...
+    
+    Timer->>TimeQueue: process(timestamp())
+    TimeQueue->>Timer: 检查是否到期
+    Timer->>Handler: handleTimeout()
+    Handler->>App: tickGameTime()
+    Timer->>TimeQueue: 重新入队 (循环 timer)
+</MermaidDiagram>
 
-- BaseApp 用 `mainDispatcher_.addTimer(1000000 / Config::updateHertz(), ..., "GameTick")` 启动 game timer，见 [baseapp.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/baseapp/baseapp.cpp:2016)。
-- CellApp 用同样方式在 ready 后启动 game timer，见 [cellapp.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/cellapp.cpp:798)。
-- Timer 到期后分别进入 `BaseApp::handleTimeout()` 和 `CellApp::handleTimeout()`，再分派到 `tickGameTime()` / `handleGameTickTimeSlice()`，见 [baseapp.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/baseapp/baseapp.cpp:1461) 和 [cellapp.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/cellapp.cpp:942)。
+**详细讲解：**
+
+1. **时间单位**：`microseconds` 是输入，`timestamp()` 返回纳秒。所以 `interval = microseconds * 1000`。
+
+2. **TimeQueue64 结构**：基于时间戳的优先队列，最早到期的 timer 在队首。`process()` 方法检查队首是否到期。
+
+3. **循环 Timer**：如果 `interval > 0`，timer 到期后会重新入队，实现周期性触发。GameTick 就是循环 timer。
+
+4. **Timer 触发**：`triggerTimer()` 直接调用 `TimerHandler::handleTimeout()`，在主线程同步执行。
+
+### GameTick 启动
+
+**源码入口：** [baseapp.cpp:2016](/home/cui/workspaces/BigWorld/programming/bigworld/server/baseapp/baseapp.cpp:2016)
+
+```cpp
+// baseapp.cpp:2016 - BaseApp 启动 GameTick
+void BaseApp::onManagerRebirth( ... )
+{
+    // ... 其他初始化 ...
+    
+    // 启动 GameTick timer，10Hz (100ms)
+    gameTimerHandle_ = mainDispatcher_.addTimer(
+        1000000 / Config::updateHertz(),  // 1000000 / 10 = 100000us = 100ms
+        this,                              // TimerHandler
+        NULL,                              // pUser
+        "GameTick"                         // 名称
+    );
+}
+```
+
+**GameTick 执行流程：**
+
+<MermaidDiagram title="GameTick 执行流程">
+sequenceDiagram
+    participant Timer as GameTick Timer
+    participant BaseApp as BaseApp
+    participant ServerApp as ServerApp
+    participant EntityApp as EntityApp
+    participant Script as Python Scripts
+
+    Timer->>BaseApp: handleTimeout()
+    BaseApp->>BaseApp: tickGameTime()
+    BaseApp->>ServerApp: advanceTime()
+    ServerApp->>ServerApp: onTickPeriod()
+    ServerApp->>ServerApp: onEndOfTick()
+    ServerApp->>ServerApp: time_++
+    ServerApp->>ServerApp: profiler.tick()
+    ServerApp->>ServerApp: onStartOfTick()
+    ServerApp->>ServerApp: callUpdatables()
+    ServerApp->>EntityApp: onTickProcessingComplete()
+    EntityApp->>Script: 执行脚本 timer
+</MermaidDiagram>
+
+**详细讲解：**
+
+1. **Tick 频率**：`Config::updateHertz()` 默认 10，表示 10Hz，每 100ms 一个 tick。这是 MMO 服务器的典型配置。
+
+2. **Tick Hook 顺序**：`advanceTime()` 定义了所有 App 共享的 hook 顺序，确保每个 tick 的执行顺序一致。
+
+3. **脚本 Timer**：`EntityApp::onTickProcessingComplete()` 会执行 Python 脚本的 timer，这些 timer 绑定到 GameTime，不是 wall-clock。
+
+4. **负载上报**：每个 tick 结束时，App 会向 Mgr 上报负载信息，用于负载均衡决策。
 
 ## Tick Hook 顺序
 

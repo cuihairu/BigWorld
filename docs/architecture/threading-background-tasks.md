@@ -85,77 +85,258 @@ sequenceDiagram
 
 ### 任务投递流程
 
-从主线程投递后台任务到执行的完整调用链：
+**概述：** 从主线程投递后台任务到执行的完整流程。BgTaskManager 使用信号量通知后台线程，实现高效的线程间通信。
 
-源码入口：[bgtask_manager.cpp:693](/home/cui/workspaces/BigWorld/programming/bigworld/lib/cstdmf/bgtask_manager.cpp:693)
+**源码入口：** [bgtask_manager.cpp:693](/home/cui/workspaces/BigWorld/programming/bigworld/lib/cstdmf/bgtask_manager.cpp:693)
 
-<div class="flow-strip">
-  <span class="flow-node">主线程调用 addBackgroundTask()</span>
-  <span class="flow-arrow">-></span>
-  <span class="flow-node">记录 timeEnqueuedToBackground_</span>
-  <span class="flow-arrow">-></span>
-  <span class="flow-node">bgTaskList_.push() 入队</span>
-  <span class="flow-arrow">-></span>
-  <span class="flow-node">semaphore 通知后台线程</span>
-</div>
+```cpp
+// bgtask_manager.cpp:693 - 投递后台任务
+void TaskManager::addBackgroundTask( BackgroundTask * pTask )
+{
+    // 1. 记录入队时间
+    pTask->timeEnqueuedToBackground_ = timestamp();
+    
+    // 2. 加锁并入队
+    bgTaskListMutex_.grab();
+    bgTaskList_.push_back( pTask );
+    bgTaskListMutex_.release();
+    
+    // 3. 信号量通知后台线程
+    bgTaskSemaphore_.push();
+}
+```
+
+**流程图：**
+
+<MermaidDiagram title="任务投递流程">
+sequenceDiagram
+    participant Main as 主线程
+    participant Queue as bgTaskList_
+    participant Semaphore as bgTaskSemaphore_
+    participant Worker as 后台线程
+
+    Main->>Main: 记录 timeEnqueuedToBackground_
+    Main->>Queue: 加锁并入队
+    Main->>Semaphore: push() 通知
+    Semaphore->>Worker: 唤醒
+    Worker->>Queue: pullBackgroundTask()
+    Queue->>Worker: 返回任务
+</MermaidDiagram>
+
+**详细讲解：**
+
+1. **时间戳记录**：`timeEnqueuedToBackground_` 记录任务入队时间，用于统计任务等待时间。
+
+2. **互斥锁保护**：`bgTaskListMutex_` 保护任务队列，防止多线程同时修改。
+
+3. **信号量通知**：`bgTaskSemaphore_.push()` 通知后台线程有新任务。信号量比条件变量更高效，减少上下文切换。
+
+4. **批量处理**：后台线程可以一次拉取多个任务，减少锁竞争。
 
 ### 后台线程执行流程
 
-后台线程拉取并执行任务的调用链：
+**概述：** 后台线程循环拉取并执行任务。每个任务在独立的后台线程中执行，完成后可以选择投递回主线程。
 
-源码入口：[bgtask_manager.cpp:137](/home/cui/workspaces/BigWorld/programming/bigworld/lib/cstdmf/bgtask_manager.cpp:137)
+**源码入口：** [bgtask_manager.cpp:137](/home/cui/workspaces/BigWorld/programming/bigworld/lib/cstdmf/bgtask_manager.cpp:137)
 
-<div class="flow-strip">
-  <span class="flow-node">BackgroundTaskThread::run()</span>
-  <span class="flow-arrow">-></span>
-  <span class="flow-node">pullBackgroundTask() 等待任务</span>
-  <span class="flow-arrow">-></span>
-  <span class="flow-node">setStaticThreadData() 设置线程本地数据</span>
-  <span class="flow-arrow">-></span>
-  <span class="flow-node">检查 ThreadBlockCallback</span>
-  <span class="flow-arrow">-></span>
-  <span class="flow-node">doBackgroundTask() 执行任务</span>
-  <span class="flow-arrow">-></span>
-  <span class="flow-node">onBackgroundTaskFinished() 记录耗时</span>
-</div>
+```cpp
+// bgtask_manager.cpp:137 - 后台线程主循环
+void BackgroundTaskThread::run()
+{
+    while (true)
+    {
+        // 1. 等待任务
+        BackgroundTask * pTask = pManager_->pullBackgroundTask();
+        
+        // 2. 检查退出条件
+        if (pTask == NULL)
+        {
+            break;
+        }
+        
+        // 3. 设置线程本地数据
+        pTask->setStaticThreadData();
+        
+        // 4. 检查阻塞回调
+        if (pManager_->hasThreadBlockCallback())
+        {
+            pManager_->callThreadBlockCallback();
+        }
+        
+        // 5. 执行任务
+        pTask->doBackgroundTask();
+        
+        // 6. 记录耗时
+        pTask->onBackgroundTaskFinished();
+    }
+    
+    // 7. 投递 ThreadFinisher
+    pManager_->addMainThreadTask( new ThreadFinisher(this) );
+}
+```
+
+**流程图：**
+
+<MermaidDiagram title="后台线程执行流程">
+sequenceDiagram
+    participant Worker as 后台线程
+    participant Manager as TaskManager
+    participant Task as BackgroundTask
+    participant Main as 主线程
+
+    loop 任务循环
+        Worker->>Manager: pullBackgroundTask()
+        Manager->>Worker: 返回任务
+        
+        alt 任务为空
+            Worker->>Worker: 退出循环
+        else 有任务
+            Worker->>Task: setStaticThreadData()
+            Worker->>Task: doBackgroundTask()
+            Task->>Task: 执行后台逻辑
+            
+            alt 需要回主线程
+                Task->>Manager: addMainThreadTask(this)
+            end
+            
+            Worker->>Task: onBackgroundTaskFinished()
+        end
+    end
+    
+    Worker->>Manager: addMainThreadTask(ThreadFinisher)
+    Worker->>Worker: 线程退出
+</MermaidDiagram>
+
+**详细讲解：**
+
+1. **任务拉取**：`pullBackgroundTask()` 使用信号量等待，没有任务时线程休眠，不消耗 CPU。
+
+2. **线程本地数据**：`setStaticThreadData()` 设置线程本地存储，用于跟踪当前执行的任务。
+
+3. **阻塞回调**：`ThreadBlockCallback` 用于在任务执行前检查是否需要阻塞（如等待其他资源）。
+
+4. **任务执行**：`doBackgroundTask()` 在后台线程中执行，不能访问主线程数据（除非线程安全）。
+
+5. **线程退出**：收到 NULL 任务时，线程退出循环，投递 `ThreadFinisher` 通知主线程清理资源。
 
 ### 回主线程收尾流程
 
-后台任务完成后，投递 foreground task 回主线程：
+**概述：** 后台任务完成后，如果需要在主线程执行收尾操作（如更新主线程数据结构），通过 `addMainThreadTask()` 投递回主线程。
 
-源码入口：[bgtask_manager.cpp:709](/home/cui/workspaces/BigWorld/programming/bigworld/lib/cstdmf/bgtask_manager.cpp:709)
+**源码入口：** [bgtask_manager.cpp:709](/home/cui/workspaces/BigWorld/programming/bigworld/lib/cstdmf/bgtask_manager.cpp:709)
 
-<div class="flow-strip">
-  <span class="flow-node">doBackgroundTask() 完成</span>
-  <span class="flow-arrow">-></span>
-  <span class="flow-node">调用 addMainThreadTask(this)</span>
-  <span class="flow-arrow">-></span>
-  <span class="flow-node">fgTaskListMutex_ 加锁</span>
-  <span class="flow-arrow">-></span>
-  <span class="flow-node">fgTaskList_.push_back() 入队</span>
-  <span class="flow-arrow">-></span>
-  <span class="flow-node">主线程 tick() 处理</span>
-</div>
+```cpp
+// bgtask_manager.cpp:709 - 投递主线程任务
+void TaskManager::addMainThreadTask( BackgroundTask * pTask )
+{
+    // 1. 加锁
+    fgTaskListMutex_.grab();
+    
+    // 2. 入队
+    fgTaskList_.push_back( pTask );
+    
+    // 3. 解锁
+    fgTaskListMutex_.release();
+}
+```
+
+**流程图：**
+
+<MermaidDiagram title="回主线程收尾流程">
+sequenceDiagram
+    participant Task as BackgroundTask
+    participant Manager as TaskManager
+    participant Queue as fgTaskList_
+    participant Main as 主线程
+
+    Task->>Manager: addMainThreadTask(this)
+    Manager->>Queue: 加锁并入队
+    
+    Note over Main: 等待 tick...
+    
+    Main->>Manager: tick()
+    Manager->>Queue: swap(newTasks_)
+    Manager->>Task: doMainThreadTask()
+    Task->>Task: 执行收尾逻辑
+</MermaidDiagram>
+
+**详细讲解：**
+
+1. **线程安全**：`addMainThreadTask()` 可以在后台线程中调用，通过互斥锁保护队列。
+
+2. **队列交换**：`tick()` 使用 swap 操作，将任务队列交换到临时变量，减少锁持有时间。
+
+3. **收尾执行**：`doMainThreadTask()` 在主线程中执行，可以安全访问主线程数据。
+
+4. **延迟执行**：收尾任务不会立即执行，而是等待主线程 tick，确保在正确的时机处理。
 
 ### 主线程 tick 处理流程
 
-主线程定期处理 foreground tasks 的调用链：
+**概述：** 主线程定期处理 foreground tasks。这是 BgTaskManager 与主线程交互的关键点。
 
-源码入口：[bgtask_manager.cpp:744](/home/cui/workspaces/BigWorld/programming/bigworld/lib/cstdmf/bgtask_manager.cpp:744)
+**源码入口：** [bgtask_manager.cpp:744](/home/cui/workspaces/BigWorld/programming/bigworld/lib/cstdmf/bgtask_manager.cpp:744)
 
-<div class="flow-strip">
-  <span class="flow-node">TaskManager::tick()</span>
-  <span class="flow-arrow">-></span>
-  <span class="flow-node">fgTaskListMutex_ 加锁</span>
-  <span class="flow-arrow">-></span>
-  <span class="flow-node">fgTaskList_.swap(newTasks_) 交换队列</span>
-  <span class="flow-arrow">-></span>
-  <span class="flow-node">遍历 newTasks_</span>
-  <span class="flow-arrow">-></span>
-  <span class="flow-node">doMainThreadTask() 执行收尾</span>
-  <span class="flow-arrow">-></span>
-  <span class="flow-node">记录耗时统计</span>
-</div>
+```cpp
+// bgtask_manager.cpp:744 - 主线程 tick
+void TaskManager::tick()
+{
+    // 1. 加锁
+    fgTaskListMutex_.grab();
+    
+    // 2. 交换队列（减少锁持有时间）
+    BackgroundTaskList newTasks;
+    newTasks.swap( fgTaskList_ );
+    
+    // 3. 解锁
+    fgTaskListMutex_.release();
+    
+    // 4. 处理任务
+    for (BackgroundTask * pTask : newTasks)
+    {
+        // 记录开始时间
+        uint64 startTime = timestamp();
+        
+        // 执行收尾任务
+        pTask->doMainThreadTask();
+        
+        // 记录耗时
+        uint64 elapsed = timestamp() - startTime;
+        pTask->onMainThreadTaskFinished( elapsed );
+    }
+}
+```
+
+**流程图：**
+
+<MermaidDiagram title="主线程 tick 处理流程">
+sequenceDiagram
+    participant Main as 主线程
+    participant Manager as TaskManager
+    participant Queue as fgTaskList_
+    participant Tasks as newTasks
+
+    Main->>Manager: tick()
+    Manager->>Queue: 加锁
+    Manager->>Tasks: swap(fgTaskList_)
+    Manager->>Queue: 解锁
+    
+    loop 处理任务
+        Manager->>Tasks: 遍历
+        Tasks->>Main: doMainThreadTask()
+        Main->>Main: 执行收尾逻辑
+        Main->>Tasks: onMainThreadTaskFinished()
+    end
+</MermaidDiagram>
+
+**详细讲解：**
+
+1. **队列交换**：使用 `swap()` 而不是逐个取出，减少锁持有时间，提高并发性能。
+
+2. **耗时统计**：每个任务记录执行时间，用于性能分析和负载监控。
+
+3. **顺序执行**：foreground tasks 在主线程中顺序执行，确保线程安全。
+
+4. **与 GameTick 关系**：`tick()` 在 `EntityApp::onTickProcessingComplete()` 中调用，与游戏逻辑同步。
 
 ### 线程退出流程
 

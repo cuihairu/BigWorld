@@ -69,14 +69,116 @@ flowchart TD
 
 ## 地址级限流
 
-`NetworkInterface` 保存了限流周期和两个粒度的计数：
+**概述：** `NetworkInterface` 提供 per-IP 和 per-IP:port 两级限流。这是网络入口的第一道防线，在进入 Mercury 解析前先执行地址限流。
 
-- `rateLimitPerIPAddress_`
-- `rateLimitedIPAddresses_`
-- `rateLimitPerIPAddressPort_`
-- `rateLimitedIPAddressPorts_`
+**源码入口：** [network_interface.hpp:236](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/network_interface.hpp:236)
 
-公开接口包括：
+```cpp
+// network_interface.hpp:236 - NetworkInterface 限流配置
+class NetworkInterface
+{
+public:
+    // 限流配置
+    int rateLimitPeriod() const { return rateLimitPeriod_; }
+    void rateLimitPeriod( int period ) { rateLimitPeriod_ = period; }
+    
+    int rateLimitPerIPAddress() const { return rateLimitPerIPAddress_; }
+    void rateLimitPerIPAddress( int limit ) { rateLimitPerIPAddress_ = limit; }
+    
+    int rateLimitPerIPAddressPort() const { return rateLimitPerIPAddressPort_; }
+    void rateLimitPerIPAddressPort( int limit ) { rateLimitPerIPAddressPort_ = limit; }
+    
+    // 限流检查
+    bool isIPAddressLimited( const Mercury::Address & addr );
+    bool isIPAddressPortLimited( const Mercury::Address & addr );
+    
+    // 重置计数
+    void resetRateLimitCounts();
+    
+private:
+    int rateLimitPeriod_;              // 限流周期（秒）
+    int rateLimitPerIPAddress_;        // 每 IP 限制
+    int rateLimitPerIPAddressPort_;    // 每 IP:Port 限制
+    
+    // 限流计数器
+    typedef std::map< Mercury::Address, int > RateLimitMap;
+    RateLimitMap rateLimitedIPAddresses_;
+    RateLimitMap rateLimitedIPAddressPorts_;
+};
+```
+
+**流程图：**
+
+<MermaidDiagram title="地址级限流流程">
+flowchart TD
+    A[收到 UDP 包] --> B{检查 IP 限流}
+    B -- 超限 --> C[丢弃]
+    B -- 未超限 --> D{检查 IP:Port 限流}
+    D -- 超限 --> C
+    D -- 未超限 --> E[更新计数器]
+    E --> F[继续处理]
+    
+    G[定时器触发] --> H[重置计数器]
+```
+
+**详细讲解：**
+
+1. **两级限流**：
+   - **IP 级**：限制同一 IP 的请求总数，防止单个 IP 发送过多请求
+   - **IP:Port 级**：限制同一 IP:Port 的请求总数，防止同一客户端发送过多请求
+
+2. **限流周期**：`rateLimitPeriod_` 定义计数器重置周期（秒），默认 1 秒
+
+3. **限流阈值**：
+   - `rateLimitPerIPAddress_`：每 IP 每周期最大请求数
+   - `rateLimitPerIPAddressPort_`：每 IP:Port 每周期最大请求数
+
+4. **计数器管理**：
+   - `rateLimitedIPAddresses_`：存储每个 IP 的当前计数
+   - `rateLimitedIPAddressPorts_`：存储每个 IP:Port 的当前计数
+   - 定时器触发时重置计数器
+
+5. **限流检查**：`isIPAddressLimited()` 和 `isIPAddressPortLimited()` 检查是否超限
+
+### PacketReceiver 限流
+
+**源码入口：** [packet_receiver.cpp:434](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/packet_receiver.cpp:434)
+
+```cpp
+// packet_receiver.cpp:434 - PacketReceiver 限流检查
+bool PacketReceiver::processPacket( const Mercury::Address & addr,
+    const Packet * pPacket )
+{
+    // 1. 检查 IP 限流
+    if (pNetworkInterface_->isIPAddressLimited( addr ))
+    {
+        WARNING_MSG( "PacketReceiver::processPacket: "
+            "IP %s rate limited\n", addr.ipAsString() );
+        return false;
+    }
+    
+    // 2. 检查 IP:Port 限流
+    if (pNetworkInterface_->isIPAddressPortLimited( addr ))
+    {
+        WARNING_MSG( "PacketReceiver::processPacket: "
+            "IP:Port %s rate limited\n", addr.ipAsString() );
+        return false;
+    }
+    
+    // 3. 更新限流计数
+    pNetworkInterface_->updateRateLimitCounts( addr );
+    
+    // 4. 继续处理
+    return this->processPacketInternal( addr, pPacket );
+}
+```
+
+**关键细节：**
+
+- 限流检查在 Mercury 解析前执行，减少无效处理
+- 超限时直接丢弃，不进入 Channel 分发
+- 计数器在检查通过后更新，确保准确性
+- 日志记录限流事件，便于监控和调试
 
 - `rateLimitPeriod()`
 - `perIPAddressRateLimit()`

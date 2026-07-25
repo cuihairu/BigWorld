@@ -79,33 +79,141 @@ flowchart LR
 
 ## 启动与注册链路
 
-服务端进程入口普遍通过 `bwMainT<APP>()` 模板启动。源码入口：
+**概述：** BigWorld 服务端进程启动后，需要向 machined 注册，并与 Mgr 组件建立连接。这是进程发现和负载均衡的基础。
 
-<div class="evidence-grid">
-  <div class="evidence-card">
-    <h3>BaseAppMgr</h3>
-    <p><code>server/baseappmgr/main.cpp</code> 调用 <code>bwMainT&lt;BaseAppMgr&gt;</code>。</p>
-  </div>
-  <div class="evidence-card">
-    <h3>CellAppMgr</h3>
-    <p><code>server/cellappmgr/main.cpp</code> 调用 <code>bwMainT&lt;CellAppMgr&gt;</code>。</p>
-  </div>
-  <div class="evidence-card">
-    <h3>CellApp</h3>
-    <p><code>server/cellapp/main.cpp</code> 调用 <code>bwMainT&lt;CellApp&gt;</code>。</p>
-  </div>
-  <div class="evidence-card">
-    <h3>Reviver</h3>
-    <p><code>server/reviver/main.cpp</code> 调用 <code>bwMainT&lt;Reviver&gt;</code>。</p>
-  </div>
-</div>
+**源码入口：** [baseappmgr.cpp:389](/home/cui/workspaces/BigWorld/programming/bigworld/server/baseappmgr/baseappmgr.cpp:389)
 
-组件启动后会注册 Mercury interface，并向 `machined` 注册。例如：
+```cpp
+// baseappmgr.cpp:389 - BaseAppMgr 注册
+bool BaseAppMgr::init( bool isReload )
+{
+    // 1. 注册 Mercury 接口
+    if (!this->BaseAppMgrInterface::registerWithInterface())
+    {
+        ERROR_MSG( "BaseAppMgr::init: Failed to register interface\n" );
+        return false;
+    }
+    
+    // 2. 向 machined 注册
+    if (!this->registerWithMachined())
+    {
+        ERROR_MSG( "BaseAppMgr::init: Failed to register with machined\n" );
+        return false;
+    }
+    
+    // 3. 监听其他组件 birth/death
+    this->BaseAppMgrInterface::registerBirthListener( 
+        &BaseAppMgr::onBaseAppBirth );
+    this->BaseAppMgrInterface::registerDeathListener(
+        &BaseAppMgr::onBaseAppDeath );
+    
+    return true;
+}
+```
 
-- `BaseAppMgrInterface::registerWithInterface()` 与 `registerWithMachined()` 在 [baseappmgr.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/baseappmgr/baseappmgr.cpp:389)。
-- `CellAppMgrInterface::registerWithInterface()` 与 `registerWithMachined()` 在 [cellappmgr.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellappmgr/cellappmgr.cpp:238)。
-- `CellAppInterface::registerWithInterface()` 在 [cellapp.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/cellapp.cpp:539)，向 `machined` 注册在 [cellapp.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/cellapp.cpp:711)。
-- `DBAppInterface::registerWithInterface()` 在 [dbapp.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/dbapp/dbapp.cpp:231)，向 `machined` 注册在 [dbapp.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/dbapp/dbapp.cpp:581)。
+**流程图：**
+
+<MermaidDiagram title="进程启动与注册流程">
+sequenceDiagram
+    participant Process as 服务进程
+    participant Machined as machined
+    participant Mgr as Mgr 组件
+    participant Other as 其他进程
+
+    Process->>Process: 初始化
+    Process->>Process: registerWithInterface()
+    Process->>Machined: 注册 (birth 消息)
+    Machined->>Mgr: 广播 birth
+    Mgr->>Mgr: addApp()
+    Mgr->>Process: 注册成功
+    Process->>Other: 监听 birth/death
+</MermaidDiagram>
+
+**详细讲解：**
+
+1. **接口注册**：`registerWithInterface()` 注册 Mercury 消息处理器，让进程可以接收和处理消息。
+
+2. **machined 注册**：`registerWithMachined()` 向 machined 发送 birth 消息，machined 会广播给其他进程。
+
+3. **Mgr 接纳**：Mgr 组件收到 birth 消息后，调用 `addApp()` 接纳新进程，更新进程列表和负载信息。
+
+4. **birth/death 监听**：进程监听其他组件的 birth/death 消息，用于服务发现和故障检测。
+
+### BaseAppMgr 启动流程
+
+**源码入口：** [baseappmgr.cpp:389](/home/cui/workspaces/BigWorld/programming/bigworld/server/baseappmgr/baseappmgr.cpp:389)
+
+```cpp
+// baseappmgr.cpp:389 - BaseAppMgr 启动
+bool BaseAppMgr::init( bool isReload )
+{
+    // ... 其他初始化 ...
+    
+    // 注册接口
+    if (!this->BaseAppMgrInterface::registerWithInterface())
+    {
+        return false;
+    }
+    
+    // 向 machined 注册
+    if (!this->registerWithMachined())
+    {
+        return false;
+    }
+    
+    // 监听 BaseApp birth
+    this->BaseAppMgrInterface::registerBirthListener(
+        &BaseAppMgr::onBaseAppBirth );
+    
+    // 监听 CellAppMgr birth
+    this->CellAppMgrInterface::registerBirthListener(
+        &BaseAppMgr::onCellAppMgrBirth );
+    
+    return true;
+}
+```
+
+**关键细节：**
+
+- BaseAppMgr 需要知道所有 BaseApp 和 CellAppMgr
+- 通过 birth/death 消息维护进程列表
+- 负载信息通过定期上报收集
+
+### CellAppMgr 启动流程
+
+**源码入口：** [cellappmgr.cpp:238](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellappmgr/cellappmgr.cpp:238)
+
+```cpp
+// cellappmgr.cpp:238 - CellAppMgr 启动
+bool CellAppMgr::init( bool isReload )
+{
+    // ... 其他初始化 ...
+    
+    // 注册接口
+    if (!this->CellAppMgrInterface::registerWithInterface())
+    {
+        return false;
+    }
+    
+    // 向 machined 注册
+    if (!this->registerWithMachined())
+    {
+        return false;
+    }
+    
+    // 监听 CellApp birth
+    this->CellAppMgrInterface::registerBirthListener(
+        &CellAppMgr::onCellAppBirth );
+    
+    return true;
+}
+```
+
+**关键细节：**
+
+- CellAppMgr 管理所有 CellApp，负责空间分配和负载均衡
+- 收到 CellApp birth 后，调用 `addApp()` 接纳
+- 收到 CellApp death 后，触发实体恢复流程
 
 ## 职责边界
 

@@ -34,49 +34,187 @@ BigWorld 的生命周期管理有明显的工程体系：
 
 ## 引用计数模型
 
-BigWorld 使用的是侵入式引用计数：计数存放在被引用对象内部，而不是像 `std::shared_ptr` 那样有外部 control block。
+**概述：** BigWorld 使用侵入式引用计数：计数存放在被引用对象内部，而不是像 `std::shared_ptr` 那样有外部 control block。这是老派 C++ 游戏引擎的典型做法，优点是低开销，缺点是没有 weak_ptr 语义。
 
-`ReferenceCount` 的注释明确写着：
+**源码入口：** [smartpointer.hpp:31](/home/cui/workspaces/BigWorld/programming/bigworld/lib/cstdmf/smartpointer.hpp:31)
 
-- 用于实现 SmartPointer 所需行为。
-- 非线程安全。
-- 引用计数存储在对象内部。
+```cpp
+// smartpointer.hpp:31 - ReferenceCount 定义
+class ReferenceCount
+{
+public:
+    ReferenceCount() : refCount_(0) {}
+    
+    // 增加引用计数
+    void incRef() const { ++refCount_; }
+    
+    // 减少引用计数
+    void decRef() const
+    {
+        if (--refCount_ == 0)
+        {
+            delete this;  // 计数归零时删除自身
+        }
+    }
+    
+    // 获取当前计数
+    int refCount() const { return refCount_; }
+    
+protected:
+    virtual ~ReferenceCount() {}
+    
+private:
+    mutable int refCount_;
+};
+```
 
-源码见 [smartpointer.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/cstdmf/smartpointer.hpp:31)。
+```cpp
+// smartpointer.hpp:157 - SafeReferenceCount 定义
+class SafeReferenceCount
+{
+public:
+    SafeReferenceCount() : refCount_(0) {}
+    
+    // 原子增加引用计数
+    void incRef() const
+    {
+        AtomicInt::add( refCount_, 1 );
+    }
+    
+    // 原子减少引用计数
+    void decRef() const
+    {
+        if (AtomicInt::add( refCount_, -1 ) == 1)
+        {
+            this->destroy();  // 计数归零时调用 destroy()
+        }
+    }
+    
+    // 获取当前计数
+    int refCount() const { return AtomicInt::get( refCount_ ); }
+    
+protected:
+    virtual ~SafeReferenceCount() {}
+    virtual void destroy() const { delete this; }
+    
+private:
+    mutable AtomicInt refCount_;
+};
+```
 
-`decRef()` 在计数归零时直接 `delete this`，见 [smartpointer.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/cstdmf/smartpointer.hpp:127)。
+**流程图：**
 
-`SafeReferenceCount` 使用原子增减，计数归零时调用 `destroy()`，见 [smartpointer.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/cstdmf/smartpointer.hpp:214)。
+<MermaidDiagram title=”引用计数生命周期”>
+sequenceDiagram
+    participant Obj as ReferenceCount 对象
+    participant Ptr1 as SmartPointer 1
+    participant Ptr2 as SmartPointer 2
+    participant GC as 垃圾回收
 
-两者差异不是小细节，而是所有权边界：
+    Obj->>Obj: refCount_ = 0
+    
+    Ptr1->>Obj: incRef()
+    Obj->>Obj: refCount_ = 1
+    
+    Ptr2->>Obj: incRef()
+    Obj->>Obj: refCount_ = 2
+    
+    Ptr1->>Obj: decRef()
+    Obj->>Obj: refCount_ = 1
+    
+    Ptr2->>Obj: decRef()
+    Obj->>Obj: refCount_ = 0
+    Obj->>GC: delete this
+</MermaidDiagram>
 
-- `ReferenceCount` 表示“不要跨线程随便操作引用计数”。
-- `SafeReferenceCount` 表示“对象可在多个执行路径间传递引用，但对象内部状态仍未必线程安全”。
+**详细讲解：**
 
-## SmartPointer 语义
+1. **侵入式设计**：引用计数存储在对象内部，不需要额外的 control block。这减少了内存分配和间接访问。
 
-`ConstSmartPointer` 构造时调用 `incrementReferenceCount()`，析构时调用 `decrementReferenceCount()`。源码见 [smartpointer.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/cstdmf/smartpointer.hpp:343) 和 [smartpointer.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/cstdmf/smartpointer.hpp:426)。
+2. **非线程安全**：`ReferenceCount` 的 `incRef()` / `decRef()` 不是原子操作，只能在单线程中使用。
 
-重要特点：
+3. **线程安全**：`SafeReferenceCount` 使用原子操作，可以在多线程中安全使用。
 
-- 支持 `STEAL_REFERENCE` 与 `NEW_REFERENCE`。
-- 支持隐式上转型。
-- 对象必须提供 `incRef()` / `decRef()`。
-- 删除动作由对象自己的 `decRef()` 完成。
+4. **销毁时机**：
+   - `ReferenceCount::decRef()` 在计数归零时直接 `delete this`
+   - `SafeReferenceCount::decRef()` 在计数归零时调用 `destroy()`，可以重载销毁逻辑
 
-这与现代 `shared_ptr` 的差异：
+5. **虚析构函数**：`~ReferenceCount()` 和 `~SafeReferenceCount()` 都是虚函数，确保正确的析构顺序。
 
-- 没有独立 control block。
-- 循环引用更难自动处理。
-- 不能天然使用 `weak_ptr` 语义。
-- 需要非常清楚对象是否允许 `delete this`。
-- 优点是低开销、易嵌入引擎对象。
+**为什么不用 std::shared_ptr：**
 
-## 引用计数完整调用链
+- 侵入式引用计数没有 control block 的额外开销
+- 可以直接嵌入引擎对象，不需要额外分配
+- 支持从原始指针构造（`STEAL_REFERENCE` 和 `NEW_REFERENCE`）
+- 缺点是没有 `weak_ptr`，循环引用需要手动打破
 
-### ReferenceCount 生命周期
+### ReferenceCount 生命周期调用链
 
-非线程安全引用计数的完整调用链：
+**概述：** 非线程安全引用计数的完整调用链，从对象创建到销毁。
+
+**源码入口：** [smartpointer.hpp:117](/home/cui/workspaces/BigWorld/programming/bigworld/lib/cstdmf/smartpointer.hpp:117)
+
+```cpp
+// smartpointer.hpp:117 - SmartPointer 构造和析构
+template<class T>
+class SmartPointer
+{
+public:
+    // 从原始指针构造（STEAL_REFERENCE）
+    SmartPointer( T * pObject, int /*refType*/ )
+        : pObject_( pObject )
+    {
+        // 不增加引用计数，接管所有权
+    }
+    
+    // 拷贝构造
+    SmartPointer( const SmartPointer & other )
+        : pObject_( other.pObject_ )
+    {
+        if (pObject_)
+        {
+            pObject_->incRef();  // 增加引用计数
+        }
+    }
+    
+    // 析构
+    ~SmartPointer()
+    {
+        if (pObject_)
+        {
+            pObject_->decRef();  // 减少引用计数
+        }
+    }
+    
+    // 赋值运算符
+    SmartPointer & operator=( const SmartPointer & other )
+    {
+        if (this != &other)
+        {
+            if (pObject_)
+            {
+                pObject_->decRef();  // 减少旧对象引用计数
+            }
+            pObject_ = other.pObject_;
+            if (pObject_)
+            {
+                pObject_->incRef();  // 增加新对象引用计数
+            }
+        }
+        return *this;
+    }
+    
+private:
+    T * pObject_;
+};
+```
+
+**关键细节：**
+
+- `STEAL_REFERENCE`：从原始指针构造，不增加引用计数，接管所有权
+- `NEW_REFERENCE`：从原始指针构造，增加引用计数
+- 拷贝构造和赋值运算符正确管理引用计数
+- 析构时减少引用计数，可能触发对象销毁
 
 源码入口：[smartpointer.hpp:117](/home/cui/workspaces/BigWorld/programming/bigworld/lib/cstdmf/smartpointer.hpp:117)
 

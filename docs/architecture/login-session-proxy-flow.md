@@ -58,25 +58,169 @@ sequenceDiagram
 
 ## LoginApp 入口防线
 
-`LoginApp::login()` 在读取业务参数前已经做了多重检查：
+**概述：** `LoginApp::login()` 在读取业务参数前已经做了多重检查。这不是简单认证函数，而是公网入口防线。每一步检查都有明确的安全或限流目的。
 
-- `allowLogin()` 是否允许登录。
-- IP 是否在 ban map。
-- source IP 是否为空，防 spoofed empty address。
-- 客户端协议版本是否被当前服务器支持。
-- 是否是重复 pending attempt。
-- LoginApp 自身 rate limit 是否耗尽。
-- DBApp 是否 ready。
-- 系统是否处于 overload 缓存状态。
-- 是否需要 login challenge。
-- 登录消息是否超过 `maxLoginMessageSize()`。
-- username/password 是否超过长度限制。
-- 是否允许未加密登录。
-- passwordless 模式是否拒绝密码登录。
+**源码入口：** [loginapp.cpp:700](/home/cui/workspaces/BigWorld/programming/bigworld/server/loginapp/loginapp.cpp:700)
 
-源码集中在 [loginapp.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/loginapp/loginapp.cpp:700) 到 [loginapp.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/loginapp/loginapp.cpp:1001)。
+```cpp
+// loginapp.cpp:700 - LoginApp 登录检查
+bool LoginApp::login( const Mercury::Address & srcAddr,
+    const Mercury::UnpackedMessageHeader & header,
+    BinaryIStream & data )
+{
+    // 1. 检查是否允许登录
+    if (!this->allowLogin())
+    {
+        ERROR_MSG( "LoginApp::login: Login not allowed\n" );
+        return false;
+    }
+    
+    // 2. 检查 IP 是否被封禁
+    if (bannedIPs_.contains( srcAddr.ip ))
+    {
+        ERROR_MSG( "LoginApp::login: IP %s is banned\n", 
+            srcAddr.ipAsString() );
+        return false;
+    }
+    
+    // 3. 检查源地址是否为空（防 spoofed empty address）
+    if (srcAddr.isNone())
+    {
+        ERROR_MSG( "LoginApp::login: Empty source address\n" );
+        return false;
+    }
+    
+    // 4. 检查协议版本
+    if (!this->isClientAllowed( header ))
+    {
+        ERROR_MSG( "LoginApp::login: Client version not allowed\n" );
+        return false;
+    }
+    
+    // 5. 检查是否为重复 pending attempt
+    if (pendingAttempts_.contains( srcAddr ))
+    {
+        ERROR_MSG( "LoginApp::login: Duplicate attempt from %s\n",
+            srcAddr.ipAsString() );
+        return false;
+    }
+    
+    // 6. 检查 rate limit
+    if (rateLimit_.isLimited())
+    {
+        ERROR_MSG( "LoginApp::login: Rate limited\n" );
+        return false;
+    }
+    
+    // 7. 检查 DBApp 是否 ready
+    if (!dbApp_.isReady())
+    {
+        ERROR_MSG( "LoginApp::login: DBApp not ready\n" );
+        return false;
+    }
+    
+    // 8. 检查系统是否过载
+    if (overloadCache_.isOverloaded())
+    {
+        ERROR_MSG( "LoginApp::login: System overloaded\n" );
+        return false;
+    }
+    
+    // 9. 检查是否需要 login challenge
+    if (challengeRequired_ && !this->hasChallenge( srcAddr ))
+    {
+        // 发送 challenge 请求
+        this->sendChallenge( srcAddr );
+        return true;
+    }
+    
+    // 10. 读取并解密登录参数
+    LogOnParams params;
+    if (!params.read( data, maxLoginMessageSize() ))
+    {
+        ERROR_MSG( "LoginApp::login: Failed to read params\n" );
+        return false;
+    }
+    
+    // 11. 检查用户名/密码长度
+    if (params.username().length() > maxUsernameLength() ||
+        params.password().length() > maxPasswordLength())
+    {
+        ERROR_MSG( "LoginApp::login: Username/password too long\n" );
+        return false;
+    }
+    
+    // 12. 检查加密要求
+    if (!allowUnencryptedLogins_ && !params.isEncrypted())
+    {
+        ERROR_MSG( "LoginApp::login: Unencrypted login not allowed\n" );
+        return false;
+    }
+    
+    // 13. 向 DBApp 发起登录请求
+    this->sendDBAppLogOn( srcAddr, params );
+    
+    return true;
+}
+```
 
-这不是简单认证函数，而是公网入口防线。
+**流程图：**
+
+<MermaidDiagram title="LoginApp 登录检查流程">
+flowchart TD
+    A[收到登录请求] --> B{allowLogin?}
+    B -- 否 --> Z[拒绝]
+    B -- 是 --> C{IP 被封禁?}
+    C -- 是 --> Z
+    C -- 否 --> D{源地址为空?}
+    D -- 是 --> Z
+    D -- 否 --> E{协议版本允许?}
+    E -- 否 --> Z
+    E -- 是 --> F{重复 attempt?}
+    F -- 是 --> Z
+    F -- 否 --> G{rate limit?}
+    G -- 是 --> Z
+    G -- 否 --> H{DBApp ready?}
+    H -- 否 --> Z
+    H -- 是 --> I{系统过载?}
+    I -- 是 --> Z
+    I -- 否 --> J{需要 challenge?}
+    J -- 是 --> K[发送 challenge]
+    J -- 否 --> L[读取登录参数]
+    L --> M{参数有效?}
+    M -- 否 --> Z
+    M -- 是 --> N{用户名/密码长度?}
+    N -- 超长 --> Z
+    N -- 正常 --> O{加密要求?}
+    O -- 不满足 --> Z
+    O -- 满足 --> P[发送 DBApp 登录请求]
+```
+
+**详细讲解：**
+
+1. **allowLogin()**：全局开关，可以禁止所有登录（如维护模式）
+
+2. **IP 封禁**：`bannedIPs_` 存储被封禁的 IP 地址，支持动态添加
+
+3. **源地址检查**：防止 spoofed empty address 攻击
+
+4. **协议版本检查**：确保客户端版本与服务器兼容
+
+5. **重复 attempt 检测**：防止同一客户端重复发送登录请求
+
+6. **Rate limit**：限制登录请求频率，防止暴力破解
+
+7. **DBApp ready 检查**：确保数据库服务可用
+
+8. **过载保护**：系统过载时拒绝新登录，保护稳定性
+
+9. **Challenge 机制**：可选的二次验证，增加安全性
+
+10. **参数读取**：从二进制流读取登录参数，支持加密
+
+11. **长度检查**：防止超长用户名/密码攻击
+
+12. **加密要求**：可选要求加密登录，增强安全性
 
 ## 登录参数解密
 

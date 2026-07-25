@@ -65,19 +65,123 @@ BaseApp 不是只把消息转发到 DBApp。它还负责：
 
 ## Cell 数据请求
 
-如果 Base 有 Cell entity，但调用 `writeToDB()` 时没有 Cell data，就会先发请求：
+**概述：** 如果 Base 有 Cell entity，但调用 `writeToDB()` 时没有 Cell data，就会先发请求。这体现了 Base/Cell 分层持久化：Base 持有数据库协调权，Cell 持有空间和位置数据。
+
+**源码入口：** [base.cpp:1970](/home/cui/workspaces/BigWorld/programming/bigworld/server/baseapp/base.cpp:1970)
 
 ```cpp
-bundle.startRequest(CellAppInterface::writeToDBRequest, handler);
-bundle << id_;
-sendToCell();
+// base.cpp:1970 - Cell 数据请求
+bool Base::requestCellDBData( WriteDBFlags flags,
+    WriteToDBReplyStructPtr pReplyStruct )
+{
+    // 1. 检查是否有 Cell entity
+    if (!this->hasCellEntity())
+    {
+        return false;
+    }
+    
+    // 2. 创建请求 bundle
+    Mercury::Bundle & bundle = this->cellBundle();
+    
+    // 3. 发送 writeToDBRequest 到 CellApp
+    bundle.startRequest( CellAppInterface::writeToDBRequest, 
+        new WriteToDBReplyHandler( this, flags, pReplyStruct ) );
+    bundle << id_;
+    
+    // 4. 发送到 Cell
+    this->sendToCell();
+    
+    return true;
+}
 ```
 
-源码见 [base.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/baseapp/base.cpp:1970)。
+**流程图：**
 
-这体现了 Base/Cell 分层持久化：
+<MermaidDiagram title="Cell 数据请求流程">
+sequenceDiagram
+    participant Base as Base Entity
+    participant Bundle as Mercury Bundle
+    participant CellApp as CellApp
+    participant Cell as Cell Entity
 
-- Base 持有数据库协调权。
+    Base->>Base: writeToDB() 检查
+    Base->>Base: 没有 Cell data
+    Base->>Bundle: startRequest(writeToDBRequest)
+    Bundle->>Bundle: 写入 EntityID
+    Base->>CellApp: 发送请求
+    
+    CellApp->>Cell: 查找 Cell Entity
+    Cell->>Cell: 收集持久化数据
+    Cell->>Bundle: 写入 Cell data
+    CellApp->>Base: 回复 Cell data
+    
+    Base->>Base: 合并 Base + Cell data
+    Base->>DBApp: 发送完整数据
+</MermaidDiagram>
+
+**详细讲解：**
+
+1. **分层持久化**：Base 持有数据库协调权，Cell 持有空间和位置数据。两者需要合并才能完整持久化。
+
+2. **异步请求**：`startRequest()` 是异步操作，Base 不会阻塞等待 Cell 回复。
+
+3. **EntityID 传递**：CellApp 有多个 Cell Entity，需要 EntityID 路由到正确的 Entity。
+
+4. **ReplyHandler**：`WriteToDBReplyHandler` 处理 Cell 回复，合并 Base 和 Cell 数据后发送到 DBApp。
+
+5. **为什么这样设计**：
+   - Base 和 Cell 可能在不同进程
+   - Cell 可能正在迁移或 offload
+   - Base 需要协调多个 Cell 的数据（如果实体有多个 Cell）
+
+### 持久化完整流程
+
+**源码入口：** [base.cpp:1947](/home/cui/workspaces/BigWorld/programming/bigworld/server/baseapp/base.cpp:1947)
+
+```cpp
+// base.cpp:1947 - Base 持久化
+bool Base::writeToDB( WriteDBFlags flags, WriteToDBReplyHandler * pHandler,
+    PyObjectPtr pCellData, DatabaseID explicitDatabaseID )
+{
+    // 1. 检查是否需要 Cell 数据
+    if (this->hasCellEntity() && pCellData == NULL)
+    {
+        // 先请求 Cell 数据
+        return this->requestCellDBData( flags, 
+            new WriteToDBReplyStruct( pHandler ) );
+    }
+    
+    // 2. 准备 Base 数据
+    PyObjectPtr pBaseData = this->getDict();
+    
+    // 3. 发送到 DBApp
+    Mercury::Bundle & bundle = dbApp_.bundle();
+    bundle.startRequest( DBAppInterface::writeEntity,
+        new WriteToDBReplyHandler( this, flags, pHandler ) );
+    
+    // 4. 写入 EntityID 和 DatabaseID
+    bundle << id_;
+    bundle << explicitDatabaseID;
+    
+    // 5. 写入 Base 数据
+    bundle << pBaseData;
+    
+    // 6. 写入 Cell 数据（如果有）
+    if (pCellData)
+    {
+        bundle << pCellData;
+    }
+    
+    return true;
+}
+```
+
+**关键细节：**
+
+- 如果有 Cell Entity 但没有 Cell 数据，先请求 Cell 数据
+- Base 数据和 Cell 数据分别序列化
+- DatabaseID 可能是 0（首次写入）或已有值（更新）
+- 写入是异步的，通过 ReplyHandler 处理结果
 - Cell 持有空间和 cell-only 属性权威。
 - 写 DB 时必须把两边数据拼起来。
 

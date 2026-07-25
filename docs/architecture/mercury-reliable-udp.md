@@ -83,9 +83,22 @@ flowchart TD
 
 ## 可靠等级
 
-可靠性不是 bool。`Bundle` 定义了四种可靠类型，见 [bundle.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/bundle.hpp:27)：
+**概述：** 可靠性不是简单的 bool 值。BigWorld 定义了四种可靠类型，允许在同一个 Bundle 中混合可靠和不可靠消息。这是 MMO 状态同步的关键：位置更新可以丢弃，但实体创建必须可靠。
 
-<div class="decision-table">
+**源码入口：** [bundle.hpp:27](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/bundle.hpp:27)
+
+```cpp
+// bundle.hpp:27 - 可靠类型定义
+enum ReliableType
+{
+    RELIABLE_NO,        // 不可靠消息
+    RELIABLE_DRIVER,    // 驱动可靠包
+    RELIABLE_PASSENGER, // 搭车可靠消息
+    RELIABLE_CRITICAL   // 关键可靠消息
+};
+```
+
+<div class=”decision-table”>
 
 | 类型 | 含义 | 设计目的 |
 | --- | --- | --- |
@@ -96,56 +109,271 @@ flowchart TD
 
 </div>
 
-这个设计的重点是“按消息和 Bundle 组合表达可靠性”。它比 TCP 的连接级可靠更细，也比简单 UDP RPC 的 per-message ACK 更贴近游戏协议。
+**流程图：**
 
-`RELIABLE_CRITICAL` 会影响 `UDPChannel` 内的 `unackedCriticalSeq_`，源码注释说明 critical 的语义由应用层控制，见 [udp_channel.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/udp_channel.hpp:485)。
+<MermaidDiagram title=”可靠消息发送流程”>
+sequenceDiagram
+    participant Sender as 发送方
+    participant Bundle as UDPBundle
+    participant Channel as UDPChannel
+    participant Receiver as 接收方
+
+    Sender->>Bundle: 添加消息 (RELIABLE_DRIVER)
+    Bundle->>Bundle: 标记为可靠
+    Sender->>Bundle: 添加消息 (RELIABLE_PASSENGER)
+    Bundle->>Bundle: 搭车可靠
+    Sender->>Bundle: 添加消息 (RELIABLE_NO)
+    Bundle->>Bundle: 不可靠
+    
+    Bundle->>Channel: 发送 Bundle
+    Channel->>Channel: 记录到 unackedPackets_
+    Channel->>Receiver: UDP 包
+    
+    Receiver->>Receiver: 解析消息
+    Receiver->>Channel: 发送 ACK
+    Channel->>Channel: 从 unackedPackets_ 移除
+</MermaidDiagram>
+
+**详细讲解：**
+
+1. **RELIABLE_DRIVER**：第一个可靠消息，让整个 Bundle 具备可靠投递基础。如果没有 driver，Bundle 中的 passenger 消息不会重发。
+
+2. **RELIABLE_PASSENGER**：搭车消息，只有 Bundle 中有 driver 时才可靠发送。这允许批量发送多个可靠消息，减少 ACK 开销。
+
+3. **RELIABLE_CRITICAL**：关键消息，等价于 driver，并标记 Bundle 为 critical。critical Bundle 会占用 `unackedCriticalSeq_`，用于判断是否需要等待关键消息确认。
+
+4. **混合 Bundle**：同一个 Bundle 中可以混合可靠和不可靠消息。例如，移动更新（不可靠）和属性变更（可靠）可以在同一个包中发送。
+
+**为什么不用 TCP：**
+
+- TCP 是连接级可靠，无法区分”这条消息可靠，那条消息不可靠”
+- TCP 的 head-of-line blocking 会让旧可靠数据阻塞后续新状态
+- MMO 状态同步需要按消息语义选择可靠性，不是按连接统一重传
 
 ## 发送窗口
 
-发送窗口由这些状态共同维护：
+**概述：** Mercury 维护自己的滑动窗口和未确认包集合。这不是”发出去后等回调”的简单模型，而是类似 TCP 的窗口机制，但针对游戏协议优化。
 
-- `smallOutSeqAt_`：通常是下一个要发送的序号，不包含 overflow packets。
-- `largeOutSeqAt_`：包含 overflow packets。
-- `oldestUnackedSeq_`：最早未 ACK 的包。
-- `unackedPackets_`：保存未确认包与可靠消息顺序。
-- `windowSize_` 与 `maxWindowSize()`：控制发送窗口和溢出边界。
+**源码入口：** [udp_channel.hpp:383](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/udp_channel.hpp:383)
 
-源码见 [udp_channel.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/udp_channel.hpp:383)。
+```cpp
+// udp_channel.hpp:383 - 发送窗口状态
+class UDPChannel
+{
+private:
+    // 发送窗口状态
+    SeqNum smallOutSeqAt_;      // 下一个要发送的序号（不含 overflow）
+    SeqNum largeOutSeqAt_;      // 下一个要发送的序号（含 overflow）
+    SeqNum oldestUnackedSeq_;   // 最早未 ACK 的包
+    UnackedPackets unackedPackets_;  // 未确认包集合
+    int windowSize_;            // 当前窗口大小
+    int maxWindowSize_;         // 最大窗口大小
+    
+    // 重发相关
+    int roundTripTime_;         // RTT 估计
+    int resendTimeout_;         // 重发超时
+    int lastSendTime_;          // 上次发送时间
+};
+```
 
-这说明 Mercury 不是“发出去后等回调”的简单模型，而是维护自己的滑动窗口和未确认包集合。
+**流程图：**
+
+<MermaidDiagram title=”发送窗口滑动机制”>
+stateDiagram-v2
+    [*] --> Idle
+    Idle --> Sending: 有数据要发
+    Sending --> WindowFull: 窗口满
+    WindowFull --> Sending: 收到 ACK
+    Sending --> Resending: 超时未 ACK
+    Resending --> Sending: 收到 ACK
+    Sending --> Idle: 无数据
+    
+    state Sending {
+        [*] --> CheckWindow
+        CheckWindow --> SendPacket: 窗口有空间
+        CheckWindow --> WaitACK: 窗口满
+        SendPacket --> RecordUnacked
+        RecordUnacked --> CheckWindow
+    }
+    
+    state Resending {
+        [*] --> FindOldest
+        FindOldest --> ResendPacket
+        ResendPacket --> UpdateTimeout
+        UpdateTimeout --> [*]
+    }
+</MermaidDiagram>
+
+**详细讲解：**
+
+1. **序号管理**：`smallOutSeqAt_` 和 `largeOutSeqAt_` 区分普通包和 overflow 包。overflow 包用于窗口满时的特殊处理。
+
+2. **未确认包集合**：`unackedPackets_` 保存所有已发送但未收到 ACK 的包。每个包记录发送时间、可靠消息列表。
+
+3. **窗口大小**：`windowSize_` 动态调整，根据网络状况和 ACK 速度变化。`maxWindowSize_` 是上限。
+
+4. **重发机制**：如果包在 `resendTimeout_` 内未收到 ACK，触发重发。重发超时基于 RTT 估计。
+
+5. **RTT 估计**：`roundTripTime_` 通过 ACK 时间差估算，用于调整重发超时和窗口大小。
+
+### 发送流程
+
+**源码入口：** [udp_channel.cpp:1513](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/udp_channel.cpp:1513)
+
+```cpp
+// udp_channel.cpp:1513 - 发送 Bundle
+void UDPChannel::send( Bundle * pBundle )
+{
+    UDPBundle * pUDPBundle = static_cast<UDPBundle *>(pBundle);
+    
+    // 1. 检查窗口是否有空间
+    if (this->windowSize() >= this->maxWindowSize())
+    {
+        // 窗口满，等待 ACK
+        return;
+    }
+    
+    // 2. 分配序号
+    SeqNum seq = largeOutSeqAt_++;
+    
+    // 3. 记录到未确认包集合
+    unackedPackets_.add( seq, pUDPBundle );
+    
+    // 4. 写入 packet header
+    this->writeFlags( pUDPBundle );
+    this->writeFooter( pUDPBundle );
+    
+    // 5. 发送
+    pUDPBundle->send();
+}
+```
+
+**关键细节：**
+
+- 窗口满时，新消息会排队等待，不会丢弃
+- 序号单调递增，用于接收方检测乱序和重复
+- 未确认包集合支持快速查找和重发
+- packet header 包含 ACK 信息，用于确认之前发送的包
 
 ## 接收窗口
 
-接收路径的关键函数是 `UDPChannel::addToReceiveWindow()`，见 [udp_channel.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/udp_channel.cpp:1208)。
+**概述：** 接收窗口负责处理乱序包、检测重复包、维护接收顺序。这是可靠 UDP 的核心：允许短暂乱序，但最终按序交付。
 
-它做几件事：
+**源码入口：** [udp_channel.cpp:1208](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/udp_channel.cpp:1208)
 
-1. 校验 sequence number 是否在合法范围。
-2. 校验源地址；如果允许 `shouldAutoSwitchToSrcAddr_`，根据 channel version 切换地址。
-3. 对非 piggyback 包加入 `acksToSend_`。
-4. 如果 `seq == inSeqAt_`，推进接收窗口，并把已缓存的连续乱序包串起来。
-5. 如果 `seq < inSeqAt_`，判为重复包。
-6. 如果距离窗口太远，判为窗口外或异常。
-7. 合法乱序包进入 `bufferedReceives_`。
+```cpp
+// udp_channel.cpp:1208 - 添加到接收窗口
+UDPChannel::AddToReceiveWindowResult UDPChannel::addToReceiveWindow(
+    SeqNum seq, Packet * pPacket, bool isReliable )
+{
+    // 1. 校验 sequence number 是否在合法范围
+    if (seq >= inSeqAt_ + windowSize_ || seq < oldestUnackedSeq_)
+    {
+        return ADD_TO_RECEIVE_WINDOW_RESULT_OUT_OF_WINDOW;
+    }
+    
+    // 2. 校验源地址
+    if (!this->checkSourceAddress( pPacket ))
+    {
+        return ADD_TO_RECEIVE_WINDOW_RESULT_CORRUPT;
+    }
+    
+    // 3. 对非 piggyback 包加入 ACK 队列
+    if (!pPacket->isPiggyback())
+    {
+        acksToSend_.push_back( seq );
+    }
+    
+    // 4. 检查是否为预期的下一个包
+    if (seq == inSeqAt_)
+    {
+        // 推进接收窗口
+        inSeqAt_++;
+        
+        // 检查是否有缓存的乱序包可以串起来
+        while (bufferedReceives_.contains( inSeqAt_ ))
+        {
+            pPacket = bufferedReceives_.get( inSeqAt_ );
+            this->processPacket( pPacket );
+            inSeqAt_++;
+        }
+        
+        return ADD_TO_RECEIVE_WINDOW_RESULT_NEXT;
+    }
+    
+    // 5. 检查是否为重复包
+    if (seq < inSeqAt_)
+    {
+        return ADD_TO_RECEIVE_WINDOW_RESULT_DUPLICATE;
+    }
+    
+    // 6. 乱序包，缓存到接收窗口
+    bufferedReceives_.add( seq, pPacket );
+    return ADD_TO_RECEIVE_WINDOW_RESULT_BUFFERED;
+}
+```
+
+**流程图：**
+
+<MermaidDiagram title="接收窗口处理流程">
+sequenceDiagram
+    participant Receiver as 接收方
+    participant Window as 接收窗口
+    participant Buffer as 缓冲区
+    participant Handler as 消息处理
+
+    Receiver->>Window: addToReceiveWindow(seq)
+    
+    alt seq 非法
+        Window->>Receiver: OUT_OF_WINDOW
+    else seq == inSeqAt_
+        Window->>Window: inSeqAt_++
+        loop 有缓存的连续包
+            Window->>Buffer: get(inSeqAt_)
+            Buffer->>Handler: processPacket()
+            Window->>Window: inSeqAt_++
+        end
+        Window->>Receiver: NEXT
+    else seq < inSeqAt_
+        Window->>Receiver: DUPLICATE
+    else seq 在窗口内
+        Window->>Buffer: add(seq, packet)
+        Window->>Receiver: BUFFERED
+    end
+</MermaidDiagram>
+
+**详细讲解：**
+
+1. **窗口范围**：`inSeqAt_` 是期望的下一个包序号，`oldestUnackedSeq_` 是最早未 ACK 的包。窗口大小限制了可以缓存的乱序包数量。
+
+2. **重复检测**：`seq < inSeqAt_` 表示包已经收到过，直接丢弃。这防止了重发包被重复处理。
+
+3. **乱序缓存**：`bufferedReceives_` 缓存乱序包，当 `inSeqAt_` 推进时，检查是否有连续的缓存包可以串起来。
+
+4. **ACK 生成**：收到包后，将序号加入 `acksToSend_` 队列，下次发送时携带 ACK。
+
+5. **地址校验**：`checkSourceAddress()` 防止伪造包。如果允许 `shouldAutoSwitchToSrcAddr_`，可以根据 channel version 切换地址。
+
+### 接收窗口状态机
 
 <MermaidDiagram title="接收窗口状态机">
 stateDiagram-v2
-  [*] --> ValidateSeq
-  ValidateSeq --> Corrupt: seq 非法
-  ValidateSeq --> CheckAddress: seq 合法
-  CheckAddress --> Corrupt: 源地址错误
-  CheckAddress --> AckQueued: 地址合法
-  AckQueued --> Next: seq == inSeqAt_
-  AckQueued --> Duplicate: seq < inSeqAt_
-  AckQueued --> Buffered: seq 在窗口内但乱序
-  AckQueued --> OutOfWindow: seq 超过窗口
-  Next --> AdvanceWindow
-  AdvanceWindow --> AttachBuffered
-  AttachBuffered --> [*]
-  Duplicate --> [*]
-  Buffered --> [*]
-  OutOfWindow --> [*]
-  Corrupt --> [*]
+    [*] --> ValidateSeq
+    ValidateSeq --> Corrupt: seq 非法
+    ValidateSeq --> CheckAddress: seq 合法
+    CheckAddress --> Corrupt: 源地址错误
+    CheckAddress --> AckQueued: 地址合法
+    AckQueued --> Next: seq == inSeqAt_
+    AckQueued --> Duplicate: seq < inSeqAt_
+    AckQueued --> Buffered: seq 在窗口内但乱序
+    AckQueued --> OutOfWindow: seq 超过窗口
+    Next --> AdvanceWindow
+    AdvanceWindow --> AttachBuffered
+    AttachBuffered --> [*]
+    Duplicate --> [*]
+    Buffered --> [*]
+    OutOfWindow --> [*]
+    Corrupt --> [*]
 </MermaidDiagram>
 
 这个状态机是可靠 UDP 的核心之一。它保证可靠消息能按 Channel 序号恢复顺序，同时允许短暂乱序进入缓冲。

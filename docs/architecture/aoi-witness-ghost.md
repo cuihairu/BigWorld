@@ -57,26 +57,97 @@ Witness 不是客户端连接本身。客户端连接主要在 Proxy/BaseApp；W
 
 ## AoI 的 hysteresis
 
-`Entity` 注释明确说 AoI 是 x/z 轴等长范围，并有外扩 hysteresis 区域：
+**概述：** AoI 使用 hysteresis（滞后）机制避免边界抖动。实体进入 AoI 使用内层半径，离开 AoI 使用外层半径。这防止实体在边界来回移动时反复触发 enter/leave 消息。
 
-- 实体进入 AoI：进入内层 AoI 范围。
-- 实体离开 AoI：移动到 hysteresis 外才离开。
+**源码入口：** [entity.hpp:106](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity.hpp:106)
 
-源码见 [entity.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity.hpp:106)。
+```cpp
+// entity.hpp:106 - AoI 注释
+/*
+ *  Area of Interest, or "AoI" is an important concept for all BigWorld
+ *  entities which belong to clients. The AoI of an entity is the area around
+ *  it which the entity's client (if it has one) is aware of. This is used for
+ *  culling the amount of data that the client is sent. The actual shape of an
+ *  AoI is defined by a range of equal length on both the x and z axis, with a
+ *  hysteresis area of similar shape extending out further. An Entity enters
+ *  another Entity's AoI when it enters the AoI area, but doesn't leave it
+ *  until it has moved outside the hysteresis area.
+ */
+```
 
-这能避免边界抖动：
+**流程图：**
 
-- 没有 hysteresis 时，实体在边界来回抖动会反复 enter/leave。
-- 有 hysteresis 后，进入和离开阈值分离，减少网络消息和客户端对象 churn。
-
-<MermaidDiagram title="AoI 与 Hysteresis">
+<MermaidDiagram title="AoI Hysteresis 机制">
 flowchart TD
-  A[Entity enters inner AoI] --> B[send enter/create]
-  B --> C[Known in Witness AoI]
-  C --> D{position outside hysteresis?}
-  D -- no --> C
-  D -- yes --> E[send leave/delete]
+    A[实体移动] --> B{进入内层 AoI?}
+    B -- 是 --> C[触发 enterAoI]
+    C --> D[发送 enter/create 消息]
+    D --> E[加入 Witness AoI 列表]
+    E --> F{移动到外层 AoI 外?}
+    F -- 否 --> E
+    F -- 是 --> G[触发 leaveAoI]
+    G --> H[发送 leave/delete 消息]
+    H --> I[从 Witness AoI 列表移除]
 </MermaidDiagram>
+
+**详细讲解：**
+
+1. **内层半径**：`aoiRadius_` 定义 AoI 内层范围。实体进入这个范围时，触发 `enterAoI`。
+
+2. **外层半径**：`aoiRadius_ + aoiHyst_` 定义 AoI 外层范围。实体离开外层范围时，才触发 `leaveAoI`。
+
+3. **滞后效果**：进入和离开使用不同半径，避免边界抖动。例如：
+   - 内层半径 50m，外层半径 60m
+   - 实体 A 在 49m 处进入 AoI
+   - 实体 A 移动到 55m 处（仍在 AoI 内）
+   - 实体 A 移动到 61m 处（离开 AoI）
+   - 实体 A 移动到 59m 处（仍在 AoI 外，因为在外层范围内）
+   - 实体 A 移动到 51m 处（重新进入 AoI）
+
+4. **网络优化**：减少 enter/leave 消息数量，降低网络开销和客户端对象 churn。
+
+### AoI 触发机制
+
+**源码入口：** [witness.cpp:3586](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/witness.cpp:3586)
+
+```cpp
+// witness.cpp:3586 - AoI 触发
+void AoITrigger::triggerEnter( RangeListNode * pOther )
+{
+    // 1. 获取目标实体
+    Entity * pEntity = static_cast<Entity *>(pOther);
+    
+    // 2. 检查是否已经在 AoI 中
+    if (pWitness_->isInAoI( pEntity ))
+    {
+        return;
+    }
+    
+    // 3. 添加到 AoI
+    pWitness_->addToAoI( pEntity );
+}
+
+void AoITrigger::triggerLeave( RangeListNode * pOther )
+{
+    // 1. 获取目标实体
+    Entity * pEntity = static_cast<Entity *>(pOther);
+    
+    // 2. 检查是否在 AoI 中
+    if (!pWitness_->isInAoI( pEntity ))
+    {
+        return;
+    }
+    
+    // 3. 从 AoI 移除
+    pWitness_->removeFromAoI( pEntity );
+}
+```
+
+**关键细节：**
+
+- `RangeListNode` 是范围树节点，用于高效的空间查询
+- `triggerEnter()` 和 `triggerLeave()` 由范围树在实体进入/离开范围时调用
+- `addToAoI()` 和 `removeFromAoI()` 更新 Witness 的 AoI 列表和 EntityCache
 
 真正触发进入/离开的不是每 tick 全量扫描，而是 `AoITrigger` 接在 `RangeList` 上：
 

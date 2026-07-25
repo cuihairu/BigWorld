@@ -23,34 +23,120 @@ CellAppMgr 管理全局空间分区，CellApp 管理本地空间实体。两边�
 
 ## 控制面 Space
 
-CellAppMgr 的 `Space` 负责决定世界如何切成 Cell：
+**概述：** CellAppMgr 的 `Space` 负责决定世界如何切成 Cell。它不是业务 Space，而是全局分区控制器。通过 BSP 树动态调整 Cell 边界，实现负载均衡。
 
-- `cells_`：当前 Space 的 CellData 集合。
-- `pRoot_`：BSP 分区树。
-- `preferredIP_`：倾向使用的机器 IP。
-- `spaceBounds_`：空间边界。
-- `artificialMinLoad_`：人工最小负载。
-- `isBalancing_`：避免递归 balance。
+**源码入口：** [space.hpp:129](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellappmgr/space.hpp:129)
 
-源码见 [space.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellappmgr/space.hpp:129)。
+```cpp
+// space.hpp:129 - CellAppMgr 侧 Space 定义
+class Space
+{
+public:
+    Space( SpaceID id, const SpaceDefinition & spaceDef );
+    ~Space();
+    
+    // 核心数据结构
+    CellDataMap cells_;           // CellData 集合
+    BSPNode * pRoot_;             // BSP 分区树根节点
+    Mercury::Address preferredIP_; // 倾向使用的机器 IP
+    BoundingBox spaceBounds_;     // 空间边界
+    float artificialMinLoad_;     // 人工最小负载
+    bool isBalancing_;            // 避免递归 balance
+    
+    // 核心方法
+    void addCell( CellApp * pApp );
+    void loadBalance();
+    void updateRanges();
+    CellData * findCell( const Vector3 & position );
+    
+    // 负载相关
+    float avgSmoothedLoad() const;
+    float totalSmoothedLoad() const;
+    float minLoad() const;
+    float maxLoad() const;
+};
+```
 
-这不是业务 Space，而是全局分区控制器。
+**流程图：**
 
-## CellData 与 BSP
+<MermaidDiagram title="控制面 Space 结构">
+flowchart TD
+    A[Space] --> B[BSP Root]
+    B --> C[BSP Node 1]
+    B --> D[BSP Node 2]
+    C --> E[CellData A]
+    C --> F[CellData B]
+    D --> G[CellData C]
+    D --> H[CellData D]
+    
+    E --> I[CellApp 1]
+    F --> J[CellApp 2]
+    G --> I
+    H --> K[CellApp 3]
+</MermaidDiagram>
 
-`CellData` 继承 `CM::BSPNode`。这意味着 Cell 本身是 BSP 树叶子节点，同时参与：
+**详细讲解：**
 
-- `updateLoad()`
-- `avgLoad()`
-- `balance()`
-- `updateRanges()`
-- `addToStream()`
-- `addCellTo()`
-- `removeCell()`
+1. **BSP 树结构**：`pRoot_` 是 BSP 分区树的根节点。每个叶子节点是一个 CellData，代表一个 Cell。
 
-源码见 [cell_data.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellappmgr/cell_data.hpp:21)。
+2. **CellData 集合**：`cells_` 存储所有 CellData，每个 CellData 关联一个 CellApp。
 
-这说明 BigWorld 的空间划分不是固定网格，而是可动态调整的 BSP 分区。
+3. **空间边界**：`spaceBounds_` 定义整个空间的边界，BSP 分区在这个范围内进行。
+
+4. **人工负载**：`artificialMinLoad_` 是人工设置的最小负载，防止某些 Cell 负载过低。
+
+5. **平衡标志**：`isBalancing_` 防止递归调用 `loadBalance()`，避免死循环。
+
+### CellData 与 BSP
+
+**概述：** `CellData` 继承 `CM::BSPNode`，表示 BSP 树的叶子节点。每个 CellData 关联一个 CellApp，同时参与负载计算和边界调整。
+
+**源码入口：** [cell_data.hpp:21](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellappmgr/cell_data.hpp:21)
+
+```cpp
+// cell_data.hpp:21 - CellData 定义
+class CellData : public CM::BSPNode
+{
+public:
+    CellData( Space * pSpace, CellApp * pApp );
+    ~CellData();
+    
+    // 关联的 CellApp
+    CellApp * pApp() const { return pApp_; }
+    
+    // 负载相关
+    void updateLoad();
+    float avgLoad() const;
+    float avgSmoothedLoad() const;
+    
+    // BSP 分区方法
+    void balance( float safetyBound, float avgLoad );
+    void updateRanges();
+    
+    // 序列化
+    void addToStream( BinaryOStream & stream );
+    void addCellTo( BinaryOStream & stream );
+    void removeCell();
+    
+    // 负载数据
+    float currLoad() const;          // 当前负载
+    float smoothedLoad() const;      // 平滑负载
+    float areaNotLoaded() const;     // 未加载区域
+    
+private:
+    Space * pSpace_;                 // 所属 Space
+    CellApp * pApp_;                 // 关联的 CellApp
+    float smoothedLoad_;             // 平滑负载
+    float areaNotLoaded_;            // 未加载区域
+};
+```
+
+**关键细节：**
+
+- `CellData` 继承 `BSPNode`，可以参与 BSP 树的分割和合并
+- `updateLoad()` 从关联的 CellApp 获取负载数据
+- `balance()` 根据安全阈值调整 BSP 分割线
+- `smoothedLoad_` 使用指数平滑，避免负载波动
 
 ## 负载从哪里来
 

@@ -29,32 +29,108 @@ BigWorld 网络层已经有多处“保护主循环”的机制：
 
 ## 接收侧背压
 
-`PacketReceiver::handleInputNotification()` 在收到 socket 可读通知后循环调用 `processSocket()`：
+**概述：** `PacketReceiver::handleInputNotification()` 在收到 socket 可读通知后循环调用 `processSocket()`，但有时间限制。这不是内核级背压，而是主线程公平性保护：防止一次 UDP burst 把 Timer、FrequentTask、脚本和其他消息饿死。
 
-1. 记录开始时间。
-2. 循环处理 socket 中的包。
-3. 每处理一轮计算 elapsed。
-4. 如果超过 `maxSocketProcessingTimeStamps_`，打印 warning 并停止本轮 socket 处理。
+**源码入口：** [packet_receiver.cpp:83](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/packet_receiver.cpp:83)
 
-源码见 [packet_receiver.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/packet_receiver.cpp:83)。
+```cpp
+// packet_receiver.cpp:83 - 接收预算
+void PacketReceiver::handleInputNotification()
+{
+    // 1. 记录开始时间
+    uint64 startTime = timestamp();
+    
+    // 2. 循环处理 socket 中的包
+    while (true)
+    {
+        // 3. 处理一个包
+        if (!this->processSocket())
+        {
+            break;
+        }
+        
+        // 4. 计算已用时间
+        uint64 elapsed = timestamp() - startTime;
+        
+        // 5. 检查是否超时
+        if (elapsed > maxSocketProcessingTimeStamps_)
+        {
+            WARNING_MSG( "PacketReceiver::handleInputNotification: "
+                "Spent too long processing socket (%.2fms), "
+                "source=%s, processed=%d packets, "
+                "remaining in queue=%d\n",
+                float(elapsed) / 1000.0f,
+                lastSourceAddr_.ipAsString(),
+                numPacketsProcessed_,
+                receiveQueueSize() );
+            break;
+        }
+    }
+}
+```
 
-这不是内核级背压，而是主线程公平性保护：
+**流程图：**
 
-- 防止一次 UDP burst 把 Timer、FrequentTask、脚本和其他消息饿死。
-- 允许 receive queue 留到下一轮处理。
-- warning 中会打印最后来源地址、处理耗时、包数和 receive queue size。
-
-<MermaidDiagram title="接收预算">
+<MermaidDiagram title="接收预算处理流程">
 flowchart TD
-  A[EPOLLIN] --> B[handleInputNotification]
-  B --> C[processSocket one packet/batch path]
-  C --> D{socket has more?}
-  D -- no --> E[return to dispatcher]
-  D -- yes --> F{elapsed > maxSocketProcessingTime?}
-  F -- no --> C
-  F -- yes --> G[warn + stop current socket processing]
-  G --> E
+    A[EPOLLIN 事件] --> B[handleInputNotification]
+    B --> C[记录开始时间]
+    C --> D{socket 有数据?}
+    D -- 否 --> E[返回 dispatcher]
+    D -- 是 --> F[processSocket]
+    F --> G[计算已用时间]
+    G --> H{超过 maxSocketProcessingTime?}
+    H -- 否 --> D
+    H -- 是 --> I[打印警告]
+    I --> E
 </MermaidDiagram>
+
+**详细讲解：**
+
+1. **时间限制**：`maxSocketProcessingTimeStamps_` 限制单次 socket 处理的最大时间。默认值由 `gameUpdateHertz` 推导。
+
+2. **循环处理**：在时间限制内，循环调用 `processSocket()` 处理包。每处理一个包检查一次时间。
+
+3. **超时处理**：超时后打印警告，包含：
+   - 处理耗时
+   - 来源地址
+   - 已处理包数
+   - 剩余队列大小
+
+4. **公平性保护**：允许 receive queue 留到下一轮处理，确保 Timer、FrequentTask、脚本和其他消息有机会执行。
+
+5. **与 Tick 的关系**：`maxSocketProcessingTime` 默认为 `1 / gameUpdateHertz`，即一个 tick 的长度。如果 `gameUpdateHertz = 10`，一个 tick 是 100ms。
+
+### BWMessageForwarder 配置
+
+**源码入口：** [bw_message_forwarder.cpp:47](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/bw_message_forwarder.cpp:47)
+
+```cpp
+// bw_message_forwarder.cpp:47 - socket 处理预算配置
+void BWMessageForwarder::init( NetworkInterface & networkInterface )
+{
+    // 1. 读取配置
+    float maxInternalSocketProcessingTime = 
+        Config::maxInternalSocketProcessingTime();
+    float gameUpdateHertz = Config::gameUpdateHertz();
+    
+    // 2. 如果配置值小于 0，使用默认值
+    if (maxInternalSocketProcessingTime < 0)
+    {
+        maxInternalSocketProcessingTime = 1.f / gameUpdateHertz;
+    }
+    
+    // 3. 设置到 NetworkInterface
+    networkInterface.maxSocketProcessingTime( 
+        maxInternalSocketProcessingTime );
+}
+```
+
+**关键细节：**
+
+- 配置值可以覆盖默认值，提供灵活性
+- 默认值与游戏 tick 频率绑定，确保公平性
+- 可以通过 Watcher 动态调整，便于调试
 
 ## 与 Tick 的关系
 

@@ -46,25 +46,110 @@ flowchart TD
 
 ## 为什么是 level-triggered epoll
 
-源码在注册 FD 时只设置 `EPOLLIN` 或 `EPOLLOUT`：
+**概述：** BigWorld 使用 level-triggered epoll，而不是 edge-triggered。这不是技术落后，而是明确的保守取舍。源码注释说明作者知道 ET 可能有收益，但选择保持 `select` 行为一致。
+
+**源码入口：** [event_poller.cpp:1079](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/event_poller.cpp:1079)
 
 ```cpp
-// TODO: Could be good to use EPOLLET (leave like select for now).
-ev.events = isRead ? EPOLLIN : EPOLLOUT;
+// event_poller.cpp:1079 - EPoller 注册 FD
+int EPoller::registerFileDescriptor( int fd, InputNotificationHandler * pHandler,
+    bool isRead )
+{
+    // 创建 epoll_event
+    struct epoll_event ev;
+    ev.data.fd = fd;
+    ev.data.ptr = pHandler;
+    
+    // TODO: Could be good to use EPOLLET (leave like select for now).
+    ev.events = isRead ? EPOLLIN : EPOLLOUT;
+    
+    // 注册到 epoll
+    if (epoll_ctl( epfd_, EPOLL_CTL_ADD, fd, &ev ) == -1)
+    {
+        ERROR_MSG( “EPoller::registerFileDescriptor: “
+            “epoll_ctl failed for fd %d: %s\n”, fd, strerror(errno) );
+        return -1;
+    }
+    
+    return 0;
+}
 ```
 
-这条注释非常关键。它说明：
+**流程图：**
 
-- 作者知道 ET 可能有收益。
-- 但当时选择保持 `select` 行为一致。
-- 这不是“不知道 epoll 高级用法”，而是明确保守取舍。
+<MermaidDiagram title=”EPoller 注册与事件处理”>
+sequenceDiagram
+    participant Handler as InputNotificationHandler
+    participant EPoller as EPoller
+    participant Kernel as Linux Kernel
 
-保守选择的合理性：
+    Handler->>EPoller: registerFileDescriptor(fd, isRead)
+    EPoller->>Kernel: epoll_ctl(EPOLL_CTL_ADD, fd, EPOLLIN)
+    
+    Note over Kernel: FD 就绪...
+    
+    Kernel->>EPoller: epoll_wait() 返回事件
+    EPoller->>Handler: handleInputNotification()
+    Handler->>Handler: 处理数据
+```
 
-- LT 语义更接近 `select`，跨平台行为一致。
-- 不要求每个 handler 都严格排空 FD，否则 ET 容易丢事件。
-- 对老代码和多平台网络抽象更安全。
-- 游戏服务器主循环更关心可预测性，不一定追求最激进 I/O 模型。
+**详细讲解：**
+
+1. **Level-triggered 语义**：只要 FD 就绪，`epoll_wait()` 就会返回事件。这与 `select` 行为一致。
+
+2. **Edge-triggered 语义**：只有 FD 状态变化时才返回事件。需要严格排空 FD，否则可能丢失事件。
+
+3. **为什么选择 LT**：
+   - **跨平台一致性**：LT 语义更接近 `select`，跨平台行为一致
+   - **安全性**：不要求每个 handler 都严格排空 FD，避免 ET 容易丢事件
+   - **老代码兼容**：对老代码和多平台网络抽象更安全
+   - **可预测性**：游戏服务器主循环更关心可预测性，不一定追求最激进 I/O 模型
+
+4. **为什么不用 io_uring**：BigWorld 开发时 io_uring 还不存在（2019 年才引入），选择 epoll 是当时最佳实践
+
+### EPoller 事件处理
+
+**源码入口：** [event_poller.cpp:1115](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/event_poller.cpp:1115)
+
+```cpp
+// event_poller.cpp:1115 - EPoller 事件处理
+int EPoller::processPendingEvents( double maxWait )
+{
+    // 1. 计算等待时间
+    int maxWaitMs = int(maxWait * 1000);
+    
+    // 2. 调用 epoll_wait
+    struct epoll_event events[10];
+    int numEvents = epoll_wait( epfd_, events, 10, maxWaitMs );
+    
+    // 3. 处理事件
+    for (int i = 0; i < numEvents; i++)
+    {
+        InputNotificationHandler * pHandler = 
+            static_cast<InputNotificationHandler *>(events[i].data.ptr);
+        
+        // 4. 调用 handler
+        if (events[i].events & EPOLLIN)
+        {
+            pHandler->handleInputNotification();
+        }
+        
+        if (events[i].events & EPOLLOUT)
+        {
+            pHandler->handleOutputNotification();
+        }
+    }
+    
+    return numEvents;
+}
+```
+
+**关键细节：**
+
+- 每次 `epoll_wait()` 最多取 10 个事件，避免一次处理太多
+- `maxWait` 控制最大等待时间，与 Timer 配合实现精确调度
+- handler 在主线程同步执行，不支持异步 I/O
+- 这是 Reactor 模式的核心：事件驱动、同步处理
 
 ## 为什么 epoll 不是性能银弹
 

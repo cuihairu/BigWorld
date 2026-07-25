@@ -52,31 +52,185 @@ flowchart TD
 
 ## BinaryStream 层
 
-`BinaryOStream` 是输出接口，最关键的方法是 `reserve(int nBytes)`，调用者拿到可写内存后直接填入数据。它也提供：
+**概述：** `BinaryOStream` / `BinaryIStream` 是最底层的二进制读写接口。它们不关心数据含义，只负责高效地读写字节流。这是所有序列化的基础。
 
-- `addBlob()`：拷贝一段二进制数据。
-- `transfer()`：从输入流搬运指定长度。
-- `writePackedInt()`：写压缩整数。
-- `writeStringLength()`：写字符串长度。
+**源码入口：** [binary_stream.hpp:24](/home/cui/workspaces/BigWorld/programming/bigworld/lib/cstdmf/binary_stream.hpp:24)
 
-源码见 [binary_stream.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/cstdmf/binary_stream.hpp:24)。
+```cpp
+// binary_stream.hpp:24 - BinaryOStream 接口
+class BinaryOStream
+{
+public:
+    virtual ~BinaryOStream() {}
+    
+    // 核心方法：预留 n 字节空间，返回可写指针
+    virtual void * reserve( int nBytes ) = 0;
+    
+    // 添加单个值
+    virtual int addBlob( const void * data, int size )
+    {
+        void * dest = this->reserve( size );
+        if (dest)
+        {
+            memcpy( dest, data, size );
+        }
+        return size;
+    }
+    
+    // 从输入流搬运数据
+    int transfer( BinaryIStream & bs, int nBytes );
+    
+    // 写入压缩整数
+    void writePackedInt( int32 value );
+    
+    // 写入字符串长度
+    void writeStringLength( uint32 length );
+    
+    // 添加基本类型
+    BinaryOStream & operator<<( bool value );
+    BinaryOStream & operator<<( int8 value );
+    BinaryOStream & operator<<( uint8 value );
+    BinaryOStream & operator<<( int16 value );
+    BinaryOStream & operator<<( uint16 value );
+    BinaryOStream & operator<<( int32 value );
+    BinaryOStream & operator<<( uint32 value );
+    BinaryOStream & operator<<( int64 value );
+    BinaryOStream & operator<<( uint64 value );
+    BinaryOStream & operator<<( float value );
+    BinaryOStream & operator<<( double value );
+};
+```
 
-`BinaryIStream` 是输入接口，核心方法是：
+```cpp
+// binary_stream.hpp:64 - BinaryIStream 接口
+class BinaryIStream
+{
+public:
+    virtual ~BinaryIStream() {}
+    
+    // 核心方法：取出 n 字节数据
+    virtual const void * retrieve( int nBytes ) = 0;
+    
+    // 剩余长度
+    virtual int remainingLength() const = 0;
+    
+    // 读取压缩整数
+    int32 readPackedInt();
+    
+    // 错误状态
+    virtual bool error() const { return error_; }
+    
+    // 读取基本类型
+    BinaryIStream & operator>>( bool & value );
+    BinaryIStream & operator>>( int8 & value );
+    BinaryIStream & operator>>( uint8 & value );
+    BinaryIStream & operator>>( int16 & value );
+    BinaryIStream & operator>>( uint16 & value );
+    BinaryIStream & operator>>( int32 & value );
+    BinaryIStream & operator>>( uint32 & value );
+    BinaryIStream & operator>>( int64 & value );
+    BinaryIStream & operator>>( uint64 & value );
+    BinaryIStream & operator>>( float & value );
+    BinaryIStream & operator>>( double & value );
+};
+```
 
-- `retrieve(int nBytes)`：取出指定长度数据。
-- `remainingLength()`：剩余长度。
-- `readPackedInt()`：读取压缩整数。
-- `error()`：记录流错误状态。
+**流程图：**
 
-源码见 [binary_stream.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/cstdmf/binary_stream.hpp:64)。
+<MermaidDiagram title="BinaryStream 读写流程">
+sequenceDiagram
+    participant Writer as 写入方
+    participant Stream as BinaryOStream
+    participant Buffer as 内存缓冲区
+    participant Reader as 读取方
 
-这个接口非常底层，优点是快、轻、容易嵌入 packet/bundle；代价是缺少现代 schema 系统的自描述、反射和版本演进能力。
+    Writer->>Stream: reserve(nBytes)
+    Stream->>Buffer: 分配空间
+    Buffer->>Writer: 返回可写指针
+    Writer->>Buffer: 填入数据
+    
+    Writer->>Stream: operator<<(value)
+    Stream->>Stream: reserve(sizeof(value))
+    Stream->>Buffer: 写入数据
+    
+    Reader->>Stream: retrieve(nBytes)
+    Stream->>Buffer: 读取数据
+    Buffer->>Reader: 返回数据指针
+    
+    Reader->>Stream: operator>>(value)
+    Stream->>Stream: retrieve(sizeof(value))
+    Stream->>Reader: 返回值
+</MermaidDiagram>
 
-## MemoryStream 层
+**详细讲解：**
 
-`MemoryOStream` 同时继承 `BinaryOStream` 和 `BinaryIStream`，可以先写入内存，再作为输入流读出。源码见 [memory_stream.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/cstdmf/memory_stream.hpp:27)。
+1. **reserve() 模式**：这是最高效的写入方式。调用者拿到可写指针后，直接填入数据，避免额外拷贝。
 
-典型用途：
+2. **addBlob()**：批量写入二进制数据，内部调用 `reserve()` + `memcpy()`。
+
+3. **transfer()**：从输入流搬运数据，避免中间缓冲区。常用于消息转发。
+
+4. **writePackedInt()**：压缩整数编码，小整数用更少字节。用于 EntityID、MethodIndex 等。
+
+5. **错误处理**：`BinaryIStream::error()` 记录流错误状态，防止读取越界。
+
+**为什么不用 std::stream：**
+
+- `BinaryOStream` / `BinaryIStream` 更轻量，没有格式化、locale 等开销
+- 直接操作内存，避免缓冲区拷贝
+- 可以直接嵌入 Mercury Bundle，零拷贝发送
+- 游戏协议不需要自描述，只需要高效读写
+
+### MemoryStream 层
+
+**概述：** `MemoryOStream` 同时继承 `BinaryOStream` 和 `BinaryIStream`，可以先写入内存，再作为输入流读出。这是进程内消息传递的基础。
+
+**源码入口：** [memory_stream.hpp:27](/home/cui/workspaces/BigWorld/programming/bigworld/lib/cstdmf/memory_stream.hpp:27)
+
+```cpp
+// memory_stream.hpp:27 - MemoryOStream 实现
+class MemoryOStream : public BinaryOStream, public BinaryIStream
+{
+public:
+    MemoryOStream( int size = 0 );
+    virtual ~MemoryOStream();
+    
+    // 写入实现
+    virtual void * reserve( int nBytes );
+    
+    // 读取实现
+    virtual const void * retrieve( int nBytes );
+    
+    // 剩余长度
+    virtual int remainingLength() const;
+    
+    // 重置
+    void reset();
+    
+    // 获取数据指针
+    const void * data() const;
+    int size() const;
+    
+private:
+    char * buffer_;
+    int size_;
+    int capacity_;
+    int cursor_;
+};
+```
+
+**典型用途：**
+
+1. **消息组装**：先写入消息头，再写入消息体，最后作为整体发送
+2. **临时缓冲**：在内存中组装复杂数据结构，再写入持久化存储
+3. **测试辅助**：模拟网络流，用于单元测试
+
+**关键细节：**
+
+- `reserve()` 动态扩容缓冲区，避免预分配过大内存
+- `retrieve()` 移动读取游标，支持顺序读取
+- `reset()` 重置游标，可以复用缓冲区
+- `data()` 和 `size()` 获取最终数据，用于写入文件或网络
 
 - 先把变长数据写入临时 buffer，再计算长度。
 - 构造子流，最后再写回父流。

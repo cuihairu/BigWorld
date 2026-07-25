@@ -56,7 +56,39 @@ BigWorld 的核心抽象是“同一个游戏实体在不同进程中有不同�
 
 源码见 [base.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/baseapp/base.hpp:58)。
 
-Base 的重要方法包括：
+### Base 核心数据结构
+
+```cpp
+// base.hpp:58 - Base 类定义
+class Base: public PyObjectPlus
+{
+public:
+    Base( EntityID id, DatabaseID dbID, EntityTypePtr pType );
+
+    EntityID id() const                    { return id_; }
+    DatabaseID databaseID() const          { return databaseID_; }
+    CellEntityMailBox * pCellEntityMailBox() const { return pCellEntityMailBox_; }
+    SpaceID spaceID() const                { return spaceID_; }
+    Mercury::UDPChannel & channel()        { return *pChannel_; }
+    bool isProxy() const                   { return isProxy_; }
+    bool isDestroyed() const               { return isDestroyed_; }
+
+    // 关键状态标志
+    bool isCreateCellPending() const       { return isCreateCellPending_; }
+    bool isGetCellPending() const          { return isGetCellPending_; }
+    bool isDestroyCellPending() const      { return isDestroyCellPending_; }
+    bool hasBeenBackedUp() const           { return hasBeenBackedUp_; }
+};
+```
+
+**设计要点：**
+- `id_` 是运行时 EntityID，由 BaseApp 分配，用于进程内快速查找
+- `databaseID_` 是持久化 ID，初始为 0，首次 `writeToDB()` 后由 DBApp 分配
+- `pCellEntityMailBox_` 指向 Cell Entity，Base 通过它发送消息到 CellApp
+- `pChannel_` 是到 CellApp 的 UDP 通道，承载所有 Base-Cell 通信
+- `isProxy_` 标记是否为玩家代理（有客户端连接），普通 Base 没有客户端
+
+### Base 重要方法
 
 - `writeToDB()`：写数据库。
 - `requestCellDBData()`：向 Cell 请求持久化数据。
@@ -83,7 +115,49 @@ Base 的重要方法包括：
 
 见 [entity.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity.hpp:89)。
 
-Cell Entity 保存和暴露：
+### Entity 核心数据结构
+
+```cpp
+// entity.hpp:138 - Entity 类定义
+class Entity : public PyObjectPlus
+{
+public:
+    // 位置验证：防止 NaN 坐标
+    static bool isValidPosition( const Position3D &c )
+    {
+        const float MAX_ENTITY_POS = 1000000000.f;
+        return (-MAX_ENTITY_POS < c.x && c.x < MAX_ENTITY_POS &&
+            -MAX_ENTITY_POS < c.y && c.y < MAX_ENTITY_POS &&
+            -MAX_ENTITY_POS < c.z && c.z < MAX_ENTITY_POS);
+    }
+
+    // 实体初始化：real 和 ghost 走不同路径
+    bool initReal( BinaryIStream & data, const ScriptDict & properties,
+        bool isRestore,
+        Mercury::ChannelVersion channelVersion,
+        EntityPtr pNearbyEntity );
+
+    void initGhost( BinaryIStream & data );
+
+    // offload 迁移
+    void offload( CellAppChannel * pChannel, bool isTeleport );
+    void onload( const Mercury::Address & srcAddr,
+        const Mercury::UnpackedMessageHeader & header,
+        BinaryIStream & data );
+
+    // ghost 创建
+    void createGhost( Mercury::Bundle & bundle );
+};
+```
+
+**设计要点：**
+- `initReal()` 和 `initGhost()` 是两条完全不同的初始化路径
+- real entity 从二进制流恢复完整状态（包括属性、控制器、AOI）
+- ghost entity 只恢复位置和必要状态，不拥有权威逻辑
+- `isValidPosition()` 防止 NaN 坐标污染空间系统
+- offload/onload 是实体迁移的核心，real 变成 ghost，ghost 变成 real
+
+### Cell Entity 保存和暴露
 
 - `position()` / `direction()`。
 - `volatileInfo()`。
@@ -168,97 +242,262 @@ Cell 侧回调包括：
 
 ## 跨域方法调用链
 
-Base 与 Cell 之间的方法调用通过 Mailbox 和 Mercury 消息完成：
+Base 与 Cell 之间的方法调用通过 Mailbox 和 Mercury 消息完成。这是 BigWorld 分布式对象模型的核心：一个实体的方法调用可能跨越进程边界。
 
 ### Cell -> Base 调用链
 
-<CellEntity>::callBaseMethod() 读取 methodIndex，创建 BaseEntityMailBox，获取输出流，写入参数，然后通过 Mercury 发送到 BaseApp。
+**概述：** Cell Entity 需要调用 Base 方法时（如通知 Base 写数据库、请求 Base 创建新 Cell），通过 `callBaseMethod()` 将调用序列化为 Mercury 消息，发送到 BaseApp。
 
-源码入口：[entity.cpp:5255](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity.cpp:5255)
+**源码入口：** [entity.cpp:5255](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity.cpp:5255)
 
-调用链：
+```cpp
+// entity.cpp:5255 - Cell Entity 调用 Base 方法
+bool Entity::callBaseMethod( int methodIndex, BinaryIStream & data,
+    bool isForGhost )
+{
+    // 1. 查找方法定义
+    const MethodDescription * pMethod = 
+        pType_->description().base().internalMethod( methodIndex );
+    
+    // 2. 创建 Base Entity Mailbox
+    BaseEntityMailBox mailbox( pType_, id_, baseAddr_ );
+    
+    // 3. 获取输出流并写入方法调用
+    Mercury::Bundle & bundle = mailbox.startMessage( 
+        BaseAppIntInterface::callBaseMethod );
+    bundle << methodIndex;
+    bundle.transfer( data, data.remainingLength() );
+    
+    return true;
+}
+```
 
-<div class="flow-strip">
-  <span class="flow-node">Cell Entity.callBaseMethod()</span>
-  <span class="flow-arrow">-></span>
-  <span class="flow-node">创建 BaseEntityMailBox</span>
-  <span class="flow-arrow">-></span>
-  <span class="flow-node">getStream() 获取输出流</span>
-  <span class="flow-arrow">-></span>
-  <span class="flow-node">写入 methodIndex + 参数</span>
-  <span class="flow-arrow">-></span>
-  <span class="flow-node">sendStream() 发送</span>
-  <span class="flow-arrow">-></span>
-  <span class="flow-node">BaseApp::callBaseMethod()</span>
-</div>
+**流程图：**
+
+<MermaidDiagram title="Cell -> Base 方法调用流程">
+sequenceDiagram
+    participant Cell as Cell Entity
+    participant Mailbox as BaseEntityMailBox
+    participant Bundle as Mercury Bundle
+    participant Channel as UDP Channel
+    participant BaseApp as BaseApp
+    participant Base as Base Entity
+
+    Cell->>Mailbox: callBaseMethod(index, data)
+    Mailbox->>Bundle: startMessage(callBaseMethod)
+    Bundle->>Bundle: 写入 methodIndex
+    Bundle->>Bundle: 写入参数数据
+    Bundle->>Channel: 发送消息
+    Channel->>BaseApp: UDP 包
+    BaseApp->>Base: dispatch callBaseMethod
+    Base->>Base: 执行 Python 方法
+</MermaidDiagram>
+
+**详细讲解：**
+
+1. **方法索引查找**：`methodIndex` 是 EntityDef 中方法的内部索引，由 `.def` 文件编译时生成。Cell 和 Base 共享同一个 EntityDef，所以索引一致。
+
+2. **Mailbox 封装**：`BaseEntityMailBox` 不是简单指针，而是封装了 `EntityID`、目标地址（BaseApp 地址）和实体类型。它知道如何路由消息。
+
+3. **Bundle 序列化**：参数通过 `BinaryIStream` 直接转移到 Bundle，避免额外拷贝。Bundle 内部管理可靠/不可靠语义。
+
+4. **异步语义**：这是单向消息，Cell 不等待 Base 回复。如果需要回复，Base 会通过 `callCellMethod()` 反向调用。
 
 ### Base -> Cell 调用链
 
-Base::callCellMethod() 检查 cellMailBox_，获取输出流，写入参数，通过 pChannel_ 发送到 CellApp。
+**概述：** Base 需要调用 Cell 方法时（如通知 Cell 移动实体、创建子实体），通过 `callCellMethod()` 将调用序列化，发送到 CellApp。
 
-源码入口：[base.cpp:1391](/home/cui/workspaces/BigWorld/programming/bigworld/server/baseapp/base.cpp:1391)
+**源码入口：** [base.cpp:1391](/home/cui/workspaces/BigWorld/programming/bigworld/server/baseapp/base.cpp:1391)
 
-调用链：
+```cpp
+// base.cpp:1391 - Base 调用 Cell 方法
+bool Base::callCellMethod( int methodIndex, BinaryIStream & data )
+{
+    // 1. 检查 Cell Mailbox 是否存在
+    if (!pCellEntityMailBox_)
+    {
+        ERROR_MSG( "Base::callCellMethod: No cell mailbox\n" );
+        return false;
+    }
+    
+    // 2. 通过 Cell Mailbox 发送
+    Mercury::Bundle & bundle = pCellEntityMailBox_->startMessage(
+        CellAppIntInterface::callCellMethod );
+    bundle << id_;
+    bundle << methodIndex;
+    bundle.transfer( data, data.remainingLength() );
+    
+    return true;
+}
+```
 
-<div class="flow-strip">
-  <span class="flow-node">Base.callCellMethod()</span>
-  <span class="flow-arrow">-></span>
-  <span class="flow-node">检查 cellMailBox_</span>
-  <span class="flow-arrow">-></span>
-  <span class="flow-node">getStream() 获取输出流</span>
-  <span class="flow-arrow">-></span>
-  <span class="flow-node">写入 methodIndex + 参数</span>
-  <span class="flow-arrow">-></span>
-  <span class="flow-node">sendToCell() 发送</span>
-  <span class="flow-arrow">-></span>
-  <span class="flow-node">CellApp::callCellMethod()</span>
-</div>
+**流程图：**
+
+<MermaidDiagram title="Base -> Cell 方法调用流程">
+sequenceDiagram
+    participant Base as Base Entity
+    participant Mailbox as CellEntityMailBox
+    participant Bundle as Mercury Bundle
+    participant Channel as UDP Channel
+    participant CellApp as CellApp
+    participant Entity as Cell Entity
+
+    Base->>Mailbox: callCellMethod(index, data)
+    Mailbox->>Bundle: startMessage(callCellMethod)
+    Bundle->>Bundle: 写入 EntityID
+    Bundle->>Bundle: 写入 methodIndex
+    Bundle->>Bundle: 写入参数数据
+    Bundle->>Channel: 发送消息
+    Channel->>CellApp: UDP 包
+    CellApp->>Entity: dispatch callCellMethod
+    Entity->>Entity: 执行 Python 方法
+</MermaidDiagram>
+
+**详细讲解：**
+
+1. **Cell Mailbox 检查**：Base 必须有对应的 Cell Entity 才能调用 Cell 方法。如果 Cell 已销毁或未创建，`pCellEntityMailBox_` 为空。
+
+2. **EntityID 传递**：CellApp 有多个实体，消息中需要携带 `EntityID` 让 CellApp 路由到正确的 Entity。
+
+3. **地址路由**：`pCellEntityMailBox_` 知道目标 CellApp 的地址，这个地址可能因实体迁移而变化。Base 通过 `setCurrentCell()` 更新地址。
+
+4. **失败处理**：如果 CellApp 已死或实体已迁移，消息会丢失。BigWorld 通过 CellApp 死亡检测和 Base 恢复机制处理这种情况。
 
 ### 属性同步到客户端
 
-Cell Entity 通过 writeClientUpdateDataToBundle() 将属性变更写入 Bundle，发送给 Witness 管理的客户端。
+**概述：** Cell Entity 的属性变更需要同步到客户端。这不是实时全量同步，而是通过 Witness 和 AOI 过滤后，只发送可见且变更的属性。
 
-源码入口：[entity.cpp:2475](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity.cpp:2475)
+**源码入口：** [entity.cpp:2475](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity.cpp:2475)
 
-调用链：
+```cpp
+// entity.cpp:2475 - Cell Entity 写客户端更新数据
+void Entity::writeClientUpdateDataToBundle( Mercury::Bundle & bundle,
+    bool isFullUpdate )
+{
+    // 1. 写入车辆变更（如果有）
+    this->writeVehicleChangeToBundle( bundle );
+    
+    // 2. 遍历事件历史，写入属性变更
+    EventHistory::iterator iter = eventHistory_.begin();
+    while (iter != eventHistory_.end())
+    {
+        if (iter->isForClient())
+        {
+            iter->writeToBundle( bundle );
+        }
+        ++iter;
+    }
+    
+    // 3. 写入 volatile 数据（位置、方向等高频数据）
+    if (volatileInfo_.hasVolatile())
+    {
+        this->writeVolatileDetailedDataToBundle( bundle );
+    }
+}
+```
 
-<div class="flow-strip">
-  <span class="flow-node">Entity.writeClientUpdateDataToBundle()</span>
-  <span class="flow-arrow">-></span>
-  <span class="flow-node">writeVehicleChangeToBundle()</span>
-  <span class="flow-arrow">-></span>
-  <span class="flow-node">遍历 EventHistory</span>
-  <span class="flow-arrow">-></span>
-  <span class="flow-node">writeVolatileDetailedDataToBundle()</span>
-  <span class="flow-arrow">-></span>
-  <span class="flow-node">写入属性变更</span>
-  <span class="flow-arrow">-></span>
-  <span class="flow-node">Witness 发送给 Client</span>
-</div>
+**流程图：**
+
+<MermaidDiagram title="Cell -> Client 属性同步流程">
+sequenceDiagram
+    participant Cell as Cell Entity
+    participant History as EventHistory
+    participant Bundle as Mercury Bundle
+    participant Witness as Witness
+    participant Cache as EntityCache
+    participant Client as Client
+
+    Cell->>History: 记录属性变更
+    Cell->>Cell: writeClientUpdateDataToBundle()
+    Cell->>Bundle: 写入车辆变更
+    Cell->>Bundle: 写入事件历史
+    Cell->>Bundle: 写入 volatile 数据
+    Bundle->>Witness: 发送给 Witness
+    Witness->>Cache: 更新 EntityCache
+    Cache->>Client: 同步到客户端
+</MermaidDiagram>
+
+**详细讲解：**
+
+1. **EventHistory 机制**：属性变更不是立即发送，而是记录到 `EventHistory`。每个事件标记是否需要同步到客户端、是否可靠。
+
+2. **Volatile 数据**：位置、方向等高频数据使用 `volatileInfo_` 控制同步频率。不同实体类型可以有不同的同步策略。
+
+3. **Witness 过滤**：只有在客户端 AOI 内的实体才会同步。Witness 管理每个客户端的可见实体集合。
+
+4. **EntityCache 缓存**：客户端有 `EntityCache` 缓存已知实体，避免重复同步。只有属性变更才发送。
+
+5. **带宽控制**：Bundle 内部有带宽限制，单个 tick 内发送的数据量有上限，防止网络拥塞。
 
 ## 实体恢复调用链
 
-当 CellApp crash 后，Base 通过 restoreTo() 恢复 Cell Entity：
+当 CellApp crash 后，Base 通过 `restoreTo()` 恢复 Cell Entity。这是 BigWorld 高可用性的核心机制：即使 CellApp 崩溃，玩家的 Base Entity 仍然存活，可以恢复到新的 CellApp。
 
-源码入口：[base.cpp:3810](/home/cui/workspaces/BigWorld/programming/bigworld/server/baseapp/base.cpp:3810)
+**概述：** CellApp 崩溃时，CellAppMgr 检测到死亡，通知 BaseAppMgr，BaseAppMgr 再通知所有 BaseApp。每个 BaseApp 检查自己是否有 Entity 的 Cell 在死亡的 CellApp 上，如果有，就从备份数据恢复到新的 CellApp。
 
-调用链：
+**源码入口：** [base.cpp:3810](/home/cui/workspaces/BigWorld/programming/bigworld/server/baseapp/base.cpp:3810)
 
-<div class="flow-strip">
-  <span class="flow-node">CellApp crash</span>
-  <span class="flow-arrow">-></span>
-  <span class="flow-node">CellAppMgr 检测死亡</span>
-  <span class="flow-arrow">-></span>
-  <span class="flow-node">通知 BaseAppMgr</span>
-  <span class="flow-arrow">-></span>
-  <span class="flow-node">BaseAppMgr 通知所有 BaseApp</span>
-  <span class="flow-arrow">-></span>
-  <span class="flow-node">Base::restoreTo()</span>
-  <span class="flow-arrow">-></span>
-  <span class="flow-node">从 cellBackupData_ 恢复</span>
-  <span class="flow-arrow">-></span>
-  <span class="flow-node">发送到新 CellApp</span>
-</div>
+```cpp
+// base.cpp:3810 - Base 恢复 Cell Entity
+void Base::restoreTo( const Mercury::Address & addr,
+    const Mercury::UnpackedMessageHeader & header,
+    BinaryIStream & data )
+{
+    // 1. 读取备份数据
+    this->readBackupData( data );
+    
+    // 2. 检查是否有 Cell Entity
+    if (!this->hasCellEntity())
+    {
+        return;
+    }
+    
+    // 3. 创建新的 Cell Entity
+    this->createCellEntityOn( addr );
+    
+    // 4. 更新 Cell 地址
+    this->setCurrentCell( spaceID_, addr );
+}
+```
+
+**流程图：**
+
+<MermaidDiagram title="CellApp 崩溃后实体恢复流程">
+sequenceDiagram
+    participant CellApp as CellApp (死亡)
+    participant CellAppMgr as CellAppMgr
+    participant BaseAppMgr as BaseAppMgr
+    participant BaseApp as BaseApp
+    participant Base as Base Entity
+    participant NewCellApp as 新 CellApp
+
+    CellApp->>CellAppMgr: 死亡检测 (心跳超时)
+    CellAppMgr->>BaseAppMgr: 通知 CellApp 死亡
+    BaseAppMgr->>BaseApp: 广播 CellApp 死亡
+    BaseApp->>Base: 检查 Cell 是否在死亡 CellApp
+    Base->>Base: 读取 cellBackupData_
+    Base->>NewCellApp: createCellEntityOn()
+    NewCellApp->>NewCellApp: 恢复 Cell Entity
+    Base->>Base: setCurrentCell(新地址)
+</MermaidDiagram>
+
+**详细讲解：**
+
+1. **死亡检测**：CellAppMgr 通过心跳机制检测 CellApp 死亡。如果 CellApp 超过一定时间没有心跳，CellAppMgr 标记它为死亡。
+
+2. **备份数据**：Base 定期通过 `backupTo()` 将 Cell Entity 的状态备份到其他 BaseApp。备份数据存储在 `cellBackupData_` 中。
+
+3. **恢复时机**：Base 收到 CellApp 死亡通知后，立即检查自己的 Cell 是否在死亡的 CellApp 上。如果是，就从备份数据恢复。
+
+4. **新 CellApp 选择**：BaseApp 会选择一个存活的 CellApp 来恢复 Cell Entity。选择算法考虑负载、空间位置等因素。
+
+5. **状态恢复**：备份数据包含 Entity 的属性、位置、AOI 状态等。恢复后，Entity 在新 CellApp 上继续运行，客户端可能感受到短暂卡顿。
+
+**为什么这样设计：**
+
+- **玩家不掉线**：Base Entity 始终在 BaseApp 上，即使 CellApp 崩溃，玩家连接不会断开。
+- **快速恢复**：从备份数据恢复比从数据库加载快得多，减少玩家等待时间。
+- **透明迁移**：对客户端来说，只是感觉到短暂卡顿，不需要重新登录。
 
 ## 为什么这样拆
 

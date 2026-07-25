@@ -43,41 +43,147 @@ BigWorld 的动态扩展可以分成三层：
 
 ## CellApp 接纳流程
 
-`CellAppMgr::addApp()` 会先判断是否允许接纳：
+**概述：** 新 CellApp 启动后，需要向 CellAppMgr 注册。CellAppMgr 检查前置条件（BaseApp、DBApp 已知），如果满足，分配 ID、同步数据、接纳新 CellApp。
 
-- 没有 BaseApp 地址时不接纳。
-- 没有 Alpha DBApp 时不接纳。
-- Evaluation build 只允许一个 CellApp。
-- `allowNewCellApps_` 为 false 时不接纳。
-- 正在 recovery 时不接纳。
+**源码入口：** [cellappmgr.cpp:1245](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellappmgr/cellappmgr.cpp:1245)
 
-源码见 [cellappmgr.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellappmgr/cellappmgr.cpp:1249)。
+```cpp
+// cellappmgr.cpp:1245 - CellAppMgr 接纳新 CellApp
+bool CellAppMgr::addApp( const Mercury::Address & addr,
+    const Mercury::UnpackedMessageHeader & header,
+    BinaryIStream & data )
+{
+    // 1. 检查前置条件
+    if (baseAppAddr_.isNone())
+    {
+        ERROR_MSG( "CellAppMgr::addApp: No BaseApp known yet\n" );
+        return false;
+    }
+    
+    if (dbAlphaAddr_.isNone())
+    {
+        ERROR_MSG( "CellAppMgr::addApp: No DBApp Alpha known yet\n" );
+        return false;
+    }
+    
+    if (!allowNewCellApps_)
+    {
+        ERROR_MSG( "CellAppMgr::addApp: New cell apps not allowed\n" );
+        return false;
+    }
+    
+    if (isRecovery_)
+    {
+        ERROR_MSG( "CellAppMgr::addApp: Currently in recovery\n" );
+        return false;
+    }
+    
+    // 2. 分配 ID 和初始化数据
+    CellAppInitData initData;
+    initData.id = ++lastCellAppID_;
+    initData.time = this->time();
+    initData.baseAppAddr = baseAppAddr_;
+    initData.dbAlphaAddr = dbAlphaAddr_;
+    initData.isReady = true;
+    initData.timeoutPeriod = Config::timeoutPeriod();
+    
+    // 3. 添加到 CellApp 集合
+    CellApp * pApp = new CellApp( addr, initData.id );
+    cellApps_.add( pApp );
+    
+    // 4. 放入 pending 列表
+    pendingApps_.push_back( pApp );
+    
+    // 5. 回复初始化数据
+    header.reply( initData );
+    
+    // 6. 下发共享数据
+    this->sendSharedData( addr );
+    this->sendGlobalData( addr );
+    
+    return true;
+}
+```
 
-接纳成功后：
+**流程图：**
 
-- `initData.id = ++lastCellAppID_`
-- `initData.time = this->time()`
-- 写入 BaseApp 地址、DBApp Alpha 地址、ready 状态、timeout period。
-- `cellApps_.add()` 加入集合。
-- 将 App 放入 `pendingApps_`。
-- reply 返回 `CellAppInitData`。
-- 下发 shared cell data 和 global data。
-
-源码见 [cellappmgr.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellappmgr/cellappmgr.cpp:1306)。
-
-<MermaidDiagram title="CellApp 动态加入">
+<MermaidDiagram title="CellApp 接纳流程">
 sequenceDiagram
-  participant CellApp
-  participant CAM as CellAppMgr
-  participant Base as BaseApp
-  participant DB as DBApp Alpha
+    participant CellApp as 新 CellApp
+    participant CellAppMgr as CellAppMgr
+    participant BaseApp as BaseApp
+    participant DBApp as DBApp Alpha
 
-  CellApp->>CAM: addApp request
-  CAM->>CAM: check BaseApp known
-  CAM->>CAM: check DBApp Alpha known
-  CAM->>CAM: check allowNewCellApps/recovery
-  CAM->>CellApp: reply CellAppInitData
-  CAM->>CellApp: setSharedData/globalData
+    CellApp->>CellAppMgr: addApp request
+    
+    alt 前置条件不满足
+        CellAppMgr->>CellApp: 拒绝
+    else 前置条件满足
+        CellAppMgr->>CellAppMgr: 分配 ID
+        CellAppMgr->>CellAppMgr: 初始化数据
+        CellAppMgr->>CellAppMgr: cellApps_.add()
+        CellAppMgr->>CellAppMgr: pendingApps_.push_back()
+        CellAppMgr->>CellApp: reply CellAppInitData
+        CellAppMgr->>CellApp: sendSharedData()
+        CellAppMgr->>CellApp: sendGlobalData()
+    end
+</MermaidDiagram>
+
+**详细讲解：**
+
+1. **前置条件检查**：
+   - `baseAppAddr_.isNone()`：必须知道 BaseApp 地址，否则无法创建 Base Entity
+   - `dbAlphaAddr_.isNone()`：必须知道 DBApp Alpha，否则无法持久化
+   - `allowNewCellApps_`：运行时开关，可以禁止新 CellApp 加入
+   - `isRecovery_`：正在恢复时不允许新 CellApp，避免状态冲突
+
+2. **ID 分配**：`lastCellAppID_` 单调递增，每个 CellApp 有唯一 ID，用于消息路由和状态管理。
+
+3. **初始化数据**：`CellAppInitData` 包含 CellApp 需要的所有初始信息：
+   - 当前游戏时间
+   - BaseApp 地址（用于 Base-Cell 通信）
+   - DBApp Alpha 地址（用于持久化）
+   - 超时周期（用于心跳检测）
+
+4. **pending 列表**：新 CellApp 先加入 `pendingApps_`，等待 ready 后才真正参与负载均衡。
+
+5. **共享数据下发**：`sendSharedData()` 和 `sendGlobalData()` 同步全局配置，确保所有 CellApp 有一致的配置。
+
+### CellAppMgr 初始化流程
+
+**源码入口：** [cellappmgr.cpp:190](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellappmgr/cellappmgr.cpp:190)
+
+```cpp
+// cellappmgr.cpp:190 - CellAppMgr 初始化
+bool CellAppMgr::init( bool isReload )
+{
+    // ... 其他初始化 ...
+    
+    // 注册负载均衡 timer
+    mainDispatcher_.addTimer( Config::loadBalancePeriod() * 1000000,
+        this, (void*)LOAD_BALANCE_TIMER, "LoadBalance" );
+    
+    // 注册 meta 负载均衡 timer
+    mainDispatcher_.addTimer( Config::metaLoadBalancePeriod() * 1000000,
+        this, (void*)META_LOAD_BALANCE_TIMER, "MetaLoadBalance" );
+    
+    // 注册过载检查 timer
+    mainDispatcher_.addTimer( Config::overloadCheckPeriod() * 1000000,
+        this, (void*)OVERLOAD_CHECK_TIMER, "OverloadCheck" );
+    
+    // 创建 TimeKeeper
+    pTimeKeeper_ = new TimeKeeper( this, this->time() );
+    
+    return true;
+}
+```
+
+**关键细节：**
+
+- 负载均衡 timer 定期触发，检查 CellApp 负载并决定是否迁移 Cell
+- meta 负载均衡 timer 处理更复杂的全局负载均衡决策
+- 过载检查 timer 监控 CellApp 是否过载，触发保护机制
+- TimeKeeper 用于跨进程时间同步
   CAM->>CellApp: gameTime/info later
   CAM->>CAM: pendingApps add
 </MermaidDiagram>

@@ -67,17 +67,68 @@ BigWorld 的测试体系不是空白，尤其网络层有不少针对可靠 UDP�
 
 ## Timer 的真实时间依赖
 
-`EventDispatcher::addTimerCommon()` 将微秒转换成 timestamp interval，再用当前 `timestamp()` 加 interval 作为过期时间。见 [event_dispatcher.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/event_dispatcher.cpp:275)。
+**概述：** BigWorld 的 Timer 系统依赖真实时间，不是虚拟时钟。这是测试和确定性重放的主要障碍。
 
-`processTimers()` 直接调用：
+**源码入口：** [event_dispatcher.cpp:264](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/event_dispatcher.cpp:264)
 
 ```cpp
+// event_dispatcher.cpp:264 - Timer 添加
+int EventDispatcher::addTimerCommon( int microseconds, 
+    TimerHandler * pHandler, void * pUser, const char * name,
+    bool isRepeating )
+{
+    // 1. 微秒转换为 timestamp interval
+    uint64 interval = uint64(microseconds) * 1000;
+    
+    // 2. 计算到期时间（使用真实时间）
+    uint64 startTime = timestamp() + interval;
+    
+    // 3. 插入 TimeQueue64
+    TimeQueue64::iterator iter = pTimeQueue_->add( startTime, 
+        pHandler, pUser, interval );
+    
+    return iter->id();
+}
+```
+
+`processTimers()` 直接调用 `timestamp()` 驱动：
+
+```cpp
+// event_dispatcher.cpp:340 - Timer 处理
 pTimeQueue_->process( timestamp() );
 ```
 
-源码见 [event_dispatcher.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/event_dispatcher.cpp:340)。
+**流程图：**
 
-这意味着测试 Timer、重发、超时、load balancing、Reviver ping 时，默认依赖真实时间流逝。
+<MermaidDiagram title="Timer 真实时间依赖">
+sequenceDiagram
+    participant App as 应用层
+    participant Dispatcher as EventDispatcher
+    participant TimeQueue as TimeQueue64
+    participant System as 系统时间
+
+    App->>Dispatcher: addTimer(100ms)
+    Dispatcher->>System: timestamp()
+    System->>Dispatcher: 返回当前时间
+    Dispatcher->>TimeQueue: add(now + 100ms)
+    
+    Note over System: 等待 100ms...
+    
+    App->>Dispatcher: processTimers()
+    Dispatcher->>System: timestamp()
+    System->>Dispatcher: 返回当前时间
+    Dispatcher->>TimeQueue: process(now)
+    TimeQueue->>TimeQueue: 检查到期 Timer
+    TimeQueue->>App: handleTimeout()
+</MermaidDiagram>
+
+**详细讲解：**
+
+1. **真实时间依赖**：Timer 使用 `timestamp()` 驱动，不是虚拟时钟。这意味着测试必须等待真实时间流逝，无法加速或减速时间。
+
+2. **测试障碍**：Timer、重发、超时、load balancing、Reviver ping 都依赖真实时间。测试这些行为需要等待真实时间，速度慢，且无法确定性重放。
+
+3. **为什么不用虚拟时钟**：游戏服务器需要真实时间行为，虚拟时钟会增加复杂度。当时没有统一的虚拟时钟注入层。
 
 ## timestamp 的平台问题
 
