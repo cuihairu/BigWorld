@@ -217,4 +217,4 @@ docker run --rm -v $(pwd):/src bigworld-build \
 
 - [CMake 文档](https://cmake.org/cmake/help/latest/)
 - [GCC 文档](https://gcc.gnu.org/onlinedocs/)
-- [构建与运行体系](/analysis/build-from-source)
+- [构建与运行体系](/getting-started/build-from-source)
