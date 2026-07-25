@@ -315,3 +315,11 @@ BigWorld 的持久化不是强事务分布式数据库模型。需要注意：
 ## 本章边界
 
 本章解释持久化和 DB 线程模型。`.def` 如何决定 persistent 属性、Identifier、索引和数据库 digest，在 [EntityDef 契约与协议生成](/architecture/entitydef-contract-generation) 中继续展开。
+
+## 相关文档
+
+- EntityDef 契约生成，详见 [EntityDef 契约与协议生成](/architecture/entitydef-contract-generation)。
+- 序列化实现，详见 [序列化与 EntityDef](/architecture/serialization-entitydef)。
+- 实体模型，详见 [实体模型 Base/Cell/Client](/architecture/entity-model)。
+- 实体生命周期，详见 [实体生命周期状态机](/architecture/entity-lifecycle-state-machine)。
+- 登录与会话，详见 [登录、会话与 Proxy 接管](/architecture/login-session-proxy-flow)。

@@ -25,10 +25,22 @@ export default {
     },
     nav: [
       { text: "总览", link: "/" },
+      { text: "快速开始", link: "/getting-started/" },
       { text: "架构研究", link: "/architecture/research-method" },
       { text: "专题大纲", link: "/architecture/outline" }
     ],
     sidebar: {
+      "/getting-started/": [
+        {
+          text: "快速开始",
+          items: [
+            { text: "概述", link: "/getting-started/" },
+            { text: "从源码构建", link: "/getting-started/build-from-source" },
+            { text: "项目结构", link: "/getting-started/project-structure" },
+            { text: "核心 API", link: "/getting-started/api-reference" }
+          ]
+        }
+      ],
       "/architecture/": [
         {
           text: "基础架构",
@@ -103,12 +115,13 @@ export default {
       ],
       "/analysis/": [
         {
-          text: "旧版草稿",
+          text: "项目分析",
           items: [
             { text: "总体画像", link: "/analysis/overview" },
             { text: "目录与模块", link: "/analysis/modules" },
             { text: "构建与运行体系", link: "/analysis/build-and-runtime" },
-            { text: "技术债与风险", link: "/analysis/risks" }
+            { text: "技术债与风险", link: "/analysis/risks" },
+            { text: "源码导读", link: "/analysis/source-code-guide" }
           ]
         }
       ],
@@ -116,7 +129,10 @@ export default {
         {
           text: "迁移专题",
           items: [
-            { text: "嵌入式 Python 运行时", link: "/migration/python-3-12" }
+            { text: "Python 3.12 路线图", link: "/migration/python-3-12" },
+            { text: "Python C API 迁移", link: "/migration/python-c-api-guide" },
+            { text: "第三方依赖升级", link: "/migration/third-party-deps" },
+            { text: "构建系统现代化", link: "/migration/build-system-modernization" }
           ]
         }
       ],

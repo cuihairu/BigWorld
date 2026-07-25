@@ -180,7 +180,8 @@ TCP 更适合登录、工具、管理、WebSocket 等场景；游戏主通道仍
 
 下一批网络专题应继续深入：
 
-- Mercury 可靠 UDP：ACK、重传、窗口、乱序、分片、piggyback。
-- Bundle 与消息定义：宏接口、消息 ID、可变长流。
-- UDP Channel：indexed、anonymous、irregular、once-off reliability。
-- 网络故障注入：丢包、延迟、Flood、篡改测试。
+- Mercury 可靠 UDP：ACK、重传、窗口、乱序、分片、piggyback，详见 [Mercury 可靠 UDP](/architecture/mercury-reliable-udp)。
+- Bundle 与消息定义：宏接口、消息 ID、可变长流，详见 [通信抽象与 RPC](/architecture/communication-rpc)。
+- UDP Channel：indexed、anonymous、irregular、once-off reliability，详见 [Mercury 可靠 UDP](/architecture/mercury-reliable-udp)。
+- 网络故障注入：丢包、延迟、Flood、篡改测试，详见 [网络背压与故障注入](/architecture/network-backpressure-fault-injection)。
+- 主循环与事件分发模型，详见 [主循环、Tick 与事件分发](/architecture/event-loop)。

@@ -222,4 +222,11 @@ BaseApp 单元测试也通过 `BW_ADD_TEST( baseapp_unit_test )` 注册，见 [s
 
 ## 本章边界
 
-本章解释构建和依赖治理。后续源码分析引用构建问题时，应回到具体依赖、宏开关、平台路径和测试基线，而不是把它泛化成“升级工具链”。
+本章解释构建和依赖治理。后续源码分析引用构建问题时，应回到具体依赖、宏开关、平台路径和测试基线，而不是把它泛化成”升级工具链”。
+
+## 相关文档
+
+- Python 迁移相关，详见 [Python 3.12 路线图](/migration/python-3-12)。
+- 第三方依赖升级，详见 [第三方依赖升级清单](/migration/third-party-deps)。
+- 构建系统现代化，详见 [构建系统现代化](/migration/build-system-modernization)。
+- 技术债与风险分析，详见 [技术债与风险](/analysis/risks)。

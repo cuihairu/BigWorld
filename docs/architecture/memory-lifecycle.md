@@ -72,6 +72,110 @@ BigWorld 使用的是侵入式引用计数：计数存放在被引用对象内�
 - 需要非常清楚对象是否允许 `delete this`。
 - 优点是低开销、易嵌入引擎对象。
 
+## 引用计数完整调用链
+
+### ReferenceCount 生命周期
+
+非线程安全引用计数的完整调用链：
+
+源码入口：[smartpointer.hpp:117](/home/cui/workspaces/BigWorld/programming/bigworld/lib/cstdmf/smartpointer.hpp:117)
+
+<div class="flow-strip">
+  <span class="flow-node">SmartPointer 构造</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">incRef() 原子增</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">count_++</span>
+</div>
+
+<div class="flow-strip">
+  <span class="flow-node">SmartPointer 析构</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">decRef() 原子减</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">count_--</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">count == 0 ?</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">delete this</span>
+</div>
+
+### SafeReferenceCount 生命周期
+
+线程安全引用计数的完整调用链：
+
+源码入口：[smartpointer.hpp:191](/home/cui/workspaces/BigWorld/programming/bigworld/lib/cstdmf/smartpointer.hpp:191)
+
+<div class="flow-strip">
+  <span class="flow-node">SmartPointer 构造</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">incRef() 原子增</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">BW_ATOMIC32_INC_AND_FETCH</span>
+</div>
+
+<div class="flow-strip">
+  <span class="flow-node">SmartPointer 析构</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">decRef() 原子减</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">BW_ATOMIC32_DEC_AND_FETCH</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">count == 0 ?</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">destroy()</span>
+</div>
+
+### Channel 生命周期
+
+Channel 对象的完整生命周期调用链：
+
+源码入口：[channel.hpp:35](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/channel.hpp:35)
+
+<div class="flow-strip">
+  <span class="flow-node">NetworkInterface 创建 Channel</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">incRef() 引用计数 +1</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">注册到 channelMap_</span>
+</div>
+
+<div class="flow-strip">
+  <span class="flow-node">Channel 断开</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">从 channelMap_ 移除</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">decRef() 引用计数 -1</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">检查 condemnedChannels_</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">延迟销毁</span>
+</div>
+
+### BackgroundTask 生命周期
+
+后台任务的完整生命周期调用链：
+
+源码入口：[bgtask_manager.hpp:25](/home/cui/workspaces/BigWorld/programming/bigworld/lib/cstdmf/bgtask_manager.hpp:25)
+
+<div class="flow-strip">
+  <span class="flow-node">创建 BackgroundTask</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">addBackgroundTask() 入队</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">SmartPointer 保活</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">后台线程执行 doBackgroundTask()</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">addMainThreadTask() 回主线程</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">tick() 执行 doMainThreadTask()</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">SmartPointer 析构</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">decRef() -> destroy()</span>
+</div>
+
 ## 生命周期分层
 
 <MermaidDiagram title="对象生命周期分层">

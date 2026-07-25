@@ -266,4 +266,11 @@ flowchart TD
 
 ## 本章边界
 
-本章回答“现在有什么测试、故障注入做到了什么、边界在哪里”。时间驱动与虚拟时钟问题放在 [测试体系与可控时间](/architecture/testing-time-control)；具体网络背压和人工 loss/latency 实现细节放在 [网络背压与故障注入](/architecture/network-backpressure-fault-injection)。
+本章回答”现在有什么测试、故障注入做到了什么、边界在哪里”。时间驱动与虚拟时钟问题放在 [测试体系与可控时间](/architecture/testing-time-control)；具体网络背压和人工 loss/latency 实现细节放在 [网络背压与故障注入](/architecture/network-backpressure-fault-injection)。
+
+## 相关文档
+
+- 测试与可控时间，详见 [测试体系与可控时间](/architecture/testing-time-control)。
+- 网络背压与故障注入，详见 [网络背压与故障注入](/architecture/network-backpressure-fault-injection)。
+- Mercury 可靠 UDP 测试，详见 [Mercury 可靠 UDP](/architecture/mercury-reliable-udp)。
+- 动态扩展与容灾，详见 [动态扩展与容灾](/architecture/scaling-fault-tolerance)。

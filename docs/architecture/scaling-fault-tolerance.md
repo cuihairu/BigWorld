@@ -176,6 +176,120 @@ flowchart TD
 
 这说明 Reviver 是进程级恢复，不是完整编排系统。它能请求重启，但不等价于现代 orchestrator 的调度、健康检查、资源约束、滚动升级和事件审计。
 
+## CellApp crash 后的实体恢复调用链
+
+当 CellApp 异常死亡时，BigWorld 通过以下调用链恢复实体：
+
+### 第一阶段：CellAppMgr 检测死亡
+
+CellAppMgr 通过 Channel 断开检测到 CellApp 死亡，调用 handleCellAppDeath()：
+
+源码入口：[cellappmgr.cpp:1806](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellappmgr/cellappmgr.cpp:1806)
+
+调用链：
+
+<div class="flow-strip">
+  <span class="flow-node">CellApp Channel 断开</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">CellAppMgr::handleCellAppDeath()</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">发送 SIGQUIT 给死亡 CellApp</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">创建 CellAppDeathHandler</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">pDeadApp->handleUnexpectedDeath()</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">等待所有 CellApp 回复</span>
+</div>
+
+### 第二阶段：CellApp 收集实体状态
+
+存活的 CellApp 收到 death 通知后，收集自己持有的 ghost 实体状态：
+
+源码入口：[cellapp.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/cellapp.cpp)
+
+调用链：
+
+<div class="flow-strip">
+  <span class="flow-node">CellApp 收到 handleCellAppDeath</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">遍历所有 ghost 实体</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">检查 ghost 是否属于死亡 CellApp</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">收集需要恢复的实体列表</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">回复 CellAppMgr</span>
+</div>
+
+### 第三阶段：CellAppMgr 通知 BaseAppMgr
+
+所有 CellApp 回复后，CellAppMgr 通知 BaseAppMgr 开始恢复：
+
+调用链：
+
+<div class="flow-strip">
+  <span class="flow-node">CellAppDeathHandler 收到所有回复</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">CellAppMgr 通知 BaseAppMgr</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">BaseAppMgr 广播给所有 BaseApp</span>
+</div>
+
+### 第四阶段：BaseApp 恢复 Cell Entity
+
+BaseApp 收到通知后，遍历所有 Base Entity，调用 restoreTo() 恢复 Cell Entity：
+
+源码入口：[baseapp.cpp:1942](/home/cui/workspaces/BigWorld/programming/bigworld/server/baseapp/baseapp.cpp:1942)
+
+调用链：
+
+<div class="flow-strip">
+  <span class="flow-node">BaseApp::handleCellAppDeath()</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">pDeadCellApps_->addApp()</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">pDeadCellApps_->tick()</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">遍历 bases_ 中的实体</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">Base::restoreTo()</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">从 cellBackupData_ 恢复</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">发送到新 CellApp</span>
+</div>
+
+### 第五阶段：CellApp 恢复实体
+
+新 CellApp 收到恢复数据后，重建 Cell Entity：
+
+调用链：
+
+<div class="flow-strip">
+  <span class="flow-node">新 CellApp 收到 restoreTo 请求</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">创建 Entity 对象</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">从备份数据恢复属性</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">重建 real/ghost 关系</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">通知 BaseApp 恢复完成</span>
+</div>
+
+### 恢复失败场景
+
+恢复可能失败的场景：
+
+- Base Entity 没有 cellBackupData_（未备份）
+- 目标 CellApp 不可用
+- 数据库不可用（无法读取持久化数据）
+- 实体处于 offload 中间态
+- 协议版本不兼容
+
+源码见 [base.cpp:3810](/home/cui/workspaces/BigWorld/programming/bigworld/server/baseapp/base.cpp:3810)。
+
 ## 故障恢复边界
 
 BigWorld 有多层恢复：

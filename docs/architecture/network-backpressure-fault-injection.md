@@ -238,3 +238,11 @@ BigWorld 设计年代没有 `io_uring`。更关键的是，当前模型是 readi
 ## 本章边界
 
 本章分析网络背压和故障注入。它与 [网络 I/O 模型选择](/architecture/network-io-model) 互补：前者解释选择 epoll/recvfrom 的模型，本文解释运行时如何保护 Tick 和验证可靠层。
+
+## 相关文档
+
+- 网络 I/O 模型，详见 [网络 I/O 模型选择](/architecture/network-io-model)。
+- Mercury 可靠 UDP，详见 [Mercury 可靠 UDP](/architecture/mercury-reliable-udp)。
+- 通信抽象与 RPC，详见 [通信抽象与 RPC](/architecture/communication-rpc)。
+- 主循环与事件分发，详见 [主循环、Tick 与事件分发](/architecture/event-loop)。
+- 测试与故障注入，详见 [测试体系、故障注入与覆盖边界](/architecture/testing-fault-injection-coverage)。

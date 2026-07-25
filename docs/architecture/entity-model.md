@@ -166,6 +166,100 @@ Cell 侧回调包括：
 
 这些回调是脚本层扩展点，但也是风险点：回调中可能销毁、迁移、offload 实体，所以 C++ 代码经常要防止对象生命周期变化。
 
+## 跨域方法调用链
+
+Base 与 Cell 之间的方法调用通过 Mailbox 和 Mercury 消息完成：
+
+### Cell -> Base 调用链
+
+<CellEntity>::callBaseMethod() 读取 methodIndex，创建 BaseEntityMailBox，获取输出流，写入参数，然后通过 Mercury 发送到 BaseApp。
+
+源码入口：[entity.cpp:5255](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity.cpp:5255)
+
+调用链：
+
+<div class="flow-strip">
+  <span class="flow-node">Cell Entity.callBaseMethod()</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">创建 BaseEntityMailBox</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">getStream() 获取输出流</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">写入 methodIndex + 参数</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">sendStream() 发送</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">BaseApp::callBaseMethod()</span>
+</div>
+
+### Base -> Cell 调用链
+
+Base::callCellMethod() 检查 cellMailBox_，获取输出流，写入参数，通过 pChannel_ 发送到 CellApp。
+
+源码入口：[base.cpp:1391](/home/cui/workspaces/BigWorld/programming/bigworld/server/baseapp/base.cpp:1391)
+
+调用链：
+
+<div class="flow-strip">
+  <span class="flow-node">Base.callCellMethod()</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">检查 cellMailBox_</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">getStream() 获取输出流</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">写入 methodIndex + 参数</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">sendToCell() 发送</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">CellApp::callCellMethod()</span>
+</div>
+
+### 属性同步到客户端
+
+Cell Entity 通过 writeClientUpdateDataToBundle() 将属性变更写入 Bundle，发送给 Witness 管理的客户端。
+
+源码入口：[entity.cpp:2475](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity.cpp:2475)
+
+调用链：
+
+<div class="flow-strip">
+  <span class="flow-node">Entity.writeClientUpdateDataToBundle()</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">writeVehicleChangeToBundle()</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">遍历 EventHistory</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">writeVolatileDetailedDataToBundle()</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">写入属性变更</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">Witness 发送给 Client</span>
+</div>
+
+## 实体恢复调用链
+
+当 CellApp crash 后，Base 通过 restoreTo() 恢复 Cell Entity：
+
+源码入口：[base.cpp:3810](/home/cui/workspaces/BigWorld/programming/bigworld/server/baseapp/base.cpp:3810)
+
+调用链：
+
+<div class="flow-strip">
+  <span class="flow-node">CellApp crash</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">CellAppMgr 检测死亡</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">通知 BaseAppMgr</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">BaseAppMgr 通知所有 BaseApp</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">Base::restoreTo()</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">从 cellBackupData_ 恢复</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">发送到新 CellApp</span>
+</div>
+
 ## 为什么这样拆
 
 这种拆分解决了 MMO 的几个问题：

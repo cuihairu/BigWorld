@@ -219,3 +219,9 @@ machined 控制面验证应覆盖发现、启动和通知：
 ## 本章边界
 
 本章解释 machined 控制面。它与 [动态扩展与容灾](/architecture/scaling-fault-tolerance) 互补：后者关注 App 接纳、Cell 负载和 Reviver 恢复语义，本文关注底层进程发现和启动机制。
+
+## 相关文档
+
+- 动态扩展与容灾，详见 [动态扩展与容灾](/architecture/scaling-fault-tolerance)。
+- 进程拓扑，详见 [进程拓扑与职责切分](/architecture/process-topology)。
+- 线程架构，详见 [线程架构与后台任务](/architecture/threading-background-tasks)。

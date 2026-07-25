@@ -81,6 +81,100 @@ sequenceDiagram
 
 源码见 [bgtask_manager.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/cstdmf/bgtask_manager.cpp:141)。
 
+## BgTaskManager 完整调用链
+
+### 任务投递流程
+
+从主线程投递后台任务到执行的完整调用链：
+
+源码入口：[bgtask_manager.cpp:693](/home/cui/workspaces/BigWorld/programming/bigworld/lib/cstdmf/bgtask_manager.cpp:693)
+
+<div class="flow-strip">
+  <span class="flow-node">主线程调用 addBackgroundTask()</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">记录 timeEnqueuedToBackground_</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">bgTaskList_.push() 入队</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">semaphore 通知后台线程</span>
+</div>
+
+### 后台线程执行流程
+
+后台线程拉取并执行任务的调用链：
+
+源码入口：[bgtask_manager.cpp:137](/home/cui/workspaces/BigWorld/programming/bigworld/lib/cstdmf/bgtask_manager.cpp:137)
+
+<div class="flow-strip">
+  <span class="flow-node">BackgroundTaskThread::run()</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">pullBackgroundTask() 等待任务</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">setStaticThreadData() 设置线程本地数据</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">检查 ThreadBlockCallback</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">doBackgroundTask() 执行任务</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">onBackgroundTaskFinished() 记录耗时</span>
+</div>
+
+### 回主线程收尾流程
+
+后台任务完成后，投递 foreground task 回主线程：
+
+源码入口：[bgtask_manager.cpp:709](/home/cui/workspaces/BigWorld/programming/bigworld/lib/cstdmf/bgtask_manager.cpp:709)
+
+<div class="flow-strip">
+  <span class="flow-node">doBackgroundTask() 完成</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">调用 addMainThreadTask(this)</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">fgTaskListMutex_ 加锁</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">fgTaskList_.push_back() 入队</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">主线程 tick() 处理</span>
+</div>
+
+### 主线程 tick 处理流程
+
+主线程定期处理 foreground tasks 的调用链：
+
+源码入口：[bgtask_manager.cpp:744](/home/cui/workspaces/BigWorld/programming/bigworld/lib/cstdmf/bgtask_manager.cpp:744)
+
+<div class="flow-strip">
+  <span class="flow-node">TaskManager::tick()</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">fgTaskListMutex_ 加锁</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">fgTaskList_.swap(newTasks_) 交换队列</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">遍历 newTasks_</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">doMainThreadTask() 执行收尾</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">记录耗时统计</span>
+</div>
+
+### 线程退出流程
+
+后台线程退出时的清理调用链：
+
+源码入口：[bgtask_manager.cpp:186](/home/cui/workspaces/BigWorld/programming/bigworld/lib/cstdmf/bgtask_manager.cpp:186)
+
+<div class="flow-strip">
+  <span class="flow-node">pullBackgroundTask() 返回 NULL</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">shouldRun = false</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">onEnd() 清理线程本地数据</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">创建 ThreadFinisher</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">addMainThreadTask() 通知主线程</span>
+</div>
+
 ## 为什么后台任务要回主线程收尾
 
 后台线程可以做阻塞或耗时工作，但最终修改实体、Python 对象或主线程状态时，往往必须回主线程。
@@ -121,6 +215,276 @@ CellApp 初始化时启动文件 I/O 线程：
 源码见 [worker_thread.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/baseapp/worker_thread.cpp:66)。
 
 这更像“延迟后台轮询器”，不是现代 work-stealing job system。
+
+## 为什么选择单 Reactor 主线程：游戏服务器视角
+
+### 游戏服务器的核心约束
+
+游戏服务器与 Web 服务器、数据库服务器有本质区别：
+
+<div class="decision-grid">
+  <div class="decision-card">
+    <h3>确定性优先</h3>
+    <p>游戏状态必须可预测、可重现。多线程并发修改实体状态会导致竞态条件，使得 Bug 难以复现和调试。</p>
+  </div>
+  <div class="decision-card">
+    <h3>帧率稳定性</h3>
+    <p>BigWorld 默认 10Hz (100ms/Tick)，每个 Tick 必须在预算内完成。多线程锁竞争会导致不可预测的延迟抖动。</p>
+  </div>
+  <div class="decision-card">
+    <h3>状态一致性</h3>
+    <p>实体属性、AOI、Ghost、Witness 必须在同一 Tick 内保持一致。多线程需要复杂的锁顺序来避免死锁。</p>
+  </div>
+  <div class="decision-card">
+    <h3>脚本安全</h3>
+    <p>Python 2.7 有 GIL，多线程无法真正并行执行脚本。单线程模型避免了 GIL 竞争问题。</p>
+  </div>
+</div>
+
+### BigWorld 的 Tick 模型
+
+BigWorld 使用固定频率的 GameTick 驱动游戏逻辑：
+
+源码入口：[baseapp.cpp:2016](/home/cui/workspaces/BigWorld/programming/bigworld/server/baseapp/baseapp.cpp:2016)
+
+```cpp
+gameTimer_ = mainDispatcher_.addTimer( 1000000/Config::updateHertz(),
+    this, reinterpret_cast< void * >( TIMEOUT_GAME_TICK ), "GameTick" );
+```
+
+默认配置：
+- `updateHertz = 10` (10Hz，每 100ms 一个 Tick)
+- `reservedTickTime` 用于判断下一个 Tick 是否 pending
+
+源码见 [baseapp.cpp:1422](/home/cui/workspaces/BigWorld/programming/bigworld/server/baseapp/baseapp.cpp:1422)。
+
+### 单线程模型的游戏优势
+
+#### 1. 实体状态修改无锁
+
+```cpp
+// 单线程模型：直接修改，无需加锁
+entity->setPosition(newPos);
+entity->setHealth(newHealth);
+entity->updateAOI();
+```
+
+如果使用多线程：
+
+```cpp
+// 多线程模型：需要加锁
+std::lock_guard<std::mutex> lock(entity->mutex);
+entity->setPosition(newPos);
+// 可能死锁：如果另一个线程持有 AOI 锁并等待实体锁
+```
+
+#### 2. 事件顺序可预测
+
+单线程模型下，事件处理顺序固定：
+
+<div class="flow-strip">
+  <span class="flow-node">FrequentTasks</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">Timers</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">Stats</span>
+  <span class="flow-arrow">-></span>
+  <span class="flow-node">Network</span>
+</div>
+
+多线程模型下，事件顺序取决于线程调度，难以重现。
+
+#### 3. 调试简单
+
+单线程模型下：
+- 堆栈跟踪清晰，只有一个主线程
+- 断点可以捕获所有状态变更
+- 日志输出顺序与执行顺序一致
+
+多线程模型下：
+- 堆栈跟踪混杂多个线程
+- 断点可能错过竞态条件
+- 日志输出顺序混乱
+
+### 多线程模型的游戏劣势
+
+#### 1. 实体间依赖复杂
+
+游戏实体之间存在大量依赖关系：
+
+- **AOI 依赖**：实体 A 看到实体 B，B 的属性变更必须通知 A
+- **Ghost 依赖**：Cell 边界的 Ghost 必须与 Real 保持同步
+- **Witness 依赖**：玩家的 Witness 管理着可见实体列表
+- **Mailbox 依赖**：Base/Cell/Client 之间的方法调用
+
+如果使用多线程处理不同实体，这些依赖会导致大量锁竞争。
+
+#### 2. 状态一致性难保证
+
+考虑一个简单场景：玩家攻击怪物
+
+单线程模型：
+```
+1. 玩家实体调用 attack(monster)
+2. 怪物实体扣血
+3. 怪物实体检查死亡
+4. 怪物实体触发 onDestroy 回调
+5. 通知周围玩家
+```
+
+多线程模型：
+```
+线程1: 玩家实体调用 attack(monster)
+线程2: 怪物实体被另一个玩家攻击
+线程3: 怪物实体被 AOI 移除
+// 需要复杂的锁顺序来保证一致性
+```
+
+#### 3. 脚本执行受限 (历史原因)
+
+Python 2.7 的 GIL 限制：
+
+- 同一时刻只有一个线程执行 Python 字节码
+- 多线程无法真正并行执行脚本
+- GIL 竞争会导致性能下降
+
+BigWorld 的解决方案：
+- 主线程执行所有脚本逻辑
+- 后台线程只做阻塞 I/O
+- 通过 `Script::releaseLock()` / `Script::acquireLock()` 管理 GIL
+
+**重要更新：Python 3.13+ 的突破**
+
+Python 3.13 (2024 年 10 月发布) 引入了 **free-threaded 模式** (PEP 703)，也称为 no-GIL：
+
+- 通过编译选项 `--disable-gil` 启用
+- 安装特殊变体 `python3.13t` 可直接使用
+- 实现了真正的多线程并行，无需 GIL
+- 内存管理和引用计数变为线程安全
+- 单线程性能有 ~5-10% 开销
+
+这意味着如果 BigWorld 迁移到 Python 3.13+，可以：
+- 真正并行执行脚本逻辑
+- 减少主线程瓶颈
+- 保持代码简单性
+
+详细迁移方案见 [Python 3.12 路线图](/migration/python-3-12)（可扩展到 3.13+）。
+
+### 何时使用多线程
+
+BigWorld 在以下场景使用多线程：
+
+| 场景 | 线程类型 | 原因 |
+|------|----------|------|
+| 数据库操作 | BgTaskManager | 阻塞 I/O，不涉及实体状态 |
+| 文件 I/O | FileIOTaskManager | 阻塞 I/O，不涉及实体状态 |
+| 定时任务 | WorkerThread | 延迟执行，结果回主线程 |
+| 加密计算 | 网络线程 | CPU 密集，不修改实体状态 |
+
+关键原则：**多线程只用于"准备数据"，不用于"修改状态"**
+
+### 与现代游戏服务器对比
+
+| 引擎 | 线程模型 | 优势 | 劣势 |
+|------|----------|------|------|
+| BigWorld | 单 Reactor + 后台任务 | 确定性高、调试简单 | 单核瓶颈 |
+| Unreal | 多线程 Task Graph | 多核利用 | 复杂度高 |
+| Unity | 主线程 + Job System | 平衡性好 | 仍有限制 |
+| 分布式 ECS | 全并行 ECS | 最大并行 | 复杂度极高 |
+
+BigWorld 选择单线程模型是基于时代约束和工程权衡：
+- 2000 年代的多核 CPU 还不普及
+- Python 2.7 的 GIL 限制了并行能力
+- MMO 的复杂状态关系难以并行化
+- 调试和运维的复杂度是重要考量
+
+### 现代化建议
+
+如果要在现代环境下改进 BigWorld 的线程模型：
+
+#### 1. 升级到 Python 3.13+ free-threaded 模式
+
+这是最有价值的改进，可以彻底改变线程模型：
+
+```bash
+# 安装 Python 3.13t (free-threaded)
+./configure --disable-gil
+make
+# 或直接使用 python3.13t
+```
+
+**收益**：
+- 真正的多线程脚本并行
+- 可以并行处理多个实体的脚本逻辑
+- 减少主线程瓶颈
+
+**风险**：
+- C 扩展兼容性问题
+- 单线程性能有 5-10% 开销
+- 需要全面测试
+
+#### 2. 引入 Actor 模型
+
+每个实体独立消息队列，避免共享状态：
+
+```cpp
+// 每个实体有自己的消息队列
+class Entity {
+    std::queue<Message> inbox;
+    void processMessages() {
+        while (!inbox.empty()) {
+            auto msg = inbox.pop();
+            handleMessage(msg);  // 无锁处理
+        }
+    }
+};
+```
+
+#### 3. 分离读写路径
+
+读操作可并行，写操作串行：
+
+```cpp
+// 读操作：可并行
+auto pos = entity->getPosition();  // 无锁
+auto health = entity->getHealth();  // 无锁
+
+// 写操作：串行
+entity->setPosition(newPos);  // 需要同步
+entity->setHealth(newHealth);  // 需要同步
+```
+
+#### 4. 使用 Lock-free 数据结构
+
+减少锁竞争：
+
+```cpp
+// 使用原子操作
+std::atomic<int> health{100};
+health.store(newHealth, std::memory_order_relaxed);
+
+// 使用无锁队列
+moodycamel::ConcurrentQueue<Message> queue;
+```
+
+#### 5. Profile 驱动优化
+
+先找到热点，再决定并行化：
+
+```bash
+# 使用 perf 分析
+perf record -g ./baseapp
+perf report
+
+# 使用火焰图
+flamegraph.pl perf.data > flame.svg
+```
+
+### 参考资料
+
+- [PEP 703: Making the Global Interpreter Lock Optional](https://peps.python.org/pep-0703/)
+- [Python 3.13 Release Notes](https://docs.python.org/3.13/whatsnew/3.13.html)
+- [BigWorld Python 迁移方案](/migration/python-3-12)
 
 ## Python GIL 与线程
 

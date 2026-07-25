@@ -193,7 +193,8 @@ BigWorld 的进程拆分服务于明确的运行时职责边界：
 
 进程拓扑只是外壳。真正决定性能和扩展边界的是：
 
-- 每个进程内部的事件循环模型。
-- Mercury 网络栈如何把 socket 事件转成消息。
-- EntityDef 如何把脚本类型、协议流和持久化绑定在一起。
-- CellAppMgr 如何做 Cell 分区、负载均衡和实体迁移。
+- 每个进程内部的事件循环模型，详见 [主循环、Tick 与事件分发](/architecture/event-loop)。
+- Mercury 网络栈如何把 socket 事件转成消息，详见 [网络 I/O 模型选择](/architecture/network-io-model)。
+- EntityDef 如何把脚本类型、协议流和持久化绑定在一起，详见 [序列化与 EntityDef](/architecture/serialization-entitydef)。
+- CellAppMgr 如何做 Cell 分区、负载均衡和实体迁移，详见 [Cell 分区与负载均衡](/architecture/cell-partition-load-balance)。
+- 进程故障恢复机制，详见 [动态扩展与容灾](/architecture/scaling-fault-tolerance)。

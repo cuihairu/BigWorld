@@ -252,3 +252,10 @@ BigWorld 采用 real/ghost/offload，是因为实体生命周期要同时满足�
 ## 本章边界
 
 本章把实体生命周期串成状态机。更细的 AOI、Cell 负载均衡、Offload 数据流已分别在 [AOI、Witness 与 Ghost](/architecture/aoi-witness-ghost)、[Cell 分区与负载均衡](/architecture/cell-partition-load-balance)、[实体迁移与 Offload](/architecture/entity-migration-offload) 中展开。
+
+## 相关文档
+
+- 实体模型基础，详见 [实体模型 Base/Cell/Client](/architecture/entity-model)。
+- EntityDef 契约，详见 [EntityDef 契约与协议生成](/architecture/entitydef-contract-generation)。
+- 持久化机制，详见 [持久化与 DB 线程模型](/architecture/persistence-db-model)。
+- 进程故障恢复，详见 [动态扩展与容灾](/architecture/scaling-fault-tolerance)。

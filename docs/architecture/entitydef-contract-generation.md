@@ -362,3 +362,11 @@ EntityDef 契约测试不应只测 XML 是否能解析，还应覆盖：
 ## 本章边界
 
 本章确认：BigWorld 有完整的 EntityDef 契约生成链路。后续分析序列化、通信、持久化和热更新时，应以 `EntityDescriptionMap`、`EntityDescription`、`DataDescription` 和 `MethodDescription` 这条源码链路作为共同依据。
+
+## 相关文档
+
+- 序列化实现，详见 [序列化与 EntityDef](/architecture/serialization-entitydef)。
+- 通信与 RPC，详见 [通信抽象与 RPC](/architecture/communication-rpc)。
+- 持久化模型，详见 [持久化与 DB 线程模型](/architecture/persistence-db-model)。
+- 热更新机制，详见 [脚本热更新与迁移](/architecture/hot-reload-script-migration)。
+- 实体模型，详见 [实体模型 Base/Cell/Client](/architecture/entity-model)。
