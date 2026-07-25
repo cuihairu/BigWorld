@@ -184,9 +184,6 @@ bool CellAppMgr::init( bool isReload )
 - meta 负载均衡 timer 处理更复杂的全局负载均衡决策
 - 过载检查 timer 监控 CellApp 是否过载，触发保护机制
 - TimeKeeper 用于跨进程时间同步
-  CAM->>CellApp: gameTime/info later
-  CAM->>CAM: pendingApps add
-</MermaidDiagram>
 
 这说明 CellApp 不是随便启动就能承载实体，必须被控制面接纳并同步初始状态。
 

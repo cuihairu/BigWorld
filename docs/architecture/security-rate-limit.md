@@ -119,6 +119,7 @@ flowchart TD
     E --> F[继续处理]
     
     G[定时器触发] --> H[重置计数器]
+</MermaidDiagram>
 ```
 
 **详细讲解：**

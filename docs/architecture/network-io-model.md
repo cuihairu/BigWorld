@@ -91,6 +91,7 @@ sequenceDiagram
     Kernel->>EPoller: epoll_wait() 返回事件
     EPoller->>Handler: handleInputNotification()
     Handler->>Handler: 处理数据
+</MermaidDiagram>
 ```
 
 **详细讲解：**

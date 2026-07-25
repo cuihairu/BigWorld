@@ -194,6 +194,7 @@ flowchart TD
     N -- 正常 --> O{加密要求?}
     O -- 不满足 --> Z
     O -- 满足 --> P[发送 DBApp 登录请求]
+</MermaidDiagram>
 ```
 
 **详细讲解：**
