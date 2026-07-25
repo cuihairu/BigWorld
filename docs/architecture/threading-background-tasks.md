@@ -159,48 +159,35 @@ CellApp 初始化时启动文件 I/O 线程：
 - 后台任务可以请求停止，`TaskManager::shouldAbortTask()` 提供快速检查，见 [bgtask_manager.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/cstdmf/bgtask_manager.cpp:875)。
 - 真正的实体状态提交应该在主线程完成。
 
-## 当时取舍
+## 源码取舍
 
-这种线程架构在 BigWorld 的设计年代是合理的：
+这种线程架构的职责边界很清楚：
 
-- Python 2.7 GIL 限制脚本并行。
 - MMO 实体状态复杂，多线程共享实体会引入大量锁和竞态。
 - 多进程 Cell/Base 分片比单进程内多线程更符合水平扩展。
-- 物理机时代进程级隔离比大型线程池更容易运维和恢复。
 - 背景任务池足以卸载数据库、文件 I/O、资源加载等阻塞路径。
+- `TaskManager::addBackgroundTask()` 可以跨线程投递，但 `tick()` 只能由 owning thread 调用。
+- 后台任务完成后通过 foreground task 回主线程交付结果，避免直接改实体状态。
 
-代价是：
+源码代价：
 
 - 单个 BaseApp/CellApp 仍有主线程瓶颈。
 - 后台线程无法解决脚本或实体主逻辑热点。
 - 回主线程收尾可能形成 foreground task 堆积。
 - 任务取消是协作式，依赖任务主动检查停止状态。
+- 后台线程进入 Python 时必须显式处理 GIL 和 thread state。
 
-## 现代对比
+## 源码验证重点
 
-<div class="decision-table">
+线程和后台任务测试应覆盖所有权和回主线程边界：
 
-| 模型 | 优点 | 代价 | 对 BigWorld 的判断 |
-| --- | --- | --- | --- |
-| 单 Reactor + 后台任务 | 顺序清晰、低锁、易调试 | 单核瓶颈 | 当前模型，适合先补观测 |
-| 固定线程池 | 简单卸载 I/O 和耗时任务 | 任务依赖和主线程提交仍复杂 | 可保留并增强 |
-| Work-stealing Job System | CPU 利用率高 | 数据依赖、对象生命周期重构大 | 适合新计算模块，不适合直接改 Entity |
-| Actor | 状态归属清晰，消息串行 | 调度器和协议重构大 | 可作为长期重构方向 |
-| Python asyncio | I/O 并发语义清晰 | 嵌入 C++/Python 2 迁移成本高 | Python 3.12 后也不应直接替代 Mercury |
-| 多解释器并行 | Python 3.12 后有新可能 | C API、扩展模块、对象共享风险高 | 只能专项评估，不能假设收益 |
-
-</div>
-
-## 现代化建议
-
-优先级建议：
-
-1. 统计后台任务队列长度、等待时间、执行时间、主线程收尾耗时。
-2. 给 `TaskManager::tick()` 增加预算，避免 foreground tasks 一次性拖垮 Tick。
-3. 审计后台任务是否触碰 Python 对象和 Entity 状态。
-4. 把数据库、文件 I/O、压缩、加密、资源加载优先下沉后台。
-5. 新增 CPU 密集模块时使用独立 job system，但只通过主线程提交状态变更。
-6. Python 3.12 迁移前不要假设多线程脚本能提升吞吐，先隔离 C API 和 GIL 边界。
+- 任意线程调用 `addBackgroundTask()` 应安全入队。
+- 非 owning thread 不应调用 `TaskManager::tick()`。
+- 后台任务完成后应通过 foreground task 回到主线程提交结果。
+- `shouldAbortTask()` 为 true 时，长任务应能协作退出。
+- DB、文件 I/O、资源加载类任务不能直接访问实体主线程状态。
+- 后台线程进入 Python 前后必须成对释放/恢复 GIL。
+- foreground task 堆积时应能观察到 tick 耗时和队列长度变化。
 
 ## 本章边界
 

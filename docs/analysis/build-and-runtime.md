@@ -9,7 +9,7 @@
 - `programming/bigworld/build/*.bat`
 - `programming/bigworld/build/docker/Dockerfile`
 
-这表明项目面向不同平台和历史团队流程长期演化，没有统一到单一现代构建标准。
+这表明项目面向不同平台和历史团队流程长期演化，没有统一到单一构建标准。
 
 ## Linux / 服务端构建
 
@@ -35,7 +35,7 @@ Dockerfile 也明确假设了 `centos:7`，并依赖：
 - `gdbm-devel`
 - `bzip2-devel`
 
-这套依赖链对 Python 3.12 并不直接兼容。
+这套依赖链对新版嵌入式 Python 运行时并不直接兼容。
 
 ## Windows / 工具链构建
 
@@ -49,7 +49,7 @@ Dockerfile 也明确假设了 `centos:7`，并依赖：
 也就是说：
 
 - CMake 配置本身就偏旧
-- Python 升级不能脱离整体构建升级讨论
+- Python 运行时变更不能脱离整体构建升级讨论
 
 ## 内嵌 Python 的构建方式
 
@@ -76,7 +76,7 @@ Dockerfile 也明确假设了 `centos:7`，并依赖：
 - `SQLAlchemy 0.6.6`
 - `AsyncSQLAlchemy.py`
 
-这些版本对于 Python 3.12 基本都不能直接使用。
+这些版本对新版 Python 运行时基本都不能直接使用。
 
 ## 运行时模型
 
@@ -104,4 +104,4 @@ Dockerfile 也明确假设了 `centos:7`，并依赖：
 - 文档/脚本路径已经漂移
 - 历史打包物与源码树已不完全一致
 
-在开始 3.12 迁移前，必须先做一次“可构建性基线校验”。
+在开始运行时迁移前，必须先做一次“可构建性基线校验”。

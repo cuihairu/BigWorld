@@ -73,7 +73,7 @@ flowchart TD
 - 内部 socket 单轮处理预算可按 tick 长度推导。
 - 高峰网络包不会无限吃掉主循环。
 
-现代化时应把这个指标转成：
+源码观测应把这个指标拆成：
 
 - 每 tick 网络处理耗时。
 - 每次 socket notification 处理包数。
@@ -108,13 +108,13 @@ int len = socket_.sendto( pPacket->data(), pPacket->totalSize(), addr.port, addr
 
 源码见 [packet_sender.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/packet_sender.cpp:304)。
 
-这是一个重要历史取舍：
+这是发送侧背压的源码取舍：
 
 - 简单稳妥。
 - 能处理短暂 kernel transmit queue 满。
 - 但会在发送路径引入最多 10ms 等待，可能拖慢主线程。
 
-现代化时应优先统计这条路径出现频率，而不是直接替换 I/O 模型。
+应优先统计这条路径出现频率和等待耗时，再判断发送侧背压是否是主线程抖动来源。
 
 ## 人工丢包与延迟
 
@@ -187,7 +187,7 @@ flowchart LR
 - Bundle 聚合。
 - Kernel transmit queue。
 
-现代化必须先观测每一段，否则容易把所有问题都归因于 epoll 或 io_uring。
+必须先观测每一段，否则容易把所有问题都归因于 epoll 或 io_uring。
 
 ## 为什么没有 io_uring 背压模型
 
@@ -208,38 +208,32 @@ BigWorld 设计年代没有 `io_uring`。更关键的是，当前模型是 readi
 
 这会改变执行模型，不只是替换 `recvfrom()`。
 
-因此，如果目标是“现代化但不推倒重写”，优先顺序应是：
+## 源码取舍
 
-1. 指标。
-2. `recvmmsg/sendmmsg`。
-3. send queue 和 receive budget 调优。
-4. 网关分离。
-5. 最后再评估 `io_uring`。
+背压和故障注入的源码取舍是把网络压力显式暴露到主循环：
 
-## 现代方案对比
+- `PacketReceiver::maxSocketProcessingTime` 限制一次可读事件处理时间，保护 Tick 公平性。
+- `PacketSender::basicSendWithRetries()` 在发送失败时有重试和短等待路径，但仍可能占用主线程。
+- artificial loss/latency、`dropNextSend()` 等测试钩子让可靠层可复现丢包和乱序。
+- Channel overflow 配置把可靠窗口压力转成可观测/可处理状态。
 
-<div class="decision-table">
+源码代价：
 
-| 能力 | BigWorld | 现代替代 | 判断 |
-| --- | --- | --- | --- |
-| 接收预算 | `maxSocketProcessingTime` | event loop budget / cooperative scheduler | 思路正确，应增强指标 |
-| UDP 发送 | `sendto` + retry | `sendmmsg` / async queue | 可先批量化 |
-| 队列满处理 | `select()` 等 10ms | 异步发送队列 + backpressure | 需要避免主线程等待 |
-| 故障注入 | artificial loss/latency | netem / toxiproxy / chaos mesh | 保留单测注入，补集成注入 |
-| Channel overflow | Mercury overflow 配置 | mailbox quota / drop policy | 应文档化每类消息策略 |
-| 高性能网络 | epoll UDP | io_uring / AF_XDP / DPDK | 先测真实瓶颈 |
+- 发送队列满路径仍可能让主线程等待。
+- 故障注入主要在引擎测试钩子内，不能覆盖所有真实网络抖动。
+- 接收预算只能限制单次 socket 处理，不限制 handler 内部业务耗时。
+- I/O 后端变化会牵动 buffer 生命周期和 handler 调度，不只是替换系统调用。
 
-</div>
+## 源码验证重点
 
-## 现代化建议
+背压和故障注入测试应覆盖网络压力传播：
 
-1. 给 `PacketReceiver::handleInputNotification()` 增加 histogram：处理包数、耗时、超预算、receive queue size。
-2. 给 `PacketSender::basicSendWithRetries()` 增加计数：EAGAIN、ENOBUFS、select 等待次数和等待耗时。
-3. 对 `dropNextSend()`、artificial loss/latency 建立测试场景文档，覆盖 ACK 丢失、数据包丢失、回复丢失。
-4. 实验 `recvmmsg/sendmmsg` 前先固定现有网络 golden tests。
-5. 对发送队列满路径设计非阻塞队列，而不是长期保留主线程 10ms 等待。
-6. 把公网噪声、登录 flood、畸形包、超大 Bundle 纳入 fuzz/chaos 测试。
-7. 不要把 `io_uring` 作为第一步性能优化，它会改变 handler 生命周期和 buffer 所有权。
+- `PacketReceiver::handleInputNotification()` 应记录处理包数、耗时和超预算退出。
+- `PacketSender::basicSendWithRetries()` 应覆盖 EAGAIN、ENOBUFS、select 等待和最终失败。
+- `dropNextSend()`、artificial loss/latency 应能复现 ACK 丢失、数据包丢失、回复丢失和乱序。
+- Channel overflow 达到阈值后应按配置丢弃、阻塞或报错，不能静默损坏可靠状态。
+- 登录 flood、畸形包、超大 Bundle 和非法 message id 应在进入重业务逻辑前被拦截。
+- 故障注入场景应同时覆盖 external client channel 和 internal server channel。
 
 ## 本章边界
 

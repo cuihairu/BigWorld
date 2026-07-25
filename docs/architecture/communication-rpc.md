@@ -346,40 +346,24 @@ BigWorld 里这种“可寻址实例引用”就是 mailbox：
 
 这个区别很关键。前者解释了为什么它同时需要 mailbox、属性增量同步、Proxy/Witness、Base/Cell 切分和专用 DBApp；后者解释不了这些引擎级约束。
 
-## 为什么不是 gRPC/Protobuf
+## 源码取舍
 
-这是现代读者最容易误判的地方。
+Mercury Interface 和 EntityDef 共同承担协议契约，源码取舍集中在这几处：
 
-BigWorld 没有选择 gRPC/Protobuf，不能简单归因于“旧”。更本质的原因是它的协议需要深度服务游戏运行时：
+- 进程级消息由 C++ interface 宏注册成 `InterfaceElement`，用 message id 和 length style 快速分发。
+- 实体级方法和属性由 EntityDef 分配 index、exposed id、client-server property id 和 digest。
+- `Bundle` / `BinaryOStream` 让业务代码按参数顺序写流，避免在热路径构造通用对象模型。
+- UDP Channel 保留可靠/不可靠混合、piggyback、ACK 和 request/reply 超时语义。
+- 前端客户端只连接 `Proxy`，普通实体通过 mailbox、AOI、Witness 和 `ClientInterface` 间接通信。
 
-- 同一个类型系统要同时服务 C++、Python 脚本、实体属性、网络同步和持久化。
-- 游戏消息需要可靠/不可靠混合，而 gRPC 基于 HTTP/2/TCP 可靠流。
-- 高频内部消息需要非常短的 header 和低分配路径。
-- Entity 方法调用不是普通服务 API，而是和实体生命周期、AOI、Base/Cell 归属绑定。
-- 当时 gRPC/HTTP2/Protobuf 生态也不是 MMO 服务端的默认基础设施。
+代价也同样来自源码结构：
 
-但现代对比也必须承认：
+- 协议不自描述，抓包和跨语言工具必须拿到同一份 interface table 和 EntityDef。
+- 宏注册隐藏了部分消息编号和 handler 绑定，阅读入口分散。
+- Handler 通常在 Reactor 主线程同步执行，RPC 调用不是自动并发任务。
+- Entity method、property sync、AOI 消息、登录握手和 DB 持久化共用 BinaryStream 体系，单点兼容性变更影响面大。
 
-- Protobuf/FlatBuffers/Cap'n Proto 的 schema 演进和工具链更强。
-- gRPC 生态在观测、负载均衡、跨语言调用上优势明显。
-- Mercury 的宏接口和自定义二进制流对新人和外部工具不友好。
-
-## 现代方案对比
-
-<div class="decision-table">
-
-| 方案 | 优点 | 代价 | 对 BigWorld 的适配性 |
-| --- | --- | --- | --- |
-| Mercury Interface | 紧凑、低开销、贴合引擎 | 宏复杂，生态弱 | 当前核心，不宜先替换 |
-| Protobuf | schema 清晰，工具强 | 不直接表达 BigWorld 可靠/实体语义 | 适合外围服务，不适合直接替代 EntityDef |
-| gRPC | 跨语言、观测和治理成熟 | TCP/HTTP2 语义重，游戏实时性弱 | 适合控制面、后台服务 |
-| FlatBuffers | 零拷贝读取，适合实时数据 | schema 迁移和动态脚本结合复杂 | 可用于新网关或客户端资源协议 |
-| Cap'n Proto | 高性能 RPC/序列化 | 生态和集成成本 | 可学习，不是低风险迁移目标 |
-| Actor mailbox | 状态归属清晰 | 不能直接覆盖 AOI、属性复制、Proxy/Witness 语义 | 适合现代化新模块，不应直接套旧接口 |
-
-</div>
-
-## 正确性边界
+## 源码正确性边界
 
 通信层的正确性依赖几个前提：
 
@@ -390,17 +374,19 @@ BigWorld 没有选择 gRPC/Protobuf，不能简单归因于“旧”。更本质
 - Reactor handler 不能阻塞。
 - 对外部客户端消息必须考虑 flood、超长 payload、非法 message id、伪造 channel 元数据。
 
-后续安全和测试章节需要围绕这些前提做故障注入。
+## 源码验证重点
 
-## 现代化建议
+通信层测试应覆盖消息编码、分发和外部入口防御：
 
-短期不建议把 Mercury RPC 全部替换为 gRPC 或 Protobuf。更稳妥的路线：
-
-1. 给 interface table 导出可读 schema，先解决可观测和文档化。
-2. 对消息 ID、长度、handler 耗时、错误 stream 增加统计。
-3. 为关键接口补 request/reply 超时测试和非法 payload 测试。
-4. 外围控制面可以引入现代 RPC，但不要穿透实时游戏主通道。
-5. 若要引入 Protobuf，应先用于新边界，例如运维 API、日志事件、离线工具，而不是替换 Entity 同步。
+- `InterfaceElement::headerSize()` 对固定长度、变长和非法消息应返回预期头大小。
+- callback length 消息必须通过 handler 得到真实 stream size。
+- `Bundle::startRequest()` 创建的 request 应在 reply 或 timeout 后释放等待状态。
+- `UDPBundleProcessor` 遇到未知 message id、错误长度或未消费完 stream 时应走错误路径。
+- `Proxy::baseEntityMethod()` 和 `Proxy::cellEntityMethod()` 必须只允许 EntityDef exposed range 内的方法。
+- `OWN_CLIENT` 方法应校验 source entity，不能由其他客户端伪造调用。
+- `ServerConnection` 解析 `entityMethod` / `entityProperty` 时必须用同一份 `ClientInterface::Range` 和 EntityDef。
+- 前端实体创建顺序应覆盖 `createBasePlayer`、`enterAoI`、`createEntity`、`updateEntity` 和 `leaveAoI`。
+- mailbox 调用应验证参数类型、stream size 和目标 Base/Cell/Client 路径。
 
 ## 本章边界
 

@@ -171,72 +171,50 @@ Reviver 的恢复动作最终是向 machined 发送 `CreateMessage`：
 
 这说明 Reviver 本身不是进程执行器，它是监控和恢复决策者；真正启动进程的是 machined。
 
-## 与 Kubernetes 的根本差异
+## machined 的源码边界
 
-machined 解决的是旧式机房里的 BigWorld 进程发现和管理：
+machined 解决的是 BigWorld 进程发现和管理：
 
 - 它知道 BigWorld interface。
 - 它能按用户、版本、interface name 查找进程。
 - 它能启动 BigWorld 组件。
 - 它能通知组件 birth/death。
 
-Kubernetes 解决的是容器编排：
+它不解决这些问题：
 
-- 调度 Pod。
-- 健康检查。
-- Service/DNS。
-- 资源限制。
-- 滚动升级。
-- Secret/ConfigMap。
-- 节点管理。
+- Cell 分区和负载均衡。
+- BaseApp/CellApp 实体状态恢复。
+- DBApp 数据一致性。
+- Watcher 权限隔离。
+- 强一致 leader election。
 
-两者不是同一层。
+因此 BigWorld 状态控制面仍然需要知道 BaseApp、CellApp、DBApp、Space、Entity、load、offload。machined 只提供底层发现、启动和通知能力。
 
-BigWorld 状态控制面仍然需要知道 BaseApp、CellApp、DBApp、Space、Entity、load、offload。Kubernetes 不会自动理解这些游戏语义。
+## 源码取舍
 
-## 当时为什么这样选
+machined、Manager、Reviver 的分工是：
 
-高置信工程判断：
+- machined 负责本机进程注册、查询、启动、信号和 birth/death 广播。
+- Manager 消费 birth/death，并维护 BigWorld 运行时状态。
+- Reviver 监控组件是否存活，决定是否请求 machined 启动替代进程。
 
-- BigWorld 设计年代还没有 Kubernetes 这类通用容器编排。
-- MMO 集群需要 BigWorld 自己的进程角色、interface 版本和用户隔离。
-- 物理机时代，用本机 daemon 管理进程和广播发现很自然。
-- Manager 需要 birth/death 事件驱动状态恢复，machined 提供了轻量机制。
-- Reviver 与 machined 分工清晰：一个判断，一个执行。
+源码代价：
 
-代价：
-
-- 缺少现代资源调度和隔离。
+- 状态分散在 machined、Manager 和各 App 内部，排障需要串联多类日志和 watcher。
 - 依赖本机 machined 正常运行。
 - 安全模型偏内网可信。
-- 没有 etcd/RAFT 那样的强一致控制面。
-- 与云原生平台集成需要桥接。
+- 没有强一致控制面，旧进程残留、重复 birth/death 和网络分区都需要上层防护。
 
-## 现代方案对比
+## 源码验证重点
 
-<div class="decision-table">
+machined 控制面验证应覆盖发现、启动和通知：
 
-| 能力 | machined | 现代方案 | 判断 |
-| --- | --- | --- | --- |
-| 进程注册 | ProcessMessage | service registry / sidecar | 可桥接 |
-| 服务发现 | `findInterface()` | DNS / registry / xDS | 需保留 interface 语义 |
-| birth/death | ListenerMessage | watch API / events | 机制类似，但安全和审计弱 |
-| 进程启动 | CreateMessage | Kubernetes/Nomad/systemd | 可替换资源层 |
-| 信号控制 | SignalMessage | orchestrator exec/signal | 现代平台更完整 |
-| 版本检查 | Mercury interface version | deployment version / protocol version | BigWorld 版本检查仍必要 |
-| 状态恢复 | Reviver + Manager | operator/controller | 可用 operator 模式重写 |
-
-</div>
-
-## 现代化建议
-
-1. 先文档化所有 interface name、id、port、birth/death listener 关系。
-2. 将 machined 依赖从“隐式必须存在”变成启动前检查和清晰错误。
-3. 对 watcher、machined、reviver 管理面增加网络隔离和认证策略。
-4. 如果迁移到 Kubernetes，不要直接删除 Manager/Machined 语义；先做 adapter。
-5. 进程启动可以交给 systemd/Kubernetes，但 birth/death 事件要回流给 BigWorld 控制面。
-6. 对 Reviver 恢复动作增加结果确认、失败原因记录和重试上限。
-7. 长期可把 machined 能力拆成 service discovery、process supervisor、event bus 三部分。
+- `ProcessMessage` 注册后，`findInterface()` 应能按 interface name、version、user 找到目标进程。
+- watcher nub 注册信息应包含端口、进程 ID、简称和版本号。
+- birth/death listener 应能收到组件创建和退出事件。
+- `CreateMessage` 应按 component、config、user、recover flag 和 output forwarding 参数启动进程。
+- Reviver 触发恢复时应只负责决策，实际执行应走 machined。
+- machined 不可用时，依赖它的注册、发现和启动路径应给出明确失败状态。
 
 ## 本章边界
 

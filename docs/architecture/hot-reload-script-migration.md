@@ -154,47 +154,33 @@ flowchart TD
 
 这些变化都会穿透 `EntityDescription`、`DataDescription`、`MethodArgs` 和 Mercury Bundle。热更新章节必须和 [序列化与 EntityDef](/architecture/serialization-entitydef) 一起阅读。
 
-## 当时取舍
+## 源码取舍
 
-这种热更新机制在当时有价值：
+这种热更新机制的价值来自运行时脚本和实体对象强耦合：
 
 - 大型 MMO 脚本迭代成本高，开发环境需要快速 reload。
 - Python 解释器允许一定程度的动态类型替换。
 - EntityDef 和脚本紧耦合，必须提供引擎级迁移入口。
 - 多进程架构下，调试单个 App 的脚本 reload 比全服重启快。
 
-但它没有提供现代生产热更通常需要的：
+源码边界也很明确：
 
 - 版本化 schema。
 - 双版本协议兼容窗口。
-- 灰度发布。
 - 事务回滚。
 - 迁移前 dry-run。
 - 跨进程一致性屏障。
 
-## 现代方案对比
+## 源码验证重点
 
-<div class="decision-table">
+热更新测试应覆盖脚本 reload 和实体迁移的真实边界：
 
-| 方案 | 优点 | 代价 | 对 BigWorld 的判断 |
-| --- | --- | --- | --- |
-| 当前 reloadScript | 开发迭代快，深度集成 Entity | 生产风险极高 | 保留为开发工具 |
-| 进程滚动重启 | 边界清晰，可回滚 | 需要状态迁移和会话转移 | 生产优先方向 |
-| 双版本协议 | 支持灰度和兼容窗口 | schema 管理成本高 | 必须先补 EntityDef 版本治理 |
-| Lua/脚本热替换 | 更轻量 | 仍有状态迁移问题 | 不是换语言即可解决 |
-| WASM 沙箱 | 隔离强，版本边界清晰 | 集成和性能成本 | 可研究新逻辑模块 |
-| Actor snapshot 迁移 | 状态边界清晰 | 架构重构大 | 长期方向，不是短期改造 |
-
-</div>
-
-## 现代化建议
-
-1. 明确 `reloadScript` 只用于开发和测试环境。
-2. 对 EntityDef 变化做兼容性检查，禁止破坏性热更新。
-3. 给 `onMigrate` 建立测试框架和迁移报告。
-4. 对 BaseApp/CellApp reload 增加全链路 dry-run。
-5. 生产升级优先走滚动重启 + 实体迁移 + 版本兼容，而不是直接脚本热换。
-6. Python 3.12 迁移时重点审计 `Py_NewInterpreter`、`PyThreadState`、`__class__` 替换和 C API 兼容。
+- `CellApp::reloadScript()` 不能在实体迁移、销毁或回调禁用状态下破坏对象状态。
+- `Entity::migrate()` 应保留 EntityID、mailbox、Base/Cell 关系和持久化属性。
+- `onMigrate` 失败时应有明确错误路径，不能留下半迁移实体。
+- EntityDef 属性、方法参数、数据域或 UDO 类型变化时，应明确拒绝不兼容热更新。
+- 多进程 reload 应验证 BaseApp、CellApp、DBApp 和客户端 digest 一致性。
+- 热更新后的方法调用、属性同步、DB 写入和 offload 流应继续使用同一套 EntityDef 解释。
 
 ## 本章边界
 

@@ -1,7 +1,7 @@
 export default {
   lang: "zh-CN",
   title: "BigWorld 引擎架构研究",
-  description: "面向 MMO 游戏服务器架构学习、源码证据链与现代化取舍分析的 BigWorld 文档站",
+  description: "面向 MMO 游戏服务器架构学习和源码证据链分析的 BigWorld 文档站",
   base: "/BigWorld/",
   cleanUrls: false,
   lastUpdated: true,
@@ -75,7 +75,7 @@ export default {
           ]
         },
         {
-          text: "工程质量与现代化",
+          text: "工程质量与边界",
           collapsed: false,
           items: [
             { text: "测试体系、故障注入与覆盖边界", link: "/architecture/testing-fault-injection-coverage" },
@@ -83,7 +83,7 @@ export default {
             { text: "Watcher、Profiler 与日志", link: "/architecture/observability-watcher-profiler-logs" },
             { text: "内存、对象生命周期与资源管理", link: "/architecture/memory-lifecycle" },
             { text: "构建、平台与依赖治理", link: "/architecture/build-platform-dependencies" },
-            { text: "现代 MMO 架构对比", link: "/architecture/modern-mmo-comparison" }
+            { text: "MMO 架构边界对比", link: "/architecture/modern-mmo-comparison" }
           ]
         },
         {
@@ -91,13 +91,6 @@ export default {
           collapsed: false,
           items: [
             { text: "完整专题大纲", link: "/architecture/outline" }
-          ]
-        },
-        {
-          text: "现代化专题",
-          collapsed: false,
-          items: [
-            { text: "Python 3.12 路线图", link: "/migration/python-3-12" }
           ]
         },
         {
@@ -121,9 +114,9 @@ export default {
       ],
       "/migration/": [
         {
-          text: "现代化路线",
+          text: "迁移专题",
           items: [
-            { text: "Python 3.12 路线图", link: "/migration/python-3-12" }
+            { text: "嵌入式 Python 运行时", link: "/migration/python-3-12" }
           ]
         }
       ],
@@ -140,7 +133,7 @@ export default {
       { icon: "github", link: "https://sourceforge.net/p/bigworld/code/HEAD/tree/" }
     ],
     footer: {
-      message: "按源码证据链、历史取舍和现代对比组织，而不是按目录机械罗列。",
+      message: "按源码证据链、源码取舍和验证边界组织，而不是按目录机械罗列。",
       copyright: "BigWorld Open-Source Edition Architecture Notes"
     }
   }

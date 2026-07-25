@@ -281,48 +281,37 @@ BigWorld 的持久化不是强事务分布式数据库模型。需要注意：
 
 例如 `Base::writeToDB()` 找不到 DBApp 时会报错并返回 false，见 [base.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/baseapp/base.cpp:2129)。
 
-## 当时取舍
+## 源码取舍
 
-这种设计的优点：
+持久化链路的核心取舍可以直接从代码看出来：
 
-- DB 阻塞操作不压主 Reactor。
-- Base 统一协调 Base/Cell 持久化。
-- Archive 分摊到多个 tick，保护游戏循环。
-- Secondary DB 提供恢复能力。
-- IDatabase 抽象允许 MySQL/XML 等后端。
+- DB 阻塞操作通过 `IDatabase` 后端任务下沉，不在 BaseApp 主 Reactor 里直接执行 SQL。
+- Base 统一协调 Base/Cell persistent 数据，DBApp 只接收已经按 EntityDef 顺序编码好的实体流。
+- Archive 按 tick 分摊，并受 DBApp channel send window 约束，避免写档把实时循环压垮。
+- Secondary DB 复用 BaseApp 侧序列化结果，提供本地恢复路径，但不替代 primary DB。
+- MySQL 映射层按 `PropertyMapping` 拆流到列、复合列、子表或 blob，不是 Python 对象到表的直接反射。
 
-代价：
+源码代价也很明确：
 
-- 一致性模型复杂。
-- 写 DB 失败的业务补偿依赖上层。
-- Base/Cell 数据拼接有消息时序风险。
-- DB schema 与 EntityDef 强绑定。
-- 后台任务积压会影响登录、写档和恢复。
+- Base/Cell 数据拼接依赖跨进程请求，消息时序和实体生命周期会影响写库结果。
+- 数据库 schema 与 EntityDef persistent 视图强绑定，`.def` 变更会穿透到 digest、表同步和历史数据解释。
+- 没有看到通用字段级 dirty set 驱动的 DB flush；属性变化对象主要服务网络增量同步。
+- DBApp、后台任务、channel 背压和登录/恢复路径共用资源，积压会影响写档、查档和上线。
 
-## 现代对比
+## 源码验证重点
 
-<div class="decision-table">
+持久化测试应覆盖实际链路，而不是只测 MySQL 后端能写入：
 
-| 方案 | 优点 | 代价 | 对 BigWorld 的判断 |
-| --- | --- | --- | --- |
-| DBApp + IDatabase | 与引擎状态模型深度集成 | 自定义协议和工具链 | 当前核心 |
-| 直接业务 SQL | 简单 | 阻塞、耦合、难恢复 | 不适合主线程 |
-| Async DB driver | 降低线程开销 | 需重写 DBApp 调用链 | 可作为后端优化 |
-| Event sourcing | 回放和审计强 | 存储量和查询复杂 | 可用于新系统，不宜直接替换 |
-| 分布式事务 | 强一致 | 延迟高、复杂 | 不适合高频游戏 Tick |
-| 云数据库 + 队列 | 运维强 | 延迟和一致性需评估 | 适合外围服务 |
-
-</div>
-
-## 现代化建议
-
-1. 给 DBApp channel window、archive skip、后台任务队列加指标。
-2. 给 Base/Cell writeToDB 建立 tracing，串起 EntityID、DBID、GameTime、flags。
-3. 为 EntityDef 持久化格式建立 golden tests。
-4. 把写 DB 失败策略文档化，区分可重试、不可重试和数据丢失。
-5. 给 `bigworldLogOns`、autoload、secondary DB 回放补专项一致性测试。
-6. 若引入 async DB，先封装在 `IDatabase` 后端，不改变 Base/DBApp 协议。
+- `Base::archive()` 调用 `onPreArchive` 返回 false 时必须跳过写 DB。
+- Base 有 Cell entity 且缺少 Cell 数据时，应先走 `writeToDBRequest` 请求 Cell 数据。
+- `Base::addToStream()` 和 Cell 数据写入必须只包含 `ONLY_PERSISTENT_DATA`。
+- 属性变化产生的 `PropertyChange` 不应被误当成数据库 dirty flush 机制。
+- `EntityTypeMapping::visit()` 建表和写库时应使用同一份 persistent 视图。
+- 复杂属性应按 `PropertyMapping::create()` 选择列、子表、复合映射或 blob。
+- DBApp channel send window 超阈值时，Archiver 应跳过本轮 primary archive。
+- `bigworldLogOns`、autoload、Base mailbox 和实体属性应分别验证，不能混成同一种属性列。
+- `Base::writeToDB()` 找不到 DBApp 时应失败并记录数据丢失风险。
 
 ## 本章边界
 
-本章解释持久化和 DB 线程模型。后续还需要继续分析安全、Watcher/Profiler/日志、内存生命周期和构建平台。
+本章解释持久化和 DB 线程模型。`.def` 如何决定 persistent 属性、Identifier、索引和数据库 digest，在 [EntityDef 契约与协议生成](/architecture/entitydef-contract-generation) 中继续展开。

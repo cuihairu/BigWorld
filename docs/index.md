@@ -4,7 +4,7 @@ layout: home
 hero:
   name: "BigWorld 引擎架构研究"
   text: "从源码证据链学习 MMO 服务器设计"
-  tagline: "重点分析线程、网络、Tick、通信、序列化、热更新、扩缩容与故障恢复，并给出当年取舍和现代方案对比。"
+  tagline: "重点分析线程、网络、Tick、通信、序列化、热更新、扩缩容与故障恢复，并给出源码证据、取舍和验证边界。"
   actions:
     - theme: brand
       text: 开始研究
@@ -15,11 +15,11 @@ hero:
 
 features:
   - title: 不是目录导览
-    details: 文档按架构决策组织，每章固定覆盖设计目标、调用链、线程归属、边界、历史取舍和现代对比。
+    details: 文档按架构决策组织，每章固定覆盖设计目标、调用链、线程归属、源码取舍和验证边界。
   - title: 源码证据优先
     details: 对关键结论标注源码入口，明确区分源码事实、高置信推断和无法确认的开放问题。
-  - title: 面向现代化
-    details: Python 3.12 迁移作为专题处理，先理解引擎架构，再判断哪些改造值得做、哪些只是代价高的表面升级。
+  - title: 边界清晰
+    details: 先理解引擎架构，再判断哪些属于源码核心约束，哪些只是外围依赖或工具链问题。
 ---
 
 <div class="arch-hero">
@@ -45,7 +45,7 @@ features:
   </div>
   <div class="topology-card">
     <h3>网络模型</h3>
-    <p>重点比较 select、poll、epoll、io_uring、批量 UDP、SO_REUSEPORT、AF_XDP/DPDK。</p>
+    <p>分析 select、poll、epoll、批量 UDP、SO_REUSEPORT、io_uring 与 Mercury 执行模型的边界。</p>
   </div>
   <div class="topology-card">
     <h3>可靠 UDP</h3>
@@ -65,7 +65,7 @@ features:
   </div>
   <div class="topology-card">
     <h3>工程质量</h3>
-    <p>补齐安全限流、加密、Watcher/Profiler/日志、内存生命周期、构建依赖与现代 MMO 对比。</p>
+    <p>补齐安全限流、加密、Watcher/Profiler/日志、内存生命周期、构建依赖与 MMO 架构边界。</p>
   </div>
 </div>
 
@@ -97,7 +97,7 @@ features:
 24. [Watcher、Profiler 与日志](/architecture/observability-watcher-profiler-logs)
 25. [内存、对象生命周期与资源管理](/architecture/memory-lifecycle)
 26. [构建、平台与依赖治理](/architecture/build-platform-dependencies)
-27. [现代 MMO 架构对比](/architecture/modern-mmo-comparison)
+27. [MMO 架构边界对比](/architecture/modern-mmo-comparison)
 28. [完整专题大纲](/architecture/outline)
 
 ## 核心判断
@@ -118,12 +118,11 @@ features:
 - 登录链路通过 LoginApp、DBApp、BaseAppMgr、BaseApp 和 Proxy 二次握手完成，成功回复会缓存，失败回复刻意不可靠以降低 DoS 风险。
 - BigWorld 的线程模型主要是主 Reactor + 后台任务回主线程提交，不是全逻辑多线程。
 - `reloadScript` 是开发调试导向的高风险迁移机制，源码明确警告不要用于生产环境。
-- 当前时间系统主要依赖真实 `timestamp()`，可控虚拟时间是后续现代化测试的重要缺口。
+- 当前时间系统主要依赖真实 `timestamp()`，可控虚拟时间是可重复测试的重要缺口。
 - 当前测试体系在 Mercury、EntityDef、Replay、Ghost buffering 上并不薄弱，但 cluster 级黑盒回归和统一 chaos 注入仍然不足。
 - 动态扩展的核心是 Manager 接纳进程并驱动 Cell/Entity 状态迁移，不是简单拉起无状态副本。
 - machined 提供进程注册、接口发现、birth/death listener 和启动组件能力，是 BigWorld 旧式控制面的基础。
 - BigWorld 有明确的入口限流、消息预算和 Channel 加密抽象，但不是现代全链路安全体系。
-- Watcher/Profiler/EntityProfiler 是理解运行时状态和负载治理的核心设施，也需要现代权限和指标导出改造。
+- Watcher/Profiler/EntityProfiler 是理解运行时状态和负载治理的核心设施，也需要权限边界和指标导出。
 - 对象生命周期依赖侵入式引用计数、Python 对象、Mercury Channel 和实体 real/ghost 转换，不适合机械替换成标准智能指针。
-- 构建现代化必须处理 CMake/Makefile、OpenSSL、嵌入式 Python、第三方库和 server/client/tools 多目标，而不是只改 Python 版本号。
-- Python 3.12 迁移必须建立在架构理解之上，否则很容易只升级解释器，却破坏脚本、实体、热更和构建链路。
+- 构建治理必须处理 CMake/Makefile、OpenSSL、嵌入式 Python、第三方库和 server/client/tools 多目标，而不是只改某个依赖版本号。

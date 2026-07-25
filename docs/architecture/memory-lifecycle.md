@@ -194,7 +194,7 @@ flowchart TD
 
 ## Python 对象生命周期
 
-虽然本章不展开 Python 3.12，但必须指出：Base、Entity 等脚本暴露对象通常和 Python 对象模型耦合。
+Base、Entity 等脚本暴露对象通常和 Python 对象模型耦合。
 
 这带来几个额外约束：
 
@@ -205,16 +205,17 @@ flowchart TD
 
 这也是为什么 BigWorld 很多地方使用“禁止 callbacks”“回主线程收尾”“迁移流”这些手段。
 
-## 当时为什么不用现代 RAII 全家桶
+## 源码取舍
 
-高置信工程判断：
+源码里存在多种所有权模型，不能用单一规则解释：
 
-- BigWorld 的历史早于 C++11 成熟普及，不能依赖 `std::shared_ptr`、`unique_ptr`、`atomic` 的现代语义。
-- 游戏引擎对分配和引用计数开销敏感，侵入式引用计数更可控。
-- 与 Python C API 和自定义对象系统集成时，标准智能指针并不能直接解决问题。
-- 跨平台支持包含老 MSVC、Linux、主机平台和工具链，自定义基础库更现实。
+- `SmartPointer` / `ReferenceCount` 处理侵入式引用计数对象。
+- `SafeReferenceCount` 用于跨线程引用计数安全，但不代表对象内部状态线程安全。
+- `delete this` 模式依赖调用路径保证最后引用释放时机。
+- Packet、Bundle、MemoryStream 等网络对象强调低分配和明确生命周期。
+- PyObjectPlus、Base、Entity 同时受 C++ 引用和 Python 引用影响。
 
-代价：
+源码代价：
 
 - 生命周期规则分散，学习成本高。
 - `delete this` 模式调试困难。
@@ -222,32 +223,16 @@ flowchart TD
 - 循环引用和 raw pointer 混用需要人工审计。
 - Python/C++ 双重生命周期增加热更新和迁移风险。
 
-## 现代方案对比
+## 源码验证重点
 
-<div class="decision-table">
+生命周期测试应覆盖所有权边界，而不是只查内存泄漏：
 
-| 维度 | BigWorld | 现代常见方案 | 判断 |
-| --- | --- | --- | --- |
-| 引用计数 | 侵入式 `SmartPointer` | `shared_ptr` / intrusive_ptr | 不建议机械替换 |
-| 独占所有权 | raw pointer + 显式 delete | `unique_ptr` | 新代码可优先采用 |
-| 跨线程任务 | `SafeReferenceCount` + foreground task | future/promise/job system | 可增强预算和取消 |
-| 网络缓冲 | `MemoryOStream` / Packet | ring buffer / arena / span | 可逐步封装边界检查 |
-| Python 对象 | PyObjectPlus + C API | pybind11 / CPython 3 API | 迁移需专项设计 |
-| 实体迁移 | real/ghost 状态转换 | actor snapshot / event sourcing | BigWorld 模型仍有学习价值 |
-
-</div>
-
-## 现代化建议
-
-优先级建议：
-
-1. 先画出核心对象所有权图：Channel、Packet、Bundle、Base、Entity、Proxy、BackgroundTask、Watcher。
-2. 给跨线程对象建立审计清单，确认哪些只是引用计数安全，哪些状态也安全。
-3. 新代码优先使用明确所有权，避免继续增加裸 `new/delete`。
-4. 对 `MemoryOStream`、`BinaryIStream` 反序列化边界增加 fuzz/golden tests。
-5. 热更新和实体迁移路径禁止隐式析构副作用，关键阶段加状态机断言。
-6. Python 3.12 迁移前先隔离 PyObject 生命周期适配层。
-7. 不要第一步替换 SmartPointer；先补测试和观测，再局部现代化。
+- Channel、Packet、Bundle、Base、Entity、Proxy、BackgroundTask、Watcher 应有清晰所有权图。
+- 跨线程对象应区分“引用计数安全”和“内部状态安全”。
+- `delete this` 路径应覆盖最后引用释放、回调重入和异常返回。
+- `MemoryOStream`、`BinaryIStream` 反序列化应覆盖截断、长度溢出和嵌套过深。
+- 热更新和实体迁移路径不应依赖隐式析构副作用完成业务状态转换。
+- Python callback 执行期间销毁底层 Entity 的路径应被状态机或 callbacks guard 拦住。
 
 ## 本章边界
 

@@ -2,7 +2,7 @@
 
 <div class="arch-hero">
 
-BigWorld 的扩展不是现代 Kubernetes HPA 式“拉起无状态副本”，而是 MMO 状态分片下的运行时接纳、负载均衡、Cell/Entity 迁移和进程级恢复。理解它必须区分资源调度、状态迁移和故障恢复三个层面。
+BigWorld 的扩展不是“拉起无状态副本”，而是 MMO 状态分片下的运行时接纳、负载均衡、Cell/Entity 迁移和进程级恢复。理解它必须区分资源调度、状态迁移和故障恢复三个层面。
 
 </div>
 
@@ -194,9 +194,9 @@ BigWorld 有多层恢复：
 - 如果控制面本身脑裂，旧 machined 模型没有现代共识系统保证。
 - 如果协议版本不兼容，重启后的进程也可能无法加入。
 
-## 当时取舍
+## 源码取舍
 
-BigWorld 的扩展与容灾反映的是物理机/虚拟机时代的 MMO 集群设计：
+BigWorld 的扩展与容灾围绕 MMO 状态迁移，而不是普通请求分摊：
 
 - 进程角色固定，管理器集中协调。
 - machined 提供机器级进程发现和启动能力。
@@ -204,32 +204,23 @@ BigWorld 的扩展与容灾反映的是物理机/虚拟机时代的 MMO 集群�
 - 负载均衡围绕 Cell、Entity 和 Ghost，而不是围绕 HTTP 请求。
 - 多进程隔离崩溃域，避免单进程多线程全服崩溃。
 
-没有选择 Kubernetes、Nomad、service mesh 的原因很直接：这些不属于它主要设计年代；更重要的是，普通无状态编排解决不了 MMO 实体迁移问题。
+源码代价：
 
-## 现代方案对比
+- 进程是否存活与游戏状态是否可迁移是两件事。
+- CellApp 接纳、Cell 分裂、Entity offload 和 Ghost 准备必须按顺序完成。
+- Reviver 能重启进程，但无法凭空恢复没有备份或没有写库的内存状态。
+- 控制面本身缺少强共识语义时，birth/death 和旧消息处理必须依赖 Manager 状态和 channel version 防护。
 
-<div class="decision-table">
+## 源码验证重点
 
-| 维度 | BigWorld | 现代常见方案 | 判断 |
-| --- | --- | --- | --- |
-| 进程启动 | machined CreateMessage | systemd/Kubernetes/Nomad | 可逐步替换资源层 |
-| 服务发现 | machined + Mercury birth/death | DNS/registry/control plane | 需要桥接旧协议 |
-| 扩容 | App 注册 + Manager 接纳 | HPA/KEDA/autoscaler | 只解决拉起进程，不解决状态迁移 |
-| 负载均衡 | Cell/Entity offload | shard/actor rebalance | BigWorld 更贴近 MMO 空间模型 |
-| 容灾 | Reviver ping + death listener | liveness/readiness + restart policy | Reviver 简单，但观测和策略弱 |
-| 一致性 | Manager 权威协调 | etcd/RAFT/lease | 现代控制面更强，但迁移成本高 |
+扩展与容灾测试应覆盖状态迁移，而不是只测进程重启：
 
-</div>
-
-## 现代化建议
-
-1. 先保留 BigWorld 的状态迁移模型，不要用 Kubernetes 直接替代 CellAppMgr。
-2. 把 machined/Reviver 能力抽象成可替换 supervisor 接口。
-3. 让进程注册、birth/death、revive 事件全部结构化输出。
-4. 给 CellApp 加入、拒绝、pending、ready、负载迁移建立指标。
-5. 对 Cell offload、Base offload、CellApp death 建立多进程故障注入测试。
-6. 引入现代编排时只替换资源层，状态层仍由 Manager 和 Entity 迁移协议控制。
-7. 如果要自动扩缩容，扩容决策必须基于 game load、spare time、AOI 压力和迁移成本，而不是 CPU 一项指标。
+- 新 CellApp 在 BaseApp 和 Alpha DBApp 未知时应被拒绝接纳。
+- CellApp 加入后，CellAppMgr 应更新负载、空间、Cell 边界和 watcher 状态。
+- Cell 分裂、Cell 删除和 Entity offload 应维持 real/ghost/Witness 一致。
+- BaseApp death、CellApp death 和 DBApp 不可用应分别触发对应恢复或失败路径。
+- recently-dead channel 和 channel version 应阻止旧包污染新组件。
+- 恢复路径应覆盖内存备份缺失、DB 不可用、offload 中间态和协议不兼容。
 
 ## 本章边界
 

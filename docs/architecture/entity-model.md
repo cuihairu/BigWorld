@@ -189,28 +189,27 @@ Cell 侧回调包括：
 - 脚本回调可能改变迁移过程中的对象状态。
 - 调试一个实体问题需要跨 BaseApp、CellApp、DBApp、客户端日志。
 
-## 现代对比
+## 源码取舍
 
-<div class="decision-table">
+Base/Cell/Client 三层模型的源码取舍是把不同权威域拆开：
 
-| 模型 | 优点 | 代价 | 对 BigWorld 的判断 |
-| --- | --- | --- | --- |
-| Base/Cell/Client | 贴合 MMO 状态归属和空间迁移 | 生命周期复杂 | 当前核心，不宜轻易替换 |
-| 单进程实体 | 简单直接 | 无法横向扩展大型世界 | 只适合小服或房间服 |
-| Actor entity | 状态归属清晰 | AOI/空间迁移仍需设计 | 可作为现代化长期方向 |
-| ECS | 数据局部性好 | 分布式对象语义弱 | 适合 Cell 内部计算，不替代 Base/Cell |
-| 微服务业务拆分 | 组织清晰 | 不适合高频空间状态 | 可用于外围系统 |
+- Base 承担长期身份、数据库协调、Proxy 和跨 Cell 生命周期管理。
+- Cell 承担空间、位置、AOI、物理和 real/ghost 状态。
+- Client 只接收 Witness 筛选后的实体投影和自身可调用的 exposed 方法。
+- DB 只持久化 EntityDef persistent 视图，不保存完整运行时对象图。
 
-</div>
+源码代价是一个实体问题通常跨多个域传播：Mailbox、Channel、EntityDef、DBID、Cell real/ghost、Client entity cache 都可能参与同一条故障链。
 
-## 现代化建议
+## 源码验证重点
 
-1. 先生成实体生命周期图，不要直接改 Base/Cell 边界。
-2. 为 Base/Cell/Client/DB 属性域生成文档。
-3. 给 Mailbox 调用增加 tracing，串起 EntityID、MethodID、ChannelID。
-4. 对 create/destroy/cell lost/offload/restore 建立状态机测试。
-5. 如果引入 ECS，只放在 Cell 内部模拟层，不穿透 Base/Client 协议。
-6. Python 3.12 迁移时重点保护 `PyObjectPlus`、Entity class、Mailbox 和 EntityDef 绑定。
+实体模型测试应覆盖域边界：
+
+- Base-only、Cell-only、Client-visible、Persistent 属性应按 EntityDef 数据域进入对应流。
+- 创建 Cell entity 时，Base mailbox、Cell mailbox 和客户端 player 关系应一致。
+- Cell 丢失、offload、restore 后，Base 持有的 Cell mailbox 不能指向旧地址。
+- Client 方法只能通过 exposed method range 调用，不能绕过 Proxy 直连 CellApp。
+- DB 写入应由 Base 协调，必要时请求 Cell persistent 数据。
+- Ghost 只应作为跨 Cell 副本和迁移辅助，不能被误当成客户端实体连接。
 
 ## 本章边界
 

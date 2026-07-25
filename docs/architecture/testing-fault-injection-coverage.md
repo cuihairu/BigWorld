@@ -236,46 +236,33 @@ flowchart TD
 
 [测试体系与可控时间](/architecture/testing-time-control) 已经说明：核心 timer 主要依赖真实 `timestamp()`。因此很多带超时、retry、watchdog 的测试仍然要围绕真实 dispatcher 循环组织，而不是完全用 fake clock 做瞬时推进。
 
-## 当时取舍
+## 源码取舍
 
-从当时背景看，这套测试体系的取舍是合理的：
+从源码看，这套测试体系优先覆盖最容易破坏运行时正确性的底层路径：
 
 - 优先把最危险的 Mercury 协议层和实体状态迁移问题测住。
 - 通过 `unit_test_lib` 统一执行入口，降低模块加测试的门槛。
 - 在服务器环境下保留 `fork()` 能力，允许做多进程测试。
 - 用人工丢包/延迟代替外部网络仿真设施，降低依赖成本。
 
-代价也很明确：
+源码代价也很明确：
 
 - 单进程仿真和真实分布式部署存在差距。
 - chaos 范围主要停留在网络层。
 - 真实时间依赖让长超时、重试和恢复测试不够彻底。
 - 集群级端到端回归没有被同样系统化。
 
-## 现代对比
+## 源码验证重点
 
-<div class="decision-table">
+测试体系自身也要被验证，重点不是“有没有测试目录”，而是关键场景能否复现：
 
-| 能力 | BigWorld 当前能力 | 现代推荐 | 判断 |
-| --- | --- | --- | --- |
-| 单元测试入口 | `BWUnitTest` + `CppUnitLite2` | 保留并接 CI | 已有基础，不必推倒重来 |
-| 多进程测试 | `fork()` + `waitpid()` | 容器化集成测试 | 当前能力可继续用来构建更高层场景 |
-| 网络故障注入 | artificial loss / latency | netem / chaos mesh / toxiproxy | 当前足够做协议单测，但不够做系统 chaos |
-| 协议状态机测试 | 可靠 UDP、overflow、switch、ghost | 保持并扩展 golden tests | 这是当前最强资产之一 |
-| 集群黑盒回归 | 较弱 | 编排式端到端测试 | 需要补齐 |
-| 时间控制 | 真实 dispatcher 时间 | fake clock + deterministic scheduler | 应与测试体系章节配合推进 |
-
-</div>
-
-## 现代化建议
-
-1. 不要废弃现有 `BWUnitTest`，先把现有测试稳定纳入 CI。
-2. 把 `MultiProcTestCase` 真正用到关键跨进程场景，而不是只停留在基础设施和示例代码。
-3. 为 `test_flood`、`baseapp death`、`auto-switch` 明确区分“单进程仿真版”和“真实多进程版”。
-4. 在现有 artificial loss/latency 之上，补充可脚本化的 DB、manager、reviver 故障注入。
-5. 给 replay、EntityDef、ghost buffering、Mercury reliable 建立 golden regression 集合。
-6. 与 [测试体系与可控时间](/architecture/testing-time-control) 配合，为 timeout/retry/watchdog 场景引入可注入 clock seam。
-7. 补一个最小 cluster 黑盒测试套件，优先覆盖登录、实体创建、Cell 切换、BaseApp 恢复和 DB digest 校验。
+- `BWUnitTest` 和 `CppUnitLite2` 应能稳定发现并运行库级测试。
+- `MultiProcTestCase` 应覆盖 fork、waitpid、子进程失败和超时清理。
+- artificial loss / latency 应能在可靠 UDP、request/reply、fragment 和 channel switch 测试中生效。
+- `test_flood`、baseapp death、auto-switch 场景应区分单进程仿真和真实多进程覆盖范围。
+- replay、EntityDef、ghost buffering、Mercury reliable 应有固定输入输出的回归集。
+- timeout/retry/watchdog 场景应明确哪些依赖真实 dispatcher 时间，哪些可以用测试 seam 控制。
+- 登录、实体创建、Cell 切换、BaseApp 恢复和 DB digest 校验应能组成最小集群级回归链路。
 
 ## 本章边界
 

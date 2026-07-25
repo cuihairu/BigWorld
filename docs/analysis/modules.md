@@ -26,13 +26,13 @@
 - 渲染与场景：`moo`、`romp`、`scene`、`space`、`terrain`、`chunk`
 - 工具与编辑器共享：`asset_pipeline`、`ual`、`gizmo`、`visual_manipulator`
 
-其中最关键的现代化阻塞库是：
+其中最关键的脚本运行时耦合库是：
 
 - `lib/pyscript`
 - `lib/script`
 - `lib/entitydef_script`
 
-它们直接决定 Python 升级成本。
+它们直接决定嵌入式 Python 运行时的维护成本。
 
 ### `programming/bigworld/server`
 
@@ -56,7 +56,7 @@
 
 ### `programming/bigworld/client`
 
-客户端主程序与客户端脚本桥接层。这里的 Python 绑定也非常重，意味着 Python 3.12 迁移不会只影响服务端。
+客户端主程序与客户端脚本桥接层。这里的 Python 绑定也非常重，意味着脚本运行时变更不会只影响服务端。
 
 ### `programming/bigworld/tools`
 

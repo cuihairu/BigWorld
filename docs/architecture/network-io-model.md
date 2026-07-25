@@ -81,7 +81,7 @@ Mercury 的主游戏协议不是“一玩家一个 TCP FD”的模型。UDP 路�
 - Entity/AOI/脚本逻辑消耗。
 - Tick 预算和尾延迟。
 
-这也是为什么现代化评估时，`recvmmsg/sendmmsg` 可能比 `io_uring` 更先值得实验。
+这说明如果瓶颈是逐包 syscall，批量 UDP 收发会比更换整个执行模型更贴近当前源码边界。
 
 ## 接收路径
 
@@ -129,7 +129,7 @@ sequenceDiagram
 
 - 虽然 socket 是非阻塞模型，但发送路径并非全链路完全无等待。
 - 高峰期主线程可能在发送重试上消耗时间。
-- 现代化时应优先观测发送队列满的频率和耗时。
+- 应优先观测发送队列满的频率和耗时，再判断它是否影响主线程 Tick。
 
 ## TCP 路径
 
@@ -143,39 +143,18 @@ TCP 路径也在 Reactor 下工作：
 
 TCP 更适合登录、工具、管理、WebSocket 等场景；游戏主通道仍需要结合 Mercury 的 UDP 可靠层理解。
 
-## 当时为什么没选 io_uring
+## I/O 后端边界
 
-这里必须严谨：源码无法证明原作者“开会时怎么想”。但可以做高置信工程判断。
-
-`io_uring` 直到 Linux 5.1 才出现，而 BigWorld 14.4.1 的平台痕迹包含 CentOS 5/6/7、老 CMake、Python 2.7、老 GCC/MSVC 兼容。也就是说，`io_uring` 不在它的原始可选方案集合内。
-
-即使放到今天，也不能直接说 `io_uring` 必然更好：
+源码当前是 readiness callback 模型，而不是异步 completion 模型：
 
 - BigWorld 的游戏 UDP 模型不是海量 FD，而是少量 UDP socket + 大量逻辑 Channel。
 - 现有 handler 是同步回调，迁移到 completion queue 会改变执行模型。
 - `io_uring` 要处理 buffer 生命周期、提交队列、完成队列、取消、背压和多线程消费。
 - 如果热点在协议解析、脚本、AOI 或 Cell 负载，换 I/O 后端收益有限。
 
-所以更合理的现代化顺序是先测量，再实验批量 UDP，再考虑更深层 I/O 重构。
+所以评估 I/O 后端时必须先确认瓶颈在 syscall、socket queue、协议解析、脚本执行还是 Cell 负载。
 
-## 横向对比
-
-<div class="decision-table">
-
-| 模型 | 当时可用性 | 优点 | 代价 | 对 BigWorld 的判断 |
-| --- | --- | --- | --- | --- |
-| `select` | 跨平台成熟 | 简单、兼容性强 | FD 集合扫描、FD 数限制 | 适合回退路径，不适合 Linux 高负载主路径 |
-| `poll` | 成熟 | 无固定 FD_SETSIZE | 仍需线性扫描 | Emscripten 路径使用，非 Linux 最优 |
-| LT `epoll` | Linux 成熟 | 高效、语义接近 select | readiness 重复通知 | 当前 Linux 方案，稳妥合理 |
-| ET `epoll` | Linux 可用 | 减少重复通知 | handler 必须严格排空，bug 风险高 | 源码注释提到但未采用，符合保守取舍 |
-| `recvmmsg/sendmmsg` | Linux 2.6.33+ | 批量 UDP，直接降低 syscall | 代码改动中等，平台分支增加 | 现代化优先实验对象 |
-| `SO_REUSEPORT` | Linux 3.9+ | 多 socket 分流，配合 RSS | Channel 状态分片复杂 | 需要重构地址/Channel 归属 |
-| `io_uring` | Linux 5.1+ | 异步提交/完成、高吞吐潜力 | 状态机和生命周期重构大 | 不适合第一步迁移 |
-| AF_XDP / DPDK | 现代高性能网络 | 极低延迟、高吞吐 | 运维、内核、网卡、协议栈成本极高 | 对 MMO 引擎一般过重，除非有极端网关场景 |
-
-</div>
-
-## 为什么不是“越现代越好”
+## 源码取舍
 
 游戏服务器网络模型的目标不是单一 QPS：
 
@@ -184,18 +163,18 @@ TCP 更适合登录、工具、管理、WebSocket 等场景；游戏主通道仍
 - 状态一致性比 I/O 后端先进性更重要。
 - 可调试性和运维稳定性比局部极限性能更重要。
 
-BigWorld 的选择体现了当时商业 MMO 引擎的务实倾向：使用成熟内核能力，保持跨平台抽象稳定，把复杂度放在 Mercury 协议、实体模型和 Cell 负载治理上。
+源码选择是使用成熟 readiness poller，保持跨平台抽象稳定，把复杂度放在 Mercury 协议、实体模型和 Cell 负载治理上。
 
-## 现代化建议
+## 源码验证重点
 
-优先级建议：
+网络 I/O 测试应覆盖 poller 和 handler 边界：
 
-1. 给 `PacketReceiver`、`PacketSender`、handler 分发、Channel 重传增加指标。
-2. 统计 `maxSocketProcessingTime` 命中率、receive queue size、发送队列满等待次数。
-3. 对 UDP 接收实验 `recvmmsg`，先作为 Linux 可选路径。
-4. 对 UDP 发送实验 `sendmmsg`，观察 bundle 聚合是否能受益。
-5. 再评估 `SO_REUSEPORT` 是否适合按 shard 分多个 UDP socket。
-6. `io_uring` 只适合在确认 syscall 和 I/O wait 是主瓶颈后作为专项重构。
+- `EventPoller` 在 Linux 下应用 level-triggered epoll，并按注册 handler 分发。
+- `PacketReceiver::handleInputNotification()` 应受 `maxSocketProcessingTime` 保护。
+- TCP 读写事件注册、部分发送和注销写事件应保持非阻塞。
+- `PacketSender::basicSendWithRetries()` 的 EAGAIN/ENOBUFS 路径不能无限阻塞主线程。
+- 网络 handler 执行时间应计入主 Reactor 风险，而不是被当成后台 I/O。
+- 修改 I/O 后端时，Channel、Bundle、ACK、fragment、request/reply 语义必须保持一致。
 
 ## 后续研究入口
 

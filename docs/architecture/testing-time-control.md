@@ -150,41 +150,28 @@ CellAppMgr 会向所有 CellApp 发送当前 game time，见 [cellapps.cpp](/hom
 - EntityDef 版本不兼容。
 - GameTick late 和 clock jump。
 
-## 当时取舍
+## 源码取舍
 
-为什么没有统一虚拟时钟？高置信推断有几个原因：
+源码没有统一虚拟时钟，直接带来几个工程边界：
 
-- 当时 C++ 游戏服务器更强调集成测试和实际进程运行。
 - `timestamp()` inline 全局函数性能优先，抽象层会增加调用成本和侵入。
 - 多进程、网络、Python、数据库混合后，完整 deterministic simulation 成本很高。
-- 商业引擎可能有内部测试工具，但开源版本未完整包含。
+- EventDispatcher、TimeQueue、Mercury request timeout、Reviver ping 和 GameTick 都会受到真实时间推进影响。
+- 测试需要区分 wall clock、GameTime、dispatcher timer 和 TimeKeeper 校准。
 
-这不是合理化缺口，而是解释当时工程环境下的取舍。
+这不是合理化缺口，而是说明哪些源码路径不能简单靠 sleep 断言。
 
-## 现代对比
+## 源码验证重点
 
-<div class="decision-table">
+时间相关测试应按时间来源拆分：
 
-| 能力 | BigWorld 当前倾向 | 现代推荐 | 收益 |
-| --- | --- | --- | --- |
-| 单元测试 | CppUnitLite 风格 | 保留并接 CI | 快速防回归 |
-| 多进程测试 | `MultiProcTestCase` | 容器化/进程编排测试 | 更贴近真实集群 |
-| 时间控制 | 真实 `timestamp()` | 注入 `IClock` / fake clock | 超时测试确定性 |
-| 网络故障 | 部分单测覆盖 | 可编程 packet filter / netem / chaos | 覆盖可靠层边界 |
-| 热更新测试 | 未形成显式框架 | EntityDef 兼容矩阵 + migration dry-run | 降低脚本迁移风险 |
-| 性能测试 | DogWatch/Watcher | 指标导出 + flamegraph + soak test | 找真实瓶颈 |
-
-</div>
-
-## 现代化建议
-
-1. 不要一开始全局替换 `timestamp()`，先给测试构建加可选 clock seam。
-2. 从 `EventDispatcher` 和 `TimeQueue` 开始引入可注入时间源。
-3. 给 Mercury 重发、Request timeout、Reviver ping 写 fake clock 测试。
-4. 保留真实时间集成测试，补充 fake time 单元测试。
-5. 对 GameTime 与 wall clock 的转换建立明确文档和断言。
-6. 建立故障注入工具，优先覆盖可靠 UDP、CellApp death、BaseApp restore、热更新失败。
-7. 把核心 wire format 和 EntityDef 迁移加入 golden tests。
+- `EventDispatcher::processOnce()` 中 timer 到期顺序应稳定。
+- `TimeQueueT::process()` 应正确处理一次性 timer、循环 timer、取消 timer 和 callback 内取消。
+- Mercury request timeout、reliable resend 和 Reviver ping 应覆盖正常到期、延迟和取消。
+- GameTick 的 `GameTime` 推进不应被误当成 wall clock。
+- `TimeKeeper` 调整 tracking timer interval 后应能恢复 nominal interval。
+- handler 阻塞、background task 卡死、CellApp death、DBApp 超时应分别验证对 dispatcher 时间和 GameTime 的影响。
+- EntityDef 版本不兼容、登录超时和 BaseApp restore 应避免依赖不可控 sleep 形成脆弱测试。
 
 ## 本章边界
 

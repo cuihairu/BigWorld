@@ -229,9 +229,9 @@ pLoginHandler_->login( extInterface_, srcAddr, header, args );
 
 这是 MMO UDP 协议很值得学习的地方。
 
-## 当时取舍
+## 源码取舍
 
-BigWorld 这样拆分登录链路的原因很明确：
+BigWorld 拆分登录链路的原因可以从职责边界看出来：
 
 - LoginApp 作为公网入口，职责集中在认证、限流、挑战和 DB 查询。
 - BaseApp 承载长期 Proxy 会话，避免 LoginApp 成为长期连接瓶颈。
@@ -239,39 +239,27 @@ BigWorld 这样拆分登录链路的原因很明确：
 - Pending login 把“已创建 Proxy”和“客户端尚未连上 BaseApp”这个中间态显式化。
 - SessionKey 防止任意客户端直接 attach 到 Proxy。
 - 成功回复缓存处理 UDP 丢包和客户端重试。
+- 失败回复保持不可靠，避免攻击者借可靠重发制造状态放大。
 
-代价：
+源码代价：
 
 - 登录链路跨多个进程，排障需要跨进程 trace。
 - Proxy 创建成功但客户端未连接会产生 pending timeout。
 - NAT/防火墙配置错误会表现为登录成功后无法进入。
 - SessionKey、加密 key、BaseApp 地址和 DB 返回结构必须严格兼容。
 
-## 现代方案对比
+## 源码验证重点
 
-<div class="decision-table">
+登录链路验证应覆盖跨进程状态和失败路径：
 
-| 维度 | BigWorld | 现代常见方案 | 判断 |
-| --- | --- | --- | --- |
-| 登录入口 | LoginApp | auth gateway / edge service | 角色清晰，可网关化 |
-| 会话承载 | BaseApp Proxy | session actor / game gateway | Proxy 模型仍有价值 |
-| 负载选择 | BaseAppMgr | service discovery + scheduler | MMO 负载需要游戏语义 |
-| 二次握手 | SessionKey + baseAppLogin | token exchange / signed ticket | 可升级为签名短票据 |
-| 成功回复 | UDP 缓存重发 | idempotent login transaction | 思路正确 |
-| 失败回复 | 不可靠 | stateless reject / rate limited | 安全取舍正确 |
-| Trace | 日志/Watcher | distributed tracing | 现代化重点缺口 |
-
-</div>
-
-## 现代化建议
-
-1. 给登录链路引入 correlation id，贯穿 LoginApp、DBApp、BaseAppMgr、BaseApp 和 Proxy。
-2. 将 session key 升级为短期签名 ticket，包含 BaseApp ID、Proxy ID、过期时间和 nonce。
-3. 登录失败保持无状态或低状态，避免可靠重发带来放大攻击。
-4. 登录成功缓存保留，但增加大小、TTL 和命中率指标。
-5. PendingLogins 暴露队列长度、超时数量、NAT 统计到指标系统。
-6. 现代公网部署中把 LoginApp 前置到 gateway 或防护层，BaseApp external 地址通过受控映射发布。
-7. 对登录 wire format 增加 golden tests，Python 3.12 或协议迁移前先锁定兼容性。
+- `allowLogin=false`、协议版本不匹配、DBApp 未 ready、系统 overloaded 时应在 LoginApp 阶段拒绝。
+- IP ban、登录速率限制和 pending/cache 重试应在进入 DBApp 前生效。
+- LoginChallenge 创建失败、proof 错误或 LogOnParams 解码失败时不能继续创建 Proxy。
+- DBApp/BaseAppMgr/BaseApp 创建 Proxy 后，LoginApp 成功回复应包含正确 BaseApp 地址和 session key。
+- 客户端 `baseAppLogin` 必须通过 SessionKey 绑定到已创建的 Proxy。
+- 成功回复缓存应覆盖 UDP 丢包重试；失败回复不应创建可靠重发状态。
+- Pending login 超时应清理中间态，并记录 NAT/防火墙相关诊断信息。
+- 登录 wire format 应有 golden tests，避免 SessionKey、加密 key、BaseApp 地址和 DB 返回结构顺序漂移。
 
 ## 本章边界
 

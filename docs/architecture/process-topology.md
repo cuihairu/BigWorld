@@ -143,7 +143,7 @@ Mgr 组件不是业务微服务，而是控制面：
 
 ## 动态扩展的真实含义
 
-BigWorld 支持运行中接纳新 `BaseApp` / `CellApp`，但它不是 Kubernetes HPA 式自动扩缩容。
+BigWorld 支持运行中接纳新 `BaseApp` / `CellApp`，但源码里的扩展入口是进程注册、Mgr 接纳、负载再平衡和状态迁移，不是单纯拉起无状态副本。
 
 更准确的模型是：
 
@@ -159,32 +159,35 @@ BigWorld 支持运行中接纳新 `BaseApp` / `CellApp`，但它不是 Kubernete
   <span class="flow-node">实体/Cell 迁移</span>
 </div>
 
-这种设计的重点是运行时迁移和控制面协调，而不是声明式资源调度。
+这种设计的重点是运行时迁移和控制面协调，而不是只增加进程数量。
 
-## 当时取舍
+## 源码取舍
 
-BigWorld 的进程拆分在当时是务实选择：
+BigWorld 的进程拆分服务于明确的运行时职责边界：
 
 - 多进程天然隔离崩溃域，比单进程多线程更容易定位故障。
 - C++ 主循环加 Python 脚本嵌入，适合把性能敏感路径留在引擎层。
 - Manager 作为权威控制面，避免每个 App 都维护全局复杂状态。
-- `machined` 和 `Reviver` 形成进程级运维能力，符合当时物理机/虚拟机时代的集群管理方式。
+- `machined` 和 `Reviver` 形成进程级发现、启动和恢复能力。
+- BaseApp、CellApp、DBApp、LoginApp 的进程角色和内部接口在源码中分别注册，便于按职责排查。
 
-它没有选择今天常见的容器编排和服务网格，原因很直接：这些技术路线不属于它的主要设计年代；而且 MMO 的状态迁移、AOI 和 Cell 负载均衡也不是普通无状态服务伸缩能解决的。
+源码代价也很清楚：
 
-## 现代对比
+- 组件间耦合强，进程拓扑必须和 Mercury 接口、birth/death 通知、Mgr 状态一致。
+- 扩容是否有效取决于 Base/Cell 负载迁移，不取决于进程是否已经启动。
+- DBApp、BaseAppMgr、CellAppMgr 等控制面异常会影响多个业务路径。
+- 排障必须跨 machined、Manager、App 自身日志和 watcher 状态一起看。
 
-<div class="decision-table">
+## 源码验证重点
 
-| 维度 | BigWorld 方案 | 现代常见方案 | 取舍 |
-| --- | --- | --- | --- |
-| 进程组织 | 固定组件角色 + Manager | 容器化服务 + 编排平台 | BigWorld 更贴近游戏状态模型，现代方案运维生态更强 |
-| 扩容 | 外部启动进程，Mgr 接纳并迁移 | HPA / KEDA / 自研调度器 | BigWorld 重运行时状态迁移，现代方案重资源调度 |
-| 容灾 | Reviver + machined | supervisor / systemd / Kubernetes / Nomad | BigWorld 方案简单直接，但观测和策略表达较弱 |
-| 服务发现 | Machined + Mercury birth/death | DNS / service registry / control plane | BigWorld 强耦合引擎协议，现代方案通用性更高 |
-| 状态管理 | Entity、Cell、Ghost 内生模型 | Actor / ECS / 分片服务 | BigWorld 针对 MMO 深度定制，迁移成本高 |
+进程拓扑验证应覆盖注册、接纳和状态传播：
 
-</div>
+- 各进程启动时必须注册对应 Mercury interface。
+- App 向 machined 注册的 component 类型、地址、pid 和 watcher nub 信息应正确。
+- `CellAppMgr::addApp()` 在缺少 BaseApp 或 Alpha DBApp 时不能接纳新 CellApp。
+- 新 BaseApp/CellApp 接纳后，Mgr watcher 中的数量、负载和 App 列表应同步更新。
+- birth/death 通知应能传播到依赖方，不能只在本地进程可见。
+- Reviver 或 machined 层面的重启不能绕过 BigWorld 自身的状态恢复流程。
 
 ## 后续研究入口
 

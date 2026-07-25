@@ -2,7 +2,7 @@
 
 <div class="arch-hero">
 
-BigWorld 的序列化不是一个孤立的 `serialize()` 工具函数，而是 EntityDef 类型系统、Python 脚本对象、网络 Bundle、数据库持久化和热更新迁移之间的粘合层。理解它，才能理解为什么 Python 3.12 迁移不是简单替换解释器。
+BigWorld 的序列化不是一个孤立的 `serialize()` 工具函数，而是 EntityDef 类型系统、Python 脚本对象、网络 Bundle、数据库持久化和热更新迁移之间的粘合层。理解它，才能判断一个属性或方法参数究竟会进入客户端、Base、Cell、Ghost、DB 还是迁移流。
 
 </div>
 
@@ -34,7 +34,7 @@ BigWorld 的 EntityDef 类型系统同时服务：
 - 数据库持久化。
 - 默认值、类型检查和脚本热更新迁移。
 
-因此它不像 Protobuf 那样只是“网络消息 schema”。它更像游戏运行时的统一类型契约。
+因此它不是单纯“网络消息 schema”。它更像游戏运行时的统一类型契约。
 
 <MermaidDiagram title="EntityDef 序列化位置">
 flowchart TD
@@ -204,34 +204,23 @@ BigWorld 的序列化格式更偏“共享 schema 的紧凑二进制流”，而
 
 如果 EntityDef 或 DataType 发生不兼容变化，热更新就会从“类迁移问题”升级为“协议和状态迁移问题”。这也是源码中对生产热更新保持谨慎态度的根本原因之一。
 
-## 为什么不是 Protobuf
+## 源码取舍
 
-从现代视角看，Protobuf 的 schema、版本演进、跨语言工具都更成熟。但 BigWorld 的序列化承担的职责比 Protobuf 更宽：
+BigWorld 的序列化承担的职责比普通网络消息编码更宽：
 
 - 它要服务 Python 脚本对象和 C++ Entity 运行时。
 - 它要按 Base/Cell/Client/Persistent 数据域选择不同属性集合。
 - 它要支持默认值、类型检查、方法参数和属性同步。
 - 它要和 Mercury 的 Bundle、可靠 UDP、实体迁移协同。
-- 它诞生时的主流 MMO 引擎更倾向自研紧耦合协议栈。
+- 它还要让 DB 映射层从同一段 persistent stream 还原数据库字段。
 
-所以不能简单说“应该换 Protobuf”。更合理的判断是：EntityDef 是 BigWorld 的核心领域模型，Protobuf 更适合作为外围边界或新服务 schema，而不是直接替换内部实体类型系统。
+源码代价：
 
-## 现代方案对比
+- BinaryStream 本身不自描述，读写双方必须共享 EntityDef、DataType 和字段顺序。
+- Python 对象转换、默认值、错误流状态和复杂嵌套类型都会影响同一条链路。
+- EntityDef 改动会同时影响网络、DB、热更新和迁移，不是局部序列化问题。
 
-<div class="decision-table">
-
-| 方案 | 优点 | 代价 | 对 BigWorld 的判断 |
-| --- | --- | --- | --- |
-| EntityDef + BinaryStream | 贴合实体、脚本、持久化和网络 | 生态弱，版本演进难 | 当前核心，先文档化和测试化 |
-| Protobuf | schema 工具强，跨语言成熟 | 难表达 Base/Cell/Client 数据域和 Python 绑定 | 适合外围 API，不宜直接替换核心 |
-| FlatBuffers | 读取快，少拷贝 | 对动态脚本对象和迁移语义不自然 | 可用于新客户端资源/只读数据 |
-| Cap'n Proto | 高性能、RPC 能力强 | 生态和迁移成本 | 可研究，不是第一阶段目标 |
-| JSON/MsgPack | 易调试，工具多 | 体积和 CPU 成本较高 | 适合调试、控制面，不适合高频同步 |
-| 自描述 TLV | 兼容性较好 | 包体变大，编码复杂 | 可用于新版本化边界，不适合全量替换 |
-
-</div>
-
-## 测试重点
+## 源码验证重点
 
 序列化测试必须覆盖 round-trip 和兼容性：
 
@@ -242,19 +231,9 @@ BigWorld 的序列化格式更偏“共享 schema 的紧凑二进制流”，而
 - `BinaryIStream::error()` 被设置后的调用者处理。
 - EntityDescription 按不同 dataDomains 输出的数据一致性。
 - 新旧 EntityDef 之间的兼容矩阵。
+- persistent stream 被 DB 映射层消费时的字段顺序和类型一致性。
 
 源码中已有 `lib/entitydef/unit_test/test_stream.cpp`，其中有 `createFromStream()` 和 `addToStream()` 的测试入口。后续测试章节需要评估它覆盖了哪些类型，缺少哪些迁移和异常场景。
-
-## 现代化建议
-
-针对序列化层，优先级建议：
-
-1. 生成 EntityDef schema 文档，明确每个属性的数据域、类型、持久化和客户端可见性。
-2. 为关键实体建立二进制 golden tests，锁定 wire format。
-3. 增加 fuzz/非法流测试，覆盖长度溢出、截断、错误类型、嵌套过深。
-4. 把 EntityDef 兼容性检查纳入 CI，禁止破坏性字段变更直接上线。
-5. Python 3.12 迁移前，先把 ScriptObject、DataSource、DataSink 的边界测试补齐。
-6. 如果引入 Protobuf/FlatBuffers，先用于新外围接口，不要替换核心实体流。
 
 ## 本章边界
 

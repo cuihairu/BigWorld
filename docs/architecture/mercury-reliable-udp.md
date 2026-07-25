@@ -231,40 +231,23 @@ indexed channel 的作用是：在同一对地址之间复用多个逻辑 channe
 
 所以 Channel 管连接状态和可靠窗口，Bundle 管消息聚合与 packet 编排。两者合起来才是 Mercury 的游戏网络协议。
 
-## 当时方案取舍
+## 源码取舍
 
-BigWorld 选择自研可靠 UDP，在当时有充分工程理由：
+Mercury 可靠 UDP 与引擎状态模型深度绑定：
 
-- ENet、RakNet 等库虽然存在，但商业 MMO 引擎需要深度绑定 Entity、AOI、Base/Cell 迁移和内部服务协议。
 - TCP 无法表达同一逻辑流内可靠/不可靠混合语义。
-- QUIC 尚未成熟，不在当时技术选项中。
 - 服务器内部多进程 MMO 通信需要可控协议头、可观测统计和引擎级调试能力。
 - Python 脚本层和 EntityDef 类型系统需要与网络协议紧密结合。
+- Channel version、critical reliable、piggyback、fragment 和 ACK 都参与实体迁移、恢复和内部 RPC 的正确性。
 
-代价同样明确：
+源码代价同样明确：
 
 - 协议复杂度高，正确性依赖大量边界测试。
-- 拥塞控制、路径 MTU、NAT、加密、抗攻击能力弱于现代成熟协议栈。
 - 与通用生态脱节，外部工具难以直接解析。
-- 现代平台上的批量收发、内核 offload、QUIC/TLS 生态无法直接复用。
+- 拥塞、路径 MTU、NAT、加密和攻击面需要结合外部入口、PacketFilter 和部署拓扑一起分析。
+- I/O 后端只能影响收发方式，不能替代 Channel 的可靠顺序和实体语义。
 
-## 现代方案对比
-
-<div class="decision-table">
-
-| 方案 | 优点 | 代价 | 对 BigWorld 的判断 |
-| --- | --- | --- | --- |
-| TCP | 成熟、可靠、有序、生态强 | 队头阻塞，可靠粒度太粗 | 适合工具、登录、管理，不适合主状态同步 |
-| 自研 UDP | 语义可完全贴合游戏 | 正确性和运维成本高 | 当前实际方案，需补测试和观测 |
-| ENet/KCP | 可靠 UDP 成熟组件 | 与 Entity/Channel 语义不完全匹配 | 可作为对照，不宜直接替换 |
-| RakNet | 游戏网络功能丰富 | 维护状态和授权生态需评估 | 可借鉴接口，不是低成本迁移 |
-| QUIC | 多路复用、加密、拥塞控制成熟 | 协议栈重，可靠流语义仍需映射 | 适合外部网关实验，不适合直接替换全部 Mercury |
-| io_uring UDP | 提升异步 I/O 和批量潜力 | 不解决可靠协议语义 | 是 I/O 后端问题，不是 Channel 替代品 |
-| AF_XDP/DPDK | 极致吞吐和低延迟 | 运维、网卡、内核旁路成本极高 | MMO 常规服过重，网关专项才考虑 |
-
-</div>
-
-## 测试重点
+## 源码验证重点
 
 可靠 UDP 的测试不能只测“能收发”。至少要覆盖：
 
@@ -277,17 +260,6 @@ BigWorld 选择自研可靠 UDP，在当时有充分工程理由：
 - 发送窗口溢出和 `maxWindowSize()` 边界。
 
 源码已经有网络单元测试目录，例如 `lib/network/unit_test/test_receive_window.cpp`、`test_reliable.cpp`、`test_fragment.cpp`、`test_channel_version.cpp`。后续测试章节会专门分析覆盖范围与缺口。
-
-## 现代化建议
-
-优先级不应是“马上换 QUIC”：
-
-1. 先给 ACK、重发、窗口占用、piggyback 命中率、fragment 重发增加指标。
-2. 对 `INTERNAL` 和 `EXTERNAL` 分开统计丢包、RTT、重发次数和窗口积压。
-3. 用故障注入复现乱序、延迟、丢 ACK、重复包、版本过期包。
-4. 对外部客户端链路评估 KCP/QUIC 网关方案，但不要直接穿透 Entity 层。
-5. 对内部服务器链路优先实验批量 UDP 收发，而不是替换可靠协议。
-6. 任何协议替换都必须先证明 Entity 迁移、Channel version、critical reliable 语义可等价表达。
 
 ## 本章边界
 

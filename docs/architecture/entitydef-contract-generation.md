@@ -82,7 +82,7 @@ flowchart TD
 
 这意味着 `entities.xml` 顺序具有协议含义。随意重排实体类型，不只是整理配置，可能改变实体类型 ID 和客户端/服务端共享契约。
 
-`ClientName` 是一个历史兼容功能：服务端实体可声明不同客户端类型名。解析后会校验 alias 的客户端方法数和 client-server property 数是否一致，否则报错。源码见 [entity_description_map.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/entitydef/entity_description_map.cpp:442)。源码注释明确该特性已废弃，因此现代化时不应继续扩大使用范围。
+`ClientName` 是一个历史兼容功能：服务端实体可声明不同客户端类型名。解析后会校验 alias 的客户端方法数和 client-server property 数是否一致，否则报错。源码见 [entity_description_map.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/entitydef/entity_description_map.cpp:442)。源码注释明确该特性已废弃，因此后续不应继续扩大使用范围。
 
 ## 属性契约
 
@@ -300,7 +300,7 @@ DB 侧还有持久化属性 digest，用于数据库兼容检查。`EntityDescri
 
 源码见 [main.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/tools/process_defs/main.cpp:244)。
 
-这说明 BigWorld 已有“契约导出边界”，只是它输出的是 Python 对象回调，而不是现代常见的 JSON schema、OpenAPI、Protobuf descriptor 或 TypeScript 类型文件。
+这说明 BigWorld 已有“契约导出边界”，只是它输出的是 Python 对象回调；下游工具如果需要其他格式，应从这条导出链路读取同一份 `EntityDescriptionMap`，不能另写一套 `.def` 解析器。
 
 ## 运行时消费路径
 
@@ -324,9 +324,9 @@ DB 侧还有持久化属性 digest，用于数据库兼容检查。`EntityDescri
 
 如果把这些层混在一起，容易误判为“改一个字段只是改 XML”。实际影响范围至少包括协议编号、digest、客户端同步、DB schema、脚本类型检查和迁移路径。
 
-## 当时取舍
+## 源码取舍
 
-BigWorld 的 EntityDef 契约设计适合当时的 MMO 引擎约束：
+BigWorld 的 EntityDef 契约设计服务的是同一份实体定义跨多个运行时视图复用：
 
 - 一份定义同时驱动客户端、Base、Cell、DB 和脚本。
 - 二进制协议紧凑，适合高频实体同步。
@@ -334,27 +334,15 @@ BigWorld 的 EntityDef 契约设计适合当时的 MMO 引擎约束：
 - 通过 digest 快速拒绝不兼容客户端。
 - 组件、接口和父定义提供一定复用能力。
 
-主要代价：
+源码代价也集中在契约稳定性上：
 
 - 版本演进依赖顺序和编号，字段重排风险高。
-- 协议 schema 不是标准格式，生态工具弱。
+- 协议 schema 隐含在 EntityDef、Mercury message range 和运行时解析代码里，外部工具必须复用 `process_defs` 或 `EntityDescriptionMap`。
 - `ClientName`、脚本存在性推断等历史兼容规则增加理解成本。
 - `.def` 同时承担网络契约和数据库契约，单点改动影响范围大。
-- `process_defs` 输出回调机制不如现代 schema artifact 直观。
 - 多进程各自解析同一套定义，部署一致性要求高。
 
-## 现代化建议
-
-优先级建议：
-
-1. 把 `process_defs` 输出标准化为 JSON artifact，同时保留现有 Python 回调，避免破坏工具链。
-2. 为 `entities.xml` 顺序、`clientServerFullIndex`、`internalIndex`、`exposedIndex` 和 digest 建立 golden tests。
-3. 在 CI 中增加 EntityDef 兼容性检查，区分安全变更、需要 DB migration 的变更和协议破坏性变更。
-4. 生成面向人读的实体契约文档，列出每个属性的数据域、持久化、索引、`DatabaseLength`、client visibility、stream size 和默认值。
-5. 禁止新增依赖 `ClientName` 的设计，只保留兼容旧项目。
-6. 把 persistent digest 变更和 `sync_db` 执行结果纳入 CI 审核。
-
-## 验证重点
+## 源码验证重点
 
 EntityDef 契约测试不应只测 XML 是否能解析，还应覆盖：
 
@@ -364,11 +352,13 @@ EntityDef 契约测试不应只测 XML 是否能解析，还应覆盖：
 - client-server 属性增删改是否导致 digest 变化。
 - server-only 属性变更是否不影响客户端 digest。
 - persistent 属性变更是否影响 DB persistent properties digest。
-- `process_defs` artifact 是否与运行时 `EntityDescriptionMap` 一致。
+- `process_defs` 导出结果是否与运行时 `EntityDescriptionMap` 一致。
 - 不兼容客户端登录是否被 digest 检查拒绝。
+- `.def` 属性的 `Persistent`、`Identifier`、`Indexed`、`DatabaseLength` 改动是否触发预期 persistent digest 或 DB schema 变化。
+- `ClientName` alias 的客户端方法数和 client-server property 数不一致时必须报错。
 
-这些测试能把“隐式协议规则”变成可审查边界，降低后续现代化风险。
+这些测试能把“隐式协议规则”变成可审查边界，避免把 `.def` 改动误判成普通脚本变更。
 
 ## 本章边界
 
-本章确认：BigWorld 有完整的 EntityDef 契约生成链路，但它不是现代独立 IDL 工具链。后续若要补齐现代化能力，应优先在现有 `EntityDescriptionMap` 和 `process_defs` 外围生成稳定 artifact，而不是直接替换 EntityDef 核心模型。
+本章确认：BigWorld 有完整的 EntityDef 契约生成链路。后续分析序列化、通信、持久化和热更新时，应以 `EntityDescriptionMap`、`EntityDescription`、`DataDescription` 和 `MethodDescription` 这条源码链路作为共同依据。

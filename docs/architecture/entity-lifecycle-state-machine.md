@@ -218,9 +218,9 @@ stateDiagram-v2
 
 这些风险解释了为什么 BigWorld 需要大量状态断言、callbacksPermitted、channel version、backup 和 ghost 机制。
 
-## 当时取舍
+## 源码取舍
 
-BigWorld 采用 real/ghost/offload 的原因：
+BigWorld 采用 real/ghost/offload，是因为实体生命周期要同时满足空间权威、可见性和迁移：
 
 - MMO 世界空间太大，不能单进程承载。
 - AOI 跨 Cell 边界必须看到附近实体。
@@ -228,38 +228,26 @@ BigWorld 采用 real/ghost/offload 的原因：
 - 客户端连接和长期身份在 BaseApp，空间逻辑在 CellApp。
 - 实体迁移要保持脚本对象和 EntityID 连续性。
 
-代价：
+源码代价：
 
 - 生命周期状态复杂。
 - 序列化和热更新强耦合。
 - 测试难度高。
 - 跨进程 trace 必不可少。
-- Python 3.12 迁移会触碰实体对象生命周期和脚本回调边界。
+- 脚本对象生命周期和 C++ Entity 生命周期紧耦合，析构、回调许可和迁移流必须一起验证。
+- Channel version、buffered messages、zombie ghost 处理都增加了消息顺序复杂度。
 
-## 现代方案对比
+## 源码验证重点
 
-<div class="decision-table">
+实体生命周期测试应围绕状态转换和跨进程序列：
 
-| 问题 | BigWorld | 现代常见方案 | 判断 |
-| --- | --- | --- | --- |
-| 空间权威 | Cell real entity | zone actor / shard actor | BigWorld 模型仍优秀 |
-| 跨边界可见 | Ghost/Witness | interest management replica | 原理一致 |
-| 迁移 | offload/onload stream | actor migration / snapshot transfer | 需增强测试和版本兼容 |
-| 生命周期 | 隐式状态 + 方法调用 | 显式 state machine | 文档和断言应补强 |
-| 脚本回调 | callbacksPermitted | lifecycle hooks with guard | 思路正确但需类型化 |
-| 容灾残留 | zombie ghost 处理 | lease/fencing/generation | 可引入 generation/epoch 概念 |
-
-</div>
-
-## 现代化建议
-
-1. 把 Entity 生命周期状态显式文档化，并在关键路径增加状态断言。
-2. 为 offload/onload 流建立 golden tests，覆盖 EntityDef 变化。
-3. 给实体迁移增加 trace id，贯穿源 CellApp、目标 CellApp、BaseApp 和客户端通知。
-4. 对 destroy/onDestroy 重入建立测试。
-5. 对 zombie ghost 和 restore 场景建立专项故障注入测试。
-6. Python 3.12 迁移前冻结 Entity lifecycle 回归集，防止对象析构和回调行为变化。
-7. 长期可以引入 generation/epoch，降低旧消息污染新状态的风险。
+- Base 创建、Cell 创建、real entity 创建和客户端 player 创建顺序必须一致。
+- `callbacksPermitted` 为 false 时不应触发脚本生命周期回调。
+- destroy 期间再次触发 destroy 或脚本回调时不能破坏状态机。
+- offload/onload 流字段顺序必须和 EntityDef、backup、ghost 数据保持兼容。
+- real/ghost 切换期间的 `ghostSetReal`、`ghostSetNextReal` 和 buffered messages 应按 channel version 过滤旧消息。
+- zombie ghost 和 restore 场景应覆盖源 CellApp 死亡、目标 real 不存在、BaseApp 通知失败等路径。
+- Witness 未 flush、Cell destroy pending、Base mailbox 更新失败都应有回归用例。
 
 ## 本章边界
 

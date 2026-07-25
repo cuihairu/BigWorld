@@ -2,7 +2,7 @@
 
 <div class="arch-hero">
 
-这是后续重写 `docs/` 的完整地图。所有专题都按“源码事实 -> 调用链 -> 历史取舍 -> 现代对比 -> 改造建议”的结构展开。
+这是后续重写 `docs/` 的完整地图。所有专题都按“源码事实 -> 调用链 -> 源码取舍 -> 验证重点 -> 本章边界”的结构展开。
 
 </div>
 
@@ -36,15 +36,14 @@
 20. [动态扩展、控制面与容量治理](/architecture/scaling-fault-tolerance)
 21. [Reviver、machined 与故障恢复边界](/architecture/machined-control-plane)
 
-## 第四组：工程质量与现代化
+## 第四组：工程质量与源码边界
 
 22. [测试体系、故障注入与覆盖边界](/architecture/testing-fault-injection-coverage)
 23. [安全、限流、加密与攻击面](/architecture/security-rate-limit)
 24. [Watcher、Profiler、日志与可观测性](/architecture/observability-watcher-profiler-logs)
 25. [内存、对象生命周期与资源管理](/architecture/memory-lifecycle)
 26. [构建、平台与依赖治理](/architecture/build-platform-dependencies)
-27. [当时方案与现代 MMO 架构对比](/architecture/modern-mmo-comparison)
-28. [Python 3.12 迁移路线](/migration/python-3-12)
+27. [MMO 架构边界对比](/architecture/modern-mmo-comparison)
 
 ## 已明确要覆盖的问题
 
@@ -55,7 +54,7 @@
   </div>
   <div class="decision-card">
     <h3>线程模型</h3>
-    <p>单 Reactor 主线程、后台任务、BaseApp WorkerThread、Python GIL、现代 actor/job system 对比。</p>
+    <p>单 Reactor 主线程、后台任务、BaseApp WorkerThread、Python GIL、actor-like mailbox 与实体调度边界。</p>
   </div>
   <div class="decision-card">
     <h3>热更新</h3>
@@ -63,7 +62,7 @@
   </div>
   <div class="decision-card">
     <h3>测试与时间</h3>
-    <p>unit_test、网络故障注入、Timer 驱动、GameTime、虚拟时钟缺口和现代仿真测试对比。</p>
+    <p>unit_test、网络故障注入、Timer 驱动、GameTime、虚拟时钟缺口和可重复测试边界。</p>
   </div>
   <div class="decision-card">
     <h3>登录与会话</h3>
@@ -75,11 +74,11 @@
   </div>
   <div class="decision-card">
     <h3>通信与序列化</h3>
-    <p>Mercury Interface、Bundle、BinaryStream、DataType、EntityDescription、协议兼容与现代 IDL 对比。</p>
+    <p>Mercury Interface、Bundle、BinaryStream、DataType、EntityDescription、协议兼容与 EntityDef 契约。</p>
   </div>
   <div class="decision-card">
     <h3>动态扩展</h3>
-    <p>Manager 接纳新 App、Cell 负载均衡、实体迁移、Reviver 恢复、与云原生扩缩容对比。</p>
+    <p>Manager 接纳新 App、Cell 负载均衡、实体迁移、Reviver 恢复和状态迁移边界。</p>
   </div>
 </div>
 
@@ -91,10 +90,9 @@
 - 关键调用链
 - 线程/进程归属
 - 数据结构或状态机
-- 当时平台约束
-- 当时可选方案
-- 现代替代方案
-- 改造优先级
-- 风险与验证方式
+- 源码取舍
+- 源码边界
+- 验证重点
+- 本章边界
 
 如果某项在源码中不存在，文档必须明确写“不存在或未确认”，并解释可能原因，而不是等读者指出后再补。

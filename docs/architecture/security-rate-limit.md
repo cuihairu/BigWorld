@@ -2,20 +2,24 @@
 
 <div class="arch-hero">
 
-BigWorld 的安全模型不是现代零信任、服务网格或全链路 TLS 模型。它更像传统 MMO 引擎的分层防线：外部入口过滤、按地址限流、按客户端消息预算缓冲、Mercury Channel 加密、登录/初连特殊处理，以及依赖部署拓扑隔离内部组件。
+BigWorld 的安全相关逻辑分布在网络入口、登录流程、Proxy 消息预算、Mercury Channel 加密、EntityDef 暴露方法和管理工具链里。源码分析这部分时，必须按组件边界拆开看，不能只看玩家 UDP 包入口。
 
 </div>
 
 ## 先给结论
 
-BigWorld 源码里能看到明确的安全与抗滥用设计，但它不是完整现代安全平台：
+BigWorld 源码里能看到明确的安全与抗滥用设计：
 
 - `NetworkInterface` 提供 per-IP 和 per-IP:port rate limit。
 - `PacketReceiver` 在进入 Mercury 解析前先执行地址限流。
 - `BaseApp` 有按 tick 的客户端消息限速与缓冲回放机制。
 - `InitialConnectionFilter` 对 BaseApp 外部接口的初连包做形状校验，只允许预期登录请求。
+- `LoginApp` 登录入口有独立防线：登录开关、IP ban、协议版本、pending/cache 重试、登录速率、DB ready、系统过载、challenge、消息长度和登录参数解码。
+- `LoginChallenge` 支持 `delay`、`fail`、`cuckoo_cycle`，其中 `cuckoo_cycle` 是登录抗滥用 proof-of-work，不是账号鉴权本身。
 - `Channel::setEncryption()` 提供加密抽象，`UDPChannel` 会挂载 `EncryptionFilter`。
 - `EncryptionFilter` 使用 BlockCipher，对包体加密并通过 magic 校验解密结果。
+- 客户端调用服务端实体方法不是任意 RPC，只能落到 `.def` 暴露出的 Base/Cell exposed method range，并且 `OWN_CLIENT` 有 source entity 校验。
+- Watcher、probe、Message Logger 等管理面能力也属于安全边界，不能只分析玩家 UDP 入口。
 
 关键源码：
 
@@ -23,6 +27,10 @@ BigWorld 源码里能看到明确的安全与抗滥用设计，但它不是完�
 - `PacketReceiver::processPacket()` 首先调用限流检查，见 [packet_receiver.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/packet_receiver.cpp:434)。
 - BaseApp 消息限速入口在 [rate_limit_message_filter.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/baseapp/rate_limit_message_filter.cpp:174)。
 - 初始连接过滤在 [initial_connection_filter.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/baseapp/initial_connection_filter.cpp:23)。
+- LoginApp 配置项在 [loginapp_config.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/loginapp/loginapp_config.cpp:17)。
+- LoginApp 登录主流程在 [loginapp.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/loginapp/loginapp.cpp:709)。
+- LoginChallenge 处理在 [loginapp.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/loginapp/loginapp.cpp:1035)。
+- Exposed 方法入口在 [proxy.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/baseapp/proxy.cpp:2491) 和 [entity.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity.cpp:5399)。
 - Channel 加密抽象在 [channel.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/channel.hpp:107)。
 - UDP Channel 挂载加密 filter 在 [udp_channel.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/udp_channel.cpp:650)。
 - 加密 filter 实现在 [encryption_filter.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/encryption_filter.cpp:51)。
@@ -34,21 +42,27 @@ flowchart TD
   A[External UDP Packet] --> B[NetworkInterface rate limit]
   B --> C{rate limited?}
   C -- yes --> D[drop before channel dispatch]
-  C -- no --> E[find UDPChannel]
-  E --> F{PacketFilter?}
-  F -- encryption --> G[decrypt and validate magic]
-  F -- initial connection --> H[allow only baseAppLogin shape]
-  G --> I[Mercury message dispatch]
-  H --> I
-  I --> J[BaseApp RateLimitMessageFilter]
-  J --> K{per tick budget}
-  K -- enough --> L[dispatch now]
-  K -- exceeded --> M[buffer or drop]
+  C -- no --> E{external entry}
+  E -- LoginApp --> L0[allowLogin / IP ban / protocol]
+  L0 --> L1[loginRateLimit / DB ready / overload]
+  L1 --> L2[LoginChallenge / LogOnParams decode / length]
+  L2 --> L3[DBApp logOn]
+  E -- BaseApp --> F[find UDPChannel]
+  F --> G{PacketFilter?}
+  G -- encryption --> H[decrypt and validate magic]
+  G -- initial connection --> I[allow only baseAppLogin shape]
+  H --> J[Mercury message dispatch]
+  I --> J
+  J --> K[BaseApp RateLimitMessageFilter]
+  K --> M{per tick budget}
+  M -- enough --> N[dispatch now]
+  M -- exceeded --> O[buffer or drop]
 </MermaidDiagram>
 
 这个分层很符合 MMO 服务器的现实需求：
 
 - 在最早入口丢掉明显异常或超频来源。
+- LoginApp 在账号验证前先做协议、限流、challenge 和消息大小约束。
 - 在 Channel 层处理加密/解密、握手后的通信。
 - 在业务入口控制客户端每 tick 可执行消息量，避免单个客户端拖垮 BaseApp。
 - 对初始连接做更严格过滤，因为初连阶段还没有稳定 Channel 上下文。
@@ -146,6 +160,143 @@ BaseApp 外部接口在还没有完整 Channel 状态前，最容易被噪声和
 - 降低畸形包进入更深层解析的机会。
 - 这类过滤对于 UDP 协议尤其重要，因为 UDP 没有 TCP 握手天然屏障。
 
+## LoginApp 登录入口安全链路
+
+LoginApp 的入口不是“收到用户名密码后直接查库”。`LoginAppConfig` 定义了一组专门用于登录入口的安全开关和限制：
+
+- `allowLogin`：总登录开关。
+- `allowProbe` / `logProbes`：探测消息开关和日志。
+- `allowUnencryptedLogins`：是否允许登录参数明文回退。
+- `maxRepliesOnFailPerSecond`：失败回复速率。
+- `loginRateLimit` / `rateLimitDuration`：全局登录速率窗口。
+- `ipAddressRateLimit` / `ipAddressPortRateLimit`：外部接口地址级限流。
+- `maxUsernameLength` / `maxPasswordLength` / `maxLoginMessageSize`：登录参数尺寸边界。
+- `passwordlessLoginsOnly`：只允许无密码登录。
+- `challengeType`：登录 challenge 类型。
+
+源码见 [loginapp_config.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/loginapp/loginapp_config.cpp:17)。
+
+`LoginApp::init()` 会把这些配置接到实际运行时：
+
+- 生产模式下如果启用 `allowProbe`，会报配置错误，见 [loginapp.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/loginapp/loginapp.cpp:301)。
+- 外部接口设置人工延迟、丢包和 `maxExternalSocketProcessingTime`，见 [loginapp.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/loginapp/loginapp.cpp:308)。
+- 外部接口设置 `rateLimitPeriod`、`perIPAddressRateLimit`、`perIPAddressPortRateLimit`，见 [loginapp.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/loginapp/loginapp.cpp:333)。
+- challenge factory 从配置初始化，并校验 `challengeType` 是否存在，见 [loginapp.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/loginapp/loginapp.cpp:340)。
+- `challengeType` 被暴露为 watcher，可运行时观察或修改，见 [loginapp.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/loginapp/loginapp.cpp:356)。
+
+`LoginApp::login()` 的实际顺序更能说明安全边界：
+
+1. 如果 `allowLogin` 为 false，直接拒绝，见 [loginapp.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/loginapp/loginapp.cpp:709)。
+2. 检查 IP ban，并周期清理过期 ban，见 [loginapp.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/loginapp/loginapp.cpp:725)。
+3. 拒绝 `source.ip == 0` 的伪造空地址，见 [loginapp.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/loginapp/loginapp.cpp:766)。
+4. 读取并校验 `ClientServerProtocolVersion`，协议不兼容返回 `LOGIN_BAD_PROTOCOL_VERSION`，见 [loginapp.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/loginapp/loginapp.cpp:784)。
+5. 优先处理 pending 重试，避免 UDP 重发导致重复登录流程，见 [loginapp.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/loginapp/loginapp.cpp:823)。
+6. 检查 `loginRateLimit` 全局预算，耗尽则返回 `LOGIN_REJECTED_RATE_LIMITED`，见 [loginapp.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/loginapp/loginapp.cpp:833)。
+7. 检查 DB 是否 ready，以及系统是否处于 overload 状态，见 [loginapp.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/loginapp/loginapp.cpp:850)。
+8. 如果配置了 challenge，先进入 `processForLoginChallenge()`，见 [loginapp.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/loginapp/loginapp.cpp:884)。
+9. 检查剩余登录消息长度是否超过 `maxLoginMessageSize`，见 [loginapp.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/loginapp/loginapp.cpp:893)。
+10. 使用 `pLogOnParamsEncoder_` 解 `LogOnParams`，并校验用户名/密码长度，见 [loginapp.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/loginapp/loginapp.cpp:909)。
+11. 处理 resolved cached attempt，避免成功回复丢失后重复创建会话，见 [loginapp.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/loginapp/loginapp.cpp:961)。
+12. 成功解码后才扣减登录限速预算，见 [loginapp.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/loginapp/loginapp.cpp:969)。
+13. 如果没有 `encryptionKey` 且不允许明文登录，拒绝，见 [loginapp.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/loginapp/loginapp.cpp:976)。
+14. 如果 `passwordlessLoginsOnly` 开启但请求仍携带 password，拒绝，见 [loginapp.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/loginapp/loginapp.cpp:990)。
+15. 通过 `DBAppInterface::logOn` 把登录请求交给 DBApp，见 [loginapp.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/loginapp/loginapp.cpp:1020)。
+
+这里有两个容易误判的点：
+
+- `loginRateLimit` 不是包级限流，包级限流在 `NetworkInterface`。`loginRateLimit` 是 LoginApp 在登录语义上的全局预算。
+- 限速扣减发生在成功解码 `LogOnParams` 之后，源码注释明确这是因为已经完成了解密登录参数的重活，见 [loginapp.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/loginapp/loginapp.cpp:969)。
+
+失败回复也被节流。`handleFailure()` 每 0.5 秒重置 `numFailRepliesLeft_`，预算来自 `maxRepliesOnFailPerSecond / 2`，见 [loginapp.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/loginapp/loginapp.cpp:607)。这避免攻击者用大量失败登录诱导 LoginApp 放大发包。
+
+## LoginChallenge 与 proof-of-work
+
+`LoginChallenge` 是登录入口前的可插拔挑战机制。抽象接口只有四个动作：
+
+- `writeChallengeToStream()`：服务端写 challenge 数据。
+- `readChallengeFromStream()`：客户端读 challenge 数据。
+- `writeResponseToStream()`：客户端写 response。
+- `readResponseFromStream()`：服务端验证 response。
+
+源码见 [login_challenge.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/connection/login_challenge.hpp:25)。
+
+默认 challenge 类型由 `LoginChallengeFactories::registerDefaultFactories()` 注册：
+
+- `delay`
+- `fail`
+- `cuckoo_cycle`
+
+源码见 [login_challenge_factory.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/connection/login_challenge_factory.cpp:265)。
+
+`processForLoginChallenge()` 的行为是：
+
+- 如果同一来源已有 challenge 且失败过，返回 `LOGIN_REJECTED_CHALLENGE_ERROR`。
+- 如果已有 pending challenge，重复发送同一个 challenge，而不是新建。
+- 如果 `challengeType` 为空，跳过 challenge。
+- 如果 challenge factory 创建失败，拒绝登录。
+- 新建 challenge 后保存到 `loginRequests_[source]`，再把 challenge 回复给客户端。
+
+源码见 [loginapp.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/loginapp/loginapp.cpp:1035)。
+
+`cuckoo_cycle` 的源码更具体：
+
+- 构造 challenge 时用 `RAND_bytes` 生成随机 prefix，见 [cuckoo_cycle_login_challenge_factory.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/connection/cuckoo_cycle_login_challenge_factory.cpp:350)。
+- challenge 数据是 `prefix_` 和 `maxNonce_`，见 [cuckoo_cycle_login_challenge_factory.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/connection/cuckoo_cycle_login_challenge_factory.cpp:372)。
+- 客户端循环寻找 proof，源码 TODO 明确还没有最大时间或迭代限制，见 [cuckoo_cycle_login_challenge_factory.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/connection/cuckoo_cycle_login_challenge_factory.cpp:415)。
+- 服务端验证 key 必须以前缀开头，剩余数据长度必须等于 `PROOFSIZE * sizeof(nonce_t)`，再调用 `Cuckoo::verify()`，见 [cuckoo_cycle_login_challenge_factory.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/connection/cuckoo_cycle_login_challenge_factory.cpp:451)。
+- `easiness` 配置必须在 `(0, 100]`，见 [cuckoo_cycle_login_challenge_factory.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/connection/cuckoo_cycle_login_challenge_factory.cpp:520)。
+
+客户端收到 challenge 后会创建 `LoginChallengeTask`。有 `TaskManager` 时放后台计算，否则在当前线程直接计算，见 [login_handler.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/connection/login_handler.cpp:339)。`LoginChallengeTask::perform()` 只调用 `writeResponseToStream()` 并记录耗时，见 [login_challenge_task.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/connection/login_challenge_task.cpp:39)。
+
+设计含义：
+
+- 这是一种登录入口抗滥用机制，目的是让客户端付出计算成本。
+- 它不替代账号密码校验，最终账号逻辑仍在 DBApp 登录链路。
+- `challengeType` 是运行时 watcher 暴露项，管理面写权限如果失控，可以改变登录入口行为。
+- 客户端 proof 计算缺少最大耗时/迭代限制，调用侧不能假设该计算一定很快返回。
+
+## 登录加密与明文回退边界
+
+LoginApp 登录参数使用 `StreamEncoder` 解码。初始化时读取 `loginApp/privateKey`，创建 `RSAStreamEncoder`，见 [loginapp.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/loginapp/loginapp.cpp:519)。
+
+关键边界在 `allowUnencryptedLogins`：
+
+- 如果允许明文登录，私钥加载失败不会让 LoginApp 初始化失败，见 [loginapp.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/loginapp/loginapp.cpp:521)。
+- 登录参数解码失败时，如果当前用了 encoder 且允许明文登录，会把 `pEncoder` 置空后再读一次，见 [loginapp.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/loginapp/loginapp.cpp:939)。
+- 如果最终参数里没有 `encryptionKey` 且不允许明文登录，会拒绝请求，见 [loginapp.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/loginapp/loginapp.cpp:976)。
+
+所以 `allowUnencryptedLogins` 不是一个普通兼容选项，而是高风险安全开关。它同时影响：
+
+- 私钥缺失时 LoginApp 是否还能启动。
+- 登录参数解析是否允许从加密回退到明文。
+- 客户端是否必须提供后续 Channel 加密 key。
+
+这也解释了为什么只看 `EncryptionFilter` 不够。登录阶段的安全链路还包括 RSA 登录参数、是否允许明文、登录返回里的 session key、客户端再到 BaseApp 的二次 attach。完整会话接管流程见 [登录、会话与 Proxy 接管](/architecture/login-session-proxy-flow)。
+
+## Exposed 方法不是任意 RPC
+
+客户端进入 BaseApp 后，上行外部协议定义在 `BaseAppExtInterface`。它包含 `baseAppLogin`、`authenticate`、移动同步、`requestEntityUpdate`、`enableEntities`、`disconnectClient` 以及 Base/Cell exposed method ranges，源码见 [baseapp_ext_interface.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/connection/baseapp_ext_interface.hpp:26)。
+
+安全边界不在“客户端能发消息”这件事本身，而在消息号如何被映射：
+
+- Base 实体方法走 `Proxy::baseEntityMethod()`。
+- Cell 实体方法走 `Proxy::cellEntityMethod()`，再转发到 `CellAppInterface::runExposedMethod`。
+- message id 必须落在 `BaseAppExtInterface::Range::baseEntityMethodRange` 或 `cellEntityMethodRange`。
+- 方法描述来自 EntityDef 解析出的 exposed method 表。
+
+`Proxy::baseEntityMethod()` 会用 `entityDesc.base().exposedMethodFromMsgID()` 查找方法。找不到就报错并返回，普通调用失败时日志包含 `CHEAT` 字样，见 [proxy.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/baseapp/proxy.cpp:2536)。
+
+`Proxy::cellEntityMethod()` 会读取目标 `EntityID`，如果为 0 则替换为自己的 proxy entity id，然后写入目标 entity id、消息 id 和 source proxy id，转发到 CellApp，见 [proxy.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/baseapp/proxy.cpp:2491)。
+
+CellApp 侧 `Entity::runExposedMethod()` 会读取 method id，再调用 `runMethodHelper(..., isExposed=true)`，见 [entity.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity.cpp:5399)。如果方法声明为 `OWN_CLIENT`，`runMethodHelper()` 会校验 source id 必须等于目标 entity id，不匹配则 block，见 [entity.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity.cpp:5440)。
+
+结论：
+
+- BigWorld exposed method 是 EntityDef 驱动的受限 RPC，不是客户端任意调用服务端 Python 函数。
+- `.def` 里的 `Exposed` 标记就是攻击面声明，安全审计必须逐个看参数类型、调用频率、权限语义和服务端二次校验。
+- `OWN_CLIENT` 解决的是“只能自己的客户端调用”这一类边界，不等于所有业务权限校验。
+- RateLimitMessageFilter 只能限制消息数量和字节，不能替代 exposed method 内部的业务鉴权。
+
 ## Channel 加密模型
 
 `Channel` 把加密定义为抽象能力：
@@ -186,70 +337,71 @@ virtual void setEncryption( Mercury::BlockCipherPtr pBlockCipher ) = 0;
 
 源码见 [encryption_filter.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/encryption_filter.cpp:119)。
 
-## 这不是现代 TLS
+## PacketFilter 的安全边界
 
-源码能证明 BigWorld 有加密 filter，但不能把它等同于现代 TLS/QUIC 安全模型。
+源码能证明 BigWorld 有加密 filter，但不能把它等同于完整传输层安全协议。
 
 需要区分：
 
 - PacketFilter 加密保护的是 Mercury Channel 包体。
-- TLS 同时包含证书、握手、密钥协商、完整性、重放防护、版本协商和大量安全工程细节。
 - BigWorld 的内部组件通信很大程度上依赖可信网络拓扑。
-- 现代公网入口还需要 DDoS 清洗、WAF/网关、bot 风控、账号风控和审计链路。
+- LoginApp challenge 是登录入口抗滥用逻辑，不等于所有 Mercury 内部 RPC 都有认证授权。
+- Watcher、probe、Message Logger 属于管理面或工具链入口，安全边界不在 PacketFilter 内。
 
-所以现代化时不能只问“有没有加密”，要问：
+所以源码分析时不能只问“有没有加密”，要继续追问：
 
 - 密钥从哪里来？
-- 握手是否防中间人？
+- 握手和 channel 绑定在哪一层完成？
 - 是否有认证绑定？
 - 是否防重放？
 - 内部 RPC 是否有认证和授权？
 - Watcher/管理接口是否暴露在不可信网络？
 
-## 当时为什么这样选
+## 管理面也是攻击面
 
-高置信工程判断：
+BigWorld 的安全分析不能只盯玩家客户端。源码里有多类管理面入口：
 
-- MMO 服务端常部署在受控机房内，内部组件默认在可信网络。
-- 客户端外部入口是最主要攻击面，所以 BaseApp/LoginApp 侧防线更明显。
-- UDP 游戏协议需要轻量加密，直接套 TLS 在当时成本和可用性都不理想。
-- 业务消息按 tick 限速比普通 HTTP QPS 限流更适合游戏服务器。
-- PacketFilter 机制能在不改变 Mercury 主协议的情况下接入加密或过滤逻辑，符合 KISS。
+- Watcher 支持远程 GET/SET/TELL，且可以通过 `ForwardingWatcher` 转发到 BaseApp、CellApp、ServiceApp 集合。
+- LoginApp 的 `challengeType` 被注册成 watcher，意味着管理面可以改变登录 challenge 行为。
+- LoginApp `probe` 能返回主机名和进程 owner 信息，生产模式启用 `allowProbe` 会报配置错误。
+- Message Logger 可以接收进程日志、重连、过滤和写入后端，如果暴露不当会泄露内部拓扑、账号名、错误堆栈和运行状态。
 
-代价：
+相关源码：
 
-- 安全能力分散在网络、BaseApp、LoginApp、部署约定里，不是统一策略平面。
-- 管理接口和 Watcher 如果暴露不当，风险很高。
-- 加密算法、密钥交换、依赖库版本都需要现代审计。
-- 只靠 IP 限流对 NAT、代理、云网络和大规模攻击都不够。
+- Watcher 网络协议支持 SET，见 [watcher_nub.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/watcher_nub.hpp:43)。
+- `ForwardingWatcher` 支持 `all/command/...`、`leastLoaded/command/...` 这类转发路径，见 [watcher_forwarding.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/server/watcher_forwarding.cpp:64)。
+- LoginApp 注册 `challengeType` watcher，见 [loginapp.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/loginapp/loginapp.cpp:356)。
+- `allowProbe` 的生产模式检查在 [loginapp.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/loginapp/loginapp.cpp:301)，probe 回复内容在 [loginapp.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/loginapp/loginapp.cpp:1131)。
 
-## 现代方案对比
+管理面风险的本质是：Watcher 不是只读指标协议，probe 不是业务登录协议，Message Logger 也不是普通 stdout。它们都应放在独立管理网络，并按“只读观测”和“可写控制”拆权限。
 
-<div class="decision-table">
+## 源码取舍
 
-| 维度 | BigWorld 方案 | 现代常见方案 | 判断 |
-| --- | --- | --- | --- |
-| 包入口限流 | per-IP / per-IP:port | 网关限流、eBPF、DDoS 清洗 | 保留进程内限流，但前置网络防线 |
-| 客户端消息预算 | 每 tick 消息/字节预算 | actor mailbox quota、令牌桶、动作冷却 | BigWorld 思路仍然正确 |
-| UDP 加密 | PacketFilter + BlockCipher | DTLS、QUIC、Noise、自研握手 | 需审计密钥协商和完整性 |
-| 初连过滤 | baseAppLogin 白名单 | gateway handshake、challenge、bot 风控 | 白名单思想可保留 |
-| 内部通信安全 | 默认可信网络 | mTLS、ACL、service identity | 现代部署必须补认证授权 |
-| 管理面 | Watcher/工具协议 | RBAC、审计、只读指标导出 | Watcher 写能力需严格隔离 |
+安全能力在源码里是分层分布的，不是一个统一策略平面：
 
-</div>
+- `NetworkInterface` 和 filters 先处理包入口、初连包形状、channel 加密和限流。
+- LoginApp 处理协议版本、登录参数大小、加密登录要求、challenge、pending login 和 DBApp 转发。
+- BaseApp 的客户端消息预算按 tick 控制 Proxy 输入，避免单个客户端持续占用主循环。
+- EntityDef 把 exposed 方法范围和 `OWN_CLIENT` 语义编进协议契约。
+- Watcher、probe、Message Logger 形成管理面入口，需要按独立攻击面分析。
 
-## 现代化建议
+这套分层和 BigWorld 的进程模型匹配：外部登录、长期会话、实体 RPC、内部工具链分别在不同组件里处理。代价是安全判断必须跨 `NetworkInterface`、LoginApp、BaseApp、EntityDef 和工具协议一起看，不能只检查某个入口。
 
-优先级建议：
+## 源码验证重点
 
-1. 盘点所有外部 interface、Watcher 端口、工具端口和管理命令。
-2. 把 Watcher 写能力和高危管理命令默认限制在管理网段。
-3. 给 `NetworkInterface` 限流命中、BaseApp 消息缓冲、丢弃原因增加指标。
-4. 对加密算法、密钥交换、OpenSSL 版本做专项审计。
-5. 如果保留 Mercury UDP，优先补 challenge/握手和重放防护，再考虑替换 I/O 后端。
-6. 将公网入口前置到专用 gateway，BigWorld 内部进程只暴露必要端口。
-7. 对客户端消息建立 schema 级校验和 fuzz 测试，尤其是 BinaryStream 反序列化边界。
+安全章节对应的测试不应只做“正常登录成功”：
+
+- `allowLogin=false` 时登录必须拒绝，且不进入 DBApp `logOn`。
+- 协议版本不兼容时返回 `LOGIN_BAD_PROTOCOL_VERSION`。
+- 超过 `maxLoginMessageSize`、`maxUsernameLength`、`maxPasswordLength` 时返回 malformed request。
+- `allowUnencryptedLogins=false` 且缺少 `encryptionKey` 时必须拒绝。
+- 开启 `challengeType=cuckoo_cycle` 后，错误 prefix、错误 proof 长度、`Cuckoo::verify()` 失败都必须拒绝。
+- 重复 pending login 应复用 pending/challenge 状态，不能重复创建 Proxy。
+- BaseApp 初连包不是 `baseAppLogin` 形状时应被 `InitialConnectionFilter` 丢弃。
+- 非 exposed message id 不能调用 Base/Cell 实体方法。
+- `OWN_CLIENT` 方法从其他 source proxy id 调用时必须被 block。
+- Watcher SET、ForwardingWatcher command、LoginApp probe 和 Message Logger 连接必须只在受控管理网络可达。
 
 ## 本章边界
 
-本章只分析安全、限流和加密。下一章分析 Watcher、Profiler 和日志：这些设施是理解 BigWorld 运行时状态的关键，但它们本身也会影响安全边界。
+本章只分析安全、限流、登录入口和加密边界。Watcher、Profiler 和日志的完整机制在下一章展开；这里明确它们属于管理面攻击面，是为了避免把“可观测性”误认为天然安全。
