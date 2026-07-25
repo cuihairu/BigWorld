@@ -1,6 +1,6 @@
 # 从源码构建
 
-<div class="arch-hero>
+<div class="arch-hero">
 
 本文档详细说明如何从源码构建 BigWorld 的各个组件。
 
