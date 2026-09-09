@@ -30,7 +30,20 @@ cxxSource =						\
 	test_static_array			\
 	test_string_utils			\
 	test_stringmap				\
-	test_time_queue
+	test_time_queue				\
+	test_arg_parser				\
+	test_base64					\
+	test_blob_or_null			\
+	test_bw_platform_info		\
+	test_string_builder			\
+	test_bwrandom				\
+	test_bwversion				\
+	test_cpuinfo				\
+	test_grow_only_pod_allocator \
+	test_string_utils_extra		\
+	test_timestamp				\
+	test_unique_id				\
+	test_watcher
 
 dependsOn += cstdmf
 

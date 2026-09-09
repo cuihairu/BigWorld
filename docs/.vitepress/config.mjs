@@ -120,7 +120,7 @@ export default {
             { text: "总体画像", link: "/analysis/overview" },
             { text: "目录与模块", link: "/analysis/modules" },
             { text: "构建与运行体系", link: "/analysis/build-and-runtime" },
-            { text: "技术债与风险", link: "/analysis/risks" },
+            { text: "源码风险边界", link: "/analysis/risks" },
             { text: "源码导读", link: "/analysis/source-code-guide" }
           ]
         }

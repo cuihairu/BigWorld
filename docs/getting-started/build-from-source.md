@@ -2,252 +2,180 @@
 
 <div class="arch-hero">
 
-本文档详细说明如何从源码构建 BigWorld 的各个组件。
+本文按当前仓库中的 Makefile、CMakeLists 和 Dockerfile 说明 BigWorld 的构建入口。重点是明确真实源码边界，而不是把旧工程改写成现代通用构建流程。
 
 </div>
 
 ## 构建系统概览
 
-BigWorld 使用混合构建系统：
+BigWorld 保留了多条构建链：
 
-| 组件 | 构建系统 | 入口文件 |
-|------|----------|----------|
-| 服务器 | Make + CMake | `programming/Makefile` |
-| 客户端 | CMake | `programming/bigworld/CMakeLists.txt` |
-| 工具 | CMake | `programming/bigworld/CMakeLists.txt` |
-| Docker | Dockerfile | `build/docker/Dockerfile` |
+| 构建链 | 入口文件 | 主要目标 |
+|---|---|---|
+| Linux Make | `programming/Makefile` -> `programming/bigworld/build/make/Makefile` | 服务端组件、服务端工具、单元测试和部分第三方库 |
+| Docker | `programming/bigworld/build/docker/Dockerfile` | 固定 CentOS 7 构建环境 |
+| CMake | `programming/bigworld/CMakeLists.txt` | Windows 工程和 remote server 生成路径 |
+| Windows 脚本 | `programming/bigworld/build/*.bat` | Windows 工程生成辅助 |
 
-## Linux 服务器构建
+Linux 服务端源码分析应优先看 Make 链；客户端、工具和 Windows 工程再看 CMake 链。
 
-### 环境准备
+## Linux 服务端构建
 
-```bash
-# CentOS 7
-sudo yum groupinstall -y "Development Tools"
-sudo yum install -y \
-    cmake3 \
-    python-devel \
-    openssl-devel \
-    mariadb-devel \
-    sqlite-devel \
-    readline-devel \
-    gdbm-devel \
-    bzip2-devel
+### 依赖基线
 
-# Ubuntu 22.04
-sudo apt-get update
-sudo apt-get install -y \
-    build-essential \
-    cmake \
-    python3-dev \
-    libssl-dev \
-    libmysqlclient-dev \
-    libsqlite3-dev \
-    libreadline-dev
+Dockerfile 使用 `centos:7`，并安装以下关键依赖：
+
+```text
+make
+gcc
+gcc-c++
+rpm-build
+mariadb-devel
+python-devel
+sqlite-devel
+readline-devel
+gdbm-devel
+bzip2-devel
+ncurses-devel
+binutils-devel
 ```
 
-### 构建步骤
+这说明当前服务端构建依赖的是旧式系统包和内置第三方库组合。不要直接假设现代发行版包名、编译器或 Python 版本可以无差异替换。
 
-```bash
-# 进入项目根目录
-cd programming
+### 构建命令
 
-# 查看可用目标
-make help
+从仓库根目录执行：
 
-# 构建所有服务器组件
-make -C build/make server
-
-# 构建特定组件
-make -C build/make baseapp
-make -C build/make cellapp
-make -C build/make dbapp
-make -C build/make loginapp
+```sh
+make -C programming
 ```
 
-### 构建产物
+Dockerfile 注释里的示例命令：
 
-构建产物位于：
-
-```
-game/bin/server/
-├── linux64/
-│   ├── baseapp
-│   ├── cellapp
-│   ├── dbapp
-│   ├── loginapp
-│   ├── baseappmgr
-│   ├── cellappmgr
-│   ├── dbappmgr
-│   └── bwmachined
-└── linux64_debug/
-    └── ... (调试版本)
+```sh
+make -s -j64 -rR -C programming
 ```
 
-### CMake 构建 (推荐)
+`-j64` 只是示例，应按实际机器 CPU、内存和第三方库构建稳定性调整。
 
-```bash
-# 进入项目目录
-cd programming/bigworld
+### 常用目标
 
-# 配置
-cmake -B build \
-    -DCMAKE_BUILD_TYPE=Release \
-    -DCMAKE_INSTALL_PREFIX=/opt/bigworld
+顶层 Makefile 注释中定义了几个主目标：
 
-# 编译
-cmake --build build -j$(nproc)
+| 目标 | 说明 |
+|---|---|
+| `all` | 构建源码组件 |
+| `everything` | 构建更多非源码产物，例如 RPM |
+| `clean` | 清理中间文件 |
+| `bw-run-all-unit-tests` | 运行全部单元测试 |
+| `bw-run-unit-tests` | 运行单元测试，失败时尽早停止 |
 
-# 安装
-cmake --install build
-```
+如果要定位某个服务端组件，可继续查对应目录下的 `Makefile.rules`。
 
-## Windows 客户端构建
+## 输出目录
 
-### 环境准备
+Makefile 中的输出路径由 `BW_BUILD_PLATFORM`、`BW_CONFIG` 和相关变量拼出。
 
-1. 安装 Visual Studio 2022
-2. 安装 CMake 3.20+
-3. 安装 Python 3.10+
-4. 安装 OpenSSL (vcpkg 或手动)
+| 类型 | 变量 | 路径形式 |
+|---|---|---|
+| 服务端二进制 | `BW_SERVER_BIN_DIR` | `bin/server/<platform_config>/server` |
+| 服务端工具 | `BW_SERVER_TOOLS_BIN_DIR` | `bin/server/<platform_config>/tools` |
+| 单元测试 | `BW_UNIT_TEST_DIR` | `bin/server/<platform_config>/unit_tests` |
+| 第三方产物 | `BW_THIRD_PARTY_INSTALL_DIR` | `bin/server/<host_platform_config>/third_party` |
 
-### 构建步骤
-
-```powershell
-# 进入项目目录
-cd programming\bigworld
-
-# 生成 Visual Studio 项目
-cmake -G "Visual Studio 17 2022" -A x64 -B build
-
-# 编译
-cmake --build build --config Release
-
-# 或者直接打开 Visual Studio
-start build\BigWorld.sln
-```
-
-### 构建产物
-
-```
-game\bin\client\
-├── bigworld.exe
-├── bigworld.pdb
-└── *.dll
-```
+在默认安装目录下，产物位于 `game/` 树中。Dockerfile 注释中也指出 Make 输出通常进入 `game/bin/server/el7/`。
 
 ## Docker 构建
 
-### Dockerfile
+Dockerfile 位于：
 
-```dockerfile
-FROM ubuntu:22.04
-
-# 安装依赖
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    cmake \
-    python3-dev \
-    libssl-dev \
-    libmysqlclient-dev \
-    libsqlite3-dev \
-    && rm -rf /var/lib/apt/lists/*
-
-# 设置工作目录
-WORKDIR /src
-
-# 复制源码
-COPY . .
-
-# 构建
-RUN cmake -B build -DCMAKE_BUILD_TYPE=Release \
-    && cmake --build build -j$(nproc)
+```text
+programming/bigworld/build/docker/Dockerfile
 ```
 
-### 使用 Docker
+构建镜像示例：
 
-```bash
-# 构建镜像
-docker build -t bigworld-build -f build/docker/Dockerfile .
-
-# 运行构建容器
-docker run --rm -v $(pwd):/src bigworld-build
-
-# 或进入容器手动构建
-docker run --rm -it -v $(pwd):/src bigworld-build /bin/bash
+```sh
+docker buildx build . \
+  -f programming/bigworld/build/docker/Dockerfile \
+  -t bigworld-build
 ```
 
-## 构建选项
+进入容器执行构建的示例：
 
-### CMake 选项
-
-| 选项 | 默认值 | 说明 |
-|------|--------|------|
-| `CMAKE_BUILD_TYPE` | Release | 构建类型 |
-| `CMAKE_INSTALL_PREFIX` | /usr/local | 安装路径 |
-| `BUILD_SERVER` | ON | 构建服务器 |
-| `BUILD_CLIENT` | ON | 构建客户端 |
-| `BUILD_TOOLS` | ON | 构建工具 |
-| `ENABLE_TESTS` | OFF | 启用测试 |
-
-### 使用示例
-
-```bash
-cmake -B build \
-    -DCMAKE_BUILD_TYPE=Debug \
-    -DENABLE_TESTS=ON \
-    -DBUILD_CLIENT=OFF
+```sh
+docker run --rm -it \
+  -u "$(id -u):$(id -g)" \
+  --mount type=bind,source="${PWD}",target=/home/bigworld/host \
+  --mount type=tmpfs,target=/home/bigworld/rpmbuild \
+  --env HOME=/home/bigworld \
+  -w /home/bigworld/host \
+  bigworld-build
 ```
 
-## 常见问题
+容器内再执行：
 
-### 找不到 Python
-
-```bash
-CMake Error: Could not find Python
+```sh
+make -s -j"$(nproc)" -rR -C programming
 ```
 
-**解决**:
-```bash
-# 指定 Python 路径
-cmake -B build -DPython_ROOT_DIR=/usr/bin/python3
+Dockerfile 注释明确提示：初次 third_party 构建可能不适合并行构建，某些 Python 相关 patch/output 问题可能导致需要重跑。这是构建链现实，不应在文档中隐藏。
+
+## CMake 工程边界
+
+`programming/bigworld/CMakeLists.txt` 的源码事实：
+
+- `CMAKE_MINIMUM_REQUIRED(VERSION 2.8.12)`。
+- 必须指定 `BW_CMAKE_TARGET`，否则直接报错。
+- 普通路径只支持 Windows；非 Windows 会报 “Only Windows builds are currently supported.”
+- remote server 是单独路径，由 `BW_IS_REMOTE_ONLY` 和 `BW_REMOTE_PLATFORM` 控制。
+- 支持的 MSVC token 是 `vc9` 到 `vc14`。
+
+因此，不应写成：
+
+```sh
+cmake -B build
+cmake --build build
 ```
 
-### OpenSSL 版本不兼容
+这种通用现代 CMake 流程不符合当前根 CMakeLists 的行为。使用 CMake 时必须先明确目标和平台，例如 Windows 工程、client、tools 或 remote server。
 
-```bash
-error: 'SSL_CTX_new' was not declared
+## 单元测试
+
+测试目标分布在各模块 `unit_test/CMakeLists.txt` 或 Make 构建规则中。
+
+源码入口示例：
+
+| 测试区域 | 路径 |
+|---|---|
+| 网络 | `programming/bigworld/lib/network/unit_test/` |
+| EntityDef | `programming/bigworld/lib/entitydef/unit_test/` |
+| BgTaskManager | `programming/bigworld/lib/cstdmf/unit_test/test_bgtasks.cpp` |
+| BaseApp | `programming/bigworld/server/baseapp/unit_test/` |
+| CellApp | `programming/bigworld/server/cellapp/unit_test/` |
+| DBApp | `programming/bigworld/server/dbapp/unit_test/` |
+
+运行测试前先确认对应目标已被当前平台构建链纳入。找测试目标可用：
+
+```sh
+rg "BW_ADD_TEST" programming/bigworld
+rg "TEST\\(" programming/bigworld/lib programming/bigworld/server
 ```
 
-**解决**:
-```bash
-# 检查 OpenSSL 版本
-openssl version
+## 构建排查顺序
 
-# 如果是 3.x，可能需要添加兼容标志
-cmake -B build -DOPENSSL_NO_DEPRECATED=ON
-```
+排查构建问题时建议按顺序确认：
 
-### 内存不足
+1. 当前目标是 Linux server、Windows client/tool，还是文档站。
+2. 使用的是 Make 链还是 CMake 链。
+3. `BW_BUILD_PLATFORM`、`BW_CONFIG`、`BW_INSTALL_DIR` 是否符合预期。
+4. 第三方库是否已构建并复制到 `bin/server/<platform>/third_party`。
+5. 目标目录的 `Makefile.rules` 是否被顶层 Makefile 收集。
+6. 如果是 CMake，`BW_CMAKE_TARGET` 和平台判断是否通过。
+7. 如果是运行失败，再查资源路径、`BWResource::init`、`BWConfig::init` 和 App `init()`。
 
-```bash
-c++: fatal error: Killed signal terminated program cc1plus
-```
+## 相关文档
 
-**解决**:
-```bash
-# 减少并行编译数
-cmake --build build -j2
-
-# 或增加 swap
-sudo fallocate -l 4G /swapfile
-sudo chmod 600 /swapfile
-sudo mkswap /swapfile
-sudo swapon /swapfile
-```
-
-## 参考资料
-
-- [项目结构](/getting-started/project-structure)
-- [核心 API](/getting-started/api-reference)
-- [构建系统现代化](/upgrade-plan/build-system-modernization)
+- [构建与运行体系](/analysis/build-and-runtime)
+- [构建、平台与依赖治理](/architecture/build-platform-dependencies)
+- [源码导读](/analysis/source-code-guide)

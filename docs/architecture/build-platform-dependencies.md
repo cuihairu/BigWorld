@@ -226,7 +226,7 @@ BaseApp 单元测试也通过 `BW_ADD_TEST( baseapp_unit_test )` 注册，见 [s
 
 ## 相关文档
 
-- Python 迁移相关，详见 [Python 升级路线图](/upgrade-plan/python-upgrade-plan)。
-- 第三方依赖升级，详见 [第三方依赖升级清单](/upgrade-plan/third-party-deps)。
-- 构建系统现代化，详见 [构建系统现代化](/upgrade-plan/build-system-modernization)。
-- 技术债与风险分析，详见 [技术债与风险](/analysis/risks)。
+- 构建入口和运行顺序，详见 [构建与运行体系](/analysis/build-and-runtime)。
+- 目录与模块职责，详见 [目录与模块](/analysis/modules)。
+- 源码风险验证清单，详见 [源码风险边界](/analysis/risks)。
+- 进程发现和控制面，详见 [machined 控制面与进程发现](/architecture/machined-control-plane)。

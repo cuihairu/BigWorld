@@ -93,7 +93,7 @@
 | 结论 | 推断依据 | 可信度 |
 |------|----------|--------|
 | io_uring 不在原始设计选项内 | CentOS 7 内核不支持，代码无相关引用 | 95% |
-| Python 2.7 GIL 限制了并行能力 | 代码使用 `PyEval_InitThreads()`，无 free-threaded 支持 | 95% |
+| 脚本执行受全局解释器锁边界约束 | 代码使用 `PyEval_InitThreads()`、`PyEval_SaveThread()`、`PyEval_RestoreThread()` 管理 thread state | 95% |
 | 商业版可能有更多优化 | 开源版缺少 `control_cluster.py`，文档有漂移 | 80% |
 | 设计年代约 2005-2010 | 使用 CentOS 5/6，Python 2.4 兼容探测 | 90% |
 
