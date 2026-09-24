@@ -23,16 +23,16 @@ def main():
 	options, args = opt.parse_args()
 
 	if not args:
-		print "No make arguments provided to %s" % sys.argv[ 0 ]
+		print( "No make arguments provided to %s" % sys.argv[ 0 ] )
 		sys.exit( 1 )
-	
+
 	newEnvironment = dict( os.environ )
 
 	# Find all the environment variables associated with make and remove them
 	# so when we re-invoke make the jobserver is not re-used.
 	keysToRemove = []
 
-	for key, val in newEnvironment.iteritems():
+	for key, val in newEnvironment.items():
 		if key.startswith( "MAKE" ):
 			keysToRemove.append( key )
 		if key.startswith( "MFLAGS" ):
@@ -44,7 +44,7 @@ def main():
 	commandArgs = [ options.make ]
 	commandArgs.extend( args )
 
-	#print "Running command '%s'" % str( commandArgs )
+	#print( "Running command '%s'" % str( commandArgs ) )
 
 	processObject = subprocess.Popen( commandArgs, env = newEnvironment,
 		close_fds = True )

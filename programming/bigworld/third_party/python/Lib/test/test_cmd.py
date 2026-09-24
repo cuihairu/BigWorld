@@ -6,10 +6,13 @@ Original by Michael Schneider
 
 import cmd
 import sys
-from test import test_support
-import re
+import doctest
 import unittest
-import StringIO
+import io
+import textwrap
+from test import support
+from test.support.import_helper import import_module
+from test.support.pty_helper import run_pty
 
 class samplecmdclass(cmd.Cmd):
     """
@@ -52,7 +55,7 @@ class samplecmdclass(cmd.Cmd):
 
     Test for the function completedefault():
     >>> mycmd.completedefault()
-    This is the completedefault methode
+    This is the completedefault method
     >>> mycmd.completenames("a")
     ['add']
 
@@ -70,7 +73,7 @@ class samplecmdclass(cmd.Cmd):
     >>> mycmd.complete_help("12")
     []
     >>> sorted(mycmd.complete_help(""))
-    ['add', 'exit', 'help', 'shell']
+    ['add', 'exit', 'help', 'life', 'meaning', 'shell']
 
     Test for the function do_help():
     >>> mycmd.do_help("testet")
@@ -79,11 +82,19 @@ class samplecmdclass(cmd.Cmd):
     help text for add
     >>> mycmd.onecmd("help add")
     help text for add
+    >>> mycmd.onecmd("help meaning")  # doctest: +NORMALIZE_WHITESPACE
+    Try and be nice to people, avoid eating fat, read a good book every
+    now and then, get some walking in, and try to live together in peace
+    and harmony with people of all creeds and nations.
     >>> mycmd.do_help("")
     <BLANKLINE>
     Documented commands (type help <topic>):
     ========================================
     add  help
+    <BLANKLINE>
+    Miscellaneous help topics:
+    ==========================
+    life  meaning
     <BLANKLINE>
     Undocumented commands:
     ======================
@@ -99,9 +110,9 @@ class samplecmdclass(cmd.Cmd):
     <BLANKLINE>
 
     Test for the function columnize():
-    >>> mycmd.columnize([str(i) for i in xrange(20)])
+    >>> mycmd.columnize([str(i) for i in range(20)])
     0  1  2  3  4  5  6  7  8  9  10  11  12  13  14  15  16  17  18  19
-    >>> mycmd.columnize([str(i) for i in xrange(20)], 10)
+    >>> mycmd.columnize([str(i) for i in range(20)], 10)
     0  7   14
     1  8   15
     2  9   16
@@ -110,21 +121,26 @@ class samplecmdclass(cmd.Cmd):
     5  12  19
     6  13
 
-    This is a interactive test, put some commands in the cmdqueue attribute
+    This is an interactive test, put some commands in the cmdqueue attribute
     and let it execute
     This test includes the preloop(), postloop(), default(), emptyline(),
     parseline(), do_help() functions
     >>> mycmd.use_rawinput=0
-    >>> mycmd.cmdqueue=["", "add", "add 4 5", "help", "help add","exit"]
-    >>> mycmd.cmdloop()
+
+    >>> mycmd.cmdqueue=["add", "add 4 5", "", "help", "help add", "exit"]
+    >>> mycmd.cmdloop()  # doctest: +REPORT_NDIFF
     Hello from preloop
-    help text for add
     *** invalid number of arguments
+    9
     9
     <BLANKLINE>
     Documented commands (type help <topic>):
     ========================================
     add  help
+    <BLANKLINE>
+    Miscellaneous help topics:
+    ==========================
+    life  meaning
     <BLANKLINE>
     Undocumented commands:
     ======================
@@ -135,18 +151,16 @@ class samplecmdclass(cmd.Cmd):
     """
 
     def preloop(self):
-        print "Hello from preloop"
+        print("Hello from preloop")
 
     def postloop(self):
-        print "Hello from postloop"
+        print("Hello from postloop")
 
     def completedefault(self, *ignored):
-        print "This is the completedefault methode"
-        return
+        print("This is the completedefault method")
 
     def complete_command(self):
-        print "complete command"
-        return
+        print("complete command")
 
     def do_shell(self, s):
         pass
@@ -154,17 +168,28 @@ class samplecmdclass(cmd.Cmd):
     def do_add(self, s):
         l = s.split()
         if len(l) != 2:
-            print "*** invalid number of arguments"
+            print("*** invalid number of arguments")
             return
         try:
             l = [int(i) for i in l]
         except ValueError:
-            print "*** arguments should be numbers"
+            print("*** arguments should be numbers")
             return
-        print l[0]+l[1]
+        print(l[0]+l[1])
 
     def help_add(self):
-        print "help text for add"
+        print("help text for add")
+        return
+
+    def help_meaning(self):
+        print("Try and be nice to people, avoid eating fat, read a "
+              "good book every now and then, get some walking in, "
+              "and try to live together in peace and harmony with "
+              "people of all creeds and nations.")
+        return
+
+    def help_life(self):
+        print("Always look on the bright side of life")
         return
 
     def do_exit(self, arg):
@@ -176,7 +201,7 @@ class TestAlternateInput(unittest.TestCase):
     class simplecmd(cmd.Cmd):
 
         def do_print(self, args):
-            print >>self.stdout, args
+            print(args, file=self.stdout)
 
         def do_EOF(self, args):
             return True
@@ -185,13 +210,13 @@ class TestAlternateInput(unittest.TestCase):
     class simplecmd2(simplecmd):
 
         def do_EOF(self, args):
-            print >>self.stdout, '*** Unknown syntax: EOF'
+            print('*** Unknown syntax: EOF', file=self.stdout)
             return True
 
 
     def test_file_with_missing_final_nl(self):
-        input = StringIO.StringIO("print test\nprint test2")
-        output = StringIO.StringIO()
+        input = io.StringIO("print test\nprint test2")
+        output = io.StringIO()
         cmd = self.simplecmd(stdin=input, stdout=output)
         cmd.use_rawinput = False
         cmd.cmdloop()
@@ -202,8 +227,8 @@ class TestAlternateInput(unittest.TestCase):
 
 
     def test_input_reset_at_EOF(self):
-        input = StringIO.StringIO("print test\nprint test2")
-        output = StringIO.StringIO()
+        input = io.StringIO("print test\nprint test2")
+        output = io.StringIO()
         cmd = self.simplecmd2(stdin=input, stdout=output)
         cmd.use_rawinput = False
         cmd.cmdloop()
@@ -211,8 +236,8 @@ class TestAlternateInput(unittest.TestCase):
             ("(Cmd) test\n"
              "(Cmd) test2\n"
              "(Cmd) *** Unknown syntax: EOF\n"))
-        input = StringIO.StringIO("print \n\n")
-        output = StringIO.StringIO()
+        input = io.StringIO("print \n\n")
+        output = io.StringIO()
         cmd.stdin = input
         cmd.stdout = output
         cmd.cmdloop()
@@ -222,24 +247,55 @@ class TestAlternateInput(unittest.TestCase):
              "(Cmd) *** Unknown syntax: EOF\n"))
 
 
-def test_main(verbose=None):
-    from test import test_cmd
-    test_support.run_doctest(test_cmd, verbose)
-    test_support.run_unittest(TestAlternateInput)
+class CmdPrintExceptionClass(cmd.Cmd):
+    """
+    GH-80731
+    cmd.Cmd should print the correct exception in default()
+    >>> mycmd = CmdPrintExceptionClass()
+    >>> try:
+    ...     raise ValueError("test")
+    ... except ValueError:
+    ...     mycmd.onecmd("not important")
+    (<class 'ValueError'>, ValueError('test'))
+    """
 
-def test_coverage(coverdir):
-    trace = test_support.import_module('trace')
-    tracer=trace.Trace(ignoredirs=[sys.prefix, sys.exec_prefix,],
-                        trace=0, count=1)
-    tracer.run('reload(cmd);test_main()')
-    r=tracer.results()
-    print "Writing coverage results..."
-    r.write_results(show_missing=True, summary=True, coverdir=coverdir)
+    def default(self, line):
+        print(sys.exc_info()[:2])
+
+
+@support.requires_subprocess()
+class CmdTestReadline(unittest.TestCase):
+    def setUpClass():
+        # Ensure that the readline module is loaded
+        # If this fails, the test is skipped because SkipTest will be raised
+        readline = import_module('readline')
+
+    def test_basic_completion(self):
+        script = textwrap.dedent("""
+            import cmd
+            class simplecmd(cmd.Cmd):
+                def do_tab_completion_test(self, args):
+                    print('tab completion success')
+                    return True
+
+            simplecmd().cmdloop()
+        """)
+
+        # 't' and complete 'ab_completion_test' to 'tab_completion_test'
+        input = b"t\t\n"
+
+        output = run_pty(script, input)
+
+        self.assertIn(b'ab_completion_test', output)
+        self.assertIn(b'tab completion success', output)
+
+def load_tests(loader, tests, pattern):
+    tests.addTest(doctest.DocTestSuite())
+    return tests
+
 
 if __name__ == "__main__":
-    if "-c" in sys.argv:
-        test_coverage('/tmp/cmd.cover')
-    elif "-i" in sys.argv:
+    if "-i" in sys.argv:
         samplecmdclass().cmdloop()
     else:
-        test_main()
+        unittest.main()

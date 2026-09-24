@@ -57,7 +57,9 @@ $(OPENSSL_BUILD_DIR):
 $(sslConfigureFilePath): | $(OPENSSL_BUILD_DIR)
 	@$(BW_BLDDIR)/test_symlink.sh $(OPENSSL_BUILD_DIR)
 	cp -TR $(OPENSSL_DIR) $(OPENSSL_BUILD_DIR)
-	chmod -R +w $(OPENSSL_BUILD_DIR)
+	# u+rwX (not just +w) keeps/sets the execute bit on Configure/config so
+	# the build works from checkouts where scripts lost their exec bit.
+	chmod -R u+rwX $(OPENSSL_BUILD_DIR)
 
 # Makefile
 $(sslMakefileFilePath): $(sslConfigureFilePath)

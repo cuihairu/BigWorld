@@ -1,15 +1,19 @@
 /*
     An implementation of the new I/O lib as defined by PEP 3116 - "New I/O"
-    
+
     Classes defined here: UnsupportedOperation, BlockingIOError.
     Functions defined here: open().
-    
+
     Mostly written by Amaury Forgeot d'Arc
 */
 
-#define PY_SSIZE_T_CLEAN
 #include "Python.h"
-#include "structmember.h"
+#include "pycore_abstract.h"      // _PyNumber_Index()
+#include "pycore_initconfig.h"    // _PyStatus_OK()
+#include "pycore_long.h"          // _PyLong_Sign()
+#include "pycore_pyerrors.h"      // _PyErr_ChainExceptions1()
+#include "pycore_pystate.h"       // _PyInterpreterState_GET()
+
 #include "_iomodule.h"
 
 #ifdef HAVE_SYS_TYPES_H
@@ -20,38 +24,10 @@
 #include <sys/stat.h>
 #endif /* HAVE_SYS_STAT_H */
 
+#ifdef MS_WINDOWS
+#include <windows.h>
+#endif
 
-/* Various interned strings */
-
-PyObject *_PyIO_str_close;
-PyObject *_PyIO_str_closed;
-PyObject *_PyIO_str_decode;
-PyObject *_PyIO_str_encode;
-PyObject *_PyIO_str_fileno;
-PyObject *_PyIO_str_flush;
-PyObject *_PyIO_str_getstate;
-PyObject *_PyIO_str_isatty;
-PyObject *_PyIO_str_newlines;
-PyObject *_PyIO_str_nl;
-PyObject *_PyIO_str_read;
-PyObject *_PyIO_str_read1;
-PyObject *_PyIO_str_readable;
-PyObject *_PyIO_str_readinto;
-PyObject *_PyIO_str_readline;
-PyObject *_PyIO_str_reset;
-PyObject *_PyIO_str_seek;
-PyObject *_PyIO_str_seekable;
-PyObject *_PyIO_str_setstate;
-PyObject *_PyIO_str_tell;
-PyObject *_PyIO_str_truncate;
-PyObject *_PyIO_str_writable;
-PyObject *_PyIO_str_write;
-
-PyObject *_PyIO_empty_str;
-PyObject *_PyIO_empty_bytes;
-PyObject *_PyIO_zero;
-
-
 PyDoc_STRVAR(module_doc,
 "The io module provides the Python interfaces to stream handling. The\n"
 "builtin open function is defined in this module.\n"
@@ -59,7 +35,7 @@ PyDoc_STRVAR(module_doc,
 "At the top of the I/O hierarchy is the abstract base class IOBase. It\n"
 "defines the basic interface to a stream. Note, however, that there is no\n"
 "separation between reading and writing to streams; implementations are\n"
-"allowed to raise an IOError if they do not support a given operation.\n"
+"allowed to raise an OSError if they do not support a given operation.\n"
 "\n"
 "Extending IOBase is RawIOBase which deals simply with the reading and\n"
 "writing of raw bytes to a stream. FileIO subclasses RawIOBase to provide\n"
@@ -74,7 +50,7 @@ PyDoc_STRVAR(module_doc,
 "Another IOBase subclass, TextIOBase, deals with the encoding and decoding\n"
 "of streams into text. TextIOWrapper, which extends it, is a buffered text\n"
 "interface to a buffered raw stream (`BufferedIOBase`). Finally, StringIO\n"
-"is a in-memory stream for text.\n"
+"is an in-memory stream for text.\n"
 "\n"
 "Argument names are not part of the specification, and only the arguments\n"
 "of open() are intended to be used as keyword arguments.\n"
@@ -87,241 +63,173 @@ PyDoc_STRVAR(module_doc,
 "   I/O classes. open() uses the file's blksize (as obtained by os.stat) if\n"
 "   possible.\n"
     );
-
 
-/*
- * BlockingIOError extends IOError
- */
-
-static int
-blockingioerror_init(PyBlockingIOErrorObject *self, PyObject *args,
-                     PyObject *kwds)
-{
-    PyObject *myerrno = NULL, *strerror = NULL;
-    PyObject *baseargs = NULL;
-    Py_ssize_t written = 0;
-
-    assert(PyTuple_Check(args));
-
-    self->written = 0;
-    if (!PyArg_ParseTuple(args, "OO|n:BlockingIOError",
-                          &myerrno, &strerror, &written))
-        return -1;
-
-    baseargs = PyTuple_Pack(2, myerrno, strerror);
-    if (baseargs == NULL)
-        return -1;
-    /* This will take care of initializing of myerrno and strerror members */
-    if (((PyTypeObject *)PyExc_IOError)->tp_init(
-                (PyObject *)self, baseargs, kwds) == -1) {
-        Py_DECREF(baseargs);
-        return -1;
-    }
-    Py_DECREF(baseargs);
-
-    self->written = written;
-    return 0;
-}
-
-static PyMemberDef blockingioerror_members[] = {
-    {"characters_written", T_PYSSIZET, offsetof(PyBlockingIOErrorObject, written), 0},
-    {NULL}  /* Sentinel */
-};
-
-static PyTypeObject _PyExc_BlockingIOError = {
-    PyVarObject_HEAD_INIT(NULL, 0)
-    "BlockingIOError", /*tp_name*/
-    sizeof(PyBlockingIOErrorObject), /*tp_basicsize*/
-    0,                          /*tp_itemsize*/
-    0,                          /*tp_dealloc*/
-    0,                          /*tp_print*/
-    0,                          /*tp_getattr*/
-    0,                          /*tp_setattr*/
-    0,                          /*tp_compare */
-    0,                          /*tp_repr*/
-    0,                          /*tp_as_number*/
-    0,                          /*tp_as_sequence*/
-    0,                          /*tp_as_mapping*/
-    0,                          /*tp_hash */
-    0,                          /*tp_call*/
-    0,                          /*tp_str*/
-    0,                          /*tp_getattro*/
-    0,                          /*tp_setattro*/
-    0,                          /*tp_as_buffer*/
-    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE, /*tp_flags*/
-    PyDoc_STR("Exception raised when I/O would block "
-              "on a non-blocking I/O stream"), /* tp_doc */
-    0,                          /* tp_traverse */
-    0,                          /* tp_clear */
-    0,                          /* tp_richcompare */
-    0,                          /* tp_weaklistoffset */
-    0,                          /* tp_iter */
-    0,                          /* tp_iternext */
-    0,                          /* tp_methods */
-    blockingioerror_members,    /* tp_members */
-    0,                          /* tp_getset */
-    0,                          /* tp_base */
-    0,                          /* tp_dict */
-    0,                          /* tp_descr_get */
-    0,                          /* tp_descr_set */
-    0,                          /* tp_dictoffset */
-    (initproc)blockingioerror_init, /* tp_init */
-    0,                          /* tp_alloc */
-    0,                          /* tp_new */
-};
-PyObject *PyExc_BlockingIOError = (PyObject *)&_PyExc_BlockingIOError;
-
 
 /*
  * The main open() function
  */
-PyDoc_STRVAR(open_doc,
-"Open file and return a stream.  Raise IOError upon failure.\n"
-"\n"
-"file is either a text or byte string giving the name (and the path\n"
-"if the file isn't in the current working directory) of the file to\n"
-"be opened or an integer file descriptor of the file to be\n"
-"wrapped. (If a file descriptor is given, it is closed when the\n"
-"returned I/O object is closed, unless closefd is set to False.)\n"
-"\n"
-"mode is an optional string that specifies the mode in which the file\n"
-"is opened. It defaults to 'r' which means open for reading in text\n"
-"mode.  Other common values are 'w' for writing (truncating the file if\n"
-"it already exists), and 'a' for appending (which on some Unix systems,\n"
-"means that all writes append to the end of the file regardless of the\n"
-"current seek position). In text mode, if encoding is not specified the\n"
-"encoding used is platform dependent. (For reading and writing raw\n"
-"bytes use binary mode and leave encoding unspecified.) The available\n"
-"modes are:\n"
-"\n"
-"========= ===============================================================\n"
-"Character Meaning\n"
-"--------- ---------------------------------------------------------------\n"
-"'r'       open for reading (default)\n"
-"'w'       open for writing, truncating the file first\n"
-"'a'       open for writing, appending to the end of the file if it exists\n"
-"'b'       binary mode\n"
-"'t'       text mode (default)\n"
-"'+'       open a disk file for updating (reading and writing)\n"
-"'U'       universal newline mode (for backwards compatibility; unneeded\n"
-"          for new code)\n"
-"========= ===============================================================\n"
-"\n"
-"The default mode is 'rt' (open for reading text). For binary random\n"
-"access, the mode 'w+b' opens and truncates the file to 0 bytes, while\n"
-"'r+b' opens the file without truncation.\n"
-"\n"
-"Python distinguishes between files opened in binary and text modes,\n"
-"even when the underlying operating system doesn't. Files opened in\n"
-"binary mode (appending 'b' to the mode argument) return contents as\n"
-"bytes objects without any decoding. In text mode (the default, or when\n"
-"'t' is appended to the mode argument), the contents of the file are\n"
-"returned as strings, the bytes having been first decoded using a\n"
-"platform-dependent encoding or using the specified encoding if given.\n"
-"\n"
-"buffering is an optional integer used to set the buffering policy.\n"
-"Pass 0 to switch buffering off (only allowed in binary mode), 1 to select\n"
-"line buffering (only usable in text mode), and an integer > 1 to indicate\n"
-"the size of a fixed-size chunk buffer.  When no buffering argument is\n"
-"given, the default buffering policy works as follows:\n"
-"\n"
-"* Binary files are buffered in fixed-size chunks; the size of the buffer\n"
-"  is chosen using a heuristic trying to determine the underlying device's\n"
-"  \"block size\" and falling back on `io.DEFAULT_BUFFER_SIZE`.\n"
-"  On many systems, the buffer will typically be 4096 or 8192 bytes long.\n"
-"\n"
-"* \"Interactive\" text files (files for which isatty() returns True)\n"
-"  use line buffering.  Other text files use the policy described above\n"
-"  for binary files.\n"
-"\n"
-"encoding is the name of the encoding used to decode or encode the\n"
-"file. This should only be used in text mode. The default encoding is\n"
-"platform dependent, but any encoding supported by Python can be\n"
-"passed.  See the codecs module for the list of supported encodings.\n"
-"\n"
-"errors is an optional string that specifies how encoding errors are to\n"
-"be handled---this argument should not be used in binary mode. Pass\n"
-"'strict' to raise a ValueError exception if there is an encoding error\n"
-"(the default of None has the same effect), or pass 'ignore' to ignore\n"
-"errors. (Note that ignoring encoding errors can lead to data loss.)\n"
-"See the documentation for codecs.register for a list of the permitted\n"
-"encoding error strings.\n"
-"\n"
-"newline controls how universal newlines works (it only applies to text\n"
-"mode). It can be None, '', '\\n', '\\r', and '\\r\\n'.  It works as\n"
-"follows:\n"
-"\n"
-"* On input, if newline is None, universal newlines mode is\n"
-"  enabled. Lines in the input can end in '\\n', '\\r', or '\\r\\n', and\n"
-"  these are translated into '\\n' before being returned to the\n"
-"  caller. If it is '', universal newline mode is enabled, but line\n"
-"  endings are returned to the caller untranslated. If it has any of\n"
-"  the other legal values, input lines are only terminated by the given\n"
-"  string, and the line ending is returned to the caller untranslated.\n"
-"\n"
-"* On output, if newline is None, any '\\n' characters written are\n"
-"  translated to the system default line separator, os.linesep. If\n"
-"  newline is '', no translation takes place. If newline is any of the\n"
-"  other legal values, any '\\n' characters written are translated to\n"
-"  the given string.\n"
-"\n"
-"If closefd is False, the underlying file descriptor will be kept open\n"
-"when the file is closed. This does not work when a file name is given\n"
-"and must be True in that case.\n"
-"\n"
-"open() returns a file object whose type depends on the mode, and\n"
-"through which the standard file operations such as reading and writing\n"
-"are performed. When open() is used to open a file in a text mode ('w',\n"
-"'r', 'wt', 'rt', etc.), it returns a TextIOWrapper. When used to open\n"
-"a file in a binary mode, the returned class varies: in read binary\n"
-"mode, it returns a BufferedReader; in write binary and append binary\n"
-"modes, it returns a BufferedWriter, and in read/write mode, it returns\n"
-"a BufferedRandom.\n"
-"\n"
-"It is also possible to use a string or bytearray as a file for both\n"
-"reading and writing. For strings StringIO can be used like a file\n"
-"opened in a text mode, and for bytes a BytesIO can be used like a file\n"
-"opened in a binary mode.\n"
-    );
+/*[clinic input]
+module _io
+
+_io.open
+    file: object
+    mode: str = "r"
+    buffering: int = -1
+    encoding: str(accept={str, NoneType}) = None
+    errors: str(accept={str, NoneType}) = None
+    newline: str(accept={str, NoneType}) = None
+    closefd: bool = True
+    opener: object = None
+
+Open file and return a stream.  Raise OSError upon failure.
+
+file is either a text or byte string giving the name (and the path
+if the file isn't in the current working directory) of the file to
+be opened or an integer file descriptor of the file to be
+wrapped.  (If a file descriptor is given, it is closed when the
+returned I/O object is closed, unless closefd is set to False.)
+
+mode is an optional string that specifies the mode in which the file
+is opened.  It defaults to 'r' which means open for reading in text
+mode.  Other common values are 'w' for writing (truncating the file if
+it already exists), 'x' for creating and writing to a new file, and
+'a' for appending (which on some Unix systems, means that all writes
+append to the end of the file regardless of the current seek position).
+In text mode, if encoding is not specified the encoding used is platform
+dependent: locale.getencoding() is called to get the current locale
+encoding.  (For reading and writing raw bytes use binary mode and leave
+encoding unspecified.)  The available modes are:
+
+========= ==========================================================
+Character Meaning
+--------- ----------------------------------------------------------
+'r'       open for reading (default)
+'w'       open for writing, truncating the file first
+'x'       create a new file and open it for writing
+'a'       open for writing, appending to the end of the file if it
+          exists
+'b'       binary mode
+'t'       text mode (default)
+'+'       open a disk file for updating (reading and writing)
+========= ==========================================================
+
+The default mode is 'rt' (open for reading text).  For binary random
+access, the mode 'w+b' opens and truncates the file to 0 bytes, while
+'r+b' opens the file without truncation.  The 'x' mode implies 'w' and
+raises an `FileExistsError` if the file already exists.
+
+Python distinguishes between files opened in binary and text modes,
+even when the underlying operating system doesn't.  Files opened in
+binary mode (appending 'b' to the mode argument) return contents as
+bytes objects without any decoding.  In text mode (the default, or when
+'t' is appended to the mode argument), the contents of the file are
+returned as strings, the bytes having been first decoded using a
+platform-dependent encoding or using the specified encoding if given.
+
+buffering is an optional integer used to set the buffering policy.
+Pass 0 to switch buffering off (only allowed in binary mode), 1 to
+select line buffering (only usable in text mode), and an integer > 1 to
+indicate the size of a fixed-size chunk buffer.   When no buffering
+argument is given, the default buffering policy works as follows:
+
+* Binary files are buffered in fixed-size chunks; the size of the buffer
+  is chosen using a heuristic trying to determine the underlying
+  device's "block size" and falling back on `io.DEFAULT_BUFFER_SIZE`.
+  On many systems, the buffer will typically be 4096 or 8192 bytes
+  long.
+
+* "Interactive" text files (files for which isatty() returns True)
+  use line buffering.  Other text files use the policy described above
+  for binary files.
+
+encoding is the name of the encoding used to decode or encode the
+file.  This should only be used in text mode.  The default encoding is
+platform dependent, but any encoding supported by Python can be
+passed.  See the codecs module for the list of supported encodings.
+
+errors is an optional string that specifies how encoding errors are to
+be handled---this argument should not be used in binary mode.  Pass
+'strict' to raise a ValueError exception if there is an encoding error
+(the default of None has the same effect), or pass 'ignore' to ignore
+errors.  (Note that ignoring encoding errors can lead to data loss.)
+See the documentation for codecs.register or run 'help(codecs.Codec)'
+for a list of the permitted encoding error strings.
+
+newline controls how universal newlines works (it only applies to text
+mode).  It can be None, '', '\n', '\r', and '\r\n'.  It works as
+follows:
+
+* On input, if newline is None, universal newlines mode is enabled.
+  Lines in the input can end in '\n', '\r', or '\r\n', and these are
+  translated into '\n' before being returned to the caller.  If it is
+  '', universal newline mode is enabled, but line endings are returned
+  to the caller untranslated.  If it has any of the other legal values,
+  input lines are only terminated by the given string, and the line
+  ending is returned to the caller untranslated.
+
+* On output, if newline is None, any '\n' characters written are
+  translated to the system default line separator, os.linesep.  If
+  newline is '' or '\n', no translation takes place.  If newline is any
+  of the other legal values, any '\n' characters written are translated
+  to the given string.
+
+If closefd is False, the underlying file descriptor will be kept open
+when the file is closed.  This does not work when a file name is given
+and must be True in that case.
+
+A custom opener can be used by passing a callable as *opener*.  The
+underlying file descriptor for the file object is then obtained by
+calling *opener* with (*file*, *flags*).  *opener* must return an open
+file descriptor (passing os.open as *opener* results in functionality
+similar to passing None).
+
+open() returns a file object whose type depends on the mode, and
+through which the standard file operations such as reading and writing
+are performed.  When open() is used to open a file in a text mode ('w',
+'r', 'wt', 'rt', etc.), it returns a TextIOWrapper.  When used to open
+a file in a binary mode, the returned class varies: in read binary
+mode, it returns a BufferedReader; in write binary and append binary
+modes, it returns a BufferedWriter, and in read/write mode, it returns
+a BufferedRandom.
+
+It is also possible to use a string or bytearray as a file for both
+reading and writing.  For strings StringIO can be used like a file
+opened in a text mode, and for bytes a BytesIO can be used like a file
+opened in a binary mode.
+[clinic start generated code]*/
 
 static PyObject *
-io_open(PyObject *self, PyObject *args, PyObject *kwds)
+_io_open_impl(PyObject *module, PyObject *file, const char *mode,
+              int buffering, const char *encoding, const char *errors,
+              const char *newline, int closefd, PyObject *opener)
+/*[clinic end generated code: output=aefafc4ce2b46dc0 input=202d0aefc19a36c5]*/
 {
-    char *kwlist[] = {"file", "mode", "buffering",
-                      "encoding", "errors", "newline",
-                      "closefd", NULL};
-    PyObject *file;
-    char *mode = "r";
-    int buffering = -1, closefd = 1;
-    char *encoding = NULL, *errors = NULL, *newline = NULL;
     unsigned i;
 
-    int reading = 0, writing = 0, appending = 0, updating = 0;
-    int text = 0, binary = 0, universal = 0;
+    int creating = 0, reading = 0, writing = 0, appending = 0, updating = 0;
+    int text = 0, binary = 0;
 
-    char rawmode[5], *m;
-    int line_buffering;
-    long isatty;
+    char rawmode[6], *m;
+    int line_buffering, is_number, isatty = 0;
 
-    PyObject *raw, *modeobj = NULL, *buffer = NULL, *wrapper = NULL;
+    PyObject *raw, *modeobj = NULL, *buffer, *wrapper, *result = NULL, *path_or_fd = NULL;
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwds, "O|sizzzi:open", kwlist,
-                                     &file, &mode, &buffering,
-                                     &encoding, &errors, &newline,
-                                     &closefd)) {
-        return NULL;
+    is_number = PyNumber_Check(file);
+
+    if (is_number) {
+        path_or_fd = Py_NewRef(file);
+    } else {
+        path_or_fd = PyOS_FSPath(file);
+        if (path_or_fd == NULL) {
+            return NULL;
+        }
     }
 
-    if (!PyUnicode_Check(file) &&
-	!PyBytes_Check(file) &&
-	!PyNumber_Check(file)) {
-        PyObject *repr = PyObject_Repr(file);
-        if (repr != NULL) {
-            PyErr_Format(PyExc_TypeError, "invalid file: %s",
-                         PyString_AS_STRING(repr));
-            Py_DECREF(repr);
-        }
-        return NULL;
+    if (!is_number &&
+        !PyUnicode_Check(path_or_fd) &&
+        !PyBytes_Check(path_or_fd)) {
+        PyErr_Format(PyExc_TypeError, "invalid file: %R", file);
+        goto error;
     }
 
     /* Decode mode */
@@ -329,6 +237,9 @@ io_open(PyObject *self, PyObject *args, PyObject *kwds)
         char c = mode[i];
 
         switch (c) {
+        case 'x':
+            creating = 1;
+            break;
         case 'r':
             reading = 1;
             break;
@@ -347,10 +258,6 @@ io_open(PyObject *self, PyObject *args, PyObject *kwds)
         case 'b':
             binary = 1;
             break;
-        case 'U':
-            universal = 1;
-            reading = 1;
-            break;
         default:
             goto invalid_mode;
         }
@@ -359,12 +266,13 @@ io_open(PyObject *self, PyObject *args, PyObject *kwds)
         if (strchr(mode+i+1, c)) {
           invalid_mode:
             PyErr_Format(PyExc_ValueError, "invalid mode: '%s'", mode);
-            return NULL;
+            goto error;
         }
 
     }
 
     m = rawmode;
+    if (creating)  *(m++) = 'x';
     if (reading)   *(m++) = 'r';
     if (writing)   *(m++) = 'w';
     if (appending) *(m++) = 'a';
@@ -372,67 +280,84 @@ io_open(PyObject *self, PyObject *args, PyObject *kwds)
     *m = '\0';
 
     /* Parameters validation */
-    if (universal) {
-        if (writing || appending) {
-            PyErr_SetString(PyExc_ValueError,
-                            "can't use U and writing mode at once");
-            return NULL;
-        }
-        reading = 1;
-    }
-
     if (text && binary) {
         PyErr_SetString(PyExc_ValueError,
                         "can't have text and binary mode at once");
-        return NULL;
+        goto error;
     }
 
-    if (reading + writing + appending > 1) {
+    if (creating + reading + writing + appending > 1) {
         PyErr_SetString(PyExc_ValueError,
-                        "must have exactly one of read/write/append mode");
-        return NULL;
+                        "must have exactly one of create/read/write/append mode");
+        goto error;
     }
 
     if (binary && encoding != NULL) {
         PyErr_SetString(PyExc_ValueError,
                         "binary mode doesn't take an encoding argument");
-        return NULL;
+        goto error;
     }
 
     if (binary && errors != NULL) {
         PyErr_SetString(PyExc_ValueError,
                         "binary mode doesn't take an errors argument");
-        return NULL;
+        goto error;
     }
 
     if (binary && newline != NULL) {
         PyErr_SetString(PyExc_ValueError,
                         "binary mode doesn't take a newline argument");
-        return NULL;
+        goto error;
+    }
+
+    if (binary && buffering == 1) {
+        if (PyErr_WarnEx(PyExc_RuntimeWarning,
+                         "line buffering (buffering=1) isn't supported in "
+                         "binary mode, the default buffer size will be used",
+                         1) < 0) {
+           goto error;
+        }
     }
 
     /* Create the Raw file stream */
-    raw = PyObject_CallFunction((PyObject *)&PyFileIO_Type,
-				"Osi", file, rawmode, closefd);
+    _PyIO_State *state = get_io_state(module);
+    {
+        PyObject *RawIO_class = (PyObject *)state->PyFileIO_Type;
+#ifdef HAVE_WINDOWS_CONSOLE_IO
+        const PyConfig *config = _Py_GetConfig();
+        if (!config->legacy_windows_stdio && _PyIO_get_console_type(path_or_fd) != '\0') {
+            RawIO_class = (PyObject *)state->PyWindowsConsoleIO_Type;
+            encoding = "utf-8";
+        }
+#endif
+        raw = PyObject_CallFunction(RawIO_class, "OsOO",
+                                    path_or_fd, rawmode,
+                                    closefd ? Py_True : Py_False,
+                                    opener);
+    }
+
     if (raw == NULL)
-        return NULL;
+        goto error;
+    result = raw;
+
+    Py_SETREF(path_or_fd, NULL);
 
     modeobj = PyUnicode_FromString(mode);
     if (modeobj == NULL)
         goto error;
 
     /* buffering */
-    {
-        PyObject *res = PyObject_CallMethod(raw, "isatty", NULL);
+    if (buffering < 0) {
+        PyObject *res = PyObject_CallMethodNoArgs(raw, &_Py_ID(isatty));
         if (res == NULL)
             goto error;
-        isatty = PyLong_AsLong(res);
+        isatty = PyObject_IsTrue(res);
         Py_DECREF(res);
-        if (isatty == -1 && PyErr_Occurred())
+        if (isatty < 0)
             goto error;
     }
 
-    if (buffering == 1 || (buffering < 0 && isatty)) {
+    if (buffering == 1 || isatty) {
         buffering = -1;
         line_buffering = 1;
     }
@@ -440,24 +365,14 @@ io_open(PyObject *self, PyObject *args, PyObject *kwds)
         line_buffering = 0;
 
     if (buffering < 0) {
-        buffering = DEFAULT_BUFFER_SIZE;
-#ifdef HAVE_STRUCT_STAT_ST_BLKSIZE
-        {
-            struct stat st;
-            int fileno;
-            PyObject *res = PyObject_CallMethod(raw, "fileno", NULL);
-            if (res == NULL)
-                goto error;
-
-            fileno = _PyInt_AsInt(res);
-            Py_DECREF(res);
-            if (fileno == -1 && PyErr_Occurred())
-                goto error;
-
-            if (fstat(fileno, &st) >= 0 && st.st_blksize > 1)
-                buffering = st.st_blksize;
-        }
-#endif
+        PyObject *blksize_obj;
+        blksize_obj = PyObject_GetAttr(raw, &_Py_ID(_blksize));
+        if (blksize_obj == NULL)
+            goto error;
+        buffering = PyLong_AsLong(blksize_obj);
+        Py_DECREF(blksize_obj);
+        if (buffering == -1 && PyErr_Occurred())
+            goto error;
     }
     if (buffering < 0) {
         PyErr_SetString(PyExc_ValueError,
@@ -474,19 +389,22 @@ io_open(PyObject *self, PyObject *args, PyObject *kwds)
         }
 
         Py_DECREF(modeobj);
-        return raw;
+        return result;
     }
 
     /* wraps into a buffered file */
     {
         PyObject *Buffered_class;
 
-        if (updating)
-            Buffered_class = (PyObject *)&PyBufferedRandom_Type;
-        else if (writing || appending)
-            Buffered_class = (PyObject *)&PyBufferedWriter_Type;
-        else if (reading)
-            Buffered_class = (PyObject *)&PyBufferedReader_Type;
+        if (updating) {
+            Buffered_class = (PyObject *)state->PyBufferedRandom_Type;
+        }
+        else if (creating || writing || appending) {
+            Buffered_class = (PyObject *)state->PyBufferedWriter_Type;
+        }
+        else if (reading) {
+            Buffered_class = (PyObject *)state->PyBufferedReader_Type;
+        }
         else {
             PyErr_Format(PyExc_ValueError,
                          "unknown mode: '%s'", mode);
@@ -495,40 +413,111 @@ io_open(PyObject *self, PyObject *args, PyObject *kwds)
 
         buffer = PyObject_CallFunction(Buffered_class, "Oi", raw, buffering);
     }
-    Py_CLEAR(raw);
     if (buffer == NULL)
         goto error;
+    result = buffer;
+    Py_DECREF(raw);
 
 
     /* if binary, returns the buffered file */
     if (binary) {
         Py_DECREF(modeobj);
-        return buffer;
+        return result;
     }
 
     /* wraps into a TextIOWrapper */
-    wrapper = PyObject_CallFunction((PyObject *)&PyTextIOWrapper_Type,
-				    "Osssi",
-				    buffer,
-				    encoding, errors, newline,
-				    line_buffering);
-    Py_CLEAR(buffer);
+    wrapper = PyObject_CallFunction((PyObject *)state->PyTextIOWrapper_Type,
+                                    "OsssO",
+                                    buffer,
+                                    encoding, errors, newline,
+                                    line_buffering ? Py_True : Py_False);
     if (wrapper == NULL)
         goto error;
+    result = wrapper;
+    Py_DECREF(buffer);
 
-    if (PyObject_SetAttrString(wrapper, "mode", modeobj) < 0)
+    if (PyObject_SetAttr(wrapper, &_Py_ID(mode), modeobj) < 0)
         goto error;
     Py_DECREF(modeobj);
-    return wrapper;
+    return result;
 
   error:
-    Py_XDECREF(raw);
+    if (result != NULL) {
+        PyObject *exc = PyErr_GetRaisedException();
+        PyObject *close_result = PyObject_CallMethodNoArgs(result, &_Py_ID(close));
+        _PyErr_ChainExceptions1(exc);
+        Py_XDECREF(close_result);
+        Py_DECREF(result);
+    }
+    Py_XDECREF(path_or_fd);
     Py_XDECREF(modeobj);
-    Py_XDECREF(buffer);
-    Py_XDECREF(wrapper);
     return NULL;
 }
-
+
+
+/*[clinic input]
+_io.text_encoding
+    encoding: object
+    stacklevel: int = 2
+    /
+
+A helper function to choose the text encoding.
+
+When encoding is not None, this function returns it.
+Otherwise, this function returns the default text encoding
+(i.e. "locale" or "utf-8" depends on UTF-8 mode).
+
+This function emits an EncodingWarning if encoding is None and
+sys.flags.warn_default_encoding is true.
+
+This can be used in APIs with an encoding=None parameter.
+However, please consider using encoding="utf-8" for new APIs.
+[clinic start generated code]*/
+
+static PyObject *
+_io_text_encoding_impl(PyObject *module, PyObject *encoding, int stacklevel)
+/*[clinic end generated code: output=91b2cfea6934cc0c input=4999aa8b3d90f3d4]*/
+{
+    if (encoding == NULL || encoding == Py_None) {
+        PyInterpreterState *interp = _PyInterpreterState_GET();
+        if (_PyInterpreterState_GetConfig(interp)->warn_default_encoding) {
+            if (PyErr_WarnEx(PyExc_EncodingWarning,
+                             "'encoding' argument not specified", stacklevel)) {
+                return NULL;
+            }
+        }
+        const PyPreConfig *preconfig = &_PyRuntime.preconfig;
+        if (preconfig->utf8_mode) {
+            _Py_DECLARE_STR(utf_8, "utf-8");
+            encoding = &_Py_STR(utf_8);
+        }
+        else {
+            encoding = &_Py_ID(locale);
+        }
+    }
+    return Py_NewRef(encoding);
+}
+
+
+/*[clinic input]
+_io.open_code
+
+    path : unicode
+
+Opens the provided file with the intent to import the contents.
+
+This may perform extra validation beyond open(), but is otherwise
+interchangeable with calling open(path, 'rb').
+
+[clinic start generated code]*/
+
+static PyObject *
+_io_open_code_impl(PyObject *module, PyObject *path)
+/*[clinic end generated code: output=2fe4ecbd6f3d6844 input=2803c35aeb63c719]*/
+{
+    return PyFile_OpenCodeObject(path);
+}
+
 /*
  * Private helpers for the io module.
  */
@@ -538,15 +527,9 @@ PyNumber_AsOff_t(PyObject *item, PyObject *err)
 {
     Py_off_t result;
     PyObject *runerr;
-    PyObject *value = PyNumber_Index(item);
+    PyObject *value = _PyNumber_Index(item);
     if (value == NULL)
         return -1;
-
-    if (PyInt_Check(value)) {
-        /* We assume a long always fits in a Py_off_t... */
-        result = (Py_off_t) PyInt_AS_LONG(value);
-        goto finish;
-    }
 
     /* We're done if PyLong_AsSsize_t() returns without error. */
     result = PyLong_AsOff_t(value);
@@ -575,7 +558,7 @@ PyNumber_AsOff_t(PyObject *item, PyObject *err)
         /* Otherwise replace the error with caller's error object. */
         PyErr_Format(err,
                      "cannot fit '%.200s' into an offset-sized integer",
-                     item->ob_type->tp_name);
+                     Py_TYPE(item)->tp_name);
     }
 
  finish:
@@ -583,27 +566,61 @@ PyNumber_AsOff_t(PyObject *item, PyObject *err)
     return result;
 }
 
+static int
+iomodule_traverse(PyObject *mod, visitproc visit, void *arg) {
+    _PyIO_State *state = get_io_state(mod);
+    Py_VISIT(state->unsupported_operation);
 
-/* Basically the "n" format code with the ability to turn None into -1. */
-int 
-_PyIO_ConvertSsize_t(PyObject *obj, void *result) {
-    Py_ssize_t limit;
-    if (obj == Py_None) {
-        limit = -1;
-    }
-    else if (PyNumber_Check(obj)) {
-        limit = PyNumber_AsSsize_t(obj, PyExc_OverflowError);
-        if (limit == -1 && PyErr_Occurred())
-            return 0;
-    }
-    else {
-        PyErr_Format(PyExc_TypeError,
-                     "integer argument expected, got '%.200s'",
-                     Py_TYPE(obj)->tp_name);
-        return 0;
-    }
-    *((Py_ssize_t *)result) = limit;
-    return 1;
+    Py_VISIT(state->PyIOBase_Type);
+    Py_VISIT(state->PyIncrementalNewlineDecoder_Type);
+    Py_VISIT(state->PyRawIOBase_Type);
+    Py_VISIT(state->PyBufferedIOBase_Type);
+    Py_VISIT(state->PyBufferedRWPair_Type);
+    Py_VISIT(state->PyBufferedRandom_Type);
+    Py_VISIT(state->PyBufferedReader_Type);
+    Py_VISIT(state->PyBufferedWriter_Type);
+    Py_VISIT(state->PyBytesIOBuffer_Type);
+    Py_VISIT(state->PyBytesIO_Type);
+    Py_VISIT(state->PyFileIO_Type);
+    Py_VISIT(state->PyStringIO_Type);
+    Py_VISIT(state->PyTextIOBase_Type);
+    Py_VISIT(state->PyTextIOWrapper_Type);
+#ifdef HAVE_WINDOWS_CONSOLE_IO
+    Py_VISIT(state->PyWindowsConsoleIO_Type);
+#endif
+    return 0;
+}
+
+
+static int
+iomodule_clear(PyObject *mod) {
+    _PyIO_State *state = get_io_state(mod);
+    Py_CLEAR(state->unsupported_operation);
+
+    Py_CLEAR(state->PyIOBase_Type);
+    Py_CLEAR(state->PyIncrementalNewlineDecoder_Type);
+    Py_CLEAR(state->PyRawIOBase_Type);
+    Py_CLEAR(state->PyBufferedIOBase_Type);
+    Py_CLEAR(state->PyBufferedRWPair_Type);
+    Py_CLEAR(state->PyBufferedRandom_Type);
+    Py_CLEAR(state->PyBufferedReader_Type);
+    Py_CLEAR(state->PyBufferedWriter_Type);
+    Py_CLEAR(state->PyBytesIOBuffer_Type);
+    Py_CLEAR(state->PyBytesIO_Type);
+    Py_CLEAR(state->PyFileIO_Type);
+    Py_CLEAR(state->PyStringIO_Type);
+    Py_CLEAR(state->PyTextIOBase_Type);
+    Py_CLEAR(state->PyTextIOWrapper_Type);
+#ifdef HAVE_WINDOWS_CONSOLE_IO
+    Py_CLEAR(state->PyWindowsConsoleIO_Type);
+#endif
+    return 0;
+}
+
+static void
+iomodule_free(void *mod)
+{
+    (void)iomodule_clear((PyObject *)mod);
 }
 
 
@@ -611,159 +628,118 @@ _PyIO_ConvertSsize_t(PyObject *obj, void *result) {
  * Module definition
  */
 
-PyObject *_PyIO_os_module = NULL;
-PyObject *_PyIO_locale_module = NULL;
-PyObject *_PyIO_unsupported_operation = NULL;
+#define clinic_state() (get_io_state(module))
+#include "clinic/_iomodule.c.h"
+#undef clinic_state
 
 static PyMethodDef module_methods[] = {
-    {"open", (PyCFunction)io_open, METH_VARARGS|METH_KEYWORDS, open_doc},
+    _IO_OPEN_METHODDEF
+    _IO_TEXT_ENCODING_METHODDEF
+    _IO_OPEN_CODE_METHODDEF
     {NULL, NULL}
 };
 
-PyMODINIT_FUNC
-init_io(void)
+#define ADD_TYPE(module, type, spec, base)                               \
+do {                                                                     \
+    type = (PyTypeObject *)PyType_FromModuleAndSpec(module, spec,        \
+                                                    (PyObject *)base);   \
+    if (type == NULL) {                                                  \
+        return -1;                                                       \
+    }                                                                    \
+    if (PyModule_AddType(module, type) < 0) {                            \
+        return -1;                                                       \
+    }                                                                    \
+} while (0)
+
+static int
+iomodule_exec(PyObject *m)
 {
-    PyObject *m = Py_InitModule4("_io", module_methods,
-                                 module_doc, NULL, PYTHON_API_VERSION);
-    if (m == NULL)
-        return;
-
-    /* put os in the module state */
-    _PyIO_os_module = PyImport_ImportModule("os");
-    if (_PyIO_os_module == NULL)
-        goto fail;
-
-#define ADD_TYPE(type, name) \
-    if (PyType_Ready(type) < 0) \
-        goto fail; \
-    Py_INCREF(type); \
-    if (PyModule_AddObject(m, name, (PyObject *)type) < 0) {  \
-        Py_DECREF(type); \
-        goto fail; \
-    }
+    _PyIO_State *state = get_io_state(m);
 
     /* DEFAULT_BUFFER_SIZE */
     if (PyModule_AddIntMacro(m, DEFAULT_BUFFER_SIZE) < 0)
-        goto fail;
+        return -1;
 
-    /* UnsupportedOperation inherits from ValueError and IOError */
-    _PyIO_unsupported_operation = PyObject_CallFunction(
+    /* UnsupportedOperation inherits from ValueError and OSError */
+    state->unsupported_operation = PyObject_CallFunction(
         (PyObject *)&PyType_Type, "s(OO){}",
-        "UnsupportedOperation", PyExc_ValueError, PyExc_IOError);
-    if (_PyIO_unsupported_operation == NULL)
-        goto fail;
-    Py_INCREF(_PyIO_unsupported_operation);
-    if (PyModule_AddObject(m, "UnsupportedOperation",
-                           _PyIO_unsupported_operation) < 0)
-        goto fail;
+        "UnsupportedOperation", PyExc_OSError, PyExc_ValueError);
+    if (state->unsupported_operation == NULL)
+        return -1;
+    if (PyModule_AddObjectRef(m, "UnsupportedOperation",
+                              state->unsupported_operation) < 0)
+    {
+        return -1;
+    }
 
-    /* BlockingIOError */
-    _PyExc_BlockingIOError.tp_base = (PyTypeObject *) PyExc_IOError;
-    ADD_TYPE(&_PyExc_BlockingIOError, "BlockingIOError");
+    /* BlockingIOError, for compatibility */
+    if (PyModule_AddObjectRef(m, "BlockingIOError",
+                              (PyObject *) PyExc_BlockingIOError) < 0) {
+        return -1;
+    }
 
-    /* Concrete base types of the IO ABCs.
-       (the ABCs themselves are declared through inheritance in io.py)
-    */
-    ADD_TYPE(&PyIOBase_Type, "_IOBase");
-    ADD_TYPE(&PyRawIOBase_Type, "_RawIOBase");
-    ADD_TYPE(&PyBufferedIOBase_Type, "_BufferedIOBase");
-    ADD_TYPE(&PyTextIOBase_Type, "_TextIOBase");
+    // Base classes
+    ADD_TYPE(m, state->PyIncrementalNewlineDecoder_Type, &nldecoder_spec, NULL);
+    ADD_TYPE(m, state->PyBytesIOBuffer_Type, &bytesiobuf_spec, NULL);
+    ADD_TYPE(m, state->PyIOBase_Type, &iobase_spec, NULL);
 
-    /* Implementation of concrete IO objects. */
-    /* FileIO */
-    PyFileIO_Type.tp_base = &PyRawIOBase_Type;
-    ADD_TYPE(&PyFileIO_Type, "FileIO");
+    // PyIOBase_Type subclasses
+    ADD_TYPE(m, state->PyTextIOBase_Type, &textiobase_spec,
+             state->PyIOBase_Type);
+    ADD_TYPE(m, state->PyBufferedIOBase_Type, &bufferediobase_spec,
+             state->PyIOBase_Type);
+    ADD_TYPE(m, state->PyRawIOBase_Type, &rawiobase_spec,
+             state->PyIOBase_Type);
 
-    /* BytesIO */
-    PyBytesIO_Type.tp_base = &PyBufferedIOBase_Type;
-    ADD_TYPE(&PyBytesIO_Type, "BytesIO");
+    // PyBufferedIOBase_Type(PyIOBase_Type) subclasses
+    ADD_TYPE(m, state->PyBytesIO_Type, &bytesio_spec, state->PyBufferedIOBase_Type);
+    ADD_TYPE(m, state->PyBufferedWriter_Type, &bufferedwriter_spec,
+             state->PyBufferedIOBase_Type);
+    ADD_TYPE(m, state->PyBufferedReader_Type, &bufferedreader_spec,
+             state->PyBufferedIOBase_Type);
+    ADD_TYPE(m, state->PyBufferedRWPair_Type, &bufferedrwpair_spec,
+             state->PyBufferedIOBase_Type);
+    ADD_TYPE(m, state->PyBufferedRandom_Type, &bufferedrandom_spec,
+             state->PyBufferedIOBase_Type);
 
-    /* StringIO */
-    PyStringIO_Type.tp_base = &PyTextIOBase_Type;
-    ADD_TYPE(&PyStringIO_Type, "StringIO");
+    // PyRawIOBase_Type(PyIOBase_Type) subclasses
+    ADD_TYPE(m, state->PyFileIO_Type, &fileio_spec, state->PyRawIOBase_Type);
 
-    /* BufferedReader */
-    PyBufferedReader_Type.tp_base = &PyBufferedIOBase_Type;
-    ADD_TYPE(&PyBufferedReader_Type, "BufferedReader");
+#ifdef HAVE_WINDOWS_CONSOLE_IO
+    ADD_TYPE(m, state->PyWindowsConsoleIO_Type, &winconsoleio_spec,
+             state->PyRawIOBase_Type);
+#endif
 
-    /* BufferedWriter */
-    PyBufferedWriter_Type.tp_base = &PyBufferedIOBase_Type;
-    ADD_TYPE(&PyBufferedWriter_Type, "BufferedWriter");
+    // PyTextIOBase_Type(PyIOBase_Type) subclasses
+    ADD_TYPE(m, state->PyStringIO_Type, &stringio_spec, state->PyTextIOBase_Type);
+    ADD_TYPE(m, state->PyTextIOWrapper_Type, &textiowrapper_spec,
+             state->PyTextIOBase_Type);
 
-    /* BufferedRWPair */
-    PyBufferedRWPair_Type.tp_base = &PyBufferedIOBase_Type;
-    ADD_TYPE(&PyBufferedRWPair_Type, "BufferedRWPair");
+#undef ADD_TYPE
+    return 0;
+}
 
-    /* BufferedRandom */
-    PyBufferedRandom_Type.tp_base = &PyBufferedIOBase_Type;
-    ADD_TYPE(&PyBufferedRandom_Type, "BufferedRandom");
+static struct PyModuleDef_Slot iomodule_slots[] = {
+    {Py_mod_exec, iomodule_exec},
+    {Py_mod_multiple_interpreters, Py_MOD_PER_INTERPRETER_GIL_SUPPORTED},
+    {Py_mod_gil, Py_MOD_GIL_NOT_USED},
+    {0, NULL},
+};
 
-    /* TextIOWrapper */
-    PyTextIOWrapper_Type.tp_base = &PyTextIOBase_Type;
-    ADD_TYPE(&PyTextIOWrapper_Type, "TextIOWrapper");
+struct PyModuleDef _PyIO_Module = {
+    .m_base = PyModuleDef_HEAD_INIT,
+    .m_name = "io",
+    .m_doc = module_doc,
+    .m_size = sizeof(_PyIO_State),
+    .m_methods = module_methods,
+    .m_traverse = iomodule_traverse,
+    .m_clear = iomodule_clear,
+    .m_free = iomodule_free,
+    .m_slots = iomodule_slots,
+};
 
-    /* IncrementalNewlineDecoder */
-    ADD_TYPE(&PyIncrementalNewlineDecoder_Type, "IncrementalNewlineDecoder");
-
-    /* Interned strings */
-    if (!(_PyIO_str_close = PyString_InternFromString("close")))
-        goto fail;
-    if (!(_PyIO_str_closed = PyString_InternFromString("closed")))
-        goto fail;
-    if (!(_PyIO_str_decode = PyString_InternFromString("decode")))
-        goto fail;
-    if (!(_PyIO_str_encode = PyString_InternFromString("encode")))
-        goto fail;
-    if (!(_PyIO_str_fileno = PyString_InternFromString("fileno")))
-        goto fail;
-    if (!(_PyIO_str_flush = PyString_InternFromString("flush")))
-        goto fail;
-    if (!(_PyIO_str_getstate = PyString_InternFromString("getstate")))
-        goto fail;
-    if (!(_PyIO_str_isatty = PyString_InternFromString("isatty")))
-        goto fail;
-    if (!(_PyIO_str_newlines = PyString_InternFromString("newlines")))
-        goto fail;
-    if (!(_PyIO_str_nl = PyString_InternFromString("\n")))
-        goto fail;
-    if (!(_PyIO_str_read = PyString_InternFromString("read")))
-        goto fail;
-    if (!(_PyIO_str_read1 = PyString_InternFromString("read1")))
-        goto fail;
-    if (!(_PyIO_str_readable = PyString_InternFromString("readable")))
-        goto fail;
-    if (!(_PyIO_str_readinto = PyString_InternFromString("readinto")))
-        goto fail;
-    if (!(_PyIO_str_readline = PyString_InternFromString("readline")))
-        goto fail;
-    if (!(_PyIO_str_reset = PyString_InternFromString("reset")))
-        goto fail;
-    if (!(_PyIO_str_seek = PyString_InternFromString("seek")))
-        goto fail;
-    if (!(_PyIO_str_seekable = PyString_InternFromString("seekable")))
-        goto fail;
-    if (!(_PyIO_str_setstate = PyString_InternFromString("setstate")))
-        goto fail;
-    if (!(_PyIO_str_tell = PyString_InternFromString("tell")))
-        goto fail;
-    if (!(_PyIO_str_truncate = PyString_InternFromString("truncate")))
-        goto fail;
-    if (!(_PyIO_str_write = PyString_InternFromString("write")))
-        goto fail;
-    if (!(_PyIO_str_writable = PyString_InternFromString("writable")))
-        goto fail;
-    
-    if (!(_PyIO_empty_str = PyUnicode_FromStringAndSize(NULL, 0)))
-        goto fail;
-    if (!(_PyIO_empty_bytes = PyBytes_FromStringAndSize(NULL, 0)))
-        goto fail;
-    if (!(_PyIO_zero = PyLong_FromLong(0L)))
-        goto fail;
-
-    return;
-
-  fail:
-    Py_CLEAR(_PyIO_os_module);
-    Py_CLEAR(_PyIO_unsupported_operation);
-    Py_DECREF(m);
+PyMODINIT_FUNC
+PyInit__io(void)
+{
+    return PyModuleDef_Init(&_PyIO_Module);
 }

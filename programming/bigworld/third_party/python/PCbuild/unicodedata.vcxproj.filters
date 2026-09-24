@@ -2,10 +2,13 @@
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <Filter Include="Header Files">
-      <UniqueIdentifier>{d47676ca-d54b-4b71-9379-0a5dacf8eca4}</UniqueIdentifier>
+      <UniqueIdentifier>{b939a8f1-ccd7-420a-974a-243606dccd74}</UniqueIdentifier>
     </Filter>
     <Filter Include="Source Files">
-      <UniqueIdentifier>{410f1b9d-d9e9-411c-91f5-44d1f8cebdda}</UniqueIdentifier>
+      <UniqueIdentifier>{e2c055bb-ec62-4bbc-aa1c-d88da4d4ad1c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Resource Files">
+      <UniqueIdentifier>{d04f3447-67b0-42aa-b84f-9fc0029d5af7}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -20,5 +23,10 @@
     <ClCompile Include="..\Modules\unicodedata.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="..\PC\python_nt.rc">
+      <Filter>Resource Files</Filter>
+    </ResourceCompile>
   </ItemGroup>
 </Project>

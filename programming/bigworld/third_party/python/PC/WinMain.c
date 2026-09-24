@@ -4,13 +4,14 @@
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <stdlib.h>  /* __argc, __wargv */
 
-int WINAPI WinMain(
+int WINAPI wWinMain(
     HINSTANCE hInstance,      /* handle to current instance */
     HINSTANCE hPrevInstance,  /* handle to previous instance */
-    LPSTR lpCmdLine,          /* pointer to command line */
+    LPWSTR lpCmdLine,         /* pointer to command line */
     int nCmdShow              /* show state of window */
 )
 {
-    return Py_Main(__argc, __argv);
+    return Py_Main(__argc, __wargv);
 }

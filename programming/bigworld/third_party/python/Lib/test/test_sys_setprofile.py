@@ -3,7 +3,6 @@ import pprint
 import sys
 import unittest
 
-from test import test_support
 
 class TestGetProfile(unittest.TestCase):
     def setUp(self):
@@ -31,9 +30,9 @@ class HookWatcher:
         if (event == "call"
             or event == "return"
             or event == "exception"):
-            self.add_event(event, frame)
+            self.add_event(event, frame, arg)
 
-    def add_event(self, event, frame=None):
+    def add_event(self, event, frame=None, arg=None):
         """Add an event to the log."""
         if frame is None:
             frame = sys._getframe(1)
@@ -44,11 +43,11 @@ class HookWatcher:
             frameno = len(self.frames)
             self.frames.append(frame)
 
-        self.events.append((frameno, event, ident(frame)))
+        self.events.append((frameno, event, ident(frame), arg))
 
     def get_events(self):
         """Remove calls to add_event()."""
-        disallowed = [ident(self.add_event.im_func), ident(ident)]
+        disallowed = [ident(self.add_event.__func__), ident(ident)]
         self.frames = None
 
         return [item for item in self.events if item[2] not in disallowed]
@@ -90,11 +89,16 @@ class ProfileSimulator(HookWatcher):
 
 
 class TestCaseBase(unittest.TestCase):
-    def check_events(self, callable, expected):
+    def check_events(self, callable, expected, check_args=False):
         events = capture_events(callable, self.new_watcher())
-        if events != expected:
-            self.fail("Expected events:\n%s\nReceived events:\n%s"
-                      % (pprint.pformat(expected), pprint.pformat(events)))
+        if check_args:
+            if events != expected:
+                self.fail("Expected events:\n%s\nReceived events:\n%s"
+                          % (pprint.pformat(expected), pprint.pformat(events)))
+        else:
+            if [(frameno, event, ident) for frameno, event, ident, arg in events] != expected:
+                self.fail("Expected events:\n%s\nReceived events:\n%s"
+                          % (pprint.pformat(expected), pprint.pformat(events)))
 
 
 class ProfileHookTestCase(TestCaseBase):
@@ -111,7 +115,7 @@ class ProfileHookTestCase(TestCaseBase):
 
     def test_exception(self):
         def f(p):
-            1./0
+            1/0
         f_ident = ident(f)
         self.check_events(f, [(1, 'call', f_ident),
                               (1, 'return', f_ident),
@@ -119,7 +123,7 @@ class ProfileHookTestCase(TestCaseBase):
 
     def test_caught_exception(self):
         def f(p):
-            try: 1./0
+            try: 1/0
             except: pass
         f_ident = ident(f)
         self.check_events(f, [(1, 'call', f_ident),
@@ -128,7 +132,7 @@ class ProfileHookTestCase(TestCaseBase):
 
     def test_caught_nested_exception(self):
         def f(p):
-            try: 1./0
+            try: 1/0
             except: pass
         f_ident = ident(f)
         self.check_events(f, [(1, 'call', f_ident),
@@ -137,7 +141,7 @@ class ProfileHookTestCase(TestCaseBase):
 
     def test_nested_exception(self):
         def f(p):
-            1./0
+            1/0
         f_ident = ident(f)
         self.check_events(f, [(1, 'call', f_ident),
                               # This isn't what I expected:
@@ -148,7 +152,7 @@ class ProfileHookTestCase(TestCaseBase):
 
     def test_exception_in_except_clause(self):
         def f(p):
-            1./0
+            1/0
         def g(p):
             try:
                 f(p)
@@ -165,9 +169,9 @@ class ProfileHookTestCase(TestCaseBase):
                               (1, 'return', g_ident),
                               ])
 
-    def test_exception_propogation(self):
+    def test_exception_propagation(self):
         def f(p):
-            1./0
+            1/0
         def g(p):
             try: f(p)
             finally: p.add_event("falling through")
@@ -182,8 +186,8 @@ class ProfileHookTestCase(TestCaseBase):
 
     def test_raise_twice(self):
         def f(p):
-            try: 1./0
-            except: 1./0
+            try: 1/0
+            except: 1/0
         f_ident = ident(f)
         self.check_events(f, [(1, 'call', f_ident),
                               (1, 'return', f_ident),
@@ -191,7 +195,7 @@ class ProfileHookTestCase(TestCaseBase):
 
     def test_raise_reraise(self):
         def f(p):
-            try: 1./0
+            try: 1/0
             except: raise
         f_ident = ident(f)
         self.check_events(f, [(1, 'call', f_ident),
@@ -208,7 +212,7 @@ class ProfileHookTestCase(TestCaseBase):
 
     def test_distant_exception(self):
         def f():
-            1./0
+            1/0
         def g():
             f()
         def h():
@@ -256,11 +260,27 @@ class ProfileHookTestCase(TestCaseBase):
                               (1, 'return', g_ident),
                               ])
 
+    def test_unfinished_generator(self):
+        def f():
+            for i in range(2):
+                yield i
+        def g(p):
+            next(f())
+
+        f_ident = ident(f)
+        g_ident = ident(g)
+        self.check_events(g, [(1, 'call', g_ident, None),
+                              (2, 'call', f_ident, None),
+                              (2, 'return', f_ident, 0),
+                              (2, 'call', f_ident, None),
+                              (2, 'return', f_ident, None),
+                              (1, 'return', g_ident, None),
+                              ], check_args=True)
+
     def test_stop_iteration(self):
         def f():
             for i in range(2):
                 yield i
-            raise StopIteration
         def g(p):
             for i in f():
                 pass
@@ -293,7 +313,7 @@ class ProfileSimulatorTestCase(TestCaseBase):
 
     def test_basic_exception(self):
         def f(p):
-            1./0
+            1/0
         f_ident = ident(f)
         self.check_events(f, [(1, 'call', f_ident),
                               (1, 'return', f_ident),
@@ -301,7 +321,7 @@ class ProfileSimulatorTestCase(TestCaseBase):
 
     def test_caught_exception(self):
         def f(p):
-            try: 1./0
+            try: 1/0
             except: pass
         f_ident = ident(f)
         self.check_events(f, [(1, 'call', f_ident),
@@ -310,7 +330,7 @@ class ProfileSimulatorTestCase(TestCaseBase):
 
     def test_distant_exception(self):
         def f():
-            1./0
+            1/0
         def g():
             f()
         def h():
@@ -336,12 +356,55 @@ class ProfileSimulatorTestCase(TestCaseBase):
                               (1, 'return', j_ident),
                               ])
 
+    # bpo-34125: profiling method_descriptor with **kwargs
+    def test_unbound_method(self):
+        kwargs = {}
+        def f(p):
+            dict.get({}, 42, **kwargs)
+        f_ident = ident(f)
+        self.check_events(f, [(1, 'call', f_ident),
+                              (1, 'return', f_ident)])
+
+    # Test an invalid call (bpo-34126)
+    def test_unbound_method_no_args(self):
+        def f(p):
+            dict.get()
+        f_ident = ident(f)
+        self.check_events(f, [(1, 'call', f_ident),
+                              (1, 'return', f_ident)])
+
+    # Test an invalid call (bpo-34126)
+    def test_unbound_method_invalid_args(self):
+        def f(p):
+            dict.get(print, 42)
+        f_ident = ident(f)
+        self.check_events(f, [(1, 'call', f_ident),
+                              (1, 'return', f_ident)])
+
+    # Test an invalid call (bpo-34125)
+    def test_unbound_method_no_keyword_args(self):
+        kwargs = {}
+        def f(p):
+            dict.get(**kwargs)
+        f_ident = ident(f)
+        self.check_events(f, [(1, 'call', f_ident),
+                              (1, 'return', f_ident)])
+
+    # Test an invalid call (bpo-34125)
+    def test_unbound_method_invalid_keyword_args(self):
+        kwargs = {}
+        def f(p):
+            dict.get(print, 42, **kwargs)
+        f_ident = ident(f)
+        self.check_events(f, [(1, 'call', f_ident),
+                              (1, 'return', f_ident)])
+
 
 def ident(function):
     if hasattr(function, "f_code"):
         code = function.f_code
     else:
-        code = function.func_code
+        code = function.__code__
     return code.co_firstlineno, code.co_name
 
 
@@ -374,13 +437,64 @@ def show_events(callable):
     pprint.pprint(capture_events(callable))
 
 
-def test_main():
-    test_support.run_unittest(
-        TestGetProfile,
-        ProfileHookTestCase,
-        ProfileSimulatorTestCase
-    )
+class TestEdgeCases(unittest.TestCase):
+
+    def setUp(self):
+        self.addCleanup(sys.setprofile, sys.getprofile())
+        sys.setprofile(None)
+
+    def test_reentrancy(self):
+        def foo(*args):
+            ...
+
+        def bar(*args):
+            ...
+
+        class A:
+            def __call__(self, *args):
+                pass
+
+            def __del__(self):
+                sys.setprofile(bar)
+
+        sys.setprofile(A())
+        sys.setprofile(foo)
+        self.assertEqual(sys.getprofile(), bar)
+
+    def test_same_object(self):
+        def foo(*args):
+            ...
+
+        sys.setprofile(foo)
+        del foo
+        sys.setprofile(sys.getprofile())
+
+    def test_profile_after_trace_opcodes(self):
+        def f():
+            ...
+
+        sys._getframe().f_trace_opcodes = True
+        prev_trace = sys.gettrace()
+        sys.settrace(lambda *args: None)
+        f()
+        sys.settrace(prev_trace)
+        sys.setprofile(lambda *args: None)
+        f()
+
+    def test_method_with_c_function(self):
+        # gh-122029
+        # When we have a PyMethodObject whose im_func is a C function, we
+        # should record both the call and the return. f = classmethod(repr)
+        # is just a way to create a PyMethodObject with a C function.
+        class A:
+            f = classmethod(repr)
+        events = []
+        sys.setprofile(lambda frame, event, args: events.append(event))
+        A().f()
+        sys.setprofile(None)
+        # The last c_call is the call to sys.setprofile
+        self.assertEqual(events, ['c_call', 'c_return', 'c_call'])
 
 
 if __name__ == "__main__":
-    test_main()
+    unittest.main()

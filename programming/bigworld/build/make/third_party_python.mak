@@ -4,7 +4,7 @@ comma := ,
 addUndefined = $(addprefix -Wl$(comma)-u,$(1))
 # usePython
 
-BW_PYTHON_VERSION := 2.7
+BW_PYTHON_VERSION := 3.13
 
 # Enforce that the OpenSSL makefile has already been included as we depend
 # on it's directory having been defined.
@@ -38,8 +38,18 @@ sourcePythonDependencies := $(PYTHON_BUILD_DIR)/pyconfig.h $(PYTHON_BUILD_DIR)/M
 
 linkForSharedExtra = -L$(BW_INTERMEDIATE_DIR)/$(BW_PLATFORM_CONFIG)/lib
 # Add our OpenSSL build to the Python interpreter
-sourcePythonDependencies += $(BW_CRYPTO_LIB) $(BW_SSL_LIB)
-linkForSharedExtra += -Wl,--whole-archive -lbwssl -lbwcrypto -Wl,--no-whole-archive
+# BIGWORLD_BEGIN(3.13 migration)
+# Was: sourcePythonDependencies += $(BW_CRYPTO_LIB) $(BW_SSL_LIB) plus a
+# -Wl,--whole-archive -lbwssl -lbwcrypto -Wl,--no-whole-archive entry in
+# linkForSharedExtra, both feeding the 2.7 _ssl/_hashlib shared modules.
+# 3.13 requires OpenSSL >= 1.1.1 and disables those modules against our
+# vendored 1.0.0d (which additionally no longer compiles under gcc >= 14 /
+# C23), so the interpreter no longer links OpenSSL at all. Restore the
+# dependency, the whole-archive link and --with-openssl once the OpenSSL
+# dependency is upgraded (vcpkg task, see docs/python-313-migration.md).
+# sourcePythonDependencies += $(BW_CRYPTO_LIB) $(BW_SSL_LIB)
+# linkForSharedExtra += -Wl,--whole-archive -lbwssl -lbwcrypto -Wl,--no-whole-archive
+# BIGWORLD_END
 
 pythonLibDir := $(BW_INTERMEDIATE_DIR)/$(BW_PLATFORM_CONFIG)/lib
 
@@ -115,9 +125,19 @@ pythonInstallBinaryTarget := $(PYTHON_INSTALL_DIR)/bin/$(pythonBinaryFile)
 # How to ./configure Python
 #
 
-pythonConfigureOpts := --enable-unicode=ucs4 
+# BIGWORLD_BEGIN(3.13 migration)
+# --enable-unicode=ucs4 is gone: 3.3+ always uses a flexible ('unicode-internal'
+# in 3.3+, PEP 393) representation and the option was removed.
+# --with-openssl is deliberately NOT passed: the vendored OpenSSL (1.0.0d) is
+# below 3.13's minimum (1.1.1), and passing the option turns that into a hard
+# configure error instead of a soft _ssl/_hashlib disable. Re-add it once the
+# OpenSSL dependency is upgraded (see docs/python-313-migration.md):
+#   pythonConfigureOpts += --with-openssl="$(OPENSSL_BUILD_DIR)"
+# The CPPFLAGS below still expose our OpenSSL headers to configure's checks.
+# BIGWORLD_END
 pythonConfigureOpts += --with-suffix="$(PYTHON_EXE_SUFFIX)"
 pythonConfigureOpts += --prefix="$(PYTHON_INSTALL_DIR)"
+pythonConfigureOpts += --disable-test-modules
 
 ifeq ($(BW_IS_QUIET_BUILD),1)
 pythonConfigureOpts += --silent
@@ -170,7 +190,22 @@ clean_lib$(BW_PYTHON_TARGET):
 # Proxy file for the entire tree, hopefully changes with every update
 pythonLibrarySentinel := __future__.py
 # The shared modules we expect
-pythonSharedMods := array.so audioop.so binascii.so _bisect.so bz2.so cmath.so _codecs_cn.so _codecs_hk.so _codecs_iso2022.so _codecs_jp.so _codecs_kr.so _codecs_tw.so _collections.so cPickle.so crypt.so cStringIO.so _csv.so _ctypes.so _ctypes_test.so _curses_panel.so _curses.so datetime.so _elementtree.so fcntl.so _functools.so future_builtins.so gdbm.so grp.so _hashlib.so _heapq.so _hotshot.so _io.so itertools.so _json.so linuxaudiodev.so _locale.so _lsprof.so math.so mmap.so _multibytecodec.so _multiprocessing.so nis.so operator.so ossaudiodev.so parser.so pyexpat.so _random.so readline.so resource.so select.so _socket.so spwd.so _sqlite3.so _ssl.so strop.so _struct.so syslog.so termios.so _testcapi.so time.so unicodedata.so zlib.so
+# BIGWORLD_BEGIN(3.13 migration)
+# 3.13 shared modules, full EXT_SUFFIX names (see the sourcePythonSharedModDir
+# note below). Dropped from the 2.7 list: modules removed from the stdlib
+# (audioop, cPickle, cStringIO, crypt, future_builtins, _hotshot,
+# linuxaudiodev, nis, ossaudiodev, parser, spwd, strop, _testcapi...),
+# modules that are built into libpython since 3.x (_collections, _functools,
+# _io, itertools, operator, time...), and modules requiring optional system
+# dev packages that our build hosts do not guarantee (gdbm, readline).
+# _ssl/_hashlib re-enter this list once the vendored OpenSSL reaches 3.13's
+# minimum (>= 1.1.1); see docs/python-313-migration.md.
+# EXT_SUFFIX/SOABI carry the version without the dot (cpython-313, not
+# cpython-3.13), hence the dedicated variable.
+pythonSoabiVersion := $(subst .,,$(BW_PYTHON_VERSION))
+pythonExtSuffix := .cpython-$(pythonSoabiVersion)-x86_64-linux-gnu.so
+pythonSharedMods := $(foreach mod,array _asyncio _bisect _blake2 _bz2 cmath _codecs_cn _codecs_hk _codecs_iso2022 _codecs_jp _codecs_kr _codecs_tw _contextvars _csv _ctypes _curses_panel _curses _datetime _decimal _elementtree _heapq _interpchannels _interpqueues _interpreters _json _lsprof _lzma _md5 _multibytecodec _multiprocessing _opcode _pickle _posixshmem _posixsubprocess _queue _random _sha1 _sha2 _sha3 _socket _sqlite3 _statistics _struct _uuid _zoneinfo binascii fcntl grp math mmap pyexpat resource select syslog termios unicodedata zlib,$(mod)$(pythonExtSuffix))
+# BIGWORLD_END
 
 # Relative paths in our trees
 bwCommonDir := $(BW_SUFFIX_RES_BIGWORLD)/scripts/common
@@ -179,7 +214,14 @@ bwServerCommonDir := $(BW_SUFFIX_RES_BIGWORLD)/scripts/server_common
 bwPythonArchitectureDir := lib-dynload-$(BW_PLATFORM_CONFIG)
 
 # Source tree (third-party) build targets
-sourcePythonSharedModDir := $(PYTHON_BUILD_DIR)/build/lib.linux-x86_64-$(BW_PYTHON_VERSION)$(pyplatform_extra)
+# BIGWORLD_BEGIN(3.13 migration)
+# Since 3.12 extension modules are driven by Modules/Setup.stdlib and land
+# in the build tree's Modules/ subdirectory with EXT_SUFFIX names
+# (<name>.cpython-313-<arch>-<os>.so), not under build/lib.linux-*/.
+# The list below therefore carries full EXT_SUFFIX file names, which keeps
+# the existing '%.so' copy pattern and its `-f` existence assertions
+# working unchanged (a bare '.so' destination suffix remains importable).
+sourcePythonSharedModDir := $(PYTHON_BUILD_DIR)/Modules
 sourcePythonSharedMods := $(addprefix $(sourcePythonSharedModDir)/,$(pythonSharedMods))
 sourcePythonSharedModSentinel := $(sourcePythonSharedModDir)/bwsentinel.txt
 
@@ -191,9 +233,9 @@ sourcePythonLibrarySentinel := $(sourcePythonLibraryDir)/$(pythonLibrarySentinel
 # the library at the same time.
 $(sourcePythonSharedModSentinel): cFlags_python := EXTRA_CFLAGS="$(bwPython_flags)"
 $(sourcePythonSharedModSentinel): $(pythonBuildBinaryTarget)
-	$(MAKE_WITHOUT_JOBSERVER) -C $(PYTHON_BUILD_DIR) sharedmods $(cFlags_python)
+	$(MAKE_WITHOUT_JOBSERVER) -C $(PYTHON_BUILD_DIR) all $(cFlags_python)
 	@true $(foreach output,$(sourcePythonSharedMods),&& [ -f $(output) ])
-	@if [ $$? == 0 ]; then \
+	@if [ $$? -eq 0 ]; then \
 		touch $(sourcePythonSharedModSentinel); \
 	fi
 
@@ -292,7 +334,15 @@ BW_PYTHON_MODULES += python_library
 # need to provide
 getUndefined = $(shell nm -u $(1) | grep 'U ' | grep -v -E ' _?Py' | grep -v '@@GLIBC' | cut -b20-)
 
-modulesWhichNeedSymbols := _hashlib.so _ssl.so
+# BIGWORLD_BEGIN(3.13 migration)
+# Was "_hashlib.so _ssl.so". 3.13's configure disables _ssl/_hashlib while
+# the vendored OpenSSL is below its 1.1.1 minimum, so there are no shared
+# modules left to harvest symbols from; the pregenerated list above is kept
+# unchanged so process link flags stay identical to the 2.7 build. The
+# BW_Py_* entries are satisfied by bwhooks.o inside libbwpython3.13.a and the
+# OpenSSL ones by the engine's own bwssl link, same as before.
+modulesWhichNeedSymbols :=
+# BIGWORLD_END
 sourceModulesWhichNeedSymbols := $(addprefix $(sourcePythonSharedModDir)/,$(modulesWhichNeedSymbols))
 
 bwThirdPartyPythonSymbolsMak := $(BW_BLDDIR)/third_party_python_symbols.mak

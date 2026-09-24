@@ -48,6 +48,9 @@
 #include "addrinfo.h"
 #endif
 
+#ifdef HAVE_NETDB_H
+#define HAVE_GETNAMEINFO 1
+
 #define SUCCESS 0
 #define YES 1
 #define NO  0
@@ -82,8 +85,8 @@ struct gni_sockinet {
 #define ENI_SALEN       6
 
 /* forward declaration to make gcc happy */
-int getnameinfo Py_PROTO((const struct sockaddr *, size_t, char *, size_t,
-                          char *, size_t, int));
+int getnameinfo(const struct sockaddr *, size_t, char *, size_t,
+                          char *, size_t, int);
 
 int
 getnameinfo(sa, salen, host, hostlen, serv, servlen, flags)
@@ -104,8 +107,8 @@ getnameinfo(sa, salen, host, hostlen, serv, servlen, flags)
     u_long v4a;
 #ifdef ENABLE_IPV6
     u_char pfx;
-#endif
     int h_error;
+#endif
     char numserv[512];
     char numaddr[512];
 
@@ -181,7 +184,6 @@ getnameinfo(sa, salen, host, hostlen, serv, servlen, flags)
         hp = getipnodebyaddr(addr, gni_afd->a_addrlen, gni_afd->a_af, &h_error);
 #else
         hp = gethostbyaddr(addr, gni_afd->a_addrlen, gni_afd->a_af);
-        h_error = h_errno;
 #endif
 
         if (hp) {
@@ -212,3 +214,4 @@ getnameinfo(sa, salen, host, hostlen, serv, servlen, flags)
     }
     return SUCCESS;
 }
+#endif // HAVE_NETDB_H

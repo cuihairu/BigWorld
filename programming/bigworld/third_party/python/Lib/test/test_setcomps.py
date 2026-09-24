@@ -1,3 +1,10 @@
+import doctest
+import traceback
+import unittest
+
+from test.support import BrokenIter
+
+
 doctests = """
 ########### Tests mostly copied from test_listcomps.py ############
 
@@ -9,7 +16,7 @@ Test simple loop with conditional
 Test simple case
 
     >>> {2*y + x + 1 for x in (0,) for y in (1,)}
-    set([3])
+    {3}
 
 Test simple nesting
 
@@ -20,6 +27,22 @@ Test nesting with the inner expression dependent on the outer
 
     >>> list(sorted({(i,j) for i in range(4) for j in range(i)}))
     [(1, 0), (2, 0), (2, 1), (3, 0), (3, 1), (3, 2)]
+
+Test the idiom for temporary variable assignment in comprehensions.
+
+    >>> sorted({j*j for i in range(4) for j in [i+1]})
+    [1, 4, 9, 16]
+    >>> sorted({j*k for i in range(4) for j in [i+1] for k in [j+1]})
+    [2, 6, 12, 20]
+    >>> sorted({j*k for i in range(4) for j, k in [(i+1, i+2)]})
+    [2, 6, 12, 20]
+
+Not assignment
+
+    >>> sorted({i*i for i in [*range(4)]})
+    [0, 1, 4, 9]
+    >>> sorted({i*i for i in (*range(4),)})
+    [0, 1, 4, 9]
 
 Make sure the induction variable is not exposed
 
@@ -68,7 +91,7 @@ Generators can call other generators:
 Make sure that None is a valid return value
 
     >>> {None for i in range(10)}
-    set([None])
+    {None}
 
 ########### Tests for various scoping corner cases ############
 
@@ -82,21 +105,21 @@ Same again, only this time as a closure variable
 
     >>> items = {(lambda: i) for i in range(5)}
     >>> {x() for x in items}
-    set([4])
+    {4}
 
 Another way to test that the iteration variable is local to the list comp
 
     >>> items = {(lambda: i) for i in range(5)}
     >>> i = 20
     >>> {x() for x in items}
-    set([4])
+    {4}
 
 And confirm that a closure can jump over the list comp scope
 
     >>> items = {(lambda: y) for i in range(5)}
     >>> y = 2
     >>> {x() for x in items}
-    set([2])
+    {2}
 
 We also repeat each of the above scoping tests inside a function
 
@@ -110,42 +133,67 @@ We also repeat each of the above scoping tests inside a function
     ...     items = {(lambda: i) for i in range(5)}
     ...     return {x() for x in items}
     >>> test_func()
-    set([4])
+    {4}
 
     >>> def test_func():
     ...     items = {(lambda: i) for i in range(5)}
     ...     i = 20
     ...     return {x() for x in items}
     >>> test_func()
-    set([4])
+    {4}
 
     >>> def test_func():
     ...     items = {(lambda: y) for i in range(5)}
     ...     y = 2
     ...     return {x() for x in items}
     >>> test_func()
-    set([2])
+    {2}
 
 """
 
+class SetComprehensionTest(unittest.TestCase):
+    def test_exception_locations(self):
+        # The location of an exception raised from __init__ or
+        # __next__ should should be the iterator expression
+
+        def init_raises():
+            try:
+                {x for x in BrokenIter(init_raises=True)}
+            except Exception as e:
+                return e
+
+        def next_raises():
+            try:
+                {x for x in BrokenIter(next_raises=True)}
+            except Exception as e:
+                return e
+
+        def iter_raises():
+            try:
+                {x for x in BrokenIter(iter_raises=True)}
+            except Exception as e:
+                return e
+
+        for func, expected in [(init_raises, "BrokenIter(init_raises=True)"),
+                               (next_raises, "BrokenIter(next_raises=True)"),
+                               (iter_raises, "BrokenIter(iter_raises=True)"),
+                              ]:
+            with self.subTest(func):
+                exc = func()
+                f = traceback.extract_tb(exc.__traceback__)[0]
+                indent = 16
+                co = func.__code__
+                self.assertEqual(f.lineno, co.co_firstlineno + 2)
+                self.assertEqual(f.end_lineno, co.co_firstlineno + 2)
+                self.assertEqual(f.line[f.colno - indent : f.end_colno - indent],
+                                 expected)
 
 __test__ = {'doctests' : doctests}
 
-def test_main(verbose=None):
-    import sys
-    from test import test_support
-    from test import test_setcomps
-    test_support.run_doctest(test_setcomps, verbose)
+def load_tests(loader, tests, pattern):
+    tests.addTest(doctest.DocTestSuite())
+    return tests
 
-    # verify reference counting
-    if verbose and hasattr(sys, "gettotalrefcount"):
-        import gc
-        counts = [None] * 5
-        for i in range(len(counts)):
-            test_support.run_doctest(test_setcomps, verbose)
-            gc.collect()
-            counts[i] = sys.gettotalrefcount()
-        print(counts)
 
 if __name__ == "__main__":
-    test_main(verbose=True)
+    unittest.main()

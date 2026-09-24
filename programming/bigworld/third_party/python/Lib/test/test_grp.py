@@ -1,9 +1,12 @@
 """Test script for the grp module."""
 
+import random
+import string
 import unittest
-from test import test_support
+from test.support import import_helper
 
-grp = test_support.import_module('grp')
+
+grp = import_helper.import_module('grp')
 
 class GroupDatabaseTestCase(unittest.TestCase):
 
@@ -12,11 +15,11 @@ class GroupDatabaseTestCase(unittest.TestCase):
         # attributes promised by the docs
         self.assertEqual(len(value), 4)
         self.assertEqual(value[0], value.gr_name)
-        self.assertIsInstance(value.gr_name, basestring)
+        self.assertIsInstance(value.gr_name, str)
         self.assertEqual(value[1], value.gr_passwd)
-        self.assertIsInstance(value.gr_passwd, basestring)
+        self.assertIsInstance(value.gr_passwd, str)
         self.assertEqual(value[2], value.gr_gid)
-        self.assertIsInstance(value.gr_gid, (long, int))
+        self.assertIsInstance(value.gr_gid, int)
         self.assertEqual(value[3], value.gr_mem)
         self.assertIsInstance(value.gr_mem, list)
 
@@ -48,52 +51,53 @@ class GroupDatabaseTestCase(unittest.TestCase):
 
     def test_errors(self):
         self.assertRaises(TypeError, grp.getgrgid)
+        self.assertRaises(TypeError, grp.getgrgid, 3.14)
+        self.assertRaises(TypeError, grp.getgrgid, 0.0)
+        self.assertRaises(TypeError, grp.getgrgid, 0, 0)
+        # should be out of gid_t range
+        self.assertRaises(OverflowError, grp.getgrgid, 2**128)
+        self.assertRaises(OverflowError, grp.getgrgid, -2**128)
         self.assertRaises(TypeError, grp.getgrnam)
+        self.assertRaises(TypeError, grp.getgrnam, 42)
+        self.assertRaises(TypeError, grp.getgrnam, b'root')
+        self.assertRaises(TypeError, grp.getgrnam, 'root', 0)
+        # embedded null character
+        self.assertRaisesRegex(ValueError, 'null', grp.getgrnam, 'a\x00b')
+        self.assertRaisesRegex(ValueError, 'null', grp.getgrnam, 'root\x00')
+        self.assertRaises(UnicodeEncodeError, grp.getgrnam, 'roo\udc74')
+        self.assertRaises(KeyError, grp.getgrnam, '')
         self.assertRaises(TypeError, grp.getgrall, 42)
 
-        # try to get some errors
-        bynames = {}
-        bygids = {}
-        for (n, p, g, mem) in grp.getgrall():
-            if not n or n == '+':
-                continue # skip NIS entries etc.
-            bynames[n] = g
-            bygids[g] = n
+        # Find a non-existent group name.
+        # getgrall() will not necessarily report all existing groups
+        # (typical for LDAP based directories in big organizations).
+        for _ in range(30):
+            fakename = ''.join(random.choices(string.ascii_lowercase, k=6))
+            try:
+                grp.getgrnam(fakename)
+            except KeyError:
+                break
+        else:
+            self.fail('Cannot find non-existent group name')
 
-        allnames = bynames.keys()
-        namei = 0
-        fakename = allnames[namei]
-        while fakename in bynames:
-            chars = list(fakename)
-            for i in xrange(len(chars)):
-                if chars[i] == 'z':
-                    chars[i] = 'A'
-                    break
-                elif chars[i] == 'Z':
-                    continue
+        # Find a non-existent gid.
+        maxgid = 2**31
+        for _ in range(30):
+            fakegid = random.randrange(maxgid)
+            try:
+                grp.getgrgid(fakegid)
+            except KeyError:
+                break
+            except OverflowError:
+                if maxgid == 2**31:
+                    maxgid = 2**16-1
+                elif maxgid == 2**16-1:
+                    maxgid = 2**15
                 else:
-                    chars[i] = chr(ord(chars[i]) + 1)
-                    break
-            else:
-                namei = namei + 1
-                try:
-                    fakename = allnames[namei]
-                except IndexError:
-                    # should never happen... if so, just forget it
-                    break
-            fakename = ''.join(chars)
+                    raise
+        else:
+            self.fail('Cannot find non-existent gid')
 
-        self.assertRaises(KeyError, grp.getgrnam, fakename)
-
-        # Choose a non-existent gid.
-        fakegid = 4127
-        while fakegid in bygids:
-            fakegid = (fakegid * 3) % 0x10000
-
-        self.assertRaises(KeyError, grp.getgrgid, fakegid)
-
-def test_main():
-    test_support.run_unittest(GroupDatabaseTestCase)
 
 if __name__ == "__main__":
-    test_main()
+    unittest.main()

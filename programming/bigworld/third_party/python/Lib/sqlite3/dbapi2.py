@@ -1,7 +1,6 @@
-# -*- coding: iso-8859-1 -*-
 # pysqlite2/dbapi2.py: the DB-API 2.0 interface
 #
-# Copyright (C) 2004-2005 Gerhard Häring <gh@ghaering.de>
+# Copyright (C) 2004-2005 Gerhard HÃ¤ring <gh@ghaering.de>
 #
 # This file is part of pysqlite.
 #
@@ -23,12 +22,14 @@
 
 import datetime
 import time
+import collections.abc
 
 from _sqlite3 import *
+from _sqlite3 import _deprecated_version
+
+_deprecated_names = frozenset({"version", "version_info"})
 
 paramstyle = "qmark"
-
-threadsafety = 1
 
 apilevel = "2.0"
 
@@ -47,26 +48,36 @@ def TimeFromTicks(ticks):
 def TimestampFromTicks(ticks):
     return Timestamp(*time.localtime(ticks)[:6])
 
-version_info = tuple([int(x) for x in version.split(".")])
+_deprecated_version_info = tuple(map(int, _deprecated_version.split(".")))
 sqlite_version_info = tuple([int(x) for x in sqlite_version.split(".")])
 
-Binary = buffer
+Binary = memoryview
+collections.abc.Sequence.register(Row)
 
 def register_adapters_and_converters():
+    from warnings import warn
+
+    msg = ("The default {what} is deprecated as of Python 3.12; "
+           "see the sqlite3 documentation for suggested replacement recipes")
+
     def adapt_date(val):
+        warn(msg.format(what="date adapter"), DeprecationWarning, stacklevel=2)
         return val.isoformat()
 
     def adapt_datetime(val):
+        warn(msg.format(what="datetime adapter"), DeprecationWarning, stacklevel=2)
         return val.isoformat(" ")
 
     def convert_date(val):
-        return datetime.date(*map(int, val.split("-")))
+        warn(msg.format(what="date converter"), DeprecationWarning, stacklevel=2)
+        return datetime.date(*map(int, val.split(b"-")))
 
     def convert_timestamp(val):
-        datepart, timepart = val.split(" ")
-        year, month, day = map(int, datepart.split("-"))
-        timepart_full = timepart.split(".")
-        hours, minutes, seconds = map(int, timepart_full[0].split(":"))
+        warn(msg.format(what="timestamp converter"), DeprecationWarning, stacklevel=2)
+        datepart, timepart = val.split(b" ")
+        year, month, day = map(int, datepart.split(b"-"))
+        timepart_full = timepart.split(b".")
+        hours, minutes, seconds = map(int, timepart_full[0].split(b":"))
         if len(timepart_full) == 2:
             microseconds = int('{:0<6.6}'.format(timepart_full[1].decode()))
         else:
@@ -86,3 +97,12 @@ register_adapters_and_converters()
 # Clean up namespace
 
 del(register_adapters_and_converters)
+
+def __getattr__(name):
+    if name in _deprecated_names:
+        from warnings import warn
+
+        warn(f"{name} is deprecated and will be removed in Python 3.14",
+             DeprecationWarning, stacklevel=2)
+        return globals()[f"_deprecated_{name}"]
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

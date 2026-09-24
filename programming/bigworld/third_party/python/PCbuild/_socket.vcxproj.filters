@@ -2,10 +2,13 @@
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <Filter Include="Header Files">
-      <UniqueIdentifier>{b8a0a8f7-db94-4963-a6c3-0552a9fe1fdf}</UniqueIdentifier>
+      <UniqueIdentifier>{1452207f-707c-4e84-b532-307193a0fd85}</UniqueIdentifier>
     </Filter>
     <Filter Include="Source Files">
-      <UniqueIdentifier>{b0f46484-dece-4cfe-80b8-4fdf1394aec2}</UniqueIdentifier>
+      <UniqueIdentifier>{1edfe0d0-7b9d-4dc8-a335-b21fef7cc77a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Resource Files">
+      <UniqueIdentifier>{f8efff18-28ed-4c6b-8e8d-fa816d9a81a8}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -17,5 +20,10 @@
     <ClCompile Include="..\Modules\socketmodule.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="..\PC\python_nt.rc">
+      <Filter>Resource Files</Filter>
+    </ResourceCompile>
   </ItemGroup>
 </Project>

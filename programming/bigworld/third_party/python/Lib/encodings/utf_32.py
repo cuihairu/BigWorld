@@ -59,7 +59,7 @@ class IncrementalDecoder(codecs.BufferedIncrementalDecoder):
             elif byteorder == 1:
                 self.decoder = codecs.utf_32_be_decode
             elif consumed >= 4:
-                raise UnicodeError("UTF-32 stream does not start with BOM")
+                raise UnicodeDecodeError("utf-32", input, 0, 4, "Stream does not start with BOM")
             return (output, consumed)
         return self.decoder(input, self.errors, final)
 
@@ -68,7 +68,7 @@ class IncrementalDecoder(codecs.BufferedIncrementalDecoder):
         self.decoder = None
 
     def getstate(self):
-        # additonal state info from the base class must be None here,
+        # additional state info from the base class must be None here,
         # as it isn't passed along to the caller
         state = codecs.BufferedIncrementalDecoder.getstate(self)[0]
         # additional state info we pass to the caller:
@@ -132,8 +132,8 @@ class StreamReader(codecs.StreamReader):
             self.decode = codecs.utf_32_le_decode
         elif byteorder == 1:
             self.decode = codecs.utf_32_be_decode
-        elif consumed>=4:
-            raise UnicodeError,"UTF-32 stream does not start with BOM"
+        elif consumed >= 4:
+            raise UnicodeDecodeError("utf-32", input, 0, 4, "Stream does not start with BOM")
         return (object, consumed)
 
 ### encodings module API

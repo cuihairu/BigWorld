@@ -1,10 +1,8 @@
 """Unit tests for collections.defaultdict."""
 
-import os
 import copy
-import tempfile
+import pickle
 import unittest
-from test import test_support
 
 from collections import defaultdict
 
@@ -43,7 +41,7 @@ class TestDefaultDict(unittest.TestCase):
         self.assertEqual(d2.default_factory, None)
         try:
             d2[15]
-        except KeyError, err:
+        except KeyError as err:
             self.assertEqual(err.args, (15,))
         else:
             self.fail("d2[15] didn't raise KeyError")
@@ -65,33 +63,12 @@ class TestDefaultDict(unittest.TestCase):
         d2 = defaultdict(int)
         self.assertEqual(d2.default_factory, int)
         d2[12] = 42
-        self.assertEqual(repr(d2), "defaultdict(<type 'int'>, {12: 42})")
+        self.assertEqual(repr(d2), "defaultdict(<class 'int'>, {12: 42})")
         def foo(): return 43
         d3 = defaultdict(foo)
         self.assertTrue(d3.default_factory is foo)
         d3[13]
         self.assertEqual(repr(d3), "defaultdict(%s, {13: 43})" % repr(foo))
-
-    def test_print(self):
-        d1 = defaultdict()
-        def foo(): return 42
-        d2 = defaultdict(foo, {1: 2})
-        # NOTE: We can't use tempfile.[Named]TemporaryFile since this
-        # code must exercise the tp_print C code, which only gets
-        # invoked for *real* files.
-        tfn = tempfile.mktemp()
-        try:
-            f = open(tfn, "w+")
-            try:
-                print >>f, d1
-                print >>f, d2
-                f.seek(0)
-                self.assertEqual(f.readline(), repr(d1) + "\n")
-                self.assertEqual(f.readline(), repr(d2) + "\n")
-            finally:
-                f.close()
-        finally:
-            os.remove(tfn)
 
     def test_copy(self):
         d1 = defaultdict()
@@ -143,7 +120,7 @@ class TestDefaultDict(unittest.TestCase):
         d1 = defaultdict()
         try:
             d1[(1,)]
-        except KeyError, err:
+        except KeyError as err:
             self.assertEqual(err.args[0], (1,))
         else:
             self.fail("expected KeyError")
@@ -156,26 +133,91 @@ class TestDefaultDict(unittest.TestCase):
             def _factory(self):
                 return []
         d = sub()
-        self.assertTrue(repr(d).startswith(
-            "defaultdict(<bound method sub._factory of defaultdict(..."))
-
-        # NOTE: printing a subclass of a builtin type does not call its
-        # tp_print slot. So this part is essentially the same test as above.
-        tfn = tempfile.mktemp()
-        try:
-            f = open(tfn, "w+")
-            try:
-                print >>f, d
-            finally:
-                f.close()
-        finally:
-            os.remove(tfn)
+        self.assertRegex(repr(d),
+            r"sub\(<bound method .*sub\._factory "
+            r"of sub\(\.\.\., \{\}\)>, \{\}\)")
 
     def test_callable_arg(self):
         self.assertRaises(TypeError, defaultdict, {})
 
-def test_main():
-    test_support.run_unittest(TestDefaultDict)
+    def test_pickling(self):
+        d = defaultdict(int)
+        d[1]
+        for proto in range(pickle.HIGHEST_PROTOCOL + 1):
+            s = pickle.dumps(d, proto)
+            o = pickle.loads(s)
+            self.assertEqual(d, o)
+
+    def test_union(self):
+        i = defaultdict(int, {1: 1, 2: 2})
+        s = defaultdict(str, {0: "zero", 1: "one"})
+
+        i_s = i | s
+        self.assertIs(i_s.default_factory, int)
+        self.assertDictEqual(i_s, {1: "one", 2: 2, 0: "zero"})
+        self.assertEqual(list(i_s), [1, 2, 0])
+
+        s_i = s | i
+        self.assertIs(s_i.default_factory, str)
+        self.assertDictEqual(s_i, {0: "zero", 1: 1, 2: 2})
+        self.assertEqual(list(s_i), [0, 1, 2])
+
+        i_ds = i | dict(s)
+        self.assertIs(i_ds.default_factory, int)
+        self.assertDictEqual(i_ds, {1: "one", 2: 2, 0: "zero"})
+        self.assertEqual(list(i_ds), [1, 2, 0])
+
+        ds_i = dict(s) | i
+        self.assertIs(ds_i.default_factory, int)
+        self.assertDictEqual(ds_i, {0: "zero", 1: 1, 2: 2})
+        self.assertEqual(list(ds_i), [0, 1, 2])
+
+        with self.assertRaises(TypeError):
+            i | list(s.items())
+        with self.assertRaises(TypeError):
+            list(s.items()) | i
+
+        # We inherit a fine |= from dict, so just a few sanity checks here:
+        i |= list(s.items())
+        self.assertIs(i.default_factory, int)
+        self.assertDictEqual(i, {1: "one", 2: 2, 0: "zero"})
+        self.assertEqual(list(i), [1, 2, 0])
+
+        with self.assertRaises(TypeError):
+            i |= None
+
+    def test_factory_conflict_with_set_value(self):
+        key = "conflict_test"
+        count = 0
+
+        def default_factory():
+            nonlocal count
+            count += 1
+            local_count = count
+            if count == 1:
+                test_dict[key]
+            return local_count
+
+        test_dict = defaultdict(default_factory)
+
+        self.assertEqual(count, 0)
+        self.assertEqual(test_dict[key], 2)
+        self.assertEqual(count, 2)
+
+    def test_repr_recursive_factory(self):
+        # gh-145492: defaultdict.__repr__ should not cause infinite recursion
+        # when the factory's __repr__ calls repr() on the defaultdict.
+        class ProblematicFactory:
+            def __call__(self):
+                return {}
+            def __repr__(self):
+                repr(dd)
+                return f"ProblematicFactory for {dd}"
+
+        dd = defaultdict(ProblematicFactory())
+        # Should not raise RecursionError
+        r = repr(dd)
+        self.assertIn("ProblematicFactory for", r)
 
 if __name__ == "__main__":
-    test_main()
+    unittest.main()

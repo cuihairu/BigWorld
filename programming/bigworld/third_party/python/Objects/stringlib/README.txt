@@ -1,4 +1,4 @@
-bits shared by the stringobject and unicodeobject implementations (and
+bits shared by the bytesobject and unicodeobject implementations (and
 possibly other modules, in a not too distant future).
 
 the stuff in here is included into relevant places; see the individual
@@ -9,12 +9,12 @@ the following defines used by the different modules:
 
 STRINGLIB_CHAR
 
-    the type used to hold a character (char or Py_UNICODE)
+    the type used to hold a character (char, Py_UCS1, Py_UCS2 or Py_UCS4)
 
-STRINGLIB_EMPTY
+STRINGLIB_GET_EMPTY()
 
-    a PyObject representing the empty string, only to be used if
-    STRINGLIB_MUTABLE is 0
+    returns a PyObject representing the empty string, only to be used if
+    STRINGLIB_MUTABLE is 0. It must not be NULL.
 
 Py_ssize_t STRINGLIB_LEN(PyObject*)
 

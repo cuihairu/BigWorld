@@ -8,11 +8,15 @@ SHARED_MODS_OUTPUT_DIR="${SRCROOT}/../../../../game/res/bigworld/scripts/server_
 STANDARD_LIBRARY_OUTPUT_DIR="${SRCROOT}/../../../../game/res/bigworld/scripts/common/Lib"
 PYTHON_BUILD_DIR="${SRCROOT}/pythonbuild-macosx"
 
-# This is required for building for BigWorld, else a compile-time assertion
-# fails while building any Python-dependent libraries.
-CONFIGURE_FLAGS="--enable-unicode=ucs4"
+# BIGWORLD_BEGIN(3.13 migration)
+# Was 2.7 with --enable-unicode=ucs4 (option removed in 3.x).
+# macOS builds keep the same configure/build flow; extension modules now land
+# in the build directory root with EXT_SUFFIX names, which the generic
+# '*.so' find below already picks up.
+CONFIGURE_FLAGS=""
 
-PYTHON_VERSION=2.7
+PYTHON_VERSION=3.13
+# BIGWORLD_END
 export LDFLAGS="-lcrypto -lssl"
 CONFIGURE_SCRIPT_PATH=`abspath ${SRCROOT}/../../third_party/python/configure`
 
@@ -66,7 +70,9 @@ then
 fi
 
 echo " * Building shared modules"
-if ! make sharedmods >> ${BUILD_LOG_PATH} 2>&1
+# BIGWORLD_BEGIN(3.13 migration) 'sharedmods' no longer builds the
+# extension modules; 'all' does.
+if ! make all >> ${BUILD_LOG_PATH} 2>&1
 
 then
     echo "Failed to make shared modules"

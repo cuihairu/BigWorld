@@ -1,5 +1,5 @@
-IDLE History
-============
+IDLE History from Python 1.5.2 to 2.1
+=====================================
 
 This file contains the release messages for previous IDLE releases.
 As you read on you go back to the dark ages of IDLE's history.
@@ -11,7 +11,7 @@ What's New in IDLEfork 0.8.1?
 *Release date: 22-Jul-2001*
 
 - New tarball released as a result of the 'revitalisation' of the IDLEfork
-  project. 
+  project.
 
 - This release requires python 2.1 or better. Compatibility with earlier
   versions of python (especially ancient ones like 1.5x) is no longer a
@@ -26,8 +26,8 @@ What's New in IDLEfork 0.8.1?
   not working, but I believe this was the case with the previous IDLE fork
   release (0.7.1) as well.
 
-- This release is being made now to mark the point at which IDLEfork is 
-  launching into a new stage of development. 
+- This release is being made now to mark the point at which IDLEfork is
+  launching into a new stage of development.
 
 - IDLEfork CVS will now be branched to enable further development and
   exploration of the two "execution in a remote process" patches submitted by
@@ -59,8 +59,8 @@ IDLEfork 0.7.1 - 29 May 2000
   get to keep both pieces.
 
 - If you have problems or suggestions, you should either contact me or post to
-  the list at http://www.python.org/mailman/listinfo/idle-dev (making it clear
-  that you are using this modified version of IDLE).
+  the idle-dev mailing list (making it clear that you are using this modified
+  version of IDLE).
 
 - Changes:
 
@@ -96,7 +96,7 @@ IDLEfork 0.7.1 - 29 May 2000
     instead of the IDLE help; shift-TAB is now a synonym for unindent.
 
 - New modules:
-  
+
   ExecBinding.py         Executes program through loader
   loader.py              Bootstraps user program
   protocol.py            RPC protocol
@@ -164,7 +164,7 @@ with Python 1.5.2; you can drop this version on top of it.)
 COPYRIGHT
 
 IDLE is covered by the standard Python copyright notice
-(http://www.python.org/doc/Copyright.html).
+(https://www.python.org/doc/copyright).
 
 
 New in IDLE 0.5 (2/15/2000)
@@ -277,7 +277,7 @@ Command to format a paragraph.
 Debug menu:
 
 JIT (Just-In-Time) stack viewer toggle -- if set, the stack viewer
-automaticall pops up when you get a traceback.
+automatically pops up when you get a traceback.
 
 Windows menu:
 

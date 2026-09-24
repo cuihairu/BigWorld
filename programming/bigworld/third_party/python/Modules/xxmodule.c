@@ -9,8 +9,7 @@
    You will probably want to delete all references to 'x_attr' and add
    your own types of attributes instead.  Maybe you want to name your
    local variables other than 'self'.  If your object type is needed in
-   other files, you'll have to create a file "foobarobject.h"; see
-   intobject.h for an example. */
+   other files, you'll have to create a separate header file for it. */
 
 /* Xxo objects */
 
@@ -25,7 +24,7 @@ typedef struct {
 
 static PyTypeObject Xxo_Type;
 
-#define XxoObject_Check(v)      (Py_TYPE(v) == &Xxo_Type)
+#define XxoObject_Check(v)      Py_IS_TYPE(v, &Xxo_Type)
 
 static XxoObject *
 newXxoObject(PyObject *arg)
@@ -44,7 +43,7 @@ static void
 Xxo_dealloc(XxoObject *self)
 {
     Py_XDECREF(self->x_attr);
-    PyObject_Del(self);
+    PyObject_Free(self);
 }
 
 static PyObject *
@@ -52,8 +51,7 @@ Xxo_demo(XxoObject *self, PyObject *args)
 {
     if (!PyArg_ParseTuple(args, ":demo"))
         return NULL;
-    Py_INCREF(Py_None);
-    return Py_None;
+    return Py_NewRef(Py_None);
 }
 
 static PyMethodDef Xxo_methods[] = {
@@ -63,20 +61,22 @@ static PyMethodDef Xxo_methods[] = {
 };
 
 static PyObject *
-Xxo_getattr(XxoObject *self, char *name)
+Xxo_getattro(XxoObject *self, PyObject *name)
 {
     if (self->x_attr != NULL) {
-        PyObject *v = PyDict_GetItemString(self->x_attr, name);
+        PyObject *v = PyDict_GetItemWithError(self->x_attr, name);
         if (v != NULL) {
-            Py_INCREF(v);
-            return v;
+            return Py_NewRef(v);
+        }
+        else if (PyErr_Occurred()) {
+            return NULL;
         }
     }
-    return Py_FindMethod(Xxo_methods, (PyObject *)self, name);
+    return PyObject_GenericGetAttr((PyObject *)self, name);
 }
 
 static int
-Xxo_setattr(XxoObject *self, char *name, PyObject *v)
+Xxo_setattr(XxoObject *self, const char *name, PyObject *v)
 {
     if (self->x_attr == NULL) {
         self->x_attr = PyDict_New();
@@ -85,7 +85,7 @@ Xxo_setattr(XxoObject *self, char *name, PyObject *v)
     }
     if (v == NULL) {
         int rv = PyDict_DelItemString(self->x_attr, name);
-        if (rv < 0)
+        if (rv < 0 && PyErr_ExceptionMatches(PyExc_KeyError))
             PyErr_SetString(PyExc_AttributeError,
                 "delete non-existing Xxo attribute");
         return rv;
@@ -102,42 +102,42 @@ static PyTypeObject Xxo_Type = {
     sizeof(XxoObject),          /*tp_basicsize*/
     0,                          /*tp_itemsize*/
     /* methods */
-    (destructor)Xxo_dealloc, /*tp_dealloc*/
-    0,                          /*tp_print*/
-    (getattrfunc)Xxo_getattr, /*tp_getattr*/
-    (setattrfunc)Xxo_setattr, /*tp_setattr*/
-    0,                          /*tp_compare*/
+    (destructor)Xxo_dealloc,    /*tp_dealloc*/
+    0,                          /*tp_vectorcall_offset*/
+    (getattrfunc)0,             /*tp_getattr*/
+    (setattrfunc)Xxo_setattr,   /*tp_setattr*/
+    0,                          /*tp_as_async*/
     0,                          /*tp_repr*/
     0,                          /*tp_as_number*/
     0,                          /*tp_as_sequence*/
     0,                          /*tp_as_mapping*/
     0,                          /*tp_hash*/
-    0,                      /*tp_call*/
-    0,                      /*tp_str*/
-    0,                      /*tp_getattro*/
-    0,                      /*tp_setattro*/
-    0,                      /*tp_as_buffer*/
-    Py_TPFLAGS_DEFAULT,     /*tp_flags*/
-    0,                      /*tp_doc*/
-    0,                      /*tp_traverse*/
-    0,                      /*tp_clear*/
-    0,                      /*tp_richcompare*/
-    0,                      /*tp_weaklistoffset*/
-    0,                      /*tp_iter*/
-    0,                      /*tp_iternext*/
-    0,                      /*tp_methods*/
-    0,                      /*tp_members*/
-    0,                      /*tp_getset*/
-    0,                      /*tp_base*/
-    0,                      /*tp_dict*/
-    0,                      /*tp_descr_get*/
-    0,                      /*tp_descr_set*/
-    0,                      /*tp_dictoffset*/
-    0,                      /*tp_init*/
-    0,                      /*tp_alloc*/
-    0,                      /*tp_new*/
-    0,                      /*tp_free*/
-    0,                      /*tp_is_gc*/
+    0,                          /*tp_call*/
+    0,                          /*tp_str*/
+    (getattrofunc)Xxo_getattro, /*tp_getattro*/
+    0,                          /*tp_setattro*/
+    0,                          /*tp_as_buffer*/
+    Py_TPFLAGS_DEFAULT,         /*tp_flags*/
+    0,                          /*tp_doc*/
+    0,                          /*tp_traverse*/
+    0,                          /*tp_clear*/
+    0,                          /*tp_richcompare*/
+    0,                          /*tp_weaklistoffset*/
+    0,                          /*tp_iter*/
+    0,                          /*tp_iternext*/
+    Xxo_methods,                /*tp_methods*/
+    0,                          /*tp_members*/
+    0,                          /*tp_getset*/
+    0,                          /*tp_base*/
+    0,                          /*tp_dict*/
+    0,                          /*tp_descr_get*/
+    0,                          /*tp_descr_set*/
+    0,                          /*tp_dictoffset*/
+    0,                          /*tp_init*/
+    0,                          /*tp_alloc*/
+    0,                          /*tp_new*/
+    0,                          /*tp_free*/
+    0,                          /*tp_is_gc*/
 };
 /* --------------------------------------------------------------------- */
 
@@ -156,7 +156,7 @@ xx_foo(PyObject *self, PyObject *args)
     if (!PyArg_ParseTuple(args, "ll:foo", &i, &j))
         return NULL;
     res = i+j; /* XXX Do something here */
-    return PyInt_FromLong(res);
+    return PyLong_FromLong(res);
 }
 
 
@@ -187,13 +187,12 @@ xx_bug(PyObject *self, PyObject *args)
 
     item = PyList_GetItem(list, 0);
     /* Py_INCREF(item); */
-    PyList_SetItem(list, 1, PyInt_FromLong(0L));
+    PyList_SetItem(list, 1, PyLong_FromLong(0L));
     PyObject_Print(item, stdout, 0);
     printf("\n");
     /* Py_DECREF(item); */
 
-    Py_INCREF(Py_None);
-    return Py_None;
+    return Py_NewRef(Py_None);
 }
 
 /* Test bad format character */
@@ -205,8 +204,7 @@ xx_roj(PyObject *self, PyObject *args)
     long b;
     if (!PyArg_ParseTuple(args, "O#:roj", &a, &b))
         return NULL;
-    Py_INCREF(Py_None);
-    return Py_None;
+    return Py_NewRef(Py_None);
 }
 
 
@@ -221,10 +219,10 @@ static PyTypeObject Str_Type = {
     0,                          /*tp_itemsize*/
     /* methods */
     0,                          /*tp_dealloc*/
-    0,                          /*tp_print*/
+    0,                          /*tp_vectorcall_offset*/
     0,                          /*tp_getattr*/
     0,                          /*tp_setattr*/
-    0,                          /*tp_compare*/
+    0,                          /*tp_as_async*/
     0,                          /*tp_repr*/
     0,                          /*tp_as_number*/
     0,                          /*tp_as_sequence*/
@@ -246,7 +244,7 @@ static PyTypeObject Str_Type = {
     0,                          /*tp_methods*/
     0,                          /*tp_members*/
     0,                          /*tp_getset*/
-    0, /* see initxx */         /*tp_base*/
+    0, /* see PyInit_xx */      /*tp_base*/
     0,                          /*tp_dict*/
     0,                          /*tp_descr_get*/
     0,                          /*tp_descr_set*/
@@ -263,8 +261,7 @@ static PyTypeObject Str_Type = {
 static PyObject *
 null_richcompare(PyObject *self, PyObject *other, int op)
 {
-    Py_INCREF(Py_NotImplemented);
-    return Py_NotImplemented;
+    return Py_NewRef(Py_NotImplemented);
 }
 
 static PyTypeObject Null_Type = {
@@ -276,10 +273,10 @@ static PyTypeObject Null_Type = {
     0,                          /*tp_itemsize*/
     /* methods */
     0,                          /*tp_dealloc*/
-    0,                          /*tp_print*/
+    0,                          /*tp_vectorcall_offset*/
     0,                          /*tp_getattr*/
     0,                          /*tp_setattr*/
-    0,                          /*tp_compare*/
+    0,                          /*tp_as_async*/
     0,                          /*tp_repr*/
     0,                          /*tp_as_number*/
     0,                          /*tp_as_sequence*/
@@ -301,14 +298,14 @@ static PyTypeObject Null_Type = {
     0,                          /*tp_methods*/
     0,                          /*tp_members*/
     0,                          /*tp_getset*/
-    0, /* see initxx */         /*tp_base*/
+    0, /* see PyInit_xx */      /*tp_base*/
     0,                          /*tp_dict*/
     0,                          /*tp_descr_get*/
     0,                          /*tp_descr_set*/
     0,                          /*tp_dictoffset*/
     0,                          /*tp_init*/
     0,                          /*tp_alloc*/
-    0, /* see initxx */         /*tp_new*/
+    PyType_GenericNew,          /*tp_new*/
     0,                          /*tp_free*/
     0,                          /*tp_is_gc*/
 };
@@ -334,46 +331,78 @@ static PyMethodDef xx_methods[] = {
 PyDoc_STRVAR(module_doc,
 "This is a template module just for instruction.");
 
-/* Initialization function for the module (*must* be called initxx) */
 
-PyMODINIT_FUNC
-initxx(void)
+static int
+xx_exec(PyObject *m)
 {
-    PyObject *m;
+    /* Slot initialization is subject to the rules of initializing globals.
+       C99 requires the initializers to be "address constants".  Function
+       designators like 'PyType_GenericNew', with implicit conversion to
+       a pointer, are valid C99 address constants.
 
-    /* Due to cross platform compiler issues the slots must be filled
-     * here. It's required for portability to Windows without requiring
-     * C++. */
+       However, the unary '&' operator applied to a non-static variable
+       like 'PyBaseObject_Type' is not required to produce an address
+       constant.  Compilers may support this (gcc does), MSVC does not.
+
+       Both compilers are strictly standard conforming in this particular
+       behavior.
+    */
     Null_Type.tp_base = &PyBaseObject_Type;
-    Null_Type.tp_new = PyType_GenericNew;
     Str_Type.tp_base = &PyUnicode_Type;
 
     /* Finalize the type object including setting type of the new type
      * object; doing it here is required for portability, too. */
-    if (PyType_Ready(&Xxo_Type) < 0)
-        return;
-
-    /* Create the module and add the functions */
-    m = Py_InitModule3("xx", xx_methods, module_doc);
-    if (m == NULL)
-        return;
+    if (PyType_Ready(&Xxo_Type) < 0) {
+        return -1;
+    }
 
     /* Add some symbolic constants to the module */
     if (ErrorObject == NULL) {
         ErrorObject = PyErr_NewException("xx.error", NULL, NULL);
-        if (ErrorObject == NULL)
-            return;
+        if (ErrorObject == NULL) {
+            return -1;
+        }
     }
-    Py_INCREF(ErrorObject);
-    PyModule_AddObject(m, "error", ErrorObject);
+    int rc = PyModule_AddType(m, (PyTypeObject *)ErrorObject);
+    Py_DECREF(ErrorObject);
+    if (rc < 0) {
+        return -1;
+    }
 
-    /* Add Str */
-    if (PyType_Ready(&Str_Type) < 0)
-        return;
-    PyModule_AddObject(m, "Str", (PyObject *)&Str_Type);
+    /* Add Str and Null types */
+    if (PyModule_AddType(m, &Str_Type) < 0) {
+        return -1;
+    }
+    if (PyModule_AddType(m, &Null_Type) < 0) {
+        return -1;
+    }
 
-    /* Add Null */
-    if (PyType_Ready(&Null_Type) < 0)
-        return;
-    PyModule_AddObject(m, "Null", (PyObject *)&Null_Type);
+    return 0;
+}
+
+static struct PyModuleDef_Slot xx_slots[] = {
+    {Py_mod_exec, xx_exec},
+    {Py_mod_multiple_interpreters, Py_MOD_PER_INTERPRETER_GIL_SUPPORTED},
+    {Py_mod_gil, Py_MOD_GIL_NOT_USED},
+    {0, NULL},
+};
+
+static struct PyModuleDef xxmodule = {
+    PyModuleDef_HEAD_INIT,
+    "xx",
+    module_doc,
+    0,
+    xx_methods,
+    xx_slots,
+    NULL,
+    NULL,
+    NULL
+};
+
+/* Export function for the module (*must* be called PyInit_xx) */
+
+PyMODINIT_FUNC
+PyInit_xx(void)
+{
+    return PyModuleDef_Init(&xxmodule);
 }

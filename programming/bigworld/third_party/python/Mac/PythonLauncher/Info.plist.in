@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
-	<string>English</string>
+	<string>en</string>
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>
@@ -38,9 +38,11 @@
 		</dict>
 	</array>
 	<key>CFBundleExecutable</key>
-	<string>PythonLauncher</string>
+	<string>Python Launcher</string>
+	<key>NSHumanReadableCopyright</key>
+	<string>Copyright © 2001-2024 Python Software Foundation</string>
 	<key>CFBundleGetInfoString</key>
-	<string>%VERSION%, © 2001-2014 Python Software Foundation</string>
+	<string>%VERSION%, © 2001-2024 Python Software Foundation</string>
 	<key>CFBundleIconFile</key>
 	<string>PythonLauncher.icns</string>
 	<key>CFBundleIdentifier</key>
@@ -61,5 +63,7 @@
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>Python Launcher uses Apple events to launch your Python script in a Terminal window.</string>
 </dict>
 </plist>

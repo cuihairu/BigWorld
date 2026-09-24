@@ -40,12 +40,9 @@ The data members `self.doc_header', `self.misc_header', and
 `self.undoc_header' set the headers used for the help function's
 listings of documented functions, miscellaneous topics, and undocumented
 functions respectively.
-
-These interpreters use raw_input; thus, if the readline module is loaded,
-they automatically support Emacs-like command history and editing features.
 """
 
-import string
+import inspect, string, sys
 
 __all__ = ["Cmd"]
 
@@ -87,7 +84,6 @@ class Cmd:
         sys.stdin and sys.stdout are used.
 
         """
-        import sys
         if stdin is not None:
             self.stdin = stdin
         else:
@@ -112,7 +108,15 @@ class Cmd:
                 import readline
                 self.old_completer = readline.get_completer()
                 readline.set_completer(self.complete)
-                readline.parse_and_bind(self.completekey+": complete")
+                if readline.backend == "editline":
+                    if self.completekey == 'tab':
+                        # libedit uses "^I" instead of "tab"
+                        command_string = "bind ^I rl_complete"
+                    else:
+                        command_string = f"bind {self.completekey} rl_complete"
+                else:
+                    command_string = f"{self.completekey}: complete"
+                readline.parse_and_bind(command_string)
             except ImportError:
                 pass
         try:
@@ -127,7 +131,7 @@ class Cmd:
                 else:
                     if self.use_rawinput:
                         try:
-                            line = raw_input(self.prompt)
+                            line = input(self.prompt)
                         except EOFError:
                             line = 'EOF'
                     else:
@@ -214,9 +218,8 @@ class Cmd:
         if cmd == '':
             return self.default(line)
         else:
-            try:
-                func = getattr(self, 'do_' + cmd)
-            except AttributeError:
+            func = getattr(self, 'do_' + cmd, None)
+            if func is None:
                 return self.default(line)
             return func(arg)
 
@@ -302,6 +305,7 @@ class Cmd:
             except AttributeError:
                 try:
                     doc=getattr(self, 'do_' + arg).__doc__
+                    doc = inspect.cleandoc(doc)
                     if doc:
                         self.stdout.write("%s\n"%str(doc))
                         return
@@ -314,10 +318,10 @@ class Cmd:
             names = self.get_names()
             cmds_doc = []
             cmds_undoc = []
-            help = {}
+            topics = set()
             for name in names:
                 if name[:5] == 'help_':
-                    help[name[5:]]=1
+                    topics.add(name[5:])
             names.sort()
             # There can be duplicates if routines overridden
             prevname = ''
@@ -327,16 +331,16 @@ class Cmd:
                         continue
                     prevname = name
                     cmd=name[3:]
-                    if cmd in help:
+                    if cmd in topics:
                         cmds_doc.append(cmd)
-                        del help[cmd]
+                        topics.remove(cmd)
                     elif getattr(self, name).__doc__:
                         cmds_doc.append(cmd)
                     else:
                         cmds_undoc.append(cmd)
             self.stdout.write("%s\n"%str(self.doc_leader))
             self.print_topics(self.doc_header,   cmds_doc,   15,80)
-            self.print_topics(self.misc_header,  help.keys(),15,80)
+            self.print_topics(self.misc_header,  sorted(topics),15,80)
             self.print_topics(self.undoc_header, cmds_undoc, 15,80)
 
     def print_topics(self, header, cmds, cmdlen, maxcol):
@@ -356,11 +360,12 @@ class Cmd:
         if not list:
             self.stdout.write("<empty>\n")
             return
+
         nonstrings = [i for i in range(len(list))
                         if not isinstance(list[i], str)]
         if nonstrings:
-            raise TypeError, ("list[i] not a string for i in %s" %
-                              ", ".join(map(str, nonstrings)))
+            raise TypeError("list[i] not a string for i in %s"
+                            % ", ".join(map(str, nonstrings)))
         size = len(list)
         if size == 1:
             self.stdout.write('%s\n'%str(list[0]))

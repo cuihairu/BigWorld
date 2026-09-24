@@ -2,10 +2,13 @@
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <Filter Include="Header Files">
-      <UniqueIdentifier>{b94f6e56-74db-46a5-be97-a7fe7dd5932a}</UniqueIdentifier>
+      <UniqueIdentifier>{ce5b649d-a6f7-4459-9425-c883795d79df}</UniqueIdentifier>
     </Filter>
     <Filter Include="Source Files">
-      <UniqueIdentifier>{95cf3de9-71a2-4847-bd63-490ce9b534bf}</UniqueIdentifier>
+      <UniqueIdentifier>{0e842fe2-176b-4e83-9d1f-0ad13a859efd}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Resource Files">
+      <UniqueIdentifier>{0248795a-00c9-4090-ad61-55ae23438598}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -20,5 +23,10 @@
     <ClCompile Include="$(sqlite3Dir)\sqlite3.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="..\PC\sqlite3.rc">
+      <Filter>Resource Files</Filter>
+    </ResourceCompile>
   </ItemGroup>
 </Project>

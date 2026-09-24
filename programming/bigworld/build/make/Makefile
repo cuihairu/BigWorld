@@ -334,7 +334,13 @@ include $(BW_BLDDIR)/third_party_curl.mak
 include $(BW_BLDDIR)/third_party_json.mak
 include $(BW_BLDDIR)/third_party_mysql.mak
 include $(BW_BLDDIR)/third_party_python.mak
-include $(BW_BLDDIR)/third_party_python_modules.mak
+# BIGWORLD_BEGIN(3.13 migration)
+# Disabled during the Python 3.13 port: these rules install the bundled
+# Py2-era packages (Twisted 11, SQLAlchemy 0.6, Zope 2.11, ...) which cannot
+# run under 3.13. Re-enable after upgrading the packages under
+# third_party/python_modules (see docs/python-313-migration.md).
+# include $(BW_BLDDIR)/third_party_python_modules.mak
+# BIGWORLD_END
 include $(BW_BLDDIR)/third_party_sdl.mak
 include $(BW_BLDDIR)/third_party_mongodb.mak
 

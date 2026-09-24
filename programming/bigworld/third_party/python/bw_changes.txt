@@ -1,36 +1,61 @@
 This file lists the changes made by BigWorld to the python distribution.
+This edition tracks the CPython 3.13.15 port (see docs/python-313-migration.md
+for the full analysis and disposition of the 2.7.3-era patches).
 
 All changes to source code should include BIGWORLD_BEGIN/BIGWORLD_END around
 the changed areas of code.
 
 Adding BWHooks for memory allocation
-1. Makefile.pre.in was changed to include bwhooks.o and bwhooks.h
-2. Cmake/libpython/CMakeLists.txt was changed to include bwhooks.c
-3. Changed obmalloc.c to redefine malloc/realloc/free to the hook functions
-4. Changed pymem.h to redefine malloc/realloc/free to the hook functions
+====================================
+1. Include/bwhooks.h + Python/bwhooks.c kept from the 2.7 tree (plus a new
+   BW_Py_calloc, required by PyMemAllocatorEx).
+2. Makefile.pre.in: Python/bwhooks.o added to PYTHON_OBJS.
+3. Unlike 2.7, malloc/realloc/free are NOT #define-redirection in
+   obmalloc.c/pymem.h any more. The engine installs the official
+   PyMem_SetAllocator(PYMEM_DOMAIN_RAW, ...) raw allocator (routed through
+   BW_Py_malloc/realloc/free/calloc) and PyObject_SetArenaAllocator
+   (BW_Py_malloc/BW_Py_free) from lib/pyscript/script.cpp before
+   Py_Initialize(). This is the supported embedding interface in 3.x and
+   keeps CPython core sources unpatched.
 
 Making python compile and link statically with CMake
-1. CMake/
-2. PC/dl_nt.c - Added an else case to add dummy versions of Py_*ActCtx
+====================================================
+Dropped. The 2.7-era CMake/libpython directory was BigWorld-specific and does
+not exist in the 3.13 tree. Linux builds use ./configure + make
+libpython3.13.a via build/make/third_party_python.mak. A Windows static
+configuration would need to be regenerated for PCbuild if ever required.
 
 Added VS2012 project files
-1. PCBuild/
+==========================
+Dropped. Obsolete toolchain; 3.13 ships its own PCbuild projects (VS2022+).
 
 Fixed python linking shared modules to openSSL
-1. Modified setup.py removing references to ssl and crypto libraries
+==============================================
+Superseded. The 2.7 setup.py hack has no direct equivalent: extension builds
+in 3.x are driven by configure detection (Modules/Setup.bootstrap /
+Modules/Setup.stdlib) instead of runtime probing in setup.py. The _ssl and
+_hashlib modules link against the BigWorld OpenSSL build through the normal
+configure --with-openssl= path when enabled; see third_party_python.mak.
 
 Fixed build failures with pre3.5.0 versions of sqlite3
-1. Modules/_sqlite/connection.c - removed references to specific sqlite
-   versions.
+======================================================
+Dropped. The patched sqlite3 code no longer exists in 3.x (and the vendored
+sqlite in third_party/ is newer than the guarded versions).
 
-Fixed line endings so windows mounts can build python
-1. Parser/asdl_c.py
+Fixed line endings so windows mounts can build python (Parser/asdl_c.py)
+========================================================================
+Dropped. 3.13 tree normalises line endings; not reproducible/needed.
 
-Added an official Python patch to address issue #17547
-Issue: http://bugs.python.org/issue17547 (-Wformat is needed by gcc 4.8)
-Patch: http://hg.python.org/cpython/rev/9d50af4c482f/
-1. 
+Added an official Python patch to address issue #17547 (-Wformat / gcc 4.8)
+===========================================================================
+Dropped. Fixed upstream long ago.
 
-Making Python compilable on VS2015
-1. Modules/timemodule.c - timezone, tzname, daylight definitions absent in VS2015 toolkit
-2. Modules/posixmodule.c - dummy _PyVerify_fd for VS2015 because of dropped support of __pioinfo
+Making Python compilable on VS2015 (timemodule.c/posixmodule.c dummies)
+=======================================================================
+Dropped. Obsolete toolchain.
+
+New in the 3.13 port
+====================
+1. Modules/_hashopenssl.c: hashlib_init_constructors() wraps the digest
+   constructor table setup with BW_Py_memoryTrackingIgnoreBegin/End (the
+   3.x replacement point for the 2.7 INIT_CONSTRUCTOR_CONSTANTS wrap).

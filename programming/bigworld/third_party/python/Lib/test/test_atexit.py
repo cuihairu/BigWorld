@@ -1,82 +1,105 @@
-import sys
-import unittest
-import StringIO
 import atexit
-from imp import reload
-from test import test_support
+import os
+import textwrap
+import unittest
+from test import support
+from test.support import script_helper
 
-class TestCase(unittest.TestCase):
-    def setUp(self):
-        s = StringIO.StringIO()
-        self.save_stdout = sys.stdout
-        self.save_stderr = sys.stderr
-        sys.stdout = sys.stderr = self.subst_io = s
-        self.save_handlers = atexit._exithandlers
-        atexit._exithandlers = []
 
-    def tearDown(self):
-        sys.stdout = self.save_stdout
-        sys.stderr = self.save_stderr
-        atexit._exithandlers = self.save_handlers
+class GeneralTest(unittest.TestCase):
+    def test_general(self):
+        # Run _test_atexit.py in a subprocess since it calls atexit._clear()
+        script = support.findfile("_test_atexit.py")
+        script_helper.run_test_script(script)
 
-    def test_args(self):
-        atexit.register(self.h1)
-        atexit.register(self.h4)
-        atexit.register(self.h4, 4, kw="abc")
-        atexit._run_exitfuncs()
-        self.assertEqual(self.subst_io.getvalue(),
-                         "h4 (4,) {'kw': 'abc'}\nh4 () {}\nh1\n")
+class FunctionalTest(unittest.TestCase):
+    def test_shutdown(self):
+        # Actually test the shutdown mechanism in a subprocess
+        code = textwrap.dedent("""
+            import atexit
 
-    def test_badargs(self):
-        atexit.register(lambda: 1, 0, 0, (x for x in (1,2)), 0, 0)
-        self.assertRaises(TypeError, atexit._run_exitfuncs)
+            def f(msg):
+                print(msg)
 
-    def test_order(self):
-        atexit.register(self.h1)
-        atexit.register(self.h2)
-        atexit.register(self.h3)
-        atexit._run_exitfuncs()
-        self.assertEqual(self.subst_io.getvalue(), "h3\nh2\nh1\n")
+            atexit.register(f, "one")
+            atexit.register(f, "two")
+        """)
+        res = script_helper.assert_python_ok("-c", code)
+        self.assertEqual(res.out.decode().splitlines(), ["two", "one"])
+        self.assertFalse(res.err)
 
-    def test_sys_override(self):
-        # be sure a preset sys.exitfunc is handled properly
-        exfunc = sys.exitfunc
-        sys.exitfunc = self.h1
-        reload(atexit)
-        try:
-            atexit.register(self.h2)
-            atexit._run_exitfuncs()
-        finally:
-            sys.exitfunc = exfunc
-        self.assertEqual(self.subst_io.getvalue(), "h2\nh1\n")
+    def test_atexit_instances(self):
+        # bpo-42639: It is safe to have more than one atexit instance.
+        code = textwrap.dedent("""
+            import sys
+            import atexit as atexit1
+            del sys.modules['atexit']
+            import atexit as atexit2
+            del sys.modules['atexit']
 
-    def test_raise(self):
-        atexit.register(self.raise1)
-        atexit.register(self.raise2)
-        self.assertRaises(TypeError, atexit._run_exitfuncs)
+            assert atexit2 is not atexit1
 
-    ### helpers
-    def h1(self):
-        print "h1"
+            atexit1.register(print, "atexit1")
+            atexit2.register(print, "atexit2")
+        """)
+        res = script_helper.assert_python_ok("-c", code)
+        self.assertEqual(res.out.decode().splitlines(), ["atexit2", "atexit1"])
+        self.assertFalse(res.err)
 
-    def h2(self):
-        print "h2"
 
-    def h3(self):
-        print "h3"
+@support.cpython_only
+class SubinterpreterTest(unittest.TestCase):
 
-    def h4(self, *args, **kwargs):
-        print "h4", args, kwargs
+    def test_callbacks_leak(self):
+        # This test shows a leak in refleak mode if atexit doesn't
+        # take care to free callbacks in its per-subinterpreter module
+        # state.
+        n = atexit._ncallbacks()
+        code = textwrap.dedent(r"""
+            import atexit
+            def f():
+                pass
+            atexit.register(f)
+            del atexit
+        """)
+        ret = support.run_in_subinterp(code)
+        self.assertEqual(ret, 0)
+        self.assertEqual(atexit._ncallbacks(), n)
 
-    def raise1(self):
-        raise TypeError
+    def test_callbacks_leak_refcycle(self):
+        # Similar to the above, but with a refcycle through the atexit
+        # module.
+        n = atexit._ncallbacks()
+        code = textwrap.dedent(r"""
+            import atexit
+            def f():
+                pass
+            atexit.register(f)
+            atexit.__atexit = atexit
+        """)
+        ret = support.run_in_subinterp(code)
+        self.assertEqual(ret, 0)
+        self.assertEqual(atexit._ncallbacks(), n)
 
-    def raise2(self):
-        raise SystemError
+    @unittest.skipUnless(hasattr(os, "pipe"), "requires os.pipe()")
+    def test_callback_on_subinterpreter_teardown(self):
+        # This tests if a callback is called on
+        # subinterpreter teardown.
+        expected = b"The test has passed!"
+        r, w = os.pipe()
 
-def test_main():
-    test_support.run_unittest(TestCase)
+        code = textwrap.dedent(r"""
+            import os
+            import atexit
+            def callback():
+                os.write({:d}, b"The test has passed!")
+            atexit.register(callback)
+        """.format(w))
+        ret = support.run_in_subinterp(code)
+        os.close(w)
+        self.assertEqual(os.read(r, len(expected)), expected)
+        os.close(r)
 
 
 if __name__ == "__main__":
-    test_main()
+    unittest.main()

@@ -5,33 +5,33 @@ __author__ = "Mike Bland"
 __email__ = "mbland at acm dot org"
 
 import sys
+import traceback
 import unittest
 from collections import deque
-from contextlib import GeneratorContextManager, contextmanager
-from test.test_support import run_unittest
+from contextlib import _GeneratorContextManager, contextmanager, nullcontext
 
 
-class MockContextManager(GeneratorContextManager):
-    def __init__(self, gen):
-        GeneratorContextManager.__init__(self, gen)
+class MockContextManager(_GeneratorContextManager):
+    def __init__(self, *args):
+        super().__init__(*args)
         self.enter_called = False
         self.exit_called = False
         self.exit_args = None
 
     def __enter__(self):
         self.enter_called = True
-        return GeneratorContextManager.__enter__(self)
+        return _GeneratorContextManager.__enter__(self)
 
     def __exit__(self, type, value, traceback):
         self.exit_called = True
         self.exit_args = (type, value, traceback)
-        return GeneratorContextManager.__exit__(self, type,
-                                                value, traceback)
+        return _GeneratorContextManager.__exit__(self, type,
+                                                 value, traceback)
 
 
 def mock_contextmanager(func):
     def helper(*args, **kwds):
-        return MockContextManager(func(*args, **kwds))
+        return MockContextManager(func, args, kwds)
     return helper
 
 
@@ -80,11 +80,11 @@ class Nested(object):
             try:
                 if mgr.__exit__(*ex):
                     ex = (None, None, None)
-            except:
-                ex = sys.exc_info()
+            except BaseException as e:
+                ex = (type(e), e, e.__traceback__)
         self.entered = None
         if ex is not exc_info:
-            raise ex[0], ex[1], ex[2]
+            raise ex
 
 
 class MockNested(Nested):
@@ -110,7 +110,7 @@ class FailureTestCase(unittest.TestCase):
             with foo: pass
         self.assertRaises(NameError, fooNotDeclared)
 
-    def testEnterAttributeError(self):
+    def testEnterAttributeError1(self):
         class LacksEnter(object):
             def __exit__(self, type, value, traceback):
                 pass
@@ -118,7 +118,16 @@ class FailureTestCase(unittest.TestCase):
         def fooLacksEnter():
             foo = LacksEnter()
             with foo: pass
-        self.assertRaises(AttributeError, fooLacksEnter)
+        self.assertRaisesRegex(TypeError, 'the context manager', fooLacksEnter)
+
+    def testEnterAttributeError2(self):
+        class LacksEnterAndExit(object):
+            pass
+
+        def fooLacksEnterAndExit():
+            foo = LacksEnterAndExit()
+            with foo: pass
+        self.assertRaisesRegex(TypeError, 'the context manager', fooLacksEnterAndExit)
 
     def testExitAttributeError(self):
         class LacksExit(object):
@@ -128,7 +137,7 @@ class FailureTestCase(unittest.TestCase):
         def fooLacksExit():
             foo = LacksExit()
             with foo: pass
-        self.assertRaises(AttributeError, fooLacksExit)
+        self.assertRaisesRegex(TypeError, 'the context manager.*__exit__', fooLacksExit)
 
     def assertRaisesSyntaxError(self, codestr):
         def shouldRaiseSyntaxError(s):
@@ -139,11 +148,6 @@ class FailureTestCase(unittest.TestCase):
         self.assertRaisesSyntaxError('with mock as None:\n  pass')
         self.assertRaisesSyntaxError(
             'with mock as (None):\n'
-            '  pass')
-
-    def testAssignmentToEmptyTupleError(self):
-        self.assertRaisesSyntaxError(
-            'with mock as ():\n'
             '  pass')
 
     def testAssignmentToTupleOnlyContainingNoneError(self):
@@ -167,7 +171,10 @@ class FailureTestCase(unittest.TestCase):
         def shouldThrow():
             ct = EnterThrows()
             self.foo = None
-            with ct as self.foo:
+            # Ruff complains that we're redefining `self.foo` here,
+            # but the whole point of the test is to check that `self.foo`
+            # is *not* redefined (because `__enter__` raises)
+            with ct as self.foo:  # noqa: F811
                 pass
         self.assertRaises(RuntimeError, shouldThrow)
         self.assertEqual(self.foo, None)
@@ -184,7 +191,9 @@ class FailureTestCase(unittest.TestCase):
         self.assertRaises(RuntimeError, shouldThrow)
 
 class ContextmanagerAssertionMixin(object):
-    TEST_EXCEPTION = RuntimeError("test exception")
+
+    def setUp(self):
+        self.TEST_EXCEPTION = RuntimeError("test exception")
 
     def assertInWithManagerInvariants(self, mock_manager):
         self.assertTrue(mock_manager.enter_called)
@@ -246,7 +255,6 @@ class NonexceptionalTestCase(unittest.TestCase, ContextmanagerAssertionMixin):
         self.assertAfterWithGeneratorInvariantsNoError(foo)
 
     def testInlineGeneratorBoundToExistingVariable(self):
-        foo = None
         with mock_contextmanager_generator() as foo:
             self.assertInWithGeneratorInvariants(foo)
         self.assertAfterWithGeneratorInvariantsNoError(foo)
@@ -347,7 +355,7 @@ class NestedNonexceptionalTestCase(unittest.TestCase,
         self.assertAfterWithManagerInvariantsNoError(mock_nested)
 
 
-class ExceptionalTestCase(unittest.TestCase, ContextmanagerAssertionMixin):
+class ExceptionalTestCase(ContextmanagerAssertionMixin, unittest.TestCase):
     def testSingleResource(self):
         cm = mock_contextmanager_generator()
         def shouldThrow():
@@ -453,7 +461,8 @@ class ExceptionalTestCase(unittest.TestCase, ContextmanagerAssertionMixin):
             with cm():
                 raise StopIteration("from with")
 
-        self.assertRaises(StopIteration, shouldThrow)
+        with self.assertRaisesRegex(StopIteration, 'from with'):
+            shouldThrow()
 
     def testRaisedStopIteration2(self):
         # From bug 1462485
@@ -467,7 +476,8 @@ class ExceptionalTestCase(unittest.TestCase, ContextmanagerAssertionMixin):
             with cm():
                 raise StopIteration("from with")
 
-        self.assertRaises(StopIteration, shouldThrow)
+        with self.assertRaisesRegex(StopIteration, 'from with'):
+            shouldThrow()
 
     def testRaisedStopIteration3(self):
         # Another variant where the exception hasn't been instantiated
@@ -478,9 +488,10 @@ class ExceptionalTestCase(unittest.TestCase, ContextmanagerAssertionMixin):
 
         def shouldThrow():
             with cm():
-                raise iter([]).next()
+                raise next(iter([]))
 
-        self.assertRaises(StopIteration, shouldThrow)
+        with self.assertRaises(StopIteration):
+            shouldThrow()
 
     def testRaisedGeneratorExit1(self):
         # From bug 1462485
@@ -515,7 +526,7 @@ class ExceptionalTestCase(unittest.TestCase, ContextmanagerAssertionMixin):
         class cm(object):
             def __init__(self, bool_conversion):
                 class Bool:
-                    def __nonzero__(self):
+                    def __bool__(self):
                         return bool_conversion()
                 self.exit_result = Bool()
             def __enter__(self):
@@ -534,7 +545,7 @@ class ExceptionalTestCase(unittest.TestCase, ContextmanagerAssertionMixin):
         self.assertRaises(AssertionError, falseAsBool)
 
         def failAsBool():
-            with cm(lambda: 1 // 0):
+            with cm(lambda: 1//0):
                 self.fail("Should NOT see this")
         self.assertRaises(ZeroDivisionError, failAsBool)
 
@@ -601,13 +612,13 @@ class AssignmentTargetTestCase(unittest.TestCase):
     def testSingleComplexTarget(self):
         targets = {1: [0, 1, 2]}
         with mock_contextmanager_generator() as targets[1][0]:
-            self.assertEqual(targets.keys(), [1])
+            self.assertEqual(list(targets.keys()), [1])
             self.assertEqual(targets[1][0].__class__, MockResource)
-        with mock_contextmanager_generator() as targets.values()[0][1]:
-            self.assertEqual(targets.keys(), [1])
+        with mock_contextmanager_generator() as list(targets.values())[0][1]:
+            self.assertEqual(list(targets.keys()), [1])
             self.assertEqual(targets[1][1].__class__, MockResource)
         with mock_contextmanager_generator() as targets[2]:
-            keys = targets.keys()
+            keys = list(targets.keys())
             keys.sort()
             self.assertEqual(keys, [1, 2])
         class C: pass
@@ -622,7 +633,7 @@ class AssignmentTargetTestCase(unittest.TestCase):
         targets = {1: [0, 1, 2]}
         with C() as (targets[1][0], targets[1][1], targets[1][2]):
             self.assertEqual(targets, {1: [1, 2, 3]})
-        with C() as (targets.values()[0][2], targets.values()[0][1], targets.values()[0][0]):
+        with C() as (list(targets.values())[0][2], list(targets.values())[0][1], list(targets.values())[0][0]):
             self.assertEqual(targets, {1: [3, 2, 1]})
         with C() as (targets[1], targets[2], targets[3]):
             self.assertEqual(targets, {1: 1, 2: 2, 3: 3})
@@ -633,6 +644,12 @@ class AssignmentTargetTestCase(unittest.TestCase):
             self.assertEqual(blah.two, 2)
             self.assertEqual(blah.three, 3)
 
+    def testWithExtendedTargets(self):
+        with nullcontext(range(1, 5)) as (a, *b, c):
+            self.assertEqual(a, 1)
+            self.assertEqual(b, [2, 3])
+            self.assertEqual(c, 4)
+
 
 class ExitSwallowsExceptionTestCase(unittest.TestCase):
 
@@ -642,7 +659,7 @@ class ExitSwallowsExceptionTestCase(unittest.TestCase):
             def __exit__(self, t, v, tb): return True
         try:
             with AfricanSwallow():
-                1 // 0
+                1/0
         except ZeroDivisionError:
             self.fail("ZeroDivisionError should have been swallowed")
 
@@ -652,7 +669,7 @@ class ExitSwallowsExceptionTestCase(unittest.TestCase):
             def __exit__(self, t, v, tb): return False
         try:
             with EuropeanSwallow():
-                1 // 0
+                1/0
         except ZeroDivisionError:
             pass
         else:
@@ -735,14 +752,48 @@ class NestedWith(unittest.TestCase):
             self.assertEqual(10, b1)
             self.assertEqual(20, b2)
 
-def test_main():
-    run_unittest(FailureTestCase, NonexceptionalTestCase,
-                 NestedNonexceptionalTestCase, ExceptionalTestCase,
-                 NonLocalFlowControlTestCase,
-                 AssignmentTargetTestCase,
-                 ExitSwallowsExceptionTestCase,
-                 NestedWith)
+    def testExceptionLocation(self):
+        # The location of an exception raised from
+        # __init__, __enter__ or __exit__ of a context
+        # manager should be just the context manager expression,
+        # pinpointing the precise context manager in case there
+        # is more than one.
+
+        def init_raises():
+            try:
+                with self.Dummy(), self.InitRaises() as cm, self.Dummy() as d:
+                    pass
+            except Exception as e:
+                return e
+
+        def enter_raises():
+            try:
+                with self.EnterRaises(), self.Dummy() as d:
+                    pass
+            except Exception as e:
+                return e
+
+        def exit_raises():
+            try:
+                with self.ExitRaises(), self.Dummy() as d:
+                    pass
+            except Exception as e:
+                return e
+
+        for func, expected in [(init_raises, "self.InitRaises()"),
+                               (enter_raises, "self.EnterRaises()"),
+                               (exit_raises, "self.ExitRaises()"),
+                              ]:
+            with self.subTest(func):
+                exc = func()
+                f = traceback.extract_tb(exc.__traceback__)[0]
+                indent = 16
+                co = func.__code__
+                self.assertEqual(f.lineno, co.co_firstlineno + 2)
+                self.assertEqual(f.end_lineno, co.co_firstlineno + 2)
+                self.assertEqual(f.line[f.colno - indent : f.end_colno - indent],
+                                 expected)
 
 
 if __name__ == '__main__':
-    test_main()
+    unittest.main()

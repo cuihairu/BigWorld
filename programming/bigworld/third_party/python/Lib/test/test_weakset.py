@@ -1,62 +1,50 @@
 import unittest
-from test import test_support
-from weakref import proxy, ref, WeakSet
-import operator
+from weakref import WeakSet
 import copy
 import string
-import os
-from random import randrange, shuffle
-import sys
-import warnings
-import collections
+from collections import UserString as ustr
+from collections.abc import Set, MutableSet
 import gc
 import contextlib
-from UserString import UserString as ustr
+from test import support
 
 
 class Foo:
     pass
 
-class SomeClass(object):
-    def __init__(self, value):
-        self.value = value
-    def __eq__(self, other):
-        if type(other) != type(self):
-            return False
-        return other.value == self.value
-
-    def __ne__(self, other):
-        return not self.__eq__(other)
-
-    def __hash__(self):
-        return hash((SomeClass, self.value))
-
-class RefCycle(object):
+class RefCycle:
     def __init__(self):
         self.cycle = self
+
+class WeakSetSubclass(WeakSet):
+    pass
+
+class WeakSetWithSlots(WeakSet):
+    __slots__ = ('x', 'y')
+
 
 class TestWeakSet(unittest.TestCase):
 
     def setUp(self):
         # need to keep references to them
-        self.items = [SomeClass(c) for c in ('a', 'b', 'c')]
-        self.items2 = [SomeClass(c) for c in ('x', 'y', 'z')]
-        self.letters = [SomeClass(c) for c in string.ascii_letters]
-        self.ab_items = [SomeClass(c) for c in 'ab']
-        self.abcde_items = [SomeClass(c) for c in 'abcde']
-        self.def_items = [SomeClass(c) for c in 'def']
+        self.items = [ustr(c) for c in ('a', 'b', 'c')]
+        self.items2 = [ustr(c) for c in ('x', 'y', 'z')]
+        self.ab_items = [ustr(c) for c in 'ab']
+        self.abcde_items = [ustr(c) for c in 'abcde']
+        self.def_items = [ustr(c) for c in 'def']
         self.ab_weakset = WeakSet(self.ab_items)
         self.abcde_weakset = WeakSet(self.abcde_items)
         self.def_weakset = WeakSet(self.def_items)
+        self.letters = [ustr(c) for c in string.ascii_letters]
         self.s = WeakSet(self.items)
         self.d = dict.fromkeys(self.items)
-        self.obj = SomeClass('F')
+        self.obj = ustr('F')
         self.fs = WeakSet([self.obj])
 
     def test_methods(self):
         weaksetmethods = dir(WeakSet)
         for method in dir(set):
-            if method == 'test_c_api' or method.startswith('_'):
+            if method.startswith('_'):
                 continue
             self.assertIn(method, weaksetmethods,
                          "WeakSet missing method " + method)
@@ -68,6 +56,7 @@ class TestWeakSet(unittest.TestCase):
         self.assertEqual(len(self.s), len(self.d))
         self.assertEqual(len(self.fs), 1)
         del self.obj
+        support.gc_collect()  # For PyPy or other GCs.
         self.assertEqual(len(self.fs), 0)
 
     def test_contains(self):
@@ -77,7 +66,8 @@ class TestWeakSet(unittest.TestCase):
         self.assertNotIn(1, self.s)
         self.assertIn(self.obj, self.fs)
         del self.obj
-        self.assertNotIn(SomeClass('F'), self.fs)
+        support.gc_collect()  # For PyPy or other GCs.
+        self.assertNotIn(ustr('F'), self.fs)
 
     def test_union(self):
         u = self.s.union(self.items2)
@@ -227,7 +217,7 @@ class TestWeakSet(unittest.TestCase):
         self.assertNotEqual(id(self.s), id(dup))
 
     def test_add(self):
-        x = SomeClass('Q')
+        x = ustr('Q')
         self.s.add(x)
         self.assertIn(x, self.s)
         dup = self.s.copy()
@@ -235,19 +225,20 @@ class TestWeakSet(unittest.TestCase):
         self.assertEqual(self.s, dup)
         self.assertRaises(TypeError, self.s.add, [])
         self.fs.add(Foo())
+        support.gc_collect()  # For PyPy or other GCs.
         self.assertTrue(len(self.fs) == 1)
         self.fs.add(self.obj)
         self.assertTrue(len(self.fs) == 1)
 
     def test_remove(self):
-        x = SomeClass('a')
+        x = ustr('a')
         self.s.remove(x)
         self.assertNotIn(x, self.s)
         self.assertRaises(KeyError, self.s.remove, x)
         self.assertRaises(TypeError, self.s.remove, [])
 
     def test_discard(self):
-        a, q = SomeClass('a'), SomeClass('Q')
+        a, q = ustr('a'), ustr('Q')
         self.s.discard(a)
         self.assertNotIn(a, self.s)
         self.s.discard(q)
@@ -350,6 +341,7 @@ class TestWeakSet(unittest.TestCase):
         self.assertFalse(self.s == set(self.items))
         self.assertFalse(self.s == list(self.items))
         self.assertFalse(self.s == tuple(self.items))
+        self.assertFalse(self.s == WeakSet([Foo]))
         self.assertFalse(self.s == 1)
 
     def test_ne(self):
@@ -357,97 +349,6 @@ class TestWeakSet(unittest.TestCase):
         s1 = WeakSet()
         s2 = WeakSet()
         self.assertFalse(s1 != s2)
-
-    def test_weak_destroy_while_iterating(self):
-        # Issue #7105: iterators shouldn't crash when a key is implicitly removed
-        # Create new items to be sure no-one else holds a reference
-        items = [SomeClass(c) for c in ('a', 'b', 'c')]
-        s = WeakSet(items)
-        it = iter(s)
-        next(it)             # Trigger internal iteration
-        # Destroy an item
-        del items[-1]
-        gc.collect()    # just in case
-        # We have removed either the first consumed items, or another one
-        self.assertIn(len(list(it)), [len(items), len(items) - 1])
-        del it
-        # The removal has been committed
-        self.assertEqual(len(s), len(items))
-
-    def test_weak_destroy_and_mutate_while_iterating(self):
-        # Issue #7105: iterators shouldn't crash when a key is implicitly removed
-        items = [SomeClass(c) for c in string.ascii_letters]
-        s = WeakSet(items)
-        @contextlib.contextmanager
-        def testcontext():
-            try:
-                it = iter(s)
-                next(it)
-                # Schedule an item for removal and recreate it
-                u = SomeClass(str(items.pop()))
-                gc.collect()      # just in case
-                yield u
-            finally:
-                it = None           # should commit all removals
-
-        with testcontext() as u:
-            self.assertNotIn(u, s)
-        with testcontext() as u:
-            self.assertRaises(KeyError, s.remove, u)
-        self.assertNotIn(u, s)
-        with testcontext() as u:
-            s.add(u)
-        self.assertIn(u, s)
-        t = s.copy()
-        with testcontext() as u:
-            s.update(t)
-        self.assertEqual(len(s), len(t))
-        with testcontext() as u:
-            s.clear()
-        self.assertEqual(len(s), 0)
-
-    def test_len_cycles(self):
-        N = 20
-        items = [RefCycle() for i in range(N)]
-        s = WeakSet(items)
-        del items
-        it = iter(s)
-        try:
-            next(it)
-        except StopIteration:
-            pass
-        gc.collect()
-        n1 = len(s)
-        del it
-        gc.collect()
-        n2 = len(s)
-        # one item may be kept alive inside the iterator
-        self.assertIn(n1, (0, 1))
-        self.assertEqual(n2, 0)
-
-    def test_len_race(self):
-        # Extended sanity checks for len() in the face of cyclic collection
-        self.addCleanup(gc.set_threshold, *gc.get_threshold())
-        for th in range(1, 100):
-            N = 20
-            gc.collect(0)
-            gc.set_threshold(th, th, th)
-            items = [RefCycle() for i in range(N)]
-            s = WeakSet(items)
-            del items
-            # All items will be collected at next garbage collection pass
-            it = iter(s)
-            try:
-                next(it)
-            except StopIteration:
-                pass
-            n1 = len(s)
-            del it
-            n2 = len(s)
-            self.assertGreaterEqual(n1, 0)
-            self.assertLessEqual(n1, N)
-            self.assertGreaterEqual(n2, 0)
-            self.assertLessEqual(n2, n1)
 
     def test_weak_destroy_while_iterating(self):
         # Issue #7105: iterators shouldn't crash when a key is implicitly removed
@@ -487,13 +388,13 @@ class TestWeakSet(unittest.TestCase):
                 it = None           # should commit all removals
 
         with testcontext() as u:
-            self.assertFalse(u in s)
+            self.assertNotIn(u, s)
         with testcontext() as u:
             self.assertRaises(KeyError, s.remove, u)
-        self.assertFalse(u in s)
+        self.assertNotIn(u, s)
         with testcontext() as u:
             s.add(u)
-        self.assertTrue(u in s)
+        self.assertIn(u, s)
         t = s.copy()
         with testcontext() as u:
             s.update(t)
@@ -502,9 +403,81 @@ class TestWeakSet(unittest.TestCase):
             s.clear()
         self.assertEqual(len(s), 0)
 
+    def test_len_cycles(self):
+        N = 20
+        items = [RefCycle() for i in range(N)]
+        s = WeakSet(items)
+        del items
+        it = iter(s)
+        try:
+            next(it)
+        except StopIteration:
+            pass
+        gc.collect()
+        n1 = len(s)
+        del it
+        gc.collect()
+        gc.collect()  # For PyPy or other GCs.
+        n2 = len(s)
+        # one item may be kept alive inside the iterator
+        self.assertIn(n1, (0, 1))
+        self.assertEqual(n2, 0)
 
-def test_main(verbose=None):
-    test_support.run_unittest(TestWeakSet)
+    def test_len_race(self):
+        # Extended sanity checks for len() in the face of cyclic collection
+        self.addCleanup(gc.set_threshold, *gc.get_threshold())
+        for th in range(1, 100):
+            N = 20
+            gc.collect(0)
+            gc.set_threshold(th, th, th)
+            items = [RefCycle() for i in range(N)]
+            s = WeakSet(items)
+            del items
+            # All items will be collected at next garbage collection pass
+            it = iter(s)
+            try:
+                next(it)
+            except StopIteration:
+                pass
+            n1 = len(s)
+            del it
+            n2 = len(s)
+            self.assertGreaterEqual(n1, 0)
+            self.assertLessEqual(n1, N)
+            self.assertGreaterEqual(n2, 0)
+            self.assertLessEqual(n2, n1)
+
+    def test_repr(self):
+        assert repr(self.s) == repr(self.s.data)
+
+    def test_abc(self):
+        self.assertIsInstance(self.s, Set)
+        self.assertIsInstance(self.s, MutableSet)
+
+    def test_copying(self):
+        for cls in WeakSet, WeakSetWithSlots:
+            s = cls(self.items)
+            s.x = ['x']
+            s.z = ['z']
+
+            dup = copy.copy(s)
+            self.assertIsInstance(dup, cls)
+            self.assertEqual(dup, s)
+            self.assertIsNot(dup, s)
+            self.assertIs(dup.x, s.x)
+            self.assertIs(dup.z, s.z)
+            self.assertFalse(hasattr(dup, 'y'))
+
+            dup = copy.deepcopy(s)
+            self.assertIsInstance(dup, cls)
+            self.assertEqual(dup, s)
+            self.assertIsNot(dup, s)
+            self.assertEqual(dup.x, s.x)
+            self.assertIsNot(dup.x, s.x)
+            self.assertEqual(dup.z, s.z)
+            self.assertIsNot(dup.z, s.z)
+            self.assertFalse(hasattr(dup, 'y'))
+
 
 if __name__ == "__main__":
-    test_main(verbose=True)
+    unittest.main()

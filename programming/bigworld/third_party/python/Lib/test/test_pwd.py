@@ -1,9 +1,12 @@
+import random
+import string
 import sys
 import unittest
-from test import test_support
+from test.support import import_helper
 
-pwd = test_support.import_module('pwd')
+pwd = import_helper.import_module('pwd')
 
+@unittest.skipUnless(hasattr(pwd, 'getpwall'), 'Does not have getpwall()')
 class PwdTest(unittest.TestCase):
 
     def test_values(self):
@@ -12,19 +15,19 @@ class PwdTest(unittest.TestCase):
         for e in entries:
             self.assertEqual(len(e), 7)
             self.assertEqual(e[0], e.pw_name)
-            self.assertIsInstance(e.pw_name, basestring)
+            self.assertIsInstance(e.pw_name, str)
             self.assertEqual(e[1], e.pw_passwd)
-            self.assertIsInstance(e.pw_passwd, basestring)
+            self.assertIsInstance(e.pw_passwd, str)
             self.assertEqual(e[2], e.pw_uid)
-            self.assertIsInstance(e.pw_uid, (int, long))
+            self.assertIsInstance(e.pw_uid, int)
             self.assertEqual(e[3], e.pw_gid)
-            self.assertIsInstance(e.pw_gid, (int, long))
+            self.assertIsInstance(e.pw_gid, int)
             self.assertEqual(e[4], e.pw_gecos)
-            self.assertIsInstance(e.pw_gecos, basestring)
+            self.assertIn(type(e.pw_gecos), (str, type(None)))
             self.assertEqual(e[5], e.pw_dir)
-            self.assertIsInstance(e.pw_dir, basestring)
+            self.assertIsInstance(e.pw_dir, str)
             self.assertEqual(e[6], e.pw_shell)
-            self.assertIsInstance(e.pw_shell, basestring)
+            self.assertIsInstance(e.pw_shell, str)
 
             # The following won't work, because of duplicate entries
             # for one uid
@@ -55,60 +58,57 @@ class PwdTest(unittest.TestCase):
     def test_errors(self):
         self.assertRaises(TypeError, pwd.getpwuid)
         self.assertRaises(TypeError, pwd.getpwuid, 3.14)
-        self.assertRaises(TypeError, pwd.getpwnam)
-        self.assertRaises(TypeError, pwd.getpwnam, 42)
-        self.assertRaises(TypeError, pwd.getpwall, 42)
-
-        # try to get some errors
-        bynames = {}
-        byuids = {}
-        for (n, p, u, g, gecos, d, s) in pwd.getpwall():
-            bynames[n] = u
-            byuids[u] = n
-
-        allnames = bynames.keys()
-        namei = 0
-        fakename = allnames[namei]
-        while fakename in bynames:
-            chars = list(fakename)
-            for i in xrange(len(chars)):
-                if chars[i] == 'z':
-                    chars[i] = 'A'
-                    break
-                elif chars[i] == 'Z':
-                    continue
-                else:
-                    chars[i] = chr(ord(chars[i]) + 1)
-                    break
-            else:
-                namei = namei + 1
-                try:
-                    fakename = allnames[namei]
-                except IndexError:
-                    # should never happen... if so, just forget it
-                    break
-            fakename = ''.join(chars)
-
-        self.assertRaises(KeyError, pwd.getpwnam, fakename)
-
-        # In some cases, byuids isn't a complete list of all users in the
-        # system, so if we try to pick a value not in byuids (via a perturbing
-        # loop, say), pwd.getpwuid() might still be able to find data for that
-        # uid. Using sys.maxint may provoke the same problems, but hopefully
-        # it will be a more repeatable failure.
-        fakeuid = sys.maxint
-        self.assertNotIn(fakeuid, byuids)
-        self.assertRaises(KeyError, pwd.getpwuid, fakeuid)
-
-        # -1 shouldn't be a valid uid because it has a special meaning in many
-        # uid-related functions
-        self.assertRaises(KeyError, pwd.getpwuid, -1)
+        self.assertRaises(TypeError, pwd.getpwuid, 0.0)
+        self.assertRaises(TypeError, pwd.getpwuid, 0, 0)
         # should be out of uid_t range
         self.assertRaises(KeyError, pwd.getpwuid, 2**128)
         self.assertRaises(KeyError, pwd.getpwuid, -2**128)
+        self.assertRaises(TypeError, pwd.getpwnam)
+        self.assertRaises(TypeError, pwd.getpwnam, 42)
+        self.assertRaises(TypeError, pwd.getpwnam, b'root')
+        self.assertRaises(TypeError, pwd.getpwnam, 'root', 0)
+        # embedded null character
+        self.assertRaisesRegex(ValueError, 'null', pwd.getpwnam, 'a\x00b')
+        self.assertRaisesRegex(ValueError, 'null', pwd.getpwnam, 'root\x00')
+        self.assertRaises(UnicodeEncodeError, pwd.getpwnam, 'roo\udc74')
+        self.assertRaises(KeyError, pwd.getpwnam, '')
+        self.assertRaises(TypeError, pwd.getpwall, 42)
 
-def test_main():
-    test_support.run_unittest(PwdTest)
+        # Find a non-existent user name.
+        # getpwall() will not necessarily report all existing users
+        # (typical for LDAP based directories in big organizations).
+        for _ in range(30):
+            fakename = ''.join(random.choices(string.ascii_lowercase, k=6))
+            try:
+                pwd.getpwnam(fakename)
+            except KeyError:
+                break
+        else:
+            self.fail('Cannot find non-existent user name')
+
+        # Find a non-existent uid.
+        maxuid = max(e.pw_uid for e in pwd.getpwall())
+        if maxuid < 2**15:
+            maxuid = 2**15
+        elif maxuid < 2**16:
+            maxuid = 2**16-1
+        else:
+            maxuid = 2**31
+        for _ in range(30):
+            fakeuid = random.randrange(maxuid)
+            try:
+                pwd.getpwuid(fakeuid)
+            except KeyError:
+                break
+        else:
+            self.fail('Cannot find non-existent uid')
+
+        # On Cygwin, getpwuid(-1) returns 'Unknown+User' user
+        if sys.platform != 'cygwin':
+            # -1 shouldn't be a valid uid because it has a special meaning in many
+            # uid-related functions
+            self.assertRaises(KeyError, pwd.getpwuid, -1)
+
 
 if __name__ == "__main__":
-    test_main()
+    unittest.main()

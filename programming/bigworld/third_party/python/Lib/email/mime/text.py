@@ -6,15 +6,13 @@
 
 __all__ = ['MIMEText']
 
-from email.encoders import encode_7or8bit
 from email.mime.nonmultipart import MIMENonMultipart
 
 
-
 class MIMEText(MIMENonMultipart):
     """Class for generating text/* type MIME documents."""
 
-    def __init__(self, _text, _subtype='plain', _charset='us-ascii'):
+    def __init__(self, _text, _subtype='plain', _charset=None, *, policy=None):
         """Create a text/* type MIME document.
 
         _text is the string for this message object.
@@ -25,6 +23,18 @@ class MIMEText(MIMENonMultipart):
         header.  This defaults to "us-ascii".  Note that as a side-effect, the
         Content-Transfer-Encoding header will also be set.
         """
-        MIMENonMultipart.__init__(self, 'text', _subtype,
-                                  **{'charset': _charset})
+
+        # If no _charset was specified, check to see if there are non-ascii
+        # characters present. If not, use 'us-ascii', otherwise use utf-8.
+        # XXX: This can be removed once #7304 is fixed.
+        if _charset is None:
+            try:
+                _text.encode('us-ascii')
+                _charset = 'us-ascii'
+            except UnicodeEncodeError:
+                _charset = 'utf-8'
+
+        MIMENonMultipart.__init__(self, 'text', _subtype, policy=policy,
+                                  charset=str(_charset))
+
         self.set_payload(_text, _charset)

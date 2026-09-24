@@ -1,4 +1,5 @@
-import test.test_support, unittest
+import math
+import unittest
 
 class PowTest(unittest.TestCase):
 
@@ -14,18 +15,17 @@ class PowTest(unittest.TestCase):
                 self.assertEqual(pow(type(i), 3), i*i*i)
 
             pow2 = 1
-            for i in range(0,31):
+            for i in range(0, 31):
                 self.assertEqual(pow(2, i), pow2)
                 if i != 30 : pow2 = pow2*2
 
-            for othertype in int, long:
-                for i in range(-10, 0) + range(1, 10):
-                    ii = type(i)
-                    for j in range(1, 11):
-                        jj = -othertype(j)
-                        pow(ii, jj)
+            for i in list(range(-10, 0)) + list(range(1, 10)):
+                ii = type(i)
+                inv = pow(ii, -1) # inverse of ii
+                for jj in range(-10, 0):
+                    self.assertAlmostEqual(pow(ii, jj), pow(inv, -jj))
 
-        for othertype in int, long, float:
+        for othertype in int, float:
             for i in range(1, 100):
                 zero = type(0)
                 exp = -othertype(i/10.0)
@@ -42,7 +42,7 @@ class PowTest(unittest.TestCase):
             asseq = self.assertAlmostEqual
         elif type == int:
             jl = 0
-        elif type == long:
+        elif type == int:
             jl, jh = 0, 15
         for i in range(il, ih+1):
             for j in range(jl, jh+1):
@@ -59,9 +59,6 @@ class PowTest(unittest.TestCase):
     def test_powint(self):
         self.powtest(int)
 
-    def test_powlong(self):
-        self.powtest(long)
-
     def test_powfloat(self):
         self.powtest(float)
 
@@ -74,12 +71,12 @@ class PowTest(unittest.TestCase):
         self.assertEqual(pow(-3,3) % -8, pow(-3,3,-8))
         self.assertEqual(pow(5,2) % -8, pow(5,2,-8))
 
-        self.assertEqual(pow(3L,3L) % 8, pow(3L,3L,8))
-        self.assertEqual(pow(3L,3L) % -8, pow(3L,3L,-8))
-        self.assertEqual(pow(3L,2) % -2, pow(3L,2,-2))
-        self.assertEqual(pow(-3L,3L) % 8, pow(-3L,3L,8))
-        self.assertEqual(pow(-3L,3L) % -8, pow(-3L,3L,-8))
-        self.assertEqual(pow(5L,2) % -8, pow(5L,2,-8))
+        self.assertEqual(pow(3,3) % 8, pow(3,3,8))
+        self.assertEqual(pow(3,3) % -8, pow(3,3,-8))
+        self.assertEqual(pow(3,2) % -2, pow(3,2,-2))
+        self.assertEqual(pow(-3,3) % 8, pow(-3,3,8))
+        self.assertEqual(pow(-3,3) % -8, pow(-3,3,-8))
+        self.assertEqual(pow(5,2) % -8, pow(5,2,-8))
 
         for i in range(-10, 11):
             for j in range(0, 6):
@@ -91,9 +88,31 @@ class PowTest(unittest.TestCase):
                         )
                     if j >= 0 and k != 0:
                         self.assertEqual(
-                            pow(long(i),j) % k,
-                            pow(long(i),j,k)
+                            pow(int(i),j) % k,
+                            pow(int(i),j,k)
                         )
+
+    def test_big_exp(self):
+        import random
+        self.assertEqual(pow(2, 50000), 1 << 50000)
+        # Randomized modular tests, checking the identities
+        #  a**(b1 + b2) == a**b1 * a**b2
+        #  a**(b1 * b2) == (a**b1)**b2
+        prime = 1000000000039 # for speed, relatively small prime modulus
+        for i in range(10):
+            a = random.randrange(1000, 1000000)
+            bpower = random.randrange(1000, 50000)
+            b = random.randrange(1 << (bpower - 1), 1 << bpower)
+            b1 = random.randrange(1, b)
+            b2 = b - b1
+            got1 = pow(a, b, prime)
+            got2 = pow(a, b1, prime) * pow(a, b2, prime) % prime
+            if got1 != got2:
+                self.fail(f"{a=:x} {b1=:x} {b2=:x} {got1=:x} {got2=:x}")
+            got3 = pow(a, b1 * b2, prime)
+            got4 = pow(pow(a, b1, prime), b2, prime)
+            if got3 != got4:
+                self.fail(f"{a=:x} {b1=:x} {b2=:x} {got3=:x} {got4=:x}")
 
     def test_bug643260(self):
         class TestRpow:
@@ -122,8 +141,30 @@ class PowTest(unittest.TestCase):
             eq(pow(a, -fiveto), expected)
         eq(expected, 1.0)   # else we didn't push fiveto to evenness
 
-def test_main():
-    test.test_support.run_unittest(PowTest)
+    def test_negative_exponent(self):
+        for a in range(-50, 50):
+            for m in range(-50, 50):
+                with self.subTest(a=a, m=m):
+                    if m != 0 and math.gcd(a, m) == 1:
+                        # Exponent -1 should give an inverse, with the
+                        # same sign as m.
+                        inv = pow(a, -1, m)
+                        self.assertEqual(inv, inv % m)
+                        self.assertEqual((inv * a - 1) % m, 0)
+
+                        # Larger exponents
+                        self.assertEqual(pow(a, -2, m), pow(inv, 2, m))
+                        self.assertEqual(pow(a, -3, m), pow(inv, 3, m))
+                        self.assertEqual(pow(a, -1001, m), pow(inv, 1001, m))
+
+                    else:
+                        with self.assertRaises(ValueError):
+                            pow(a, -1, m)
+                        with self.assertRaises(ValueError):
+                            pow(a, -2, m)
+                        with self.assertRaises(ValueError):
+                            pow(a, -1001, m)
+
 
 if __name__ == "__main__":
-    test_main()
+    unittest.main()

@@ -7,18 +7,29 @@ set the first day of the week (0=Monday, 6=Sunday)."""
 
 import sys
 import datetime
+from enum import IntEnum, global_enum
 import locale as _locale
+from itertools import repeat
 
 __all__ = ["IllegalMonthError", "IllegalWeekdayError", "setfirstweekday",
            "firstweekday", "isleap", "leapdays", "weekday", "monthrange",
            "monthcalendar", "prmonth", "month", "prcal", "calendar",
-           "timegm", "month_name", "month_abbr", "day_name", "day_abbr"]
+           "timegm", "month_name", "month_abbr", "day_name", "day_abbr",
+           "Calendar", "TextCalendar", "HTMLCalendar", "LocaleTextCalendar",
+           "LocaleHTMLCalendar", "weekheader",
+           "Day", "Month", "JANUARY", "FEBRUARY", "MARCH",
+           "APRIL", "MAY", "JUNE", "JULY",
+           "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER",
+           "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY",
+           "SATURDAY", "SUNDAY"]
 
 # Exception raised for bad input (with string parameter for details)
 error = ValueError
 
 # Exceptions raised for bad input
-class IllegalMonthError(ValueError):
+# This is trick for backward compatibility. Since 3.13, we will raise IllegalMonthError instead of
+# IndexError for bad month number(out of 1-12). But we can't remove IndexError for backward compatibility.
+class IllegalMonthError(ValueError, IndexError):
     def __init__(self, month):
         self.month = month
     def __str__(self):
@@ -32,9 +43,47 @@ class IllegalWeekdayError(ValueError):
         return "bad weekday number %r; must be 0 (Monday) to 6 (Sunday)" % self.weekday
 
 
-# Constants for months referenced later
-January = 1
-February = 2
+def __getattr__(name):
+    if name in ('January', 'February'):
+        import warnings
+        warnings.warn(f"The '{name}' attribute is deprecated, use '{name.upper()}' instead",
+                      DeprecationWarning, stacklevel=2)
+        if name == 'January':
+            return 1
+        else:
+            return 2
+
+    raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
+
+
+# Constants for months
+@global_enum
+class Month(IntEnum):
+    JANUARY = 1
+    FEBRUARY = 2
+    MARCH = 3
+    APRIL = 4
+    MAY = 5
+    JUNE = 6
+    JULY = 7
+    AUGUST = 8
+    SEPTEMBER = 9
+    OCTOBER = 10
+    NOVEMBER = 11
+    DECEMBER = 12
+
+
+# Constants for days
+@global_enum
+class Day(IntEnum):
+    MONDAY = 0
+    TUESDAY = 1
+    WEDNESDAY = 2
+    THURSDAY = 3
+    FRIDAY = 4
+    SATURDAY = 5
+    SUNDAY = 6
+
 
 # Number of days per month (except for February in leap years)
 mdays = [0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
@@ -90,9 +139,6 @@ day_abbr = _localized_day('%a')
 month_name = _localized_month('%B')
 month_abbr = _localized_month('%b')
 
-# Constants for weekdays
-(MONDAY, TUESDAY, WEDNESDAY, THURSDAY, FRIDAY, SATURDAY, SUNDAY) = range(7)
-
 
 def isleap(year):
     """Return True for leap years, False for non-leap years."""
@@ -108,19 +154,41 @@ def leapdays(y1, y2):
 
 
 def weekday(year, month, day):
-    """Return weekday (0-6 ~ Mon-Sun) for year (1970-...), month (1-12),
-       day (1-31)."""
-    return datetime.date(year, month, day).weekday()
+    """Return weekday (0-6 ~ Mon-Sun) for year, month (1-12), day (1-31)."""
+    if not datetime.MINYEAR <= year <= datetime.MAXYEAR:
+        year = 2000 + year % 400
+    return Day(datetime.date(year, month, day).weekday())
 
 
-def monthrange(year, month):
-    """Return weekday (0-6 ~ Mon-Sun) and number of days (28-31) for
-       year, month."""
+def _validate_month(month):
     if not 1 <= month <= 12:
         raise IllegalMonthError(month)
+
+def monthrange(year, month):
+    """Return weekday of first day of month (0-6 ~ Mon-Sun)
+       and number of days (28-31) for year, month."""
+    _validate_month(month)
     day1 = weekday(year, month, 1)
-    ndays = mdays[month] + (month == February and isleap(year))
+    ndays = mdays[month] + (month == FEBRUARY and isleap(year))
     return day1, ndays
+
+
+def _monthlen(year, month):
+    return mdays[month] + (month == FEBRUARY and isleap(year))
+
+
+def _prevmonth(year, month):
+    if month == 1:
+        return year-1, 12
+    else:
+        return year, month-1
+
+
+def _nextmonth(year, month):
+    if month == 12:
+        return year+1, 1
+    else:
+        return year, month+1
 
 
 class Calendar(object):
@@ -142,7 +210,7 @@ class Calendar(object):
 
     def iterweekdays(self):
         """
-        Return a iterator for one week of weekday numbers starting with the
+        Return an iterator for one week of weekday numbers starting with the
         configured first one.
         """
         for i in range(self.firstweekday, self.firstweekday + 7):
@@ -154,42 +222,54 @@ class Calendar(object):
         values and will always iterate through complete weeks, so it will yield
         dates outside the specified month.
         """
-        date = datetime.date(year, month, 1)
-        # Go back to the beginning of the week
-        days = (date.weekday() - self.firstweekday) % 7
-        date -= datetime.timedelta(days=days)
-        oneday = datetime.timedelta(days=1)
-        while True:
-            yield date
-            try:
-                date += oneday
-            except OverflowError:
-                # Adding one day could fail after datetime.MAXYEAR
-                break
-            if date.month != month and date.weekday() == self.firstweekday:
-                break
-
-    def itermonthdays2(self, year, month):
-        """
-        Like itermonthdates(), but will yield (day number, weekday number)
-        tuples. For days outside the specified month the day number is 0.
-        """
-        for date in self.itermonthdates(year, month):
-            if date.month != month:
-                yield (0, date.weekday())
-            else:
-                yield (date.day, date.weekday())
+        for y, m, d in self.itermonthdays3(year, month):
+            yield datetime.date(y, m, d)
 
     def itermonthdays(self, year, month):
         """
         Like itermonthdates(), but will yield day numbers. For days outside
         the specified month the day number is 0.
         """
-        for date in self.itermonthdates(year, month):
-            if date.month != month:
-                yield 0
-            else:
-                yield date.day
+        day1, ndays = monthrange(year, month)
+        days_before = (day1 - self.firstweekday) % 7
+        yield from repeat(0, days_before)
+        yield from range(1, ndays + 1)
+        days_after = (self.firstweekday - day1 - ndays) % 7
+        yield from repeat(0, days_after)
+
+    def itermonthdays2(self, year, month):
+        """
+        Like itermonthdates(), but will yield (day number, weekday number)
+        tuples. For days outside the specified month the day number is 0.
+        """
+        for i, d in enumerate(self.itermonthdays(year, month), self.firstweekday):
+            yield d, i % 7
+
+    def itermonthdays3(self, year, month):
+        """
+        Like itermonthdates(), but will yield (year, month, day) tuples.  Can be
+        used for dates outside of datetime.date range.
+        """
+        day1, ndays = monthrange(year, month)
+        days_before = (day1 - self.firstweekday) % 7
+        days_after = (self.firstweekday - day1 - ndays) % 7
+        y, m = _prevmonth(year, month)
+        end = _monthlen(y, m) + 1
+        for d in range(end-days_before, end):
+            yield y, m, d
+        for d in range(1, ndays + 1):
+            yield year, month, d
+        y, m = _nextmonth(year, month)
+        for d in range(1, days_after + 1):
+            yield y, m, d
+
+    def itermonthdays4(self, year, month):
+        """
+        Like itermonthdates(), but will yield (year, month, day, day_of_week) tuples.
+        Can be used for dates outside of datetime.date range.
+        """
+        for i, (y, m, d) in enumerate(self.itermonthdays3(year, month)):
+            yield y, m, d, (self.firstweekday + i) % 7
 
     def monthdatescalendar(self, year, month):
         """
@@ -224,10 +304,7 @@ class Calendar(object):
         Each month contains between 4 and 6 weeks and each week contains 1-7
         days. Days are datetime.date objects.
         """
-        months = [
-            self.monthdatescalendar(year, i)
-            for i in range(January, January+12)
-        ]
+        months = [self.monthdatescalendar(year, m) for m in Month]
         return [months[i:i+width] for i in range(0, len(months), width) ]
 
     def yeardays2calendar(self, year, width=3):
@@ -237,10 +314,7 @@ class Calendar(object):
         (day number, weekday number) tuples. Day numbers outside this month are
         zero.
         """
-        months = [
-            self.monthdays2calendar(year, i)
-            for i in range(January, January+12)
-        ]
+        months = [self.monthdays2calendar(year, m) for m in Month]
         return [months[i:i+width] for i in range(0, len(months), width) ]
 
     def yeardayscalendar(self, year, width=3):
@@ -249,10 +323,7 @@ class Calendar(object):
         yeardatescalendar()). Entries in the week lists are day numbers.
         Day numbers outside this month are zero.
         """
-        months = [
-            self.monthdayscalendar(year, i)
-            for i in range(January, January+12)
-        ]
+        months = [self.monthdayscalendar(year, m) for m in Month]
         return [months[i:i+width] for i in range(0, len(months), width) ]
 
 
@@ -266,7 +337,7 @@ class TextCalendar(Calendar):
         """
         Print a single week (no newline).
         """
-        print self.formatweek(theweek, width),
+        print(self.formatweek(theweek, width), end='')
 
     def formatday(self, day, weekday, width):
         """
@@ -304,6 +375,8 @@ class TextCalendar(Calendar):
         """
         Return a formatted month name.
         """
+        _validate_month(themonth)
+
         s = month_name[themonth]
         if withyear:
             s = "%s %r" % (s, theyear)
@@ -313,7 +386,7 @@ class TextCalendar(Calendar):
         """
         Print a month's calendar.
         """
-        print self.formatmonth(theyear, themonth, w, l),
+        print(self.formatmonth(theyear, themonth, w, l), end='')
 
     def formatmonth(self, theyear, themonth, w=0, l=0):
         """
@@ -370,7 +443,7 @@ class TextCalendar(Calendar):
 
     def pryear(self, theyear, w=0, l=0, c=6, m=3):
         """Print a year's calendar."""
-        print self.formatyear(theyear, w, l, c, m)
+        print(self.formatyear(theyear, w, l, c, m), end='')
 
 
 class HTMLCalendar(Calendar):
@@ -381,12 +454,31 @@ class HTMLCalendar(Calendar):
     # CSS classes for the day <td>s
     cssclasses = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 
+    # CSS classes for the day <th>s
+    cssclasses_weekday_head = cssclasses
+
+    # CSS class for the days before and after current month
+    cssclass_noday = "noday"
+
+    # CSS class for the month's head
+    cssclass_month_head = "month"
+
+    # CSS class for the month
+    cssclass_month = "month"
+
+    # CSS class for the year's table head
+    cssclass_year_head = "year"
+
+    # CSS class for the whole year table
+    cssclass_year = "year"
+
     def formatday(self, day, weekday):
         """
         Return a day as a table cell.
         """
         if day == 0:
-            return '<td class="noday">&nbsp;</td>' # day outside month
+            # day outside month
+            return '<td class="%s">&nbsp;</td>' % self.cssclass_noday
         else:
             return '<td class="%s">%d</td>' % (self.cssclasses[weekday], day)
 
@@ -401,7 +493,8 @@ class HTMLCalendar(Calendar):
         """
         Return a weekday name as a table header.
         """
-        return '<th class="%s">%s</th>' % (self.cssclasses[day], day_abbr[day])
+        return '<th class="%s">%s</th>' % (
+            self.cssclasses_weekday_head[day], day_abbr[day])
 
     def formatweekheader(self):
         """
@@ -414,11 +507,13 @@ class HTMLCalendar(Calendar):
         """
         Return a month name as a table row.
         """
+        _validate_month(themonth)
         if withyear:
             s = '%s %s' % (month_name[themonth], theyear)
         else:
             s = '%s' % month_name[themonth]
-        return '<tr><th colspan="7" class="month">%s</th></tr>' % s
+        return '<tr><th colspan="7" class="%s">%s</th></tr>' % (
+            self.cssclass_month_head, s)
 
     def formatmonth(self, theyear, themonth, withyear=True):
         """
@@ -426,7 +521,8 @@ class HTMLCalendar(Calendar):
         """
         v = []
         a = v.append
-        a('<table border="0" cellpadding="0" cellspacing="0" class="month">')
+        a('<table border="0" cellpadding="0" cellspacing="0" class="%s">' % (
+            self.cssclass_month))
         a('\n')
         a(self.formatmonthname(theyear, themonth, withyear=withyear))
         a('\n')
@@ -446,10 +542,12 @@ class HTMLCalendar(Calendar):
         v = []
         a = v.append
         width = max(width, 1)
-        a('<table border="0" cellpadding="0" cellspacing="0" class="year">')
+        a('<table border="0" cellpadding="0" cellspacing="0" class="%s">' %
+          self.cssclass_year)
         a('\n')
-        a('<tr><th colspan="%d" class="year">%s</th></tr>' % (width, theyear))
-        for i in range(January, January+12, width):
+        a('<tr><th colspan="%d" class="%s">%s</th></tr>' % (
+            width, self.cssclass_year_head, theyear))
+        for i in range(JANUARY, JANUARY+12, width):
             # months in this row
             months = range(i, min(i+width, 13))
             a('<tr>')
@@ -485,83 +583,68 @@ class HTMLCalendar(Calendar):
         return ''.join(v).encode(encoding, "xmlcharrefreplace")
 
 
-class TimeEncoding:
+class different_locale:
     def __init__(self, locale):
         self.locale = locale
+        self.oldlocale = None
 
     def __enter__(self):
-        self.oldlocale = _locale.getlocale(_locale.LC_TIME)
+        self.oldlocale = _locale.setlocale(_locale.LC_TIME, None)
         _locale.setlocale(_locale.LC_TIME, self.locale)
-        return _locale.getlocale(_locale.LC_TIME)[1]
 
     def __exit__(self, *args):
         _locale.setlocale(_locale.LC_TIME, self.oldlocale)
 
 
+def _get_default_locale():
+    locale = _locale.setlocale(_locale.LC_TIME, None)
+    if locale == "C":
+        with different_locale(""):
+            # The LC_TIME locale does not seem to be configured:
+            # get the user preferred locale.
+            locale = _locale.setlocale(_locale.LC_TIME, None)
+    return locale
+
+
 class LocaleTextCalendar(TextCalendar):
     """
     This class can be passed a locale name in the constructor and will return
-    month and weekday names in the specified locale. If this locale includes
-    an encoding all strings containing month and weekday names will be returned
-    as unicode.
+    month and weekday names in the specified locale.
     """
 
     def __init__(self, firstweekday=0, locale=None):
         TextCalendar.__init__(self, firstweekday)
         if locale is None:
-            locale = _locale.getdefaultlocale()
+            locale = _get_default_locale()
         self.locale = locale
 
     def formatweekday(self, day, width):
-        with TimeEncoding(self.locale) as encoding:
-            if width >= 9:
-                names = day_name
-            else:
-                names = day_abbr
-            name = names[day]
-            if encoding is not None:
-                name = name.decode(encoding)
-            return name[:width].center(width)
+        with different_locale(self.locale):
+            return super().formatweekday(day, width)
 
     def formatmonthname(self, theyear, themonth, width, withyear=True):
-        with TimeEncoding(self.locale) as encoding:
-            s = month_name[themonth]
-            if encoding is not None:
-                s = s.decode(encoding)
-            if withyear:
-                s = "%s %r" % (s, theyear)
-            return s.center(width)
+        with different_locale(self.locale):
+            return super().formatmonthname(theyear, themonth, width, withyear)
 
 
 class LocaleHTMLCalendar(HTMLCalendar):
     """
     This class can be passed a locale name in the constructor and will return
-    month and weekday names in the specified locale. If this locale includes
-    an encoding all strings containing month and weekday names will be returned
-    as unicode.
+    month and weekday names in the specified locale.
     """
     def __init__(self, firstweekday=0, locale=None):
         HTMLCalendar.__init__(self, firstweekday)
         if locale is None:
-            locale = _locale.getdefaultlocale()
+            locale = _get_default_locale()
         self.locale = locale
 
     def formatweekday(self, day):
-        with TimeEncoding(self.locale) as encoding:
-            s = day_abbr[day]
-            if encoding is not None:
-                s = s.decode(encoding)
-            return '<th class="%s">%s</th>' % (self.cssclasses[day], s)
+        with different_locale(self.locale):
+            return super().formatweekday(day)
 
     def formatmonthname(self, theyear, themonth, withyear=True):
-        with TimeEncoding(self.locale) as encoding:
-            s = month_name[themonth]
-            if encoding is not None:
-                s = s.decode(encoding)
-            if withyear:
-                s = '%s %s' % (s, theyear)
-            return '<tr><th colspan="7" class="month">%s</th></tr>' % s
-
+        with different_locale(self.locale):
+            return super().formatmonthname(theyear, themonth, withyear)
 
 # Support for old module level interface
 c = TextCalendar()
@@ -569,10 +652,6 @@ c = TextCalendar()
 firstweekday = c.getfirstweekday
 
 def setfirstweekday(firstweekday):
-    try:
-        firstweekday.__index__
-    except AttributeError:
-        raise IllegalWeekdayError(firstweekday)
     if not MONDAY <= firstweekday <= SUNDAY:
         raise IllegalWeekdayError(firstweekday)
     c.firstweekday = firstweekday
@@ -594,7 +673,7 @@ _spacing = 6                # Number of spaces between columns
 
 def format(cols, colwidth=_colwidth, spacing=_spacing):
     """Prints multi-column formatting for year calendars"""
-    print formatstring(cols, colwidth, spacing)
+    print(formatstring(cols, colwidth, spacing))
 
 
 def formatstring(cols, colwidth=_colwidth, spacing=_spacing):
@@ -617,52 +696,69 @@ def timegm(tuple):
     return seconds
 
 
-def main(args):
-    import optparse
-    parser = optparse.OptionParser(usage="usage: %prog [options] [year [month]]")
-    parser.add_option(
+def main(args=None):
+    import argparse
+    parser = argparse.ArgumentParser()
+    textgroup = parser.add_argument_group('text only arguments')
+    htmlgroup = parser.add_argument_group('html only arguments')
+    textgroup.add_argument(
         "-w", "--width",
-        dest="width", type="int", default=2,
-        help="width of date column (default 2, text only)"
+        type=int, default=2,
+        help="width of date column (default 2)"
     )
-    parser.add_option(
+    textgroup.add_argument(
         "-l", "--lines",
-        dest="lines", type="int", default=1,
-        help="number of lines for each week (default 1, text only)"
+        type=int, default=1,
+        help="number of lines for each week (default 1)"
     )
-    parser.add_option(
+    textgroup.add_argument(
         "-s", "--spacing",
-        dest="spacing", type="int", default=6,
-        help="spacing between months (default 6, text only)"
+        type=int, default=6,
+        help="spacing between months (default 6)"
     )
-    parser.add_option(
+    textgroup.add_argument(
         "-m", "--months",
-        dest="months", type="int", default=3,
-        help="months per row (default 3, text only)"
+        type=int, default=3,
+        help="months per row (default 3)"
     )
-    parser.add_option(
+    htmlgroup.add_argument(
         "-c", "--css",
-        dest="css", default="calendar.css",
-        help="CSS to use for page (html only)"
+        default="calendar.css",
+        help="CSS to use for page"
     )
-    parser.add_option(
+    parser.add_argument(
         "-L", "--locale",
-        dest="locale", default=None,
-        help="locale to be used from month and weekday names"
+        default=None,
+        help="locale to use for month and weekday names"
     )
-    parser.add_option(
+    parser.add_argument(
         "-e", "--encoding",
-        dest="encoding", default=None,
-        help="Encoding to use for output"
+        default=None,
+        help="encoding to use for output"
     )
-    parser.add_option(
+    parser.add_argument(
         "-t", "--type",
-        dest="type", default="text",
+        default="text",
         choices=("text", "html"),
         help="output type (text or html)"
     )
+    parser.add_argument(
+        "-f", "--first-weekday",
+        type=int, default=0,
+        help="weekday (0 is Monday, 6 is Sunday) to start each week (default 0)"
+    )
+    parser.add_argument(
+        "year",
+        nargs='?', type=int,
+        help="year number"
+    )
+    parser.add_argument(
+        "month",
+        nargs='?', type=int,
+        help="month number (1-12, text only)"
+    )
 
-    (options, args) = parser.parse_args(args)
+    options = parser.parse_args(args)
 
     if options.locale and not options.encoding:
         parser.error("if --locale is specified --encoding is required")
@@ -671,43 +767,47 @@ def main(args):
     locale = options.locale, options.encoding
 
     if options.type == "html":
+        if options.month:
+            parser.error("incorrect number of arguments")
+            sys.exit(1)
         if options.locale:
             cal = LocaleHTMLCalendar(locale=locale)
         else:
             cal = HTMLCalendar()
+        cal.setfirstweekday(options.first_weekday)
         encoding = options.encoding
         if encoding is None:
             encoding = sys.getdefaultencoding()
         optdict = dict(encoding=encoding, css=options.css)
-        if len(args) == 1:
-            print cal.formatyearpage(datetime.date.today().year, **optdict)
-        elif len(args) == 2:
-            print cal.formatyearpage(int(args[1]), **optdict)
+        write = sys.stdout.buffer.write
+        if options.year is None:
+            write(cal.formatyearpage(datetime.date.today().year, **optdict))
         else:
-            parser.error("incorrect number of arguments")
-            sys.exit(1)
+            write(cal.formatyearpage(options.year, **optdict))
     else:
         if options.locale:
             cal = LocaleTextCalendar(locale=locale)
         else:
             cal = TextCalendar()
+        cal.setfirstweekday(options.first_weekday)
         optdict = dict(w=options.width, l=options.lines)
-        if len(args) != 3:
+        if options.month is None:
             optdict["c"] = options.spacing
             optdict["m"] = options.months
-        if len(args) == 1:
+        if options.month is not None:
+            _validate_month(options.month)
+        if options.year is None:
             result = cal.formatyear(datetime.date.today().year, **optdict)
-        elif len(args) == 2:
-            result = cal.formatyear(int(args[1]), **optdict)
-        elif len(args) == 3:
-            result = cal.formatmonth(int(args[1]), int(args[2]), **optdict)
+        elif options.month is None:
+            result = cal.formatyear(options.year, **optdict)
         else:
-            parser.error("incorrect number of arguments")
-            sys.exit(1)
+            result = cal.formatmonth(options.year, options.month, **optdict)
+        write = sys.stdout.write
         if options.encoding:
             result = result.encode(options.encoding)
-        print result
+            write = sys.stdout.buffer.write
+        write(result)
 
 
 if __name__ == "__main__":
-    main(sys.argv)
+    main()

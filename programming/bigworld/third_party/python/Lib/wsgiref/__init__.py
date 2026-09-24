@@ -1,4 +1,4 @@
-"""wsgiref -- a WSGI (PEP 333) Reference Library
+"""wsgiref -- a WSGI (PEP 3333) Reference Library
 
 Current Contents:
 
@@ -12,6 +12,8 @@ Current Contents:
 
 * validate -- validation wrapper that sits between an app and a server
   to detect errors in either
+
+* types -- collection of WSGI-related types for static type checking
 
 To-Do:
 

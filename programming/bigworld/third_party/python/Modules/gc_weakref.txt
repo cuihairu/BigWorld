@@ -15,8 +15,8 @@ have been called before resurrection).  At best (and this has been an
 historically common bug), tp_clear empties an instance's __dict__, and
 "impossible" AttributeErrors result.  At worst, tp_clear leaves behind an
 insane object at the C level, and segfaults result (historically, most
-often by setting a new-style class's mro pointer to NULL, after which
-attribute lookups performed by the class can segfault).
+often by setting a class's mro pointer to NULL, after which attribute
+lookups performed by the class can segfault).
 
 OTOH, it's OK to run Python-level code that can't access unreachable
 objects, and sometimes that's necessary.  The chief example is the callback
@@ -47,10 +47,10 @@ soon as we execute Python code, threads other than the gc thread can run
 too, and they can do ordinary things with weakrefs that end up resurrecting
 CT while gc is running.
 
-    http://www.python.org/sf/1055820
+    https://bugs.python.org/issue1055820
 
 shows how innocent it can be, and also how nasty.  Variants of the three
-focussed test cases attached to that bug report are now part of Python's
+focused test cases attached to that bug report are now part of Python's
 standard Lib/test/test_gc.py.
 
 Jim Fulton gave the best nutshell summary of the new (in 2.4 and 2.3.5)
@@ -119,7 +119,7 @@ isn't easy to stumble into by accident while Python is running, and, indeed,
 it took quite a while to dream up failing test cases.  Zope3 saw segfaults
 during shutdown, during the second call of gc in Py_Finalize, after most
 modules had been torn down.  That creates many trash cycles (esp. those
-involving new-style classes), making the problem much more likely.  Once you
+involving classes), making the problem much more likely.  Once you
 know what's required to provoke the problem, though, it's easy to create
 tests that segfault before shutdown.
 

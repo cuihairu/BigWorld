@@ -1,3 +1,938 @@
+import copy
+import gc
+import pickle
+import sys
+import doctest
+import unittest
+import weakref
+import inspect
+import types
+
+from test import support
+
+try:
+    import _testcapi
+except ImportError:
+    _testcapi = None
+
+
+# This tests to make sure that if a SIGINT arrives just before we send into a
+# yield from chain, the KeyboardInterrupt is raised in the innermost
+# generator (see bpo-30039).
+@unittest.skipUnless(_testcapi is not None and
+                     hasattr(_testcapi, "raise_SIGINT_then_send_None"),
+                     "needs _testcapi.raise_SIGINT_then_send_None")
+class SignalAndYieldFromTest(unittest.TestCase):
+
+    def generator1(self):
+        return (yield from self.generator2())
+
+    def generator2(self):
+        try:
+            yield
+        except KeyboardInterrupt:
+            return "PASSED"
+        else:
+            return "FAILED"
+
+    def test_raise_and_yield_from(self):
+        gen = self.generator1()
+        gen.send(None)
+        try:
+            _testcapi.raise_SIGINT_then_send_None(gen)
+        except BaseException as _exc:
+            exc = _exc
+        self.assertIs(type(exc), StopIteration)
+        self.assertEqual(exc.value, "PASSED")
+
+
+class FinalizationTest(unittest.TestCase):
+
+    def test_frame_resurrect(self):
+        # A generator frame can be resurrected by a generator's finalization.
+        def gen():
+            nonlocal frame
+            try:
+                yield
+            finally:
+                frame = sys._getframe()
+
+        g = gen()
+        wr = weakref.ref(g)
+        next(g)
+        del g
+        support.gc_collect()
+        self.assertIs(wr(), None)
+        self.assertTrue(frame)
+        del frame
+        support.gc_collect()
+
+    def test_refcycle(self):
+        # A generator caught in a refcycle gets finalized anyway.
+        old_garbage = gc.garbage[:]
+        finalized = False
+        def gen():
+            nonlocal finalized
+            try:
+                g = yield
+                yield 1
+            finally:
+                finalized = True
+
+        g = gen()
+        next(g)
+        g.send(g)
+        self.assertGreater(sys.getrefcount(g), 2)
+        self.assertFalse(finalized)
+        del g
+        support.gc_collect()
+        self.assertTrue(finalized)
+        self.assertEqual(gc.garbage, old_garbage)
+
+    def test_lambda_generator(self):
+        # bpo-23192, gh-119897: Test that a lambda returning a generator behaves
+        # like the equivalent function
+        f = lambda: (yield 1)
+        self.assertIsInstance(f(), types.GeneratorType)
+        self.assertEqual(next(f()), 1)
+
+        def g(): return (yield 1)
+
+        # test 'yield from'
+        f2 = lambda: (yield from g())
+        def g2(): return (yield from g())
+
+        f3 = lambda: (yield from f())
+        def g3(): return (yield from f())
+
+        for gen_fun in (f, g, f2, g2, f3, g3):
+            gen = gen_fun()
+            self.assertEqual(next(gen), 1)
+            with self.assertRaises(StopIteration) as cm:
+                gen.send(2)
+            self.assertEqual(cm.exception.value, 2)
+
+    def test_exhausted_generator_frame_cycle(self):
+        def g():
+            yield
+
+        generator = g()
+        frame = generator.gi_frame
+        self.assertIsNone(frame.f_back)
+        next(generator)
+        self.assertIsNone(frame.f_back)
+        next(generator, None)
+        self.assertIsNone(frame.f_back)
+
+
+class GeneratorTest(unittest.TestCase):
+
+    def test_name(self):
+        def func():
+            yield 1
+
+        # check generator names
+        gen = func()
+        self.assertEqual(gen.__name__, "func")
+        self.assertEqual(gen.__qualname__,
+                         "GeneratorTest.test_name.<locals>.func")
+
+        # modify generator names
+        gen.__name__ = "name"
+        gen.__qualname__ = "qualname"
+        self.assertEqual(gen.__name__, "name")
+        self.assertEqual(gen.__qualname__, "qualname")
+
+        # generator names must be a string and cannot be deleted
+        self.assertRaises(TypeError, setattr, gen, '__name__', 123)
+        self.assertRaises(TypeError, setattr, gen, '__qualname__', 123)
+        self.assertRaises(TypeError, delattr, gen, '__name__')
+        self.assertRaises(TypeError, delattr, gen, '__qualname__')
+
+        # modify names of the function creating the generator
+        func.__qualname__ = "func_qualname"
+        func.__name__ = "func_name"
+        gen = func()
+        self.assertEqual(gen.__name__, "func_name")
+        self.assertEqual(gen.__qualname__, "func_qualname")
+
+        # unnamed generator
+        gen = (x for x in range(10))
+        self.assertEqual(gen.__name__,
+                         "<genexpr>")
+        self.assertEqual(gen.__qualname__,
+                         "GeneratorTest.test_name.<locals>.<genexpr>")
+
+    def test_copy(self):
+        def f():
+            yield 1
+        g = f()
+        with self.assertRaises(TypeError):
+            copy.copy(g)
+
+    def test_pickle(self):
+        def f():
+            yield 1
+        g = f()
+        for proto in range(pickle.HIGHEST_PROTOCOL + 1):
+            with self.assertRaises((TypeError, pickle.PicklingError)):
+                pickle.dumps(g, proto)
+
+    def test_send_non_none_to_new_gen(self):
+        def f():
+            yield 1
+        g = f()
+        with self.assertRaises(TypeError):
+            g.send(0)
+        self.assertEqual(next(g), 1)
+
+    def test_handle_frame_object_in_creation(self):
+
+        #Attempt to expose partially constructed frames
+        #See https://github.com/python/cpython/issues/94262
+
+        def cb(*args):
+            inspect.stack()
+
+        def gen():
+            yield 1
+
+        thresholds = gc.get_threshold()
+
+        gc.callbacks.append(cb)
+        gc.set_threshold(1, 0, 0)
+        try:
+            gen()
+        finally:
+            gc.set_threshold(*thresholds)
+            gc.callbacks.pop()
+
+        class Sneaky:
+            def __del__(self):
+                inspect.stack()
+
+        sneaky = Sneaky()
+        sneaky._s = Sneaky()
+        sneaky._s._s = sneaky
+
+        gc.set_threshold(1, 0, 0)
+        try:
+            del sneaky
+            gen()
+        finally:
+            gc.set_threshold(*thresholds)
+
+    def test_ag_frame_f_back(self):
+        async def f():
+            yield
+        ag = f()
+        self.assertIsNone(ag.ag_frame.f_back)
+
+    def test_cr_frame_f_back(self):
+        async def f():
+            pass
+        cr = f()
+        self.assertIsNone(cr.cr_frame.f_back)
+        cr.close()  # Suppress RuntimeWarning.
+
+    def test_gi_frame_f_back(self):
+        def f():
+            yield
+        gi = f()
+        self.assertIsNone(gi.gi_frame.f_back)
+
+    def test_issue103488(self):
+
+        def gen_raises():
+            yield
+            raise ValueError()
+
+        def loop():
+            try:
+                for _ in gen_raises():
+                    if True is False:
+                        return
+            except ValueError:
+                pass
+
+        #This should not raise
+        loop()
+
+    def test_close_clears_frame(self):
+        # gh-142766: Test that closing a generator clears its frame
+        class DetectDelete:
+            def __init__(self):
+                DetectDelete.deleted = False
+
+            def __del__(self):
+                DetectDelete.deleted = True
+
+        def generator(arg):
+            yield
+
+        # Test a freshly created generator (not suspended)
+        g = generator(DetectDelete())
+        g.close()
+        self.assertTrue(DetectDelete.deleted)
+
+        # Test a suspended generator
+        g = generator(DetectDelete())
+        next(g)
+        g.close()
+        self.assertTrue(DetectDelete.deleted)
+
+        # Clear via gi_frame.clear()
+        g = generator(DetectDelete())
+        g.gi_frame.clear()
+        self.assertTrue(DetectDelete.deleted)
+
+class ModifyUnderlyingIterableTest(unittest.TestCase):
+    iterables = [
+        range(0),
+        range(20),
+        [1, 2, 3],
+        (2,),
+        {13, 48, 211},
+        frozenset((15, 8, 6)),
+        {1: 2, 3: 4},
+    ]
+
+    non_iterables = [
+        None,
+        42,
+        3.0,
+        2j,
+    ]
+
+    def genexpr(self):
+        return (x for x in range(10))
+
+    def genfunc(self):
+        def gen(it):
+            for x in it:
+                yield x
+        return gen(range(10))
+
+    def process_tests(self, get_generator):
+        for obj in self.iterables:
+            g_obj = get_generator(obj)
+            with self.subTest(g_obj=g_obj, obj=obj):
+                self.assertListEqual(list(g_obj), list(obj))
+
+            g_iter = get_generator(iter(obj))
+            with self.subTest(g_iter=g_iter, obj=obj):
+                self.assertListEqual(list(g_iter), list(obj))
+
+        err_regex = "'.*' object is not iterable"
+        for obj in self.non_iterables:
+            g_obj = get_generator(obj)
+            with self.subTest(g_obj=g_obj):
+                self.assertRaisesRegex(TypeError, err_regex, list, g_obj)
+
+    def test_modify_f_locals(self):
+        def modify_f_locals(g, local, obj):
+            g.gi_frame.f_locals[local] = obj
+            return g
+
+        def get_generator_genexpr(obj):
+            return modify_f_locals(self.genexpr(), '.0', obj)
+
+        def get_generator_genfunc(obj):
+            return modify_f_locals(self.genfunc(), 'it', obj)
+
+        self.process_tests(get_generator_genexpr)
+        self.process_tests(get_generator_genfunc)
+
+    def test_new_gen_from_gi_code(self):
+        def new_gen_from_gi_code(g, obj):
+            generator_func = types.FunctionType(g.gi_code, {})
+            return generator_func(obj)
+
+        def get_generator_genexpr(obj):
+            return new_gen_from_gi_code(self.genexpr(), obj)
+
+        def get_generator_genfunc(obj):
+            return new_gen_from_gi_code(self.genfunc(), obj)
+
+        self.process_tests(get_generator_genexpr)
+        self.process_tests(get_generator_genfunc)
+
+
+class ExceptionTest(unittest.TestCase):
+    # Tests for the issue #23353: check that the currently handled exception
+    # is correctly saved/restored in PyEval_EvalFrameEx().
+
+    def test_except_throw(self):
+        def store_raise_exc_generator():
+            try:
+                self.assertIsNone(sys.exception())
+                yield
+            except Exception as exc:
+                # exception raised by gen.throw(exc)
+                self.assertIsInstance(sys.exception(), ValueError)
+                self.assertIsNone(exc.__context__)
+                yield
+
+                # ensure that the exception is not lost
+                self.assertIsInstance(sys.exception(), ValueError)
+                yield
+
+                # we should be able to raise back the ValueError
+                raise
+
+        make = store_raise_exc_generator()
+        next(make)
+
+        try:
+            raise ValueError()
+        except Exception as exc:
+            try:
+                make.throw(exc)
+            except Exception:
+                pass
+
+        next(make)
+        with self.assertRaises(ValueError) as cm:
+            next(make)
+        self.assertIsNone(cm.exception.__context__)
+
+        self.assertIsNone(sys.exception())
+
+    def test_except_next(self):
+        def gen():
+            self.assertIsInstance(sys.exception(), ValueError)
+            yield "done"
+
+        g = gen()
+        try:
+            raise ValueError
+        except Exception:
+            self.assertEqual(next(g), "done")
+        self.assertIsNone(sys.exception())
+
+    def test_except_gen_except(self):
+        def gen():
+            try:
+                self.assertIsNone(sys.exception())
+                yield
+                # we are called from "except ValueError:", TypeError must
+                # inherit ValueError in its context
+                raise TypeError()
+            except TypeError as exc:
+                self.assertIsInstance(sys.exception(), TypeError)
+                self.assertEqual(type(exc.__context__), ValueError)
+            # here we are still called from the "except ValueError:"
+            self.assertIsInstance(sys.exception(), ValueError)
+            yield
+            self.assertIsNone(sys.exception())
+            yield "done"
+
+        g = gen()
+        next(g)
+        try:
+            raise ValueError
+        except Exception:
+            next(g)
+
+        self.assertEqual(next(g), "done")
+        self.assertIsNone(sys.exception())
+
+    def test_nested_gen_except_loop(self):
+        def gen():
+            for i in range(100):
+                self.assertIsInstance(sys.exception(), TypeError)
+                yield "doing"
+
+        def outer():
+            try:
+                raise TypeError
+            except:
+                for x in gen():
+                    yield x
+
+        try:
+            raise ValueError
+        except Exception:
+            for x in outer():
+                self.assertEqual(x, "doing")
+        self.assertEqual(sys.exception(), None)
+
+    def test_except_throw_exception_context(self):
+        def gen():
+            try:
+                try:
+                    self.assertIsNone(sys.exception())
+                    yield
+                except ValueError:
+                    # we are called from "except ValueError:"
+                    self.assertIsInstance(sys.exception(), ValueError)
+                    raise TypeError()
+            except Exception as exc:
+                self.assertIsInstance(sys.exception(), TypeError)
+                self.assertEqual(type(exc.__context__), ValueError)
+            # we are still called from "except ValueError:"
+            self.assertIsInstance(sys.exception(), ValueError)
+            yield
+            self.assertIsNone(sys.exception())
+            yield "done"
+
+        g = gen()
+        next(g)
+        try:
+            raise ValueError
+        except Exception as exc:
+            g.throw(exc)
+
+        self.assertEqual(next(g), "done")
+        self.assertIsNone(sys.exception())
+
+    def test_except_throw_bad_exception(self):
+        class E(Exception):
+            def __new__(cls, *args, **kwargs):
+                return cls
+
+        def boring_generator():
+            yield
+
+        gen = boring_generator()
+
+        err_msg = 'should have returned an instance of BaseException'
+
+        with self.assertRaisesRegex(TypeError, err_msg):
+            gen.throw(E)
+
+        self.assertRaises(StopIteration, next, gen)
+
+        def generator():
+            with self.assertRaisesRegex(TypeError, err_msg):
+                yield
+
+        gen = generator()
+        next(gen)
+        with self.assertRaises(StopIteration):
+            gen.throw(E)
+
+    def test_gen_3_arg_deprecation_warning(self):
+        def g():
+            yield 42
+
+        gen = g()
+        with self.assertWarns(DeprecationWarning):
+            with self.assertRaises(TypeError):
+                gen.throw(TypeError, TypeError(24), None)
+
+    def test_stopiteration_error(self):
+        # See also PEP 479.
+
+        def gen():
+            raise StopIteration
+            yield
+
+        with self.assertRaisesRegex(RuntimeError, 'raised StopIteration'):
+            next(gen())
+
+    def test_tutorial_stopiteration(self):
+        # Raise StopIteration" stops the generator too:
+
+        def f():
+            yield 1
+            raise StopIteration
+            yield 2 # never reached
+
+        g = f()
+        self.assertEqual(next(g), 1)
+
+        with self.assertRaisesRegex(RuntimeError, 'raised StopIteration'):
+            next(g)
+
+    def test_return_tuple(self):
+        def g():
+            return (yield 1)
+
+        gen = g()
+        self.assertEqual(next(gen), 1)
+        with self.assertRaises(StopIteration) as cm:
+            gen.send((2,))
+        self.assertEqual(cm.exception.value, (2,))
+
+    def test_return_stopiteration(self):
+        def g():
+            return (yield 1)
+
+        gen = g()
+        self.assertEqual(next(gen), 1)
+        with self.assertRaises(StopIteration) as cm:
+            gen.send(StopIteration(2))
+        self.assertIsInstance(cm.exception.value, StopIteration)
+        self.assertEqual(cm.exception.value.value, 2)
+
+
+class GeneratorCloseTest(unittest.TestCase):
+
+    def test_close_no_return_value(self):
+        def f():
+            yield
+
+        gen = f()
+        gen.send(None)
+        self.assertIsNone(gen.close())
+
+    def test_close_return_value(self):
+        def f():
+            try:
+                yield
+                # close() raises GeneratorExit here, which is caught
+            except GeneratorExit:
+                return 0
+
+        gen = f()
+        gen.send(None)
+        self.assertEqual(gen.close(), 0)
+
+    def test_close_not_catching_exit(self):
+        def f():
+            yield
+            # close() raises GeneratorExit here, which isn't caught and
+            # therefore propagates -- no return value
+            return 0
+
+        gen = f()
+        gen.send(None)
+        self.assertIsNone(gen.close())
+
+    def test_close_not_started(self):
+        def f():
+            try:
+                yield
+            except GeneratorExit:
+                return 0
+
+        gen = f()
+        self.assertIsNone(gen.close())
+
+    def test_close_exhausted(self):
+        def f():
+            try:
+                yield
+            except GeneratorExit:
+                return 0
+
+        gen = f()
+        next(gen)
+        with self.assertRaises(StopIteration):
+            next(gen)
+        self.assertIsNone(gen.close())
+
+    def test_close_closed(self):
+        def f():
+            try:
+                yield
+            except GeneratorExit:
+                return 0
+
+        gen = f()
+        gen.send(None)
+        self.assertEqual(gen.close(), 0)
+        self.assertIsNone(gen.close())
+
+    def test_close_raises(self):
+        def f():
+            try:
+                yield
+            except GeneratorExit:
+                pass
+            raise RuntimeError
+
+        gen = f()
+        gen.send(None)
+        with self.assertRaises(RuntimeError):
+            gen.close()
+
+    def test_close_releases_frame_locals(self):
+        # See gh-118272
+
+        class Foo:
+            pass
+
+        f = Foo()
+        f_wr = weakref.ref(f)
+
+        def genfn():
+            a = f
+            yield
+
+        g = genfn()
+        next(g)
+        del f
+        g.close()
+        support.gc_collect()
+        self.assertIsNone(f_wr())
+
+
+# See https://github.com/python/cpython/issues/125723
+class GeneratorDeallocTest(unittest.TestCase):
+    def test_frame_outlives_generator(self):
+        def g1():
+            a = 42
+            yield sys._getframe()
+
+        def g2():
+            a = 42
+            yield
+
+        def g3(obj):
+            a = 42
+            obj.frame = sys._getframe()
+            yield
+
+        class ObjectWithFrame():
+            def __init__(self):
+                self.frame = None
+
+        def get_frame(index):
+            if index == 1:
+                return next(g1())
+            elif index == 2:
+                gen = g2()
+                next(gen)
+                return gen.gi_frame
+            elif index == 3:
+                obj = ObjectWithFrame()
+                next(g3(obj))
+                return obj.frame
+            else:
+                return None
+
+        for index in (1, 2, 3):
+            with self.subTest(index=index):
+                frame = get_frame(index)
+                frame_locals = frame.f_locals
+                self.assertIn('a', frame_locals)
+                self.assertEqual(frame_locals['a'], 42)
+
+    def test_frame_locals_outlive_generator(self):
+        frame_locals1 = None
+
+        def g1():
+            nonlocal frame_locals1
+            frame_locals1 = sys._getframe().f_locals
+            a = 42
+            yield
+
+        def g2():
+            a = 42
+            yield sys._getframe().f_locals
+
+        def get_frame_locals(index):
+            if index == 1:
+                nonlocal frame_locals1
+                next(g1())
+                return frame_locals1
+            if index == 2:
+                return next(g2())
+            else:
+                return None
+
+        for index in (1, 2):
+            with self.subTest(index=index):
+                frame_locals = get_frame_locals(index)
+                self.assertIn('a', frame_locals)
+                self.assertEqual(frame_locals['a'], 42)
+
+    def test_frame_locals_outlive_generator_with_exec(self):
+        def g():
+            a = 42
+            yield locals(), sys._getframe().f_locals
+
+        locals_ = {'g': g}
+        for i in range(10):
+            exec("snapshot, live_locals = next(g())", locals=locals_)
+            for l in (locals_['snapshot'], locals_['live_locals']):
+                self.assertIn('a', l)
+                self.assertEqual(l['a'], 42)
+
+
+class GeneratorThrowTest(unittest.TestCase):
+
+    def test_exception_context_with_yield(self):
+        def f():
+            try:
+                raise KeyError('a')
+            except Exception:
+                yield
+
+        gen = f()
+        gen.send(None)
+        with self.assertRaises(ValueError) as cm:
+            gen.throw(ValueError)
+        context = cm.exception.__context__
+        self.assertEqual((type(context), context.args), (KeyError, ('a',)))
+
+    def test_exception_context_with_yield_inside_generator(self):
+        # Check that the context is also available from inside the generator
+        # with yield, as opposed to outside.
+        def f():
+            try:
+                raise KeyError('a')
+            except Exception:
+                try:
+                    yield
+                except Exception as exc:
+                    self.assertEqual(type(exc), ValueError)
+                    context = exc.__context__
+                    self.assertEqual((type(context), context.args),
+                        (KeyError, ('a',)))
+                    yield 'b'
+
+        gen = f()
+        gen.send(None)
+        actual = gen.throw(ValueError)
+        # This ensures that the assertions inside were executed.
+        self.assertEqual(actual, 'b')
+
+    def test_exception_context_with_yield_from(self):
+        def f():
+            yield
+
+        def g():
+            try:
+                raise KeyError('a')
+            except Exception:
+                yield from f()
+
+        gen = g()
+        gen.send(None)
+        with self.assertRaises(ValueError) as cm:
+            gen.throw(ValueError)
+        context = cm.exception.__context__
+        self.assertEqual((type(context), context.args), (KeyError, ('a',)))
+
+    def test_exception_context_with_yield_from_with_context_cycle(self):
+        # Check trying to create an exception context cycle:
+        # https://bugs.python.org/issue40696
+        has_cycle = None
+
+        def f():
+            yield
+
+        def g(exc):
+            nonlocal has_cycle
+            try:
+                raise exc
+            except Exception:
+                try:
+                    yield from f()
+                except Exception as exc:
+                    has_cycle = (exc is exc.__context__)
+            yield
+
+        exc = KeyError('a')
+        gen = g(exc)
+        gen.send(None)
+        gen.throw(exc)
+        # This also distinguishes from the initial has_cycle=None.
+        self.assertEqual(has_cycle, False)
+
+    def test_throw_after_none_exc_type(self):
+        def g():
+            try:
+                raise KeyError
+            except KeyError:
+                pass
+
+            try:
+                yield
+            except Exception:
+                raise RuntimeError
+
+        gen = g()
+        gen.send(None)
+        with self.assertRaises(RuntimeError) as cm:
+            gen.throw(ValueError)
+
+
+class GeneratorStackTraceTest(unittest.TestCase):
+
+    def check_stack_names(self, frame, expected):
+        names = []
+        while frame:
+            name = frame.f_code.co_name
+            # Stop checking frames when we get to our test helper.
+            if name.startswith('check_') or name.startswith('call_'):
+                break
+
+            names.append(name)
+            frame = frame.f_back
+
+        self.assertEqual(names, expected)
+
+    def check_yield_from_example(self, call_method):
+        def f():
+            self.check_stack_names(sys._getframe(), ['f', 'g'])
+            try:
+                yield
+            except Exception:
+                pass
+            self.check_stack_names(sys._getframe(), ['f', 'g'])
+
+        def g():
+            self.check_stack_names(sys._getframe(), ['g'])
+            yield from f()
+            self.check_stack_names(sys._getframe(), ['g'])
+
+        gen = g()
+        gen.send(None)
+        try:
+            call_method(gen)
+        except StopIteration:
+            pass
+
+    def test_send_with_yield_from(self):
+        def call_send(gen):
+            gen.send(None)
+
+        self.check_yield_from_example(call_send)
+
+    def test_throw_with_yield_from(self):
+        def call_throw(gen):
+            gen.throw(RuntimeError)
+
+        self.check_yield_from_example(call_throw)
+
+
+class YieldFromTests(unittest.TestCase):
+    def test_generator_gi_yieldfrom(self):
+        def a():
+            self.assertEqual(inspect.getgeneratorstate(gen_b), inspect.GEN_RUNNING)
+            self.assertIsNone(gen_b.gi_yieldfrom)
+            yield
+            self.assertEqual(inspect.getgeneratorstate(gen_b), inspect.GEN_RUNNING)
+            self.assertIsNone(gen_b.gi_yieldfrom)
+
+        def b():
+            self.assertIsNone(gen_b.gi_yieldfrom)
+            yield from a()
+            self.assertIsNone(gen_b.gi_yieldfrom)
+            yield
+            self.assertIsNone(gen_b.gi_yieldfrom)
+
+        gen_b = b()
+        self.assertEqual(inspect.getgeneratorstate(gen_b), inspect.GEN_CREATED)
+        self.assertIsNone(gen_b.gi_yieldfrom)
+
+        gen_b.send(None)
+        self.assertEqual(inspect.getgeneratorstate(gen_b), inspect.GEN_SUSPENDED)
+        self.assertEqual(gen_b.gi_yieldfrom.gi_code.co_name, 'a')
+
+        gen_b.send(None)
+        self.assertEqual(inspect.getgeneratorstate(gen_b), inspect.GEN_SUSPENDED)
+        self.assertIsNone(gen_b.gi_yieldfrom)
+
+        [] = gen_b  # Exhaust generator
+        self.assertEqual(inspect.getgeneratorstate(gen_b), inspect.GEN_CLOSED)
+        self.assertIsNone(gen_b.gi_yieldfrom)
+
+
 tutorial_tests = """
 Let's try a simple generator:
 
@@ -6,18 +941,18 @@ Let's try a simple generator:
     ...    yield 2
 
     >>> for i in f():
-    ...     print i
+    ...     print(i)
     1
     2
     >>> g = f()
-    >>> g.next()
+    >>> next(g)
     1
-    >>> g.next()
+    >>> next(g)
     2
 
 "Falling off the end" stops the generator:
 
-    >>> g.next()
+    >>> next(g)
     Traceback (most recent call last):
       File "<stdin>", line 1, in ?
       File "<stdin>", line 2, in g
@@ -31,38 +966,19 @@ Let's try a simple generator:
     ...     yield 2 # never reached
     ...
     >>> g = f()
-    >>> g.next()
+    >>> next(g)
     1
-    >>> g.next()
+    >>> next(g)
     Traceback (most recent call last):
       File "<stdin>", line 1, in ?
       File "<stdin>", line 3, in f
     StopIteration
-    >>> g.next() # once stopped, can't be resumed
+    >>> next(g) # once stopped, can't be resumed
     Traceback (most recent call last):
       File "<stdin>", line 1, in ?
     StopIteration
 
-"raise StopIteration" stops the generator too:
-
-    >>> def f():
-    ...     yield 1
-    ...     raise StopIteration
-    ...     yield 2 # never reached
-    ...
-    >>> g = f()
-    >>> g.next()
-    1
-    >>> g.next()
-    Traceback (most recent call last):
-      File "<stdin>", line 1, in ?
-    StopIteration
-    >>> g.next()
-    Traceback (most recent call last):
-      File "<stdin>", line 1, in ?
-    StopIteration
-
-However, they are not exactly equivalent:
+However, "return" and StopIteration are not exactly equivalent:
 
     >>> def g1():
     ...     try:
@@ -78,7 +994,7 @@ However, they are not exactly equivalent:
     ...         raise StopIteration
     ...     except:
     ...         yield 42
-    >>> print list(g2())
+    >>> print(list(g2()))
     [42]
 
 This may be surprising at first:
@@ -105,13 +1021,13 @@ Generators always return to the most recent caller:
 
     >>> def creator():
     ...     r = yrange(5)
-    ...     print "creator", r.next()
+    ...     print("creator", next(r))
     ...     return r
     ...
     >>> def caller():
     ...     r = creator()
     ...     for i in r:
-    ...             print "caller", i
+    ...             print("caller", i)
     ...
     >>> caller()
     creator 0
@@ -141,10 +1057,10 @@ Specification:  Yield
     running:
 
     >>> def g():
-    ...     i = me.next()
+    ...     i = next(me)
     ...     yield i
     >>> me = g()
-    >>> me.next()
+    >>> next(me)
     Traceback (most recent call last):
      ...
       File "<string>", line 2, in g
@@ -161,7 +1077,7 @@ Specification: Return
         ...         return
         ...     except:
         ...        yield 1
-        >>> print list(f1())
+        >>> print(list(f1()))
         []
 
     because, as in any function, return simply exits, but
@@ -171,7 +1087,7 @@ Specification: Return
         ...         raise StopIteration
         ...     except:
         ...         yield 42
-        >>> print list(f2())
+        >>> print(list(f2()))
         [42]
 
     because StopIteration is captured by a bare "except", as is any
@@ -185,13 +1101,13 @@ Specification: Generators and Exception Propagation
     ...     yield f()  # the zero division exception propagates
     ...     yield 42   # and we'll never get here
     >>> k = g()
-    >>> k.next()
+    >>> next(k)
     Traceback (most recent call last):
       File "<stdin>", line 1, in ?
       File "<stdin>", line 2, in g
       File "<stdin>", line 2, in f
     ZeroDivisionError: integer division or modulo by zero
-    >>> k.next()  # and the generator cannot be resumed
+    >>> next(k)  # and the generator cannot be resumed
     Traceback (most recent call last):
       File "<stdin>", line 1, in ?
     StopIteration
@@ -221,7 +1137,7 @@ Specification: Try/Except/Finally
     ...     finally:
     ...         yield 10
     ...     yield 11
-    >>> print list(f())
+    >>> print(list(f()))
     [1, 2, 4, 5, 8, 9, 10, 11]
     >>>
 
@@ -270,8 +1186,8 @@ Guido's binary tree example.
     >>> t = tree("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
     >>> # Print the nodes of the tree in in-order.
     >>> for x in t:
-    ...     print x,
-    A B C D E F G H I J K L M N O P Q R S T U V W X Y Z
+    ...     print(' '+x, end='')
+     A B C D E F G H I J K L M N O P Q R S T U V W X Y Z
 
     >>> # A non-recursive generator.
     >>> def inorder(node):
@@ -291,8 +1207,8 @@ Guido's binary tree example.
 
     >>> # Exercise the non-recursive generator.
     >>> for x in t:
-    ...     print x,
-    A B C D E F G H I J K L M N O P Q R S T U V W X Y Z
+    ...     print(' '+x, end='')
+     A B C D E F G H I J K L M N O P Q R S T U V W X Y Z
 
 """
 
@@ -343,11 +1259,11 @@ Next one was posted to c.l.py.
 ...         for c in gcomb(rest, k):
 ...             yield c
 
->>> seq = range(1, 5)
+>>> seq = list(range(1, 5))
 >>> for k in range(len(seq) + 2):
-...     print "%d-combs of %s:" % (k, seq)
+...     print("%d-combs of %s:" % (k, seq))
 ...     for c in gcomb(seq, k):
-...         print "   ", c
+...         print("   ", c)
 0-combs of [1, 2, 3, 4]:
     []
 1-combs of [1, 2, 3, 4]:
@@ -377,15 +1293,15 @@ From the Iterators list, about the types of these things.
 ...     yield 1
 ...
 >>> type(g)
-<type 'function'>
+<class 'function'>
 >>> i = g()
 >>> type(i)
-<type 'generator'>
+<class 'generator'>
 >>> [s for s in dir(i) if not s.startswith('_')]
-['close', 'gi_code', 'gi_frame', 'gi_running', 'next', 'send', 'throw']
->>> from test.test_support import HAVE_DOCSTRINGS
->>> print(i.next.__doc__ if HAVE_DOCSTRINGS else 'x.next() -> the next value, or raise StopIteration')
-x.next() -> the next value, or raise StopIteration
+['close', 'gi_code', 'gi_frame', 'gi_running', 'gi_suspended', 'gi_yieldfrom', 'send', 'throw']
+>>> from test.support import HAVE_DOCSTRINGS
+>>> print(i.__next__.__doc__ if HAVE_DOCSTRINGS else 'Implement next(self).')
+Implement next(self).
 >>> iter(i) is i
 True
 >>> import types
@@ -397,17 +1313,17 @@ And more, added later.
 >>> i.gi_running
 0
 >>> type(i.gi_frame)
-<type 'frame'>
+<class 'frame'>
 >>> i.gi_running = 42
 Traceback (most recent call last):
   ...
-TypeError: readonly attribute
+AttributeError: attribute 'gi_running' of 'generator' objects is not writable
 >>> def g():
 ...     yield me.gi_running
 >>> me = g()
 >>> me.gi_running
 0
->>> me.next()
+>>> next(me)
 1
 >>> me.gi_running
 0
@@ -430,7 +1346,7 @@ Subject: Re: PEP 255: Simple Generators
 ...             yield x
 ...
 ...     def find(self):
-...         return self.generator.next()
+...         return next(self.generator)
 ...
 ...     def union(self, parent):
 ...         if self.parent:
@@ -445,44 +1361,44 @@ Subject: Re: PEP 255: Simple Generators
 >>> roots = sets[:]
 
 >>> import random
->>> gen = random.WichmannHill(42)
+>>> gen = random.Random(42)
 >>> while 1:
 ...     for s in sets:
-...         print "%s->%s" % (s, s.find()),
-...     print
+...         print(" %s->%s" % (s, s.find()), end='')
+...     print()
 ...     if len(roots) > 1:
 ...         s1 = gen.choice(roots)
 ...         roots.remove(s1)
 ...         s2 = gen.choice(roots)
 ...         s1.union(s2)
-...         print "merged", s1, "into", s2
+...         print("merged", s1, "into", s2)
 ...     else:
 ...         break
-A->A B->B C->C D->D E->E F->F G->G H->H I->I J->J K->K L->L M->M
-merged D into G
-A->A B->B C->C D->G E->E F->F G->G H->H I->I J->J K->K L->L M->M
-merged C into F
-A->A B->B C->F D->G E->E F->F G->G H->H I->I J->J K->K L->L M->M
-merged L into A
-A->A B->B C->F D->G E->E F->F G->G H->H I->I J->J K->K L->A M->M
-merged H into E
-A->A B->B C->F D->G E->E F->F G->G H->E I->I J->J K->K L->A M->M
-merged B into E
-A->A B->E C->F D->G E->E F->F G->G H->E I->I J->J K->K L->A M->M
-merged J into G
-A->A B->E C->F D->G E->E F->F G->G H->E I->I J->G K->K L->A M->M
-merged E into G
-A->A B->G C->F D->G E->G F->F G->G H->G I->I J->G K->K L->A M->M
-merged M into G
-A->A B->G C->F D->G E->G F->F G->G H->G I->I J->G K->K L->A M->G
-merged I into K
-A->A B->G C->F D->G E->G F->F G->G H->G I->K J->G K->K L->A M->G
-merged K into A
-A->A B->G C->F D->G E->G F->F G->G H->G I->A J->G K->A L->A M->G
-merged F into A
-A->A B->G C->A D->G E->G F->A G->G H->G I->A J->G K->A L->A M->G
-merged A into G
-A->G B->G C->G D->G E->G F->G G->G H->G I->G J->G K->G L->G M->G
+ A->A B->B C->C D->D E->E F->F G->G H->H I->I J->J K->K L->L M->M
+merged K into B
+ A->A B->B C->C D->D E->E F->F G->G H->H I->I J->J K->B L->L M->M
+merged A into F
+ A->F B->B C->C D->D E->E F->F G->G H->H I->I J->J K->B L->L M->M
+merged E into F
+ A->F B->B C->C D->D E->F F->F G->G H->H I->I J->J K->B L->L M->M
+merged D into C
+ A->F B->B C->C D->C E->F F->F G->G H->H I->I J->J K->B L->L M->M
+merged M into C
+ A->F B->B C->C D->C E->F F->F G->G H->H I->I J->J K->B L->L M->C
+merged J into B
+ A->F B->B C->C D->C E->F F->F G->G H->H I->I J->B K->B L->L M->C
+merged B into C
+ A->F B->C C->C D->C E->F F->F G->G H->H I->I J->C K->C L->L M->C
+merged F into G
+ A->G B->C C->C D->C E->G F->G G->G H->H I->I J->C K->C L->L M->C
+merged L into C
+ A->G B->C C->C D->C E->G F->G G->G H->H I->I J->C K->C L->C M->C
+merged G into I
+ A->I B->C C->C D->C E->I F->I G->I H->H I->I J->C K->C L->C M->C
+merged I into H
+ A->H B->C C->C D->C E->H F->H G->H H->H I->H J->C K->C L->C M->C
+merged C into H
+ A->H B->H C->H D->H E->H F->H G->H H->H I->H J->H K->H L->H M->H
 
 """
 # Emacs turd '
@@ -494,7 +1410,7 @@ fun_tests = """
 Build up to a recursive Sieve of Eratosthenes generator.
 
 >>> def firstn(g, n):
-...     return [g.next() for i in range(n)]
+...     return [next(g) for i in range(n)]
 
 >>> def intsfrom(i):
 ...     while 1:
@@ -513,7 +1429,7 @@ Build up to a recursive Sieve of Eratosthenes generator.
 [1, 2, 4, 5, 7, 8]
 
 >>> def sieve(ints):
-...     prime = ints.next()
+...     prime = next(ints)
 ...     yield prime
 ...     not_divisible_by_prime = exclude_multiples(prime, ints)
 ...     for p in sieve(not_divisible_by_prime):
@@ -537,19 +1453,19 @@ Try writing it without generators, and correctly, and without generating
 [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
 
 >>> def merge(g, h):
-...     ng = g.next()
-...     nh = h.next()
+...     ng = next(g)
+...     nh = next(h)
 ...     while 1:
 ...         if ng < nh:
 ...             yield ng
-...             ng = g.next()
+...             ng = next(g)
 ...         elif ng > nh:
 ...             yield nh
-...             nh = h.next()
+...             nh = next(h)
 ...         else:
 ...             yield ng
-...             ng = g.next()
-...             nh = h.next()
+...             ng = next(g)
+...             nh = next(h)
 
 The following works, but is doing a whale of a lot of redundant work --
 it's not clear how to get the internal uses of m235 to share a single
@@ -577,7 +1493,7 @@ address space, and it *looked* like a very slow leak.
 
 >>> result = m235()
 >>> for i in range(3):
-...     print firstn(result, 15)
+...     print(firstn(result, 15))
 [1, 2, 3, 4, 5, 6, 8, 9, 10, 12, 15, 16, 18, 20, 24]
 [25, 27, 30, 32, 36, 40, 45, 48, 50, 54, 60, 64, 72, 75, 80]
 [81, 90, 96, 100, 108, 120, 125, 128, 135, 144, 150, 160, 162, 180, 192]
@@ -590,7 +1506,7 @@ arguments are iterable -- a LazyList is the same as a generator to times().
 >>> class LazyList:
 ...     def __init__(self, g):
 ...         self.sofar = []
-...         self.fetch = g.next
+...         self.fetch = g.__next__
 ...
 ...     def __getitem__(self, i):
 ...         sofar, fetch = self.sofar, self.fetch
@@ -614,7 +1530,7 @@ efficient.
 
 >>> m235 = LazyList(m235())
 >>> for i in range(5):
-...     print [m235[j] for j in range(15*i, 15*(i+1))]
+...     print([m235[j] for j in range(15*i, 15*(i+1))])
 [1, 2, 3, 4, 5, 6, 8, 9, 10, 12, 15, 16, 18, 20, 24]
 [25, 27, 30, 32, 36, 40, 45, 48, 50, 54, 60, 64, 72, 75, 80]
 [81, 90, 96, 100, 108, 120, 125, 128, 135, 144, 150, 160, 162, 180, 192]
@@ -627,10 +1543,10 @@ Ye olde Fibonacci generator, LazyList style.
 ...
 ...     def sum(g, h):
 ...         while 1:
-...             yield g.next() + h.next()
+...             yield next(g) + next(h)
 ...
 ...     def tail(g):
-...         g.next()    # throw first away
+...         next(g)    # throw first away
 ...         for x in g:
 ...             yield x
 ...
@@ -685,7 +1601,7 @@ m235 to share a single generator".
 
 >>> it = m235()
 >>> for i in range(5):
-...     print firstn(it, 15)
+...     print(firstn(it, 15))
 [1, 2, 3, 4, 5, 6, 8, 9, 10, 12, 15, 16, 18, 20, 24]
 [25, 27, 30, 32, 36, 40, 45, 48, 50, 54, 60, 64, 72, 75, 80]
 [81, 90, 96, 100, 108, 120, 125, 128, 135, 144, 150, 160, 162, 180, 192]
@@ -706,12 +1622,12 @@ Ye olde Fibonacci generator, tee style.
 ...
 ...     def _isum(g, h):
 ...         while 1:
-...             yield g.next() + h.next()
+...             yield next(g) + next(h)
 ...
 ...     def _fib():
 ...         yield 1
 ...         yield 2
-...         fibTail.next() # throw first away
+...         next(fibTail) # throw first away
 ...         for res in _isum(fibHead, fibTail):
 ...             yield res
 ...
@@ -728,29 +1644,6 @@ Ye olde Fibonacci generator, tee style.
 # hackery.
 
 syntax_tests = """
-
->>> def f():
-...     return 22
-...     yield 1
-Traceback (most recent call last):
-  ..
-SyntaxError: 'return' with argument inside generator (<doctest test.test_generators.__test__.syntax[0]>, line 3)
-
->>> def f():
-...     yield 1
-...     return 22
-Traceback (most recent call last):
-  ..
-SyntaxError: 'return' with argument inside generator (<doctest test.test_generators.__test__.syntax[1]>, line 3)
-
-"return None" is not the same as "return" in a generator:
-
->>> def f():
-...     yield 1
-...     return None
-Traceback (most recent call last):
-  ..
-SyntaxError: 'return' with argument inside generator (<doctest test.test_generators.__test__.syntax[2]>, line 3)
 
 These are fine:
 
@@ -795,27 +1688,27 @@ These are fine:
 >>> def f():
 ...    yield
 >>> type(f())
-<type 'generator'>
+<class 'generator'>
 
 
 >>> def f():
 ...    if 0:
 ...        yield
 >>> type(f())
-<type 'generator'>
+<class 'generator'>
 
 
 >>> def f():
 ...     if 0:
 ...         yield 1
 >>> type(f())
-<type 'generator'>
+<class 'generator'>
 
 >>> def f():
 ...    if "":
 ...        yield None
 >>> type(f())
-<type 'generator'>
+<class 'generator'>
 
 >>> def f():
 ...     return
@@ -839,7 +1732,7 @@ These are fine:
 ...         x = 1
 ...     return
 >>> type(f())
-<type 'generator'>
+<class 'generator'>
 
 >>> def f():
 ...     if 0:
@@ -847,7 +1740,7 @@ These are fine:
 ...             yield 1
 ...
 >>> type(f())
-<type 'NoneType'>
+<class 'NoneType'>
 
 >>> def f():
 ...     if 0:
@@ -857,7 +1750,7 @@ These are fine:
 ...             def f(self):
 ...                 yield 2
 >>> type(f())
-<type 'NoneType'>
+<class 'NoneType'>
 
 >>> def f():
 ...     if 0:
@@ -865,21 +1758,7 @@ These are fine:
 ...     if 0:
 ...         yield 2
 >>> type(f())
-<type 'generator'>
-
-
->>> def f():
-...     if 0:
-...         lambda x:  x        # shouldn't trigger here
-...         return              # or here
-...         def f(i):
-...             return 2*i      # or here
-...         if 0:
-...             return 3        # but *this* sucks (line 8)
-...     if 0:
-...         yield 2             # because it's a generator (line 10)
-Traceback (most recent call last):
-SyntaxError: 'return' with argument inside generator (<doctest test.test_generators.__test__.syntax[24]>, line 10)
+<class 'generator'>
 
 This one caused a crash (see SF bug 567538):
 
@@ -891,13 +1770,13 @@ This one caused a crash (see SF bug 567538):
 ...             yield i
 ...
 >>> g = f()
->>> print g.next()
+>>> print(next(g))
 0
->>> print g.next()
+>>> print(next(g))
 1
->>> print g.next()
+>>> print(next(g))
 2
->>> print g.next()
+>>> print(next(g))
 Traceback (most recent call last):
 StopIteration
 
@@ -908,14 +1787,14 @@ Test the gi_code attribute
 ...     yield 5
 ...
 >>> g = f()
->>> g.gi_code is f.func_code
+>>> g.gi_code is f.__code__
 True
->>> g.next()
+>>> next(g)
 5
->>> g.next()
+>>> next(g)
 Traceback (most recent call last):
 StopIteration
->>> g.gi_code is f.func_code
+>>> g.gi_code is f.__code__
 True
 
 
@@ -1053,7 +1932,7 @@ def flat_conjoin(gs):  # rename to conjoin to run tests with this instead
         # Descend.
         try:
             while i < n:
-                it = iters[i] = gs[i]().next
+                it = iters[i] = gs[i]().__next__
                 values[i] = it()
                 i += 1
         except _StopIteration:
@@ -1094,12 +1973,12 @@ class Queens:
 
         # For each square, compute a bit vector of the columns and
         # diagonals it covers, and for each row compute a function that
-        # generates the possiblities for the columns in that row.
+        # generates the possibilities for the columns in that row.
         self.rowgenerators = []
         for i in rangen:
-            rowuses = [(1L << j) |                  # column ordinal
-                       (1L << (n + i-j + n-1)) |    # NW-SE ordinal
-                       (1L << (n + 2*n-1 + i+j))    # NE-SW ordinal
+            rowuses = [(1 << j) |                  # column ordinal
+                       (1 << (n + i-j + n-1)) |    # NW-SE ordinal
+                       (1 << (n + 2*n-1 + i+j))    # NE-SW ordinal
                             for j in rangen]
 
             def rowgen(rowuses=rowuses):
@@ -1122,12 +2001,12 @@ class Queens:
         n = self.n
         assert n == len(row2col)
         sep = "+" + "-+" * n
-        print sep
+        print(sep)
         for i in range(n):
             squares = [" " for j in range(n)]
             squares[row2col[i]] = "Q"
-            print "|" + "|".join(squares) + "|"
-            print sep
+            print("|" + "|".join(squares) + "|")
+            print(sep)
 
 # A conjoin-based Knight's Tour solver.  This is pretty sophisticated
 # (e.g., when used with flat_conjoin above, and passing hard=1 to the
@@ -1152,7 +2031,7 @@ class Knights:
             # If we create a square with one exit, we must visit it next;
             # else somebody else will have to visit it, and since there's
             # only one adjacent, there won't be a way to leave it again.
-            # Finelly, if we create more than one free square with a
+            # Finally, if we create more than one free square with a
             # single exit, we can only move to one of them next, leaving
             # the other one a dead end.
             ne0 = ne1 = 0
@@ -1210,7 +2089,7 @@ class Knights:
                 succs[final].remove(corner)
                 add_to_successors(this)
 
-        # Generate moves 3 thru m*n-1.
+        # Generate moves 3 through m*n-1.
         def advance(len=len):
             # If some successor has only one exit, must take it.
             # Else favor successors with fewer exits.
@@ -1232,7 +2111,7 @@ class Knights:
                         yield i
                     add_to_successors(i)
 
-        # Generate moves 3 thru m*n-1.  Alternative version using a
+        # Generate moves 3 through m*n-1.  Alternative version using a
         # stronger (but more expensive) heuristic to order successors.
         # Since the # of backtracking levels is m*n, a poor move early on
         # can take eons to undo.  Smallest square board for which this
@@ -1319,11 +2198,11 @@ class Knights:
             k += 1
 
         sep = "+" + ("-" * w + "+") * n
-        print sep
+        print(sep)
         for i in range(m):
             row = squares[i]
-            print "|" + "|".join(row) + "|"
-            print sep
+            print("|" + "|".join(row) + "|")
+            print(sep)
 
 conjoin_tests = """
 
@@ -1331,7 +2210,7 @@ Generate the 3-bit binary numbers in order.  This illustrates dumbest-
 possible use of conjoin, just to generate the full cross-product.
 
 >>> for c in conjoin([lambda: iter((0, 1))] * 3):
-...     print c
+...     print(c)
 [0, 0, 0]
 [0, 0, 1]
 [0, 1, 0]
@@ -1351,7 +2230,7 @@ generated sequence, you need to copy its results.
 
 >>> for n in range(10):
 ...     all = list(gencopy(conjoin([lambda: iter((0, 1))] * n)))
-...     print n, len(all), all[0] == [0] * n, all[-1] == [1] * n
+...     print(n, len(all), all[0] == [0] * n, all[-1] == [1] * n)
 0 1 True True
 1 2 True True
 2 4 True True
@@ -1371,7 +2250,7 @@ And run an 8-queens solver.
 >>> for row2col in q.solve():
 ...     count += 1
 ...     if count <= LIMIT:
-...         print "Solution", count
+...         print("Solution", count)
 ...         q.printsolution(row2col)
 Solution 1
 +-+-+-+-+-+-+-+-+
@@ -1410,7 +2289,7 @@ Solution 2
 | | | | |Q| | | |
 +-+-+-+-+-+-+-+-+
 
->>> print count, "solutions in all."
+>>> print(count, "solutions in all.")
 92 solutions in all.
 
 And run a Knight's Tour on a 10x10 board.  Note that there are about
@@ -1422,7 +2301,7 @@ And run a Knight's Tour on a 10x10 board.  Note that there are about
 >>> for x in k.solve():
 ...     count += 1
 ...     if count <= LIMIT:
-...         print "Solution", count
+...         print("Solution", count)
 ...         k.printsolution(x)
 ...     else:
 ...         break
@@ -1497,13 +2376,15 @@ True
 """
 
 coroutine_tests = """\
+>>> from test.support import gc_collect
+
 Sending a value into a started generator:
 
 >>> def f():
-...     print (yield 1)
+...     print((yield 1))
 ...     yield 2
 >>> g = f()
->>> g.next()
+>>> next(g)
 1
 >>> g.send(42)
 42
@@ -1524,17 +2405,11 @@ Yield by itself yields None:
 [None]
 
 
-
-An obscene abuse of a yield expression within a generator expression:
-
->>> list((yield 21) for i in range(4))
-[21, None, 21, None, 21, None, 21, None]
-
-And a more sane, but still weird usage:
+Yield is allowed only in the outermost iterable in generator expression:
 
 >>> def f(): list(i for i in [(yield 26)])
 >>> type(f())
-<type 'generator'>
+<class 'generator'>
 
 
 A yield expression with augmented assignment.
@@ -1546,17 +2421,17 @@ A yield expression with augmented assignment.
 ...         seq.append(count)
 >>> seq = []
 >>> c = coroutine(seq)
->>> c.next()
->>> print seq
+>>> next(c)
+>>> print(seq)
 []
 >>> c.send(10)
->>> print seq
+>>> print(seq)
 [10]
 >>> c.send(10)
->>> print seq
+>>> print(seq)
 [10, 20]
 >>> c.send(10)
->>> print seq
+>>> print(seq)
 [10, 20, 30]
 
 
@@ -1565,31 +2440,32 @@ Check some syntax errors for yield expressions:
 >>> f=lambda: (yield 1),(yield 2)
 Traceback (most recent call last):
   ...
-  File "<doctest test.test_generators.__test__.coroutine[21]>", line 1
 SyntaxError: 'yield' outside function
 
->>> def f(): return lambda x=(yield): 1
+>>> f=lambda: (yield from (1,2)), (yield from (3,4))
 Traceback (most recent call last):
   ...
-SyntaxError: 'return' with argument inside generator (<doctest test.test_generators.__test__.coroutine[22]>, line 1)
+SyntaxError: 'yield from' outside function
+
+>>> yield from [1,2]
+Traceback (most recent call last):
+  ...
+SyntaxError: 'yield from' outside function
 
 >>> def f(): x = yield = y
 Traceback (most recent call last):
   ...
-  File "<doctest test.test_generators.__test__.coroutine[23]>", line 1
 SyntaxError: assignment to yield expression not possible
 
 >>> def f(): (yield bar) = y
 Traceback (most recent call last):
   ...
-  File "<doctest test.test_generators.__test__.coroutine[24]>", line 1
-SyntaxError: can't assign to yield expression
+SyntaxError: cannot assign to yield expression here. Maybe you meant '==' instead of '='?
 
 >>> def f(): (yield bar) += y
 Traceback (most recent call last):
   ...
-  File "<doctest test.test_generators.__test__.coroutine[25]>", line 1
-SyntaxError: can't assign to yield expression
+SyntaxError: 'yield expression' is an illegal expression for augmented assignment
 
 
 Now check some throw() conditions:
@@ -1597,18 +2473,25 @@ Now check some throw() conditions:
 >>> def f():
 ...     while True:
 ...         try:
-...             print (yield)
-...         except ValueError,v:
-...             print "caught ValueError (%s)" % (v),
+...             print((yield))
+...         except ValueError as v:
+...             print("caught ValueError (%s)" % (v))
 >>> import sys
 >>> g = f()
->>> g.next()
+>>> next(g)
 
 >>> g.throw(ValueError) # type only
 caught ValueError ()
 
 >>> g.throw(ValueError("xyz"))  # value only
 caught ValueError (xyz)
+
+>>> import warnings
+>>> old_filters = warnings.filters.copy()
+>>> warnings.filterwarnings("ignore", category=DeprecationWarning)
+
+# Filter DeprecationWarning: regarding the (type, val, tb) signature of throw().
+# Deprecation warnings are re-enabled below.
 
 >>> g.throw(ValueError, ValueError(1))   # value+matching type
 caught ValueError (1)
@@ -1629,6 +2512,21 @@ Traceback (most recent call last):
   ...
 TypeError: throw() third argument must be a traceback object
 
+>>> g.throw("abc")
+Traceback (most recent call last):
+  ...
+TypeError: exceptions must be classes or instances deriving from BaseException, not str
+
+>>> g.throw(0)
+Traceback (most recent call last):
+  ...
+TypeError: exceptions must be classes or instances deriving from BaseException, not int
+
+>>> g.throw(list)
+Traceback (most recent call last):
+  ...
+TypeError: exceptions must be classes or instances deriving from BaseException, not type
+
 >>> def throw(g,exc):
 ...     try:
 ...         raise exc
@@ -1645,7 +2543,7 @@ Traceback (most recent call last):
   ...
 TypeError
 
->>> print g.gi_frame
+>>> print(g.gi_frame)
 None
 
 >>> g.send(2)
@@ -1663,20 +2561,46 @@ Traceback (most recent call last):
   ...
 ValueError: 7
 
->>> f().throw("abc")     # throw on just-opened generator
-Traceback (most recent call last):
-  ...
-TypeError: exceptions must be classes, or instances, not str
+>>> warnings.filters[:] = old_filters
+
+# Re-enable DeprecationWarning: the (type, val, tb) exception representation is deprecated,
+#                               and may be removed in a future version of Python.
+
+Plain "raise" inside a generator should preserve the traceback (#13188).
+The traceback should have 3 levels:
+- g.throw()
+- f()
+- 1/0
+
+>>> def f():
+...     try:
+...         yield
+...     except:
+...         raise
+>>> g = f()
+>>> try:
+...     1/0
+... except ZeroDivisionError as v:
+...     try:
+...         g.throw(v)
+...     except Exception as w:
+...         tb = w.__traceback__
+>>> levels = 0
+>>> while tb:
+...     levels += 1
+...     tb = tb.tb_next
+>>> levels
+3
 
 Now let's try closing a generator:
 
 >>> def f():
 ...     try: yield
 ...     except GeneratorExit:
-...         print "exiting"
+...         print("exiting")
 
 >>> g = f()
->>> g.next()
+>>> next(g)
 >>> g.close()
 exiting
 >>> g.close()  # should be no-op now
@@ -1686,7 +2610,7 @@ exiting
 >>> def f(): yield      # an even simpler generator
 >>> f().close()         # close before opening
 >>> g = f()
->>> g.next()
+>>> next(g)
 >>> g.close()           # close normally
 
 And finalization:
@@ -1694,22 +2618,11 @@ And finalization:
 >>> def f():
 ...     try: yield
 ...     finally:
-...         print "exiting"
+...         print("exiting")
 
 >>> g = f()
->>> g.next()
->>> del g
-exiting
-
->>> class context(object):
-...    def __enter__(self): pass
-...    def __exit__(self, *args): print 'exiting'
->>> def f():
-...     with context():
-...          yield
->>> g = f()
->>> g.next()
->>> del g
+>>> next(g)
+>>> del g; gc_collect()  # For PyPy or other GCs.
 exiting
 
 
@@ -1717,12 +2630,14 @@ GeneratorExit is not caught by except Exception:
 
 >>> def f():
 ...     try: yield
-...     except Exception: print 'except'
-...     finally: print 'finally'
+...     except Exception:
+...         print('except')
+...     finally:
+...         print('finally')
 
 >>> g = f()
->>> g.next()
->>> del g
+>>> next(g)
+>>> del g; gc_collect()  # For PyPy or other GCs.
 finally
 
 
@@ -1733,7 +2648,7 @@ Now let's try some ill-behaved generators:
 ...     except GeneratorExit:
 ...         yield "foo!"
 >>> g = f()
->>> g.next()
+>>> next(g)
 >>> g.close()
 Traceback (most recent call last):
   ...
@@ -1743,17 +2658,17 @@ RuntimeError: generator ignored GeneratorExit
 
 Our ill-behaved code should be invoked during GC:
 
->>> import sys, StringIO
->>> old, sys.stderr = sys.stderr, StringIO.StringIO()
->>> g = f()
->>> g.next()
->>> del g
->>> sys.stderr.getvalue().startswith(
-...     "Exception RuntimeError: 'generator ignored GeneratorExit' in "
-... )
+>>> with support.catch_unraisable_exception() as cm:
+...     g = f()
+...     next(g)
+...     del g
+...
+...     cm.unraisable.exc_type == RuntimeError
+...     "generator ignored GeneratorExit" in str(cm.unraisable.exc_value)
+...     cm.unraisable.exc_traceback is not None
 True
->>> sys.stderr = old
-
+True
+True
 
 And errors thrown during closing should propagate:
 
@@ -1762,7 +2677,7 @@ And errors thrown during closing should propagate:
 ...     except GeneratorExit:
 ...         raise TypeError("fie!")
 >>> g = f()
->>> g.next()
+>>> next(g)
 >>> g.close()
 Traceback (most recent call last):
   ...
@@ -1774,25 +2689,21 @@ enclosing function a generator:
 
 >>> def f(): x += yield
 >>> type(f())
-<type 'generator'>
+<class 'generator'>
 
 >>> def f(): x = yield
 >>> type(f())
-<type 'generator'>
+<class 'generator'>
 
 >>> def f(): lambda x=(yield): 1
 >>> type(f())
-<type 'generator'>
-
->>> def f(): x=(i for i in (yield) if (yield))
->>> type(f())
-<type 'generator'>
+<class 'generator'>
 
 >>> def f(d): d[(yield "a")] = d[(yield "b")] = 27
 >>> data = [1,2]
 >>> g = f(data)
 >>> type(g)
-<type 'generator'>
+<class 'generator'>
 >>> g.send(None)
 'a'
 >>> data
@@ -1818,7 +2729,7 @@ would trigger if it starts being uncleanable again.
 ...     class gen:
 ...         def __iter__(self):
 ...             return self
-...         def next(self):
+...         def __next__(self):
 ...             return self.item
 ...     g = gen()
 ...     head, tail = itertools.tee(g)
@@ -1829,7 +2740,7 @@ would trigger if it starts being uncleanable again.
 Make sure to also test the involvement of the tee-internal teedataobject,
 which stores returned items.
 
->>> item = it.next()
+>>> item = next(it)
 
 
 
@@ -1854,28 +2765,25 @@ explicitly, without generators. We do have to redirect stderr to avoid
 printing warnings and to doublecheck that we actually tested what we wanted
 to test.
 
->>> import sys, StringIO
->>> old = sys.stderr
->>> try:
-...     sys.stderr = StringIO.StringIO()
-...     class Leaker:
-...         def __del__(self):
-...             raise RuntimeError
+>>> from test import support
+>>> class Leaker:
+...     def __del__(self):
+...         def invoke(message):
+...             raise RuntimeError(message)
+...         invoke("del failed")
 ...
+>>> with support.catch_unraisable_exception() as cm:
 ...     l = Leaker()
 ...     del l
-...     err = sys.stderr.getvalue().strip()
-...     err.startswith(
-...         "Exception RuntimeError: RuntimeError() in <"
-...     )
-...     err.endswith("> ignored")
-...     len(err.splitlines())
-... finally:
-...     sys.stderr = old
+...
+...     cm.unraisable.object == Leaker.__del__
+...     cm.unraisable.exc_type == RuntimeError
+...     str(cm.unraisable.exc_value) == "del failed"
+...     cm.unraisable.exc_traceback is not None
 True
 True
-1
-
+True
+True
 
 
 These refleak tests should perhaps be in a testfile of their own,
@@ -1894,14 +2802,10 @@ __test__ = {"tut":      tutorial_tests,
             "refleaks": refleaks_tests,
             }
 
-# Magic test name that regrtest.py invokes *after* importing this module.
-# This worms around a bootstrap problem.
-# Note that doctest and regrtest both look in sys.argv for a "-v" argument,
-# so this works as expected in both ways of running regrtest.
-def test_main(verbose=None):
-    from test import test_support, test_generators
-    test_support.run_doctest(test_generators, verbose)
+def load_tests(loader, tests, pattern):
+    tests.addTest(doctest.DocTestSuite())
+    return tests
 
-# This part isn't needed for regrtest, but for running the test directly.
+
 if __name__ == "__main__":
-    test_main(1)
+    unittest.main()

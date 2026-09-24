@@ -31,6 +31,14 @@ import os
 
 REDHAT_VERSION_FILE = "/etc/redhat-release"
 
+# BIGWORLD_BEGIN(3.13 migration)
+# Debian-family fallback. The el7 configuration in platform_el7.mak is the
+# closest (and most modern) supported toolchain profile, so hosts without
+# /etc/redhat-release are reported as el7 equivalents.
+DEBIAN_VERSION_FILE = "/etc/debian_version"
+DEBIAN_EQUIVALENT_PLATFORM = "el7"
+# BIGWORLD_END
+
 
 # Examples:
 
@@ -87,9 +95,9 @@ def finaliseShortNameFromReleaseInfo( longDistroName, versionStr, releaseName ):
 
 # Regular expression taken from Python 2.6's platform.py
 _lsb_release_version = re.compile(r'(.+)'
-                                   ' release '
-                                   '([\d.]+)'
-                                   '[^(]*(?:\((.+)\))?')
+                                   r' release '
+                                   r'([\d.]+)'
+                                   r'[^(]*(?:\((.+)\))?')
 
 def parseRedHatRelease():
 	fp = open( REDHAT_VERSION_FILE, "r" )
@@ -110,6 +118,18 @@ def findPlatformName():
 	"""This function parses and returns the platform name. It is separated from
 	main() so that it can be used from pycommon/bwlog.py"""
 
+	if os.path.isfile( REDHAT_VERSION_FILE ):
+		releaseStr = parseRedHatRelease()
+		if releaseStr:
+			return releaseStr
+
+	# BIGWORLD_BEGIN(3.13 migration)
+	# Debian-family hosts (Ubuntu etc.): fall back to the el7 toolchain
+	# profile instead of failing platform discovery outright.
+	if os.path.isfile( DEBIAN_VERSION_FILE ):
+		return DEBIAN_EQUIVALENT_PLATFORM
+	# BIGWORLD_END
+
 	if not os.path.isfile( REDHAT_VERSION_FILE ):
 		sys.stderr.write( "Unable to locate file: %s\n" % REDHAT_VERSION_FILE )
 		return None
@@ -129,7 +149,7 @@ def main():
 	if not platformName:
 		return False
 
-	print platformName
+	print( platformName )
 
 	return True
 
@@ -137,7 +157,7 @@ def main():
 if __name__ == "__main__":
 	try:
 		if not main():
-			print "unknown"
+			print( "unknown" )
 			sys.exit( 1 )
 
 		sys.exit( 0 )

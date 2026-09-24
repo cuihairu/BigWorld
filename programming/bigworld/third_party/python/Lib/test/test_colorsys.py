@@ -1,4 +1,4 @@
-import unittest, test.test_support
+import unittest
 import colorsys
 
 def frange(start, stop, step):
@@ -42,6 +42,10 @@ class ColorsysTest(unittest.TestCase):
             self.assertTripleEqual(hsv, colorsys.rgb_to_hsv(*rgb))
             self.assertTripleEqual(rgb, colorsys.hsv_to_rgb(*hsv))
 
+            # test 360 phase shift in hue
+            h, s, v = hsv
+            self.assertTripleEqual(rgb, colorsys.hsv_to_rgb(h + 1.0, s, v))
+
     def test_hls_roundtrip(self):
         for r in frange(0.0, 1.0, 0.2):
             for g in frange(0.0, 1.0, 0.2):
@@ -69,8 +73,54 @@ class ColorsysTest(unittest.TestCase):
             self.assertTripleEqual(hls, colorsys.rgb_to_hls(*rgb))
             self.assertTripleEqual(rgb, colorsys.hls_to_rgb(*hls))
 
-def test_main():
-    test.test_support.run_unittest(ColorsysTest)
+    def test_hls_nearwhite(self):  # gh-106498
+        values = (
+            # rgb, hls: these do not work in reverse
+            ((0.9999999999999999, 1, 1), (0.5, 1.0, 1.0)),
+            ((1, 0.9999999999999999, 0.9999999999999999), (0.0, 1.0, 1.0)),
+        )
+        for rgb, hls in values:
+            self.assertTripleEqual(hls, colorsys.rgb_to_hls(*rgb))
+            self.assertTripleEqual((1.0, 1.0, 1.0), colorsys.hls_to_rgb(*hls))
+
+    def test_yiq_roundtrip(self):
+        for r in frange(0.0, 1.0, 0.2):
+            for g in frange(0.0, 1.0, 0.2):
+                for b in frange(0.0, 1.0, 0.2):
+                    rgb = (r, g, b)
+                    self.assertTripleEqual(
+                        rgb,
+                        colorsys.yiq_to_rgb(*colorsys.rgb_to_yiq(*rgb))
+                    )
+
+    def test_yiq_to_rgb_clamping(self):
+        values = [
+            # rgb, yiq (invalid YIQ values clamped to RGB range)
+            ((1.0, 0.0, 1.0), (0.0, 0.5, 1.0)),
+            ((0.0, 1.0, 0.0), (0.25, -1.0, -1.0)),
+            ((0.0, 0.0, 1.0), (0.0, -1.0, 0.5))
+        ]
+
+        for (rgb, yiq) in values:
+            with self.subTest(rgb=rgb, yiq=yiq):
+                self.assertTripleEqual(rgb, colorsys.yiq_to_rgb(*yiq))
+
+    def test_yiq_values(self):
+        values = [
+            # rgb, yiq
+            ((0.0, 0.0, 0.0), (0.0, 0.0, 0.0)), # black
+            ((0.0, 0.0, 1.0), (0.11, -0.3217, 0.3121)), # blue
+            ((0.0, 1.0, 0.0), (0.59, -0.2773, -0.5251)), # green
+            ((0.0, 1.0, 1.0), (0.7, -0.599, -0.213)), # cyan
+            ((1.0, 0.0, 0.0), (0.3, 0.599, 0.213)), # red
+            ((1.0, 0.0, 1.0), (0.41, 0.2773, 0.5251)), # purple
+            ((1.0, 1.0, 0.0), (0.89, 0.3217, -0.3121)), # yellow
+            ((1.0, 1.0, 1.0), (1.0, 0.0, 0.0)), # white
+            ((0.5, 0.5, 0.5), (0.5, 0.0, 0.0)), # grey
+        ]
+        for (rgb, yiq) in values:
+            self.assertTripleEqual(yiq, colorsys.rgb_to_yiq(*rgb))
+            self.assertTripleEqual(rgb, colorsys.yiq_to_rgb(*yiq))
 
 if __name__ == "__main__":
-    test_main()
+    unittest.main()

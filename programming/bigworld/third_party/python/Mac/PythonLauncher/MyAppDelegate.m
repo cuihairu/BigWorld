@@ -22,7 +22,7 @@
 {
     // Test that the file mappings are correct
     [self testFileTypeBinding];
-    // If we were opened because of a file drag or doubleclick
+    // If we were opened because of a file drag or double-click
     // we've set initial_action_done in shouldShowUI
     // Otherwise we open a preferences dialog.
     if (!initial_action_done) {
@@ -34,7 +34,7 @@
 - (BOOL)shouldShowUI
 {
     // if this call comes before applicationDidFinishLaunching: we
-    // should terminate immedeately after starting the script.
+    // should terminate immediately after starting the script.
     if (!initial_action_done)
         should_terminate = YES;
     initial_action_done = YES;

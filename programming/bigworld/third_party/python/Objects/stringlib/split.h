@@ -1,8 +1,5 @@
 /* stringlib: split implementation */
 
-#ifndef STRINGLIB_SPLIT_H
-#define STRINGLIB_SPLIT_H
-
 #ifndef STRINGLIB_FASTSEARCH_H
 #error must include "stringlib/fastsearch.h" before including this module
 #endif
@@ -51,10 +48,10 @@
 
 
 /* Always force the list to the expected size. */
-#define FIX_PREALLOC_SIZE(list) Py_SIZE(list) = count
+#define FIX_PREALLOC_SIZE(list) Py_SET_SIZE(list, count)
 
 Py_LOCAL_INLINE(PyObject *)
-stringlib_split_whitespace(PyObject* str_obj,
+STRINGLIB(split_whitespace)(PyObject* str_obj,
                            const STRINGLIB_CHAR* str, Py_ssize_t str_len,
                            Py_ssize_t maxcount)
 {
@@ -73,7 +70,7 @@ stringlib_split_whitespace(PyObject* str_obj,
         j = i; i++;
         while (i < str_len && !STRINGLIB_ISSPACE(str[i]))
             i++;
-#ifndef STRINGLIB_MUTABLE
+#if !STRINGLIB_MUTABLE
         if (j == 0 && i == str_len && STRINGLIB_CHECK_EXACT(str_obj)) {
             /* No whitespace in str_obj, so just use it as list[0] */
             Py_INCREF(str_obj);
@@ -102,7 +99,7 @@ stringlib_split_whitespace(PyObject* str_obj,
 }
 
 Py_LOCAL_INLINE(PyObject *)
-stringlib_split_char(PyObject* str_obj,
+STRINGLIB(split_char)(PyObject* str_obj,
                      const STRINGLIB_CHAR* str, Py_ssize_t str_len,
                      const STRINGLIB_CHAR ch,
                      Py_ssize_t maxcount)
@@ -125,7 +122,7 @@ stringlib_split_char(PyObject* str_obj,
             }
         }
     }
-#ifndef STRINGLIB_MUTABLE
+#if !STRINGLIB_MUTABLE
     if (count == 0 && STRINGLIB_CHECK_EXACT(str_obj)) {
         /* ch not in str_obj, so just use str_obj as list[0] */
         Py_INCREF(str_obj);
@@ -145,7 +142,7 @@ stringlib_split_char(PyObject* str_obj,
 }
 
 Py_LOCAL_INLINE(PyObject *)
-stringlib_split(PyObject* str_obj,
+STRINGLIB(split)(PyObject* str_obj,
                 const STRINGLIB_CHAR* str, Py_ssize_t str_len,
                 const STRINGLIB_CHAR* sep, Py_ssize_t sep_len,
                 Py_ssize_t maxcount)
@@ -158,7 +155,7 @@ stringlib_split(PyObject* str_obj,
         return NULL;
     }
     else if (sep_len == 1)
-        return stringlib_split_char(str_obj, str, str_len, sep[0], maxcount);
+        return STRINGLIB(split_char)(str_obj, str, str_len, sep[0], maxcount);
 
     list = PyList_New(PREALLOC_SIZE(maxcount));
     if (list == NULL)
@@ -166,14 +163,14 @@ stringlib_split(PyObject* str_obj,
 
     i = j = 0;
     while (maxcount-- > 0) {
-        pos = fastsearch(str+i, str_len-i, sep, sep_len, -1, FAST_SEARCH);
+        pos = FASTSEARCH(str+i, str_len-i, sep, sep_len, -1, FAST_SEARCH);
         if (pos < 0)
             break;
         j = i + pos;
         SPLIT_ADD(str, i, j);
         i = j + sep_len;
     }
-#ifndef STRINGLIB_MUTABLE
+#if !STRINGLIB_MUTABLE
     if (count == 0 && STRINGLIB_CHECK_EXACT(str_obj)) {
         /* No match in str_obj, so just use it as list[0] */
         Py_INCREF(str_obj);
@@ -193,7 +190,7 @@ stringlib_split(PyObject* str_obj,
 }
 
 Py_LOCAL_INLINE(PyObject *)
-stringlib_rsplit_whitespace(PyObject* str_obj,
+STRINGLIB(rsplit_whitespace)(PyObject* str_obj,
                             const STRINGLIB_CHAR* str, Py_ssize_t str_len,
                             Py_ssize_t maxcount)
 {
@@ -212,7 +209,7 @@ stringlib_rsplit_whitespace(PyObject* str_obj,
         j = i; i--;
         while (i >= 0 && !STRINGLIB_ISSPACE(str[i]))
             i--;
-#ifndef STRINGLIB_MUTABLE
+#if !STRINGLIB_MUTABLE
         if (j == str_len - 1 && i < 0 && STRINGLIB_CHECK_EXACT(str_obj)) {
             /* No whitespace in str_obj, so just use it as list[0] */
             Py_INCREF(str_obj);
@@ -243,7 +240,7 @@ stringlib_rsplit_whitespace(PyObject* str_obj,
 }
 
 Py_LOCAL_INLINE(PyObject *)
-stringlib_rsplit_char(PyObject* str_obj,
+STRINGLIB(rsplit_char)(PyObject* str_obj,
                       const STRINGLIB_CHAR* str, Py_ssize_t str_len,
                       const STRINGLIB_CHAR ch,
                       Py_ssize_t maxcount)
@@ -265,7 +262,7 @@ stringlib_rsplit_char(PyObject* str_obj,
             }
         }
     }
-#ifndef STRINGLIB_MUTABLE
+#if !STRINGLIB_MUTABLE
     if (count == 0 && STRINGLIB_CHECK_EXACT(str_obj)) {
         /* ch not in str_obj, so just use str_obj as list[0] */
         Py_INCREF(str_obj);
@@ -287,7 +284,7 @@ stringlib_rsplit_char(PyObject* str_obj,
 }
 
 Py_LOCAL_INLINE(PyObject *)
-stringlib_rsplit(PyObject* str_obj,
+STRINGLIB(rsplit)(PyObject* str_obj,
                  const STRINGLIB_CHAR* str, Py_ssize_t str_len,
                  const STRINGLIB_CHAR* sep, Py_ssize_t sep_len,
                  Py_ssize_t maxcount)
@@ -300,7 +297,7 @@ stringlib_rsplit(PyObject* str_obj,
         return NULL;
     }
     else if (sep_len == 1)
-        return stringlib_rsplit_char(str_obj, str, str_len, sep[0], maxcount);
+        return STRINGLIB(rsplit_char)(str_obj, str, str_len, sep[0], maxcount);
 
     list = PyList_New(PREALLOC_SIZE(maxcount));
     if (list == NULL)
@@ -308,13 +305,13 @@ stringlib_rsplit(PyObject* str_obj,
 
     j = str_len;
     while (maxcount-- > 0) {
-        pos = fastsearch(str, j, sep, sep_len, -1, FAST_RSEARCH);
+        pos = FASTSEARCH(str, j, sep, sep_len, -1, FAST_RSEARCH);
         if (pos < 0)
             break;
         SPLIT_ADD(str, pos + sep_len, j);
         j = pos;
     }
-#ifndef STRINGLIB_MUTABLE
+#if !STRINGLIB_MUTABLE
     if (count == 0 && STRINGLIB_CHECK_EXACT(str_obj)) {
         /* No match in str_obj, so just use it as list[0] */
         Py_INCREF(str_obj);
@@ -336,7 +333,7 @@ stringlib_rsplit(PyObject* str_obj,
 }
 
 Py_LOCAL_INLINE(PyObject *)
-stringlib_splitlines(PyObject* str_obj,
+STRINGLIB(splitlines)(PyObject* str_obj,
                      const STRINGLIB_CHAR* str, Py_ssize_t str_len,
                      int keepends)
 {
@@ -348,8 +345,8 @@ stringlib_splitlines(PyObject* str_obj,
        and the appends only done when the prealloc buffer is full.
        That's too much work for little gain.*/
 
-    register Py_ssize_t i;
-    register Py_ssize_t j;
+    Py_ssize_t i;
+    Py_ssize_t j;
     PyObject *list = PyList_New(0);
     PyObject *sub;
 
@@ -373,7 +370,7 @@ stringlib_splitlines(PyObject* str_obj,
             if (keepends)
                 eol = i;
         }
-#ifndef STRINGLIB_MUTABLE
+#if !STRINGLIB_MUTABLE
         if (j == 0 && eol == str_len && STRINGLIB_CHECK_EXACT(str_obj)) {
             /* No linebreak in str_obj, so just use it as list[0] */
             if (PyList_Append(list, str_obj))
@@ -391,4 +388,3 @@ stringlib_splitlines(PyObject* str_obj,
     return NULL;
 }
 
-#endif

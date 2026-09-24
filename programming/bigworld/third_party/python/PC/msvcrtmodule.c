@@ -17,414 +17,658 @@
 ***********************************************************/
 
 #include "Python.h"
+#include "pycore_fileutils.h"     // _Py_BEGIN_SUPPRESS_IPH
 #include "malloc.h"
 #include <io.h>
 #include <conio.h>
 #include <sys/locking.h>
+#include <crtdbg.h>
+#include <windows.h>
 
 #ifdef _MSC_VER
 #if _MSC_VER >= 1500 && _MSC_VER < 1600
 #include <crtassem.h>
+#elif _MSC_VER >= 1600
+#include <crtversion.h>
 #endif
 #endif
 
-// Force the malloc heap to clean itself up, and free unused blocks
-// back to the OS.  (According to the docs, only works on NT.)
+/*[python input]
+class HANDLE_converter(CConverter):
+    type = 'void *'
+    format_unit = '"_Py_PARSE_UINTPTR"'
+
+    def parse_arg(self, argname, displayname, *, limited_capi):
+        return self.format_code("""
+            {paramname} = PyLong_AsVoidPtr({argname});
+            if (!{paramname} && PyErr_Occurred()) {{{{
+                goto exit;
+            }}}}
+            """,
+            argname=argname)
+
+class HANDLE_return_converter(CReturnConverter):
+    type = 'void *'
+
+    def render(self, function, data):
+        self.declare(data)
+        self.err_occurred_if(
+            "_return_value == NULL || _return_value == INVALID_HANDLE_VALUE",
+            data)
+        data.return_conversion.append(
+            'return_value = PyLong_FromVoidPtr(_return_value);\n')
+
+class byte_char_return_converter(CReturnConverter):
+    type = 'int'
+
+    def render(self, function, data):
+        data.declarations.append('char s[1];')
+        data.return_value = 's[0]'
+        data.return_conversion.append(
+            'return_value = PyBytes_FromStringAndSize(s, 1);\n')
+
+class wchar_t_return_converter(CReturnConverter):
+    type = 'wchar_t'
+
+    def render(self, function, data):
+        self.declare(data)
+        data.return_conversion.append(
+            'return_value = PyUnicode_FromOrdinal(_return_value);\n')
+[python start generated code]*/
+/*[python end generated code: output=da39a3ee5e6b4b0d input=ff031be44ab3250d]*/
+
+/*[clinic input]
+module msvcrt
+[clinic start generated code]*/
+/*[clinic end generated code: output=da39a3ee5e6b4b0d input=f31a87a783d036cd]*/
+
+#include "clinic/msvcrtmodule.c.h"
+
+/*[clinic input]
+msvcrt.heapmin
+
+Minimize the malloc() heap.
+
+Force the malloc() heap to clean itself up and return unused blocks
+to the operating system. On failure, this raises OSError.
+[clinic start generated code]*/
+
 static PyObject *
-msvcrt_heapmin(PyObject *self, PyObject *args)
+msvcrt_heapmin_impl(PyObject *module)
+/*[clinic end generated code: output=1ba00f344782dc19 input=82e1771d21bde2d8]*/
 {
-    if (!PyArg_ParseTuple(args, ":heapmin"))
-        return NULL;
-
     if (_heapmin() != 0)
-        return PyErr_SetFromErrno(PyExc_IOError);
+        return PyErr_SetFromErrno(PyExc_OSError);
 
-    Py_INCREF(Py_None);
-    return Py_None;
+    Py_RETURN_NONE;
 }
+/*[clinic input]
+msvcrt.locking
 
-PyDoc_STRVAR(heapmin_doc,
-"heapmin() -> None\n\
-\n\
-Force the malloc() heap to clean itself up and return unused blocks\n\
-to the operating system. On failure, this raises IOError.");
+    fd: int
+    mode: int
+    nbytes: long
+    /
 
-// Perform locking operations on a C runtime file descriptor.
+Lock part of a file based on file descriptor fd from the C runtime.
+
+Raises OSError on failure. The locked region of the file extends from
+the current file position for nbytes bytes, and may continue beyond
+the end of the file. mode must be one of the LK_* constants listed
+below. Multiple regions in a file may be locked at the same time, but
+may not overlap. Adjacent regions are not merged; they must be unlocked
+individually.
+[clinic start generated code]*/
+
 static PyObject *
-msvcrt_locking(PyObject *self, PyObject *args)
+msvcrt_locking_impl(PyObject *module, int fd, int mode, long nbytes)
+/*[clinic end generated code: output=a4a90deca9785a03 input=e97bd15fc4a04fef]*/
 {
-    int fd;
-    int mode;
-    long nbytes;
     int err;
 
-    if (!PyArg_ParseTuple(args, "iil:locking", &fd, &mode, &nbytes))
+    if (PySys_Audit("msvcrt.locking", "iil", fd, mode, nbytes) < 0) {
         return NULL;
+    }
 
     Py_BEGIN_ALLOW_THREADS
+    _Py_BEGIN_SUPPRESS_IPH
     err = _locking(fd, mode, nbytes);
+    _Py_END_SUPPRESS_IPH
     Py_END_ALLOW_THREADS
     if (err != 0)
-        return PyErr_SetFromErrno(PyExc_IOError);
+        return PyErr_SetFromErrno(PyExc_OSError);
 
-    Py_INCREF(Py_None);
-    return Py_None;
+    Py_RETURN_NONE;
 }
 
-PyDoc_STRVAR(locking_doc,
-"locking(fd, mode, nbytes) -> None\n\
-\n\
-Lock part of a file based on file descriptor fd from the C runtime.\n\
-Raises IOError on failure. The locked region of the file extends from\n\
-the current file position for nbytes bytes, and may continue beyond\n\
-the end of the file. mode must be one of the LK_* constants listed\n\
-below. Multiple regions in a file may be locked at the same time, but\n\
-may not overlap. Adjacent regions are not merged; they must be unlocked\n\
-individually.");
+/*[clinic input]
+msvcrt.setmode -> long
 
-// Set the file translation mode for a C runtime file descriptor.
-static PyObject *
-msvcrt_setmode(PyObject *self, PyObject *args)
+    fd: int
+    mode as flags: int
+    /
+
+Set the line-end translation mode for the file descriptor fd.
+
+To set it to text mode, flags should be os.O_TEXT; for binary, it
+should be os.O_BINARY.
+
+Return value is the previous mode.
+[clinic start generated code]*/
+
+static long
+msvcrt_setmode_impl(PyObject *module, int fd, int flags)
+/*[clinic end generated code: output=24a9be5ea07ccb9b input=76e7c01f6b137f75]*/
 {
-    int fd;
-    int flags;
-    if (!PyArg_ParseTuple(args,"ii:setmode", &fd, &flags))
-        return NULL;
-
+    _Py_BEGIN_SUPPRESS_IPH
     flags = _setmode(fd, flags);
+    _Py_END_SUPPRESS_IPH
     if (flags == -1)
-        return PyErr_SetFromErrno(PyExc_IOError);
+        PyErr_SetFromErrno(PyExc_OSError);
 
-    return PyInt_FromLong(flags);
+    return flags;
 }
 
-PyDoc_STRVAR(setmode_doc,
-"setmode(fd, mode) -> Previous mode\n\
-\n\
-Set the line-end translation mode for the file descriptor fd. To set\n\
-it to text mode, flags should be os.O_TEXT; for binary, it should be\n\
-os.O_BINARY.");
+/*[clinic input]
+msvcrt.open_osfhandle -> long
 
-// Convert an OS file handle to a C runtime file descriptor.
-static PyObject *
-msvcrt_open_osfhandle(PyObject *self, PyObject *args)
+    handle: HANDLE
+    flags: int
+    /
+
+Create a C runtime file descriptor from the file handle handle.
+
+The flags parameter should be a bitwise OR of os.O_APPEND, os.O_RDONLY,
+and os.O_TEXT. The returned file descriptor may be used as a parameter
+to os.fdopen() to create a file object.
+[clinic start generated code]*/
+
+static long
+msvcrt_open_osfhandle_impl(PyObject *module, void *handle, int flags)
+/*[clinic end generated code: output=b2fb97c4b515e4e6 input=d5db190a307cf4bb]*/
 {
-    long handle;
-    int flags;
-    int fd;
+    if (PySys_Audit("msvcrt.open_osfhandle", "Ki", handle, flags) < 0) {
+        return -1;
+    }
 
-    if (!PyArg_ParseTuple(args, "li:open_osfhandle", &handle, &flags))
-        return NULL;
-
-    fd = _open_osfhandle(handle, flags);
-    if (fd == -1)
-        return PyErr_SetFromErrno(PyExc_IOError);
-
-    return PyInt_FromLong(fd);
+    return _Py_open_osfhandle(handle, flags);
 }
 
-PyDoc_STRVAR(open_osfhandle_doc,
-"open_osfhandle(handle, flags) -> file descriptor\n\
-\n\
-Create a C runtime file descriptor from the file handle handle. The\n\
-flags parameter should be a bitwise OR of os.O_APPEND, os.O_RDONLY,\n\
-and os.O_TEXT. The returned file descriptor may be used as a parameter\n\
-to os.fdopen() to create a file object.");
+/*[clinic input]
+msvcrt.get_osfhandle -> HANDLE
 
-// Convert a C runtime file descriptor to an OS file handle.
-static PyObject *
-msvcrt_get_osfhandle(PyObject *self, PyObject *args)
+    fd: int
+    /
+
+Return the file handle for the file descriptor fd.
+
+Raises OSError if fd is not recognized.
+[clinic start generated code]*/
+
+static void *
+msvcrt_get_osfhandle_impl(PyObject *module, int fd)
+/*[clinic end generated code: output=aca01dfe24637374 input=5fcfde9b17136aa2]*/
 {
-    int fd;
-    Py_intptr_t handle;
-
-    if (!PyArg_ParseTuple(args,"i:get_osfhandle", &fd))
+    if (PySys_Audit("msvcrt.get_osfhandle", "(i)", fd) < 0) {
         return NULL;
+    }
 
-    if (!_PyVerify_fd(fd))
-        return PyErr_SetFromErrno(PyExc_IOError);
-
-    handle = _get_osfhandle(fd);
-    if (handle == -1)
-        return PyErr_SetFromErrno(PyExc_IOError);
-
-    /* technically 'handle' is not a pointer, but a integer as
-       large as a pointer, Python's *VoidPtr interface is the
-       most appropriate here */
-    return PyLong_FromVoidPtr((void*)handle);
+    return _Py_get_osfhandle(fd);
 }
-
-PyDoc_STRVAR(get_osfhandle_doc,
-"get_osfhandle(fd) -> file handle\n\
-\n\
-Return the file handle for the file descriptor fd. Raises IOError\n\
-if fd is not recognized.");
 
 /* Console I/O */
+/*[clinic input]
+msvcrt.kbhit -> long
 
-static PyObject *
-msvcrt_kbhit(PyObject *self, PyObject *args)
+Returns a nonzero value if a keypress is waiting to be read. Otherwise, return 0.
+[clinic start generated code]*/
+
+static long
+msvcrt_kbhit_impl(PyObject *module)
+/*[clinic end generated code: output=940dfce6587c1890 input=d0f4cb3289ff51e2]*/
 {
-    int ok;
-
-    if (!PyArg_ParseTuple(args, ":kbhit"))
-        return NULL;
-
-    ok = _kbhit();
-    return PyInt_FromLong(ok);
+    return _kbhit();
 }
 
-PyDoc_STRVAR(kbhit_doc,
-"kbhit() -> bool\n\
-\n\
-Return true if a keypress is waiting to be read.");
+/*[clinic input]
+msvcrt.getch -> byte_char
 
-static PyObject *
-msvcrt_getch(PyObject *self, PyObject *args)
+Read a keypress and return the resulting character as a byte string.
+
+Nothing is echoed to the console. This call will block if a keypress is
+not already available, but will not wait for Enter to be pressed. If the
+pressed key was a special function key, this will return '\000' or
+'\xe0'; the next call will return the keycode. The Control-C keypress
+cannot be read with this function.
+[clinic start generated code]*/
+
+static int
+msvcrt_getch_impl(PyObject *module)
+/*[clinic end generated code: output=a4e51f0565064a7d input=37a40cf0ed0d1153]*/
 {
     int ch;
-    char s[1];
-
-    if (!PyArg_ParseTuple(args, ":getch"))
-        return NULL;
 
     Py_BEGIN_ALLOW_THREADS
     ch = _getch();
     Py_END_ALLOW_THREADS
-    s[0] = ch;
-    return PyString_FromStringAndSize(s, 1);
+    return ch;
 }
 
-PyDoc_STRVAR(getch_doc,
-"getch() -> key character\n\
-\n\
-Read a keypress and return the resulting character. Nothing is echoed to\n\
-the console. This call will block if a keypress is not already\n\
-available, but will not wait for Enter to be pressed. If the pressed key\n\
-was a special function key, this will return '\\000' or '\\xe0'; the next\n\
-call will return the keycode. The Control-C keypress cannot be read with\n\
-this function.");
+#ifdef MS_WINDOWS_DESKTOP
 
-#ifdef _WCONIO_DEFINED
-static PyObject *
-msvcrt_getwch(PyObject *self, PyObject *args)
+/*[clinic input]
+msvcrt.getwch -> wchar_t
+
+Wide char variant of getch(), returning a Unicode value.
+[clinic start generated code]*/
+
+static wchar_t
+msvcrt_getwch_impl(PyObject *module)
+/*[clinic end generated code: output=be9937494e22f007 input=27b3dec8ad823d7c]*/
 {
-    Py_UNICODE ch;
-    Py_UNICODE u[1];
-
-    if (!PyArg_ParseTuple(args, ":getwch"))
-        return NULL;
+    wchar_t ch;
 
     Py_BEGIN_ALLOW_THREADS
     ch = _getwch();
     Py_END_ALLOW_THREADS
-    u[0] = ch;
-    return PyUnicode_FromUnicode(u, 1);
+    return ch;
 }
 
-PyDoc_STRVAR(getwch_doc,
-"getwch() -> Unicode key character\n\
-\n\
-Wide char variant of getch(), returning a Unicode value.");
-#endif
+#endif /* MS_WINDOWS_DESKTOP */
 
-static PyObject *
-msvcrt_getche(PyObject *self, PyObject *args)
+/*[clinic input]
+msvcrt.getche -> byte_char
+
+Similar to getch(), but the keypress will be echoed if possible.
+[clinic start generated code]*/
+
+static int
+msvcrt_getche_impl(PyObject *module)
+/*[clinic end generated code: output=d8f7db4fd2990401 input=43311ade9ed4a9c0]*/
 {
     int ch;
-    char s[1];
-
-    if (!PyArg_ParseTuple(args, ":getche"))
-        return NULL;
 
     Py_BEGIN_ALLOW_THREADS
     ch = _getche();
     Py_END_ALLOW_THREADS
-    s[0] = ch;
-    return PyString_FromStringAndSize(s, 1);
+    return ch;
 }
 
-PyDoc_STRVAR(getche_doc,
-"getche() -> key character\n\
-\n\
-Similar to getch(), but the keypress will be echoed if it represents\n\
-a printable character.");
+#ifdef MS_WINDOWS_DESKTOP
 
-#ifdef _WCONIO_DEFINED
-static PyObject *
-msvcrt_getwche(PyObject *self, PyObject *args)
+/*[clinic input]
+msvcrt.getwche -> wchar_t
+
+Wide char variant of getche(), returning a Unicode value.
+[clinic start generated code]*/
+
+static wchar_t
+msvcrt_getwche_impl(PyObject *module)
+/*[clinic end generated code: output=d0dae5ba3829d596 input=49337d59d1a591f8]*/
 {
-    Py_UNICODE ch;
-    Py_UNICODE s[1];
-
-    if (!PyArg_ParseTuple(args, ":getwche"))
-        return NULL;
+    wchar_t ch;
 
     Py_BEGIN_ALLOW_THREADS
     ch = _getwche();
     Py_END_ALLOW_THREADS
-    s[0] = ch;
-    return PyUnicode_FromUnicode(s, 1);
+    return ch;
 }
 
-PyDoc_STRVAR(getwche_doc,
-"getwche() -> Unicode key character\n\
-\n\
-Wide char variant of getche(), returning a Unicode value.");
-#endif
+#endif /* MS_WINDOWS_DESKTOP */
+
+/*[clinic input]
+msvcrt.putch
+
+    char: char
+    /
+
+Print the byte string char to the console without buffering.
+[clinic start generated code]*/
 
 static PyObject *
-msvcrt_putch(PyObject *self, PyObject *args)
+msvcrt_putch_impl(PyObject *module, char char_value)
+/*[clinic end generated code: output=92ec9b81012d8f60 input=ec078dd10cb054d6]*/
 {
-    char ch;
-
-    if (!PyArg_ParseTuple(args, "c:putch", &ch))
-        return NULL;
-
-    _putch(ch);
-    Py_INCREF(Py_None);
-    return Py_None;
+    _Py_BEGIN_SUPPRESS_IPH
+    _putch(char_value);
+    _Py_END_SUPPRESS_IPH
+    Py_RETURN_NONE;
 }
 
-PyDoc_STRVAR(putch_doc,
-"putch(char) -> None\n\
-\n\
-Print the character char to the console without buffering.");
+#ifdef MS_WINDOWS_DESKTOP
 
-#ifdef _WCONIO_DEFINED
+/*[clinic input]
+msvcrt.putwch
+
+    unicode_char: int(accept={str})
+    /
+
+Wide char variant of putch(), accepting a Unicode value.
+[clinic start generated code]*/
+
 static PyObject *
-msvcrt_putwch(PyObject *self, PyObject *args)
+msvcrt_putwch_impl(PyObject *module, int unicode_char)
+/*[clinic end generated code: output=a3bd1a8951d28eee input=996ccd0bbcbac4c3]*/
 {
-    Py_UNICODE *ch;
-    int size;
-
-    if (!PyArg_ParseTuple(args, "u#:putwch", &ch, &size))
-        return NULL;
-
-    if (size == 0) {
-        PyErr_SetString(PyExc_ValueError,
-            "Expected unicode string of length 1");
-        return NULL;
-    }
-    _putwch(*ch);
+    _Py_BEGIN_SUPPRESS_IPH
+    _putwch(unicode_char);
+    _Py_END_SUPPRESS_IPH
     Py_RETURN_NONE;
 
 }
 
-PyDoc_STRVAR(putwch_doc,
-"putwch(unicode_char) -> None\n\
-\n\
-Wide char variant of putch(), accepting a Unicode value.");
-#endif
+#endif /* MS_WINDOWS_DESKTOP */
+
+/*[clinic input]
+msvcrt.ungetch
+
+    char: char
+    /
+
+Opposite of getch.
+
+Cause the byte string char to be "pushed back" into the
+console buffer; it will be the next character read by
+getch() or getche().
+[clinic start generated code]*/
 
 static PyObject *
-msvcrt_ungetch(PyObject *self, PyObject *args)
+msvcrt_ungetch_impl(PyObject *module, char char_value)
+/*[clinic end generated code: output=c6942a0efa119000 input=22f07ee9001bbf0f]*/
 {
-    char ch;
+    int res;
 
-    if (!PyArg_ParseTuple(args, "c:ungetch", &ch))
-        return NULL;
+    _Py_BEGIN_SUPPRESS_IPH
+    res = _ungetch(char_value);
+    _Py_END_SUPPRESS_IPH
 
-    if (_ungetch(ch) == EOF)
-        return PyErr_SetFromErrno(PyExc_IOError);
-    Py_INCREF(Py_None);
-    return Py_None;
+    if (res == EOF)
+        return PyErr_SetFromErrno(PyExc_OSError);
+    Py_RETURN_NONE;
 }
 
-PyDoc_STRVAR(ungetch_doc,
-"ungetch(char) -> None\n\
-\n\
-Cause the character char to be \"pushed back\" into the console buffer;\n\
-it will be the next character read by getch() or getche().");
+#ifdef MS_WINDOWS_DESKTOP
 
-#ifdef _WCONIO_DEFINED
+/*[clinic input]
+msvcrt.ungetwch
+
+    unicode_char: int(accept={str})
+    /
+
+Wide char variant of ungetch(), accepting a Unicode value.
+[clinic start generated code]*/
+
 static PyObject *
-msvcrt_ungetwch(PyObject *self, PyObject *args)
+msvcrt_ungetwch_impl(PyObject *module, int unicode_char)
+/*[clinic end generated code: output=e63af05438b8ba3d input=83ec0492be04d564]*/
 {
-    Py_UNICODE ch;
+    int res;
 
-    if (!PyArg_ParseTuple(args, "u:ungetwch", &ch))
-        return NULL;
+    _Py_BEGIN_SUPPRESS_IPH
+    res = _ungetwch(unicode_char);
+    _Py_END_SUPPRESS_IPH
 
-    if (_ungetch(ch) == EOF)
-        return PyErr_SetFromErrno(PyExc_IOError);
-    Py_INCREF(Py_None);
-    return Py_None;
+    if (res == WEOF)
+        return PyErr_SetFromErrno(PyExc_OSError);
+    Py_RETURN_NONE;
 }
 
-PyDoc_STRVAR(ungetwch_doc,
-"ungetwch(unicode_char) -> None\n\
-\n\
-Wide char variant of ungetch(), accepting a Unicode value.");
-#endif
+#endif /* MS_WINDOWS_DESKTOP */
 
-static void
-insertint(PyObject *d, char *name, int value)
+#ifdef _DEBUG
+/*[clinic input]
+msvcrt.CrtSetReportFile -> HANDLE
+
+    type: int
+    file: HANDLE
+    /
+
+Wrapper around _CrtSetReportFile.
+
+Only available on Debug builds.
+[clinic start generated code]*/
+
+static void *
+msvcrt_CrtSetReportFile_impl(PyObject *module, int type, void *file)
+/*[clinic end generated code: output=9393e8c77088bbe9 input=290809b5f19e65b9]*/
 {
-    PyObject *v = PyInt_FromLong((long) value);
-    if (v == NULL) {
-        /* Don't bother reporting this error */
-        PyErr_Clear();
-    }
-    else {
-        PyDict_SetItemString(d, name, v);
-        Py_DECREF(v);
-    }
+    HANDLE res;
+
+    _Py_BEGIN_SUPPRESS_IPH
+    res = _CrtSetReportFile(type, file);
+    _Py_END_SUPPRESS_IPH
+
+    return res;
 }
 
+/*[clinic input]
+msvcrt.CrtSetReportMode -> long
+
+    type: int
+    mode: int
+    /
+
+Wrapper around _CrtSetReportMode.
+
+Only available on Debug builds.
+[clinic start generated code]*/
+
+static long
+msvcrt_CrtSetReportMode_impl(PyObject *module, int type, int mode)
+/*[clinic end generated code: output=b2863761523de317 input=9319d29b4319426b]*/
+{
+    int res;
+
+    _Py_BEGIN_SUPPRESS_IPH
+    res = _CrtSetReportMode(type, mode);
+    _Py_END_SUPPRESS_IPH
+    if (res == -1)
+        PyErr_SetFromErrno(PyExc_OSError);
+    return res;
+}
+
+/*[clinic input]
+msvcrt.set_error_mode -> long
+
+    mode: int
+    /
+
+Wrapper around _set_error_mode.
+
+Only available on Debug builds.
+[clinic start generated code]*/
+
+static long
+msvcrt_set_error_mode_impl(PyObject *module, int mode)
+/*[clinic end generated code: output=ac4a09040d8ac4e3 input=046fca59c0f20872]*/
+{
+    long res;
+
+    _Py_BEGIN_SUPPRESS_IPH
+    res = _set_error_mode(mode);
+    _Py_END_SUPPRESS_IPH
+
+    return res;
+}
+#endif /* _DEBUG */
+
+#if defined(MS_WINDOWS_DESKTOP) || defined(MS_WINDOWS_APP) || defined(MS_WINDOWS_SYSTEM)
+
+/*[clinic input]
+msvcrt.GetErrorMode
+
+Wrapper around GetErrorMode.
+[clinic start generated code]*/
+
+static PyObject *
+msvcrt_GetErrorMode_impl(PyObject *module)
+/*[clinic end generated code: output=3103fc6145913591 input=5a7fb083b6dd71fd]*/
+{
+    unsigned int res;
+
+    _Py_BEGIN_SUPPRESS_IPH
+    res = GetErrorMode();
+    _Py_END_SUPPRESS_IPH
+
+    return PyLong_FromUnsignedLong(res);
+}
+
+#endif /* MS_WINDOWS_APP || MS_WINDOWS_SYSTEM */
+
+/*[clinic input]
+msvcrt.SetErrorMode
+
+    mode: unsigned_int(bitwise=True)
+    /
+
+Wrapper around SetErrorMode.
+[clinic start generated code]*/
+
+static PyObject *
+msvcrt_SetErrorMode_impl(PyObject *module, unsigned int mode)
+/*[clinic end generated code: output=01d529293f00da8f input=d8b167258d32d907]*/
+{
+    unsigned int res;
+
+    _Py_BEGIN_SUPPRESS_IPH
+    res = SetErrorMode(mode);
+    _Py_END_SUPPRESS_IPH
+
+    return PyLong_FromUnsignedLong(res);
+}
+
+/*[clinic input]
+[clinic start generated code]*/
+/*[clinic end generated code: output=da39a3ee5e6b4b0d input=da39a3ee5e6b4b0d]*/
 
 /* List of functions exported by this module */
 static struct PyMethodDef msvcrt_functions[] = {
-    {"heapmin",                 msvcrt_heapmin, METH_VARARGS, heapmin_doc},
-    {"locking",             msvcrt_locking, METH_VARARGS, locking_doc},
-    {"setmode",                 msvcrt_setmode, METH_VARARGS, setmode_doc},
-    {"open_osfhandle",          msvcrt_open_osfhandle, METH_VARARGS, open_osfhandle_doc},
-    {"get_osfhandle",           msvcrt_get_osfhandle, METH_VARARGS, get_osfhandle_doc},
-    {"kbhit",                   msvcrt_kbhit, METH_VARARGS, kbhit_doc},
-    {"getch",                   msvcrt_getch, METH_VARARGS, getch_doc},
-    {"getche",                  msvcrt_getche, METH_VARARGS, getche_doc},
-    {"putch",                   msvcrt_putch, METH_VARARGS, putch_doc},
-    {"ungetch",                 msvcrt_ungetch, METH_VARARGS, ungetch_doc},
-#ifdef _WCONIO_DEFINED
-    {"getwch",                  msvcrt_getwch, METH_VARARGS, getwch_doc},
-    {"getwche",                 msvcrt_getwche, METH_VARARGS, getwche_doc},
-    {"putwch",                  msvcrt_putwch, METH_VARARGS, putwch_doc},
-    {"ungetwch",                msvcrt_ungetwch, METH_VARARGS, ungetwch_doc},
-#endif
+    MSVCRT_HEAPMIN_METHODDEF
+    MSVCRT_LOCKING_METHODDEF
+    MSVCRT_SETMODE_METHODDEF
+    MSVCRT_OPEN_OSFHANDLE_METHODDEF
+    MSVCRT_GET_OSFHANDLE_METHODDEF
+    MSVCRT_KBHIT_METHODDEF
+    MSVCRT_GETCH_METHODDEF
+    MSVCRT_GETCHE_METHODDEF
+    MSVCRT_PUTCH_METHODDEF
+    MSVCRT_UNGETCH_METHODDEF
+    MSVCRT_GETERRORMODE_METHODDEF
+    MSVCRT_SETERRORMODE_METHODDEF
+    MSVCRT_CRTSETREPORTFILE_METHODDEF
+    MSVCRT_CRTSETREPORTMODE_METHODDEF
+    MSVCRT_SET_ERROR_MODE_METHODDEF
+    MSVCRT_GETWCH_METHODDEF
+    MSVCRT_GETWCHE_METHODDEF
+    MSVCRT_PUTWCH_METHODDEF
+    MSVCRT_UNGETWCH_METHODDEF
     {NULL,                      NULL}
 };
 
-PyMODINIT_FUNC
-initmsvcrt(void)
+static int
+insertptr(PyObject *mod, const char *name, void *value)
 {
-    int st;
-    PyObject *d;
-    PyObject *m = Py_InitModule("msvcrt", msvcrt_functions);
-    if (m == NULL)
-        return;
-    d = PyModule_GetDict(m);
+    return PyModule_Add(mod, name, PyLong_FromVoidPtr(value));
+}
 
+#define INSERTINT(MOD, NAME, VAL) do {                  \
+    if (PyModule_AddIntConstant(MOD, NAME, VAL) < 0) {  \
+        return -1;                                      \
+    }                                                   \
+} while (0)
+
+#define INSERTPTR(MOD, NAME, PTR) do {      \
+    if (insertptr(MOD, NAME, PTR) < 0) {    \
+        return -1;                          \
+    }                                       \
+} while (0)
+
+#define INSERTSTR(MOD, NAME, CONST) do {                    \
+    if (PyModule_AddStringConstant(MOD, NAME, CONST) < 0) { \
+        return -1;                                          \
+    }                                                       \
+} while (0)
+
+static int
+exec_module(PyObject* m)
+{
     /* constants for the locking() function's mode argument */
-    insertint(d, "LK_LOCK", _LK_LOCK);
-    insertint(d, "LK_NBLCK", _LK_NBLCK);
-    insertint(d, "LK_NBRLCK", _LK_NBRLCK);
-    insertint(d, "LK_RLCK", _LK_RLCK);
-    insertint(d, "LK_UNLCK", _LK_UNLCK);
+    INSERTINT(m, "LK_LOCK", _LK_LOCK);
+    INSERTINT(m, "LK_NBLCK", _LK_NBLCK);
+    INSERTINT(m, "LK_NBRLCK", _LK_NBRLCK);
+    INSERTINT(m, "LK_RLCK", _LK_RLCK);
+    INSERTINT(m, "LK_UNLCK", _LK_UNLCK);
+#ifdef MS_WINDOWS_DESKTOP
+    INSERTINT(m, "SEM_FAILCRITICALERRORS", SEM_FAILCRITICALERRORS);
+    INSERTINT(m, "SEM_NOALIGNMENTFAULTEXCEPT", SEM_NOALIGNMENTFAULTEXCEPT);
+    INSERTINT(m, "SEM_NOGPFAULTERRORBOX", SEM_NOGPFAULTERRORBOX);
+    INSERTINT(m, "SEM_NOOPENFILEERRORBOX", SEM_NOOPENFILEERRORBOX);
+#endif
+#ifdef _DEBUG
+    INSERTINT(m, "CRT_WARN", _CRT_WARN);
+    INSERTINT(m, "CRT_ERROR", _CRT_ERROR);
+    INSERTINT(m, "CRT_ASSERT", _CRT_ASSERT);
+    INSERTINT(m, "CRTDBG_MODE_DEBUG", _CRTDBG_MODE_DEBUG);
+    INSERTINT(m, "CRTDBG_MODE_FILE", _CRTDBG_MODE_FILE);
+    INSERTINT(m, "CRTDBG_MODE_WNDW", _CRTDBG_MODE_WNDW);
+    INSERTINT(m, "CRTDBG_REPORT_MODE", _CRTDBG_REPORT_MODE);
+    INSERTPTR(m, "CRTDBG_FILE_STDERR", _CRTDBG_FILE_STDERR);
+    INSERTPTR(m, "CRTDBG_FILE_STDOUT", _CRTDBG_FILE_STDOUT);
+    INSERTPTR(m, "CRTDBG_REPORT_FILE", _CRTDBG_REPORT_FILE);
+    INSERTINT(m, "OUT_TO_DEFAULT", _OUT_TO_DEFAULT);
+    INSERTINT(m, "OUT_TO_STDERR", _OUT_TO_STDERR);
+    INSERTINT(m, "OUT_TO_MSGBOX", _OUT_TO_MSGBOX);
+    INSERTINT(m, "REPORT_ERRMODE", _REPORT_ERRMODE);
+#endif
+
+#undef INSERTINT
+#undef INSERTPTR
 
     /* constants for the crt versions */
 #ifdef _VC_ASSEMBLY_PUBLICKEYTOKEN
-    st = PyModule_AddStringConstant(m, "VC_ASSEMBLY_PUBLICKEYTOKEN",
-                                    _VC_ASSEMBLY_PUBLICKEYTOKEN);
-    if (st < 0)return;
+    INSERTSTR(m, "VC_ASSEMBLY_PUBLICKEYTOKEN", _VC_ASSEMBLY_PUBLICKEYTOKEN);
 #endif
 #ifdef _CRT_ASSEMBLY_VERSION
-    st = PyModule_AddStringConstant(m, "CRT_ASSEMBLY_VERSION",
-                                    _CRT_ASSEMBLY_VERSION);
-    if (st < 0)return;
+    INSERTSTR(m, "CRT_ASSEMBLY_VERSION", _CRT_ASSEMBLY_VERSION);
 #endif
 #ifdef __LIBRARIES_ASSEMBLY_NAME_PREFIX
-    st = PyModule_AddStringConstant(m, "LIBRARIES_ASSEMBLY_NAME_PREFIX",
-                                    __LIBRARIES_ASSEMBLY_NAME_PREFIX);
-    if (st < 0)return;
+    INSERTSTR(m, "LIBRARIES_ASSEMBLY_NAME_PREFIX",
+              __LIBRARIES_ASSEMBLY_NAME_PREFIX);
 #endif
+
+#undef INSERTSTR
+
+    /* constants for the 2010 crt versions */
+#if defined(_VC_CRT_MAJOR_VERSION) && defined (_VC_CRT_MINOR_VERSION) && defined(_VC_CRT_BUILD_VERSION) && defined(_VC_CRT_RBUILD_VERSION)
+    PyObject *version = PyUnicode_FromFormat("%d.%d.%d.%d",
+                                             _VC_CRT_MAJOR_VERSION,
+                                             _VC_CRT_MINOR_VERSION,
+                                             _VC_CRT_BUILD_VERSION,
+                                             _VC_CRT_RBUILD_VERSION);
+    if (PyModule_Add(m, "CRT_ASSEMBLY_VERSION", version) < 0) {
+        return -1;
+    }
+#endif
+
+    return 0;
+}
+
+static PyModuleDef_Slot msvcrt_slots[] = {
+    {Py_mod_exec, exec_module},
+    {Py_mod_multiple_interpreters, Py_MOD_PER_INTERPRETER_GIL_SUPPORTED},
+    {Py_mod_gil, Py_MOD_GIL_NOT_USED},
+    {0, NULL}
+};
+
+static struct PyModuleDef msvcrtmodule = {
+    .m_base = PyModuleDef_HEAD_INIT,
+    .m_name = "msvcrt",
+    .m_methods = msvcrt_functions,
+    .m_slots = msvcrt_slots,
+};
+
+PyMODINIT_FUNC
+PyInit_msvcrt(void)
+{
+    return PyModuleDef_Init(&msvcrtmodule);
 }
