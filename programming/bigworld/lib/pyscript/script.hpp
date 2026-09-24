@@ -21,6 +21,29 @@
 
 BW_BEGIN_NAMESPACE
 
+// BIGWORLD_BEGIN(3.13 migration)
+/**
+ *	Borrowed-reference replacement for PyWeakref_GET_OBJECT, which is
+ *	deprecated in Python 3.13. Returns the referent without giving up
+ *	ownership, or Py_None when the referent is gone, matching the old
+ *	macro's contract.
+ *
+ *	Lives at BW scope (not inside Script) so that unqualified calls from
+ *	template bodies such as WeakPyPtr are visible at their point of
+ *	definition, as required by two-phase lookup.
+ */
+inline PyObject * bwPyWeakrefGetObject( PyObject * weakref )
+{
+	PyObject * pReferent = NULL;
+	if (PyWeakref_GetRef( weakref, &pReferent ) != 0)
+	{
+		return NULL;
+	}
+	Py_DECREF( pReferent );
+	return pReferent;
+}
+// BIGWORLD_END
+
 class Capabilities;
 struct Direction3D;
 class Matrix;
@@ -45,6 +68,7 @@ class SpaceEntryID;
  */
 namespace Script
 {
+
 	extern int g_scriptArgc;
 	extern char * g_scriptArgv[];
 
@@ -339,7 +363,17 @@ namespace Script
 	inline int compare( PyObject* apple, PyObject* orange )
 	{
 		if (apple && orange)
-			return PyObject_Compare( apple, orange );
+		{
+			// BIGWORLD_BEGIN(3.13 migration)
+			// PyObject_Compare was removed; rebuild its -1/0/1 result
+			// from rich comparisons (on error the exception stays set).
+			if (PyObject_RichCompareBool( apple, orange, Py_LT ) == 1)
+				return -1;
+			if (PyObject_RichCompareBool( apple, orange, Py_EQ ) == 1)
+				return 0;
+			return 1;
+			// BIGWORLD_END
+		}
 
 		if (apple)
 			return  1;
@@ -768,8 +802,12 @@ PyObject * Script::getData( ConstSmartPointer<CLASS> pDerived )			\
 	{																		\
 		OrderedStringMap<ENUMTYPE>::iterator iter = CONTAINER_NAME##_smap.end();	\
 																			\
-		if (PyString_Check( pObject ))										\
-			iter = CONTAINER_NAME##_smap.find( PyString_AsString( pObject ) );	\
+		/* BIGWORLD_BEGIN(3.13 migration): was PyString_Check/			\
+		 * PyString_AsString. */											\
+		if (PyUnicode_Check( pObject ))										\
+			iter = CONTAINER_NAME##_smap.find(								\
+				PyUnicode_AsUTF8( pObject ) );								\
+		/* BIGWORLD_END */													\
 																			\
 		if (iter != CONTAINER_NAME##_smap.end())							\
 		{																	\
@@ -793,7 +831,7 @@ PyObject * Script::getData( ConstSmartPointer<CLASS> pDerived )			\
 		}																	\
 		if (!i) errStr += "<No legal values>";								\
 																			\
-		PyErr_SetString( PyString_Check( pObject ) ?						\
+		PyErr_SetString( PyUnicode_Check( pObject ) ?						\
 			PyExc_ValueError : PyExc_TypeError,								\
 			errStr.c_str() );												\
 		return -1;															\
@@ -806,8 +844,11 @@ PyObject * Script::getData( ConstSmartPointer<CLASS> pDerived )			\
 		int index = data;													\
 		if (index >= 0 && index < (int)CONTAINER_NAME##_smap.size())		\
 		{																	\
-			return PyString_FromString(										\
+			/* BIGWORLD_BEGIN(3.13 migration): was						\
+			 * PyString_FromString. */										\
+			return PyUnicode_FromString(									\
 				(CONTAINER_NAME##_smap.begin() + index)->first );			\
+			/* BIGWORLD_END */												\
 		}																	\
 																			\
 		Py_RETURN_NONE;															\
@@ -821,8 +862,11 @@ PyObject * Script::getData( ConstSmartPointer<CLASS> pDerived )			\
 			CONTAINER_NAME##_emap.find( data );								\
 		if (iter != CONTAINER_NAME##_emap.end())							\
 		{																	\
-			return PyString_FromString(										\
+			/* BIGWORLD_BEGIN(3.13 migration): was						\
+			 * PyString_FromString. */										\
+			return PyUnicode_FromString(									\
 				(CONTAINER_NAME##_smap.begin() + iter->second)->first );	\
+			/* BIGWORLD_END */												\
 		}																	\
 																			\
 		Py_RETURN_NONE;															\
@@ -1370,7 +1414,10 @@ public:
 		if (uintptr(weakref_) > 1)
 		{
 			// 'good' has been inlined here
-			PyObject * P = PyWeakref_GET_OBJECT( weakref_ );
+			// BIGWORLD_BEGIN(3.13 migration)
+			// Was PyWeakref_GET_OBJECT (deprecated).
+			PyObject * P = bwPyWeakrefGetObject( weakref_ );
+			// BIGWORLD_END
 			if (P != Py_None) return (const Object*)P;
 
 			weakref_ = (PyObject*)1;
@@ -1409,7 +1456,10 @@ public:
 	bool good() const
 	{
 		if (uintptr(weakref_) <= 1) return false;
-		if (PyWeakref_GET_OBJECT( weakref_ ) != Py_None) return true;
+		// BIGWORLD_BEGIN(3.13 migration)
+		// Was PyWeakref_GET_OBJECT (deprecated).
+		if (bwPyWeakrefGetObject( weakref_ ) != Py_None) return true;
+		// BIGWORLD_END
 		// ok it just went bad ... write it down then
 		weakref_ = (PyObject*)1;
 		return false;
@@ -1500,11 +1550,11 @@ protected:
  */
 inline bool PySizeT_Check( PyObject * obj )
 {
-#if _WIN64
+	// BIGWORLD_BEGIN(3.13 migration)
+	// Was PyLong_Check on _WIN64 and PyInt_Check elsewhere; PyInt has
+	// been folded into PyLong on all platforms.
 	return PyLong_Check( obj );
-#else
-	return PyInt_Check( obj );
-#endif
+	// BIGWORLD_END
 }
 
 /**
@@ -1512,11 +1562,10 @@ inline bool PySizeT_Check( PyObject * obj )
  */
 inline long PySizeT_AsLong( PyObject* obj )
 {
-#if _WIN64
+	// BIGWORLD_BEGIN(3.13 migration)
+	// Was PyLong_AsLong on _WIN64 and PyInt_AsLong elsewhere.
 	return PyLong_AsLong( obj );
-#else
-	return PyInt_AsLong( obj );
-#endif
+	// BIGWORLD_END
 }
 
 #ifdef CODE_INLINE

@@ -195,12 +195,19 @@ void TraceBack::startFrame()
 	lineBufUpTo_ = lineBuf_;
 	line_ = this->isAtDesiredLineNum() ? lineBufUpTo_ : NULL;
 
-	pFilename_ = reinterpret_cast< PyObject * >( 
-		this->traceback()->tb_frame->f_code->co_filename );
+	// BIGWORLD_BEGIN(3.13 migration)
+	// PyFrameObject is opaque; fetch the code object through
+	// PyFrame_GetCode (a strong reference) and release it after taking
+	// our own reference to co_filename. Was tb_frame->f_code +
+	// PyString_AS_STRING.
+	PyCodeObject * pCode = PyFrame_GetCode( this->traceback()->tb_frame );
+	pFilename_ = pCode->co_filename;
+	Py_DECREF( pCode );
+	// BIGWORLD_END
 
 	BW::string absFilePath = 
 		BWResource::instance().fileSystem()->getAbsolutePath( 
-			PyString_AS_STRING( pFilename_.get() ) );
+			PyUnicode_AsUTF8( pFilename_.get() ) );
 
 	MF_ASSERT( fd_ == -1 );
 	fd_ = open( absFilePath.c_str(), O_RDONLY | O_NONBLOCK );
@@ -285,7 +292,10 @@ int TraceBack::processInput( int fd )
 			ERROR_MSG( "TraceBack::processInput: "
 					"error reading \"%s\" (%s), "
 					"exception raised on line %d\n",
-				PyString_AS_STRING( pFilename_.get() ), 
+				// BIGWORLD_BEGIN(3.13 migration)
+				// Was PyString_AS_STRING.
+				PyUnicode_AsUTF8( pFilename_.get() ),
+				// BIGWORLD_END
 				strerror( errno ),
 				this->traceback()->tb_lineno );
 
@@ -379,12 +389,17 @@ void TraceBack::outputFrame()
 	{
 
 		// Write out the frame info.
+		// BIGWORLD_BEGIN(3.13 migration)
+		// Was tb_frame->f_code->co_name + PyString_AS_STRING; the code
+		// object now comes from PyFrame_GetCode (strong reference).
+		PyCodeObject * pCode = PyFrame_GetCode( this->traceback()->tb_frame );
 		size_t bufWritten = bw_snprintf( tbOutputBuf, tbOutputBufLen, 
 			"  File \"%.500s\", line %d, in %.500s\n",
-			PyString_AS_STRING( pFilename_.get() ), 
+			PyUnicode_AsUTF8( pFilename_.get() ), 
 			this->traceback()->tb_lineno, 
-			PyString_AS_STRING( 
-				this->traceback()->tb_frame->f_code->co_name ) );
+			PyUnicode_AsUTF8( pCode->co_name ) );
+		Py_DECREF( pCode );
+		// BIGWORLD_END
 
 		// Write out the source line if we have one.
 		if (line_ != NULL && line_[0] && bufWritten < tbOutputBufLen)

@@ -60,7 +60,7 @@ BW::string PythonInputSubstituter::substitute( const BW::string & line,
 		return "";
 	}
 
-	else if (!PyString_Check( pExpansion.getObject() ))
+	else if (!PyUnicode_Check( pExpansion.getObject() ))
 	{
 		PyErr_Format( PyExc_TypeError, "Macro expansion returned non-string" );
 		PyErr_Print();
@@ -69,7 +69,10 @@ BW::string PythonInputSubstituter::substitute( const BW::string & line,
 
 	else
 	{
-		return BW::string( PyString_AsString( pExpansion.getObject() ) );
+		// BIGWORLD_BEGIN(3.13 migration)
+		// Was PyString_AsString.
+		return BW::string( PyUnicode_AsUTF8( pExpansion.getObject() ) );
+		// BIGWORLD_END
 	}
 }
 

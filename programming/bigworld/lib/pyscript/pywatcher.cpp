@@ -112,7 +112,7 @@ bool PyObjectWatcher::getAsString( const void * base, const char * path,
 {
 	// TODO: check this method makes sense and document (also in getAsStream)
 	// - decref correct?
-	PyObjectPtrRef & popr = *(PyObjectPtrRef*)( ((const uintptr)&popr_) + ((const uintptr)base) );
+	PyObjectPtrRef & popr = *(PyObjectPtrRef*)( ((uintptr)&popr_) + ((uintptr)base) );
 
 	// get out the PyObject *
 	PyObject * pObject = popr;
@@ -147,7 +147,7 @@ bool PyObjectWatcher::getAsString( const void * base, const char * path,
 bool PyObjectWatcher::setFromString( void * base, const char * path,
 	const char * valueStr )
 {
-	PyObjectPtrRef & popr = *(PyObjectPtrRef*)( ((const uintptr)&popr_) + ((const uintptr)base) );
+	PyObjectPtrRef & popr = *(PyObjectPtrRef*)( ((uintptr)&popr_) + ((uintptr)base) );
 
 	bool ret = false;
 
@@ -179,7 +179,7 @@ bool PyObjectWatcher::getAsStream( const void * base, const char * path,
 {
 	// TODO: check this method makes sense and document (also in getAsString)
 	// - decref correct?
-	PyObjectPtrRef & popr = *(PyObjectPtrRef*)( ((const uintptr)&popr_) + ((const uintptr)base) );
+	PyObjectPtrRef & popr = *(PyObjectPtrRef*)( ((uintptr)&popr_) + ((uintptr)base) );
 
 	// get out the PyObject *
 	PyObject * pObject = popr;
@@ -216,7 +216,7 @@ bool PyObjectWatcher::setFromStream( void * base, const char * path,
 	// TODO: check this method makes sense and document
 	// - decref correct?
 
-	PyObjectPtrRef & popr = *(PyObjectPtrRef*)( ((const uintptr)&popr_) + ((const uintptr)base) );
+	PyObjectPtrRef & popr = *(PyObjectPtrRef*)( ((uintptr)&popr_) + ((uintptr)base) );
 
 	bool ret = false;
 
@@ -252,7 +252,7 @@ bool PyObjectWatcher::setFromStream( void * base, const char * path,
 bool PyObjectWatcher::visitChildren( const void * base, const char * path,
 	WatcherPathRequest & pathRequest )
 {
-	PyObjectPtrRef & popr = *(PyObjectPtrRef*)( ((const uintptr)&popr_) + ((const uintptr)base) );
+	PyObjectPtrRef & popr = *(PyObjectPtrRef*)( ((uintptr)&popr_) + ((uintptr)base) );
 
 	// get out the PyObject *
 	PyObject * pObject = popr;
@@ -300,10 +300,14 @@ bool PyObjectWatcher::addChild( const char * /*path*/, WatcherPtr /*pChild*/,
  */
 Watcher * PyObjectWatcher::getSpecialWatcher( PyObject * pObject )
 {
-	if (PyString_Check( pObject ) || PyUnicode_Check( pObject ))
+	// BIGWORLD_BEGIN(3.13 migration)
+	// Was PyString_Check || PyUnicode_Check; the bytes/str split replaces
+	// the 2.7 str/unicode pair.
+	if (PyBytes_Check( pObject ) || PyUnicode_Check( pObject ))
 	{
 		return NULL;
 	}
+	// BIGWORLD_END
 	if (PySequenceSTL::Check( pObject ))
 	{
 		return &PySequence_Watcher();
@@ -368,7 +372,17 @@ static PyObject * py_setWatcher( PyObject * args )
 
 	if (pStr)
 	{
-		char * pCStr = PyString_AsString( pStr );
+		// BIGWORLD_BEGIN(3.13 migration)
+		// Was PyString_AsString; str results are unicode now and need an
+		// explicit UTF-8 decode.
+		const char * pCStr = PyUnicode_AsUTF8( pStr );
+
+		if (pCStr == NULL)
+		{
+			Py_DECREF( pStr );
+			return NULL;
+		}
+		// BIGWORLD_END
 
 		if (!Watcher::rootWatcher().setFromString( NULL, path, pCStr ))
 		{
@@ -444,7 +458,10 @@ static PyObject * py_getWatcher( PyObject * args )
 		return NULL;
 	}
 
-	return PyString_FromString( result.c_str() );
+	// BIGWORLD_BEGIN(3.13 migration)
+	// Was PyString_FromString.
+	return PyUnicode_FromString( result.c_str() );
+	// BIGWORLD_END
 }
 PY_MODULE_FUNCTION( getWatcher, BigWorld )
 
@@ -729,12 +746,14 @@ void getPyObjectWatcherData( PyObject * pyObj,
 		type = WATCHER_TYPE_BOOL;
 		size = sizeof(bool);
 	}
-	else if (PyInt_Check( pyObj ) ||
-		PyLong_Check( pyObj ))
+	// BIGWORLD_BEGIN(3.13 migration)
+	// Was PyInt_Check || PyLong_Check; PyInt has been folded into PyLong.
+	else if (PyLong_Check( pyObj ))
 	{
 		type = WATCHER_TYPE_INT;
 		size = sizeof(int64);
 	}
+	// BIGWORLD_END
 	else if (PyFloat_Check( pyObj ))
 	{
 		type = WATCHER_TYPE_FLOAT;
@@ -746,18 +765,24 @@ void getPyObjectWatcherData( PyObject * pyObj,
 
 		PyObject * pUTF8String = PyUnicode_AsUTF8String( pyObj );
 		MF_ASSERT( pUTF8String != NULL );
-		Py_ssize_t fullSize = PyString_GET_SIZE( pUTF8String );
+		// BIGWORLD_BEGIN(3.13 migration)
+		// Was PyString_GET_SIZE; PyUnicode_AsUTF8String yields bytes.
+		Py_ssize_t fullSize = PyBytes_GET_SIZE( pUTF8String );
+		// BIGWORLD_END
 		Py_DECREF( pUTF8String );
 		MF_ASSERT( fullSize <= INT_MAX );
 		size = ( int32 ) fullSize;
 	}
-	else if (PyString_Check( pyObj ))
+	// BIGWORLD_BEGIN(3.13 migration)
+	// Was PyString_Check/PyString_Size on the 2.7 str type.
+	else if (PyBytes_Check( pyObj ))
 	{
 		type = WATCHER_TYPE_STRING;
-		Py_ssize_t fullSize = PyString_Size( pyObj );
+		Py_ssize_t fullSize = PyBytes_Size( pyObj );
 		MF_ASSERT( fullSize <= INT_MAX );
 		size = ( int32 ) fullSize;
 	}
+	// BIGWORLD_END
 	else
 	{
 		type = WATCHER_TYPE_UNKNOWN;
@@ -839,7 +864,17 @@ protected:
 
 				if (pValStr)
 				{
-					result = PyString_AsString( pValStr );
+					// BIGWORLD_BEGIN(3.13 migration)
+					// Was PyString_AsString.
+					const char * pValCStr = PyUnicode_AsUTF8( pValStr );
+					if (pValCStr == NULL)
+					{
+						PyErr_PrintEx(0);
+						Py_DECREF( pValStr );
+						return false;
+					}
+					result = pValCStr;
+					// BIGWORLD_END
 					mode =
 						(setFunction_ != NULL) ? WT_READ_WRITE : WT_READ_ONLY;
 					desc = comment_;
@@ -894,10 +929,20 @@ protected:
 
 				if (pValStr)
 				{
+					// BIGWORLD_BEGIN(3.13 migration)
+					// Was PyString_AsString.
+					const char * pValCStr = PyUnicode_AsUTF8( pValStr );
+					if (pValCStr == NULL)
+					{
+						PyErr_PrintEx(0);
+						Py_DECREF( pValStr );
+						return false;
+					}
+					// BIGWORLD_END
 					Watcher::Mode mode =
 						(setFunction_ != NULL) ? WT_READ_WRITE : WT_READ_ONLY;
-					watcherValueToStream( pathRequest.getResultStream(), 
-							PyString_AsString( pValStr ), mode );
+					watcherValueToStream( pathRequest.getResultStream(),
+							pValCStr, mode );
 					pathRequest.setResult( comment_, mode, this, base );
 					Py_DECREF( pValStr );
 
@@ -1071,26 +1116,34 @@ public:
 		{
 			type = WATCHER_TYPE_BOOL;
 		}
-		else if (((PyTypeObject *)pArgType == &PyInt_Type) ||
-				((PyTypeObject *)pArgType == &PyLong_Type))
+		// BIGWORLD_BEGIN(3.13 migration)
+		// Was PyInt_Type || PyLong_Type; PyInt has been folded into PyLong.
+		else if ((PyTypeObject *)pArgType == &PyLong_Type)
 		{
 			type = WATCHER_TYPE_INT;
 		}
+		// BIGWORLD_END
 		else if ((PyTypeObject *)pArgType == &PyFloat_Type)
 		{
 			type = WATCHER_TYPE_FLOAT;
 		}
-		else if ((PyTypeObject *)pArgType == &PyString_Type)
+		// BIGWORLD_BEGIN(3.13 migration)
+		// Was PyString_Type.
+		else if ((PyTypeObject *)pArgType == &PyUnicode_Type)
 		{
 			type = WATCHER_TYPE_STRING;
 		}
+		// BIGWORLD_END
 		else
 		{
 			// If we can't determine the type of the object in the argument
 			// tuple, set an error then bail out.
 			PyObject *pyStr = PyObject_Str( pArgType );
+			// BIGWORLD_BEGIN(3.13 migration)
+			// Was PyString_AsString.
 			const char *typeStr = (pyStr != NULL) ?
-					PyString_AsString( pyStr ) : "(unknown)";
+					PyUnicode_AsUTF8( pyStr ) : "(unknown)";
+			// BIGWORLD_END
 
 			PyErr_Format( PyExc_RuntimeError,
 				"Invalid type %s encountered while processing argument list.",
@@ -1153,7 +1206,9 @@ public:
 					return false;
 				}
 
-				if (!PyString_Check( pName ) || !PyType_Check( pType ))
+				// BIGWORLD_BEGIN(3.13 migration)
+				// Was PyString_Check.
+				if (!PyUnicode_Check( pName ) || !PyType_Check( pType ))
 				{
 					PyErr_Format( PyExc_ValueError,
 							"Invalid argument tuple types for element %" PRIzu
@@ -1162,7 +1217,8 @@ public:
 
 				}
 
-				char *argName = PyString_AsString( pName );
+				const char *argName = PyUnicode_AsUTF8( pName );
+				// BIGWORLD_END
 				if (!argName)
 					return false;
 
@@ -1652,9 +1708,12 @@ bool SimplePythonWatcher::getAsString( const void * base, const char * path,
 
 	if (isEmptyPath( path ))
 	{
-		if ( PyString_Check( pPyObject ) )
+		// BIGWORLD_BEGIN(3.13 migration)
+		// The 2.7 str branch becomes bytes, and PyString_AsString becomes
+		// PyBytes_AsString / PyUnicode_AsUTF8 respectively.
+		if ( PyBytes_Check( pPyObject ) )
 		{
-			result = PyString_AsString( pPyObject );
+			result = PyBytes_AsString( pPyObject );
 			mode = WT_READ_ONLY;
 			desc = comment_;
 			return true;
@@ -1662,8 +1721,16 @@ bool SimplePythonWatcher::getAsString( const void * base, const char * path,
 		else if ( PyUnicode_Check( pPyObject ) )
 		{
 			PyObject * pUTF8String = PyUnicode_AsUTF8String( pPyObject );
-			result = PyString_AsString( pUTF8String );
+			if (pUTF8String == NULL)
+			{
+				PyErr_PrintEx(0);
+				return false;
+			}
+			result = PyBytes_AsString( pUTF8String );
 			Py_DECREF( pUTF8String );
+			mode = WT_READ_ONLY;
+			desc = comment_;
+			// BIGWORLD_END
 
 			return true;
 		}
@@ -1679,15 +1746,19 @@ bool SimplePythonWatcher::getAsString( const void * base, const char * path,
 		else
 		{
 			PyObject *pPyString = PyObject_Str( pPyObject );
-			if (PyString_Check(	pPyString ))
+			// BIGWORLD_BEGIN(3.13 migration)
+			// Was PyString_Check/PyString_AsString.
+			if (PyUnicode_Check( pPyString ))
 			{
-				result = PyString_AsString( pPyString );
+				const char * pCStr = PyUnicode_AsUTF8( pPyString );
+				result = (pCStr != NULL) ? pCStr : "";
 				Py_DECREF( pPyString );
 			}
+			// BIGWORLD_END
 			else
 			{
 				result = "";
-			} 
+			}
 			mode = WT_READ_ONLY;
 			desc = comment_;
 			return true;
@@ -1738,10 +1809,13 @@ bool SimplePythonWatcher::getAsStream( const void * base, const char * path,
 
 	if (isEmptyPath( path ))
 	{
-		if ( PyString_Check( pPyObject ) )
+		// BIGWORLD_BEGIN(3.13 migration)
+		// The 2.7 str branch becomes bytes, and PyString_AsString becomes
+		// PyBytes_AsString / PyUnicode_AsUTF8 respectively.
+		if ( PyBytes_Check( pPyObject ) )
 		{
-			watcherValueToStream( pathRequest.getResultStream(), 
-								  PyString_AsString( pPyObject ), mode );
+			watcherValueToStream( pathRequest.getResultStream(),
+								  PyBytes_AsString( pPyObject ), mode );
 			pathRequest.setResult( comment_, mode, this, base );
 			return true;
 
@@ -1749,12 +1823,18 @@ bool SimplePythonWatcher::getAsStream( const void * base, const char * path,
 		else if ( PyUnicode_Check( pPyObject ))
 		{
 			PyObject * pUTF8String = PyUnicode_AsUTF8String( pPyObject );
-			watcherValueToStream( pathRequest.getResultStream(), 
-								  PyString_AsString( pUTF8String ), mode );
+			if (pUTF8String == NULL)
+			{
+				PyErr_PrintEx(0);
+				return false;
+			}
+			watcherValueToStream( pathRequest.getResultStream(),
+								  PyBytes_AsString( pUTF8String ), mode );
 			Py_DECREF( pUTF8String );
 			pathRequest.setResult( comment_, mode, this, base );
 			return true;
 		}
+		// BIGWORLD_END
 		else if ( PyMapping_Check( pPyObject ) || 
 				  PySequence_Check( pPyObject ) ||
 				  PyObject_HasAttrString( pPyObject, "__dict__" ) )
@@ -1768,13 +1848,17 @@ bool SimplePythonWatcher::getAsStream( const void * base, const char * path,
 		else
 		{
 			PyObject *pPyString = PyObject_Str( pPyObject );
-			if (PyString_Check(	pPyString ))
+			// BIGWORLD_BEGIN(3.13 migration)
+			// Was PyString_Check/PyString_AsString.
+			if (PyUnicode_Check( pPyString ))
 			{
-				watcherValueToStream( pathRequest.getResultStream(), 
-									  PyString_AsString( pPyString ), 
+				const char * pCStr = PyUnicode_AsUTF8( pPyString );
+				watcherValueToStream( pathRequest.getResultStream(),
+									  (pCStr != NULL) ? pCStr : "",
 									  mode );
 				Py_DECREF( pPyString );
 			}
+			// BIGWORLD_END
 			else
 			{
 				watcherValueToStream( pathRequest.getResultStream(), "", mode );
@@ -1865,10 +1949,15 @@ bool SimplePythonWatcher::visitChildren( const void * base, const char * path,
 			// If we have a key use it for the label
 			if (pKeys != NULL)
 			{
-				PyObject * pKey = 
+				PyObject * pKey =
 					PyObject_Str(PySequence_Fast_GET_ITEM( pKeys, iter ));
-				label = BW::string(PyString_AsString( pKey ));
-				Py_DECREF( pKey );
+				// BIGWORLD_BEGIN(3.13 migration)
+				// Was PyString_AsString.
+				const char * pKeyCStr = (pKey != NULL) ?
+					PyUnicode_AsUTF8( pKey ) : NULL;
+				label = (pKeyCStr != NULL) ? pKeyCStr : "";
+				// BIGWORLD_END
+				Py_XDECREF( pKey );
 			}
 			// If not, just use the index
 			else

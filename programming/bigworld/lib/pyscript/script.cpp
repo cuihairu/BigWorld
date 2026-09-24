@@ -100,11 +100,16 @@ public:
 	{
 		BW_GUARD_DISABLED;
 
-		PyCodeObject *code = pFrame->f_code;
+		/* BIGWORLD_BEGIN(3.13 migration)
+		 * PyFrameObject fields are no longer directly accessible; use the
+		 * accessor functions and PyUnicode for code object names.
+		 */
+		PyCodeObject *code = PyFrame_GetCode( pFrame );
 
-		const char * name = PyString_AsString( code->co_name );
-		const char * filename = PyString_AsString( code->co_filename );
-		const int line = PyCode_Addr2Line( code, pFrame->f_lasti );
+		const char * name = PyUnicode_AsUTF8( code->co_name );
+		const char * filename = PyUnicode_AsUTF8( code->co_filename );
+		const int line = PyCode_Addr2Line( code, PyFrame_GetLasti( pFrame ) );
+		/* BIGWORLD_END */
 
 		StackTracker::push( name, filename, line, true );
 	}
@@ -124,14 +129,17 @@ public:
 		{
 			StackTracker::StackItem & top = StackTracker::getStackItem( 0 );
 
-			PyCodeObject * code = pFrame->f_code;
-			const char * name = PyString_AsString( code->co_name );
+			/* BIGWORLD_BEGIN(3.13 migration) */
+			PyCodeObject * code = PyFrame_GetCode( pFrame );
+			const char * name = PyUnicode_AsUTF8( code->co_name );
 
-			if (top.name == name)
+			if (top.name != NULL && strcmp( top.name, name ) == 0)
 			{
-				const int line = PyCode_Addr2Line( code, pFrame->f_lasti );
+				const int line = PyCode_Addr2Line( code,
+					PyFrame_GetLasti( pFrame ) );
 				top.line = line;
 			}
+			/* BIGWORLD_END */
 		}
 	}
 
@@ -142,7 +150,15 @@ public:
 		switch (action)
 		{
 		case PyTrace_CALL:
-			updateStackTop( pFrame->f_back );
+			/* BIGWORLD_BEGIN(3.13 migration)
+			 * PyFrame_GetBack returns a strong reference.
+			 */
+			{
+				PyFrameObject * pBack = PyFrame_GetBack( pFrame );
+				updateStackTop( pBack );
+				Py_XDECREF( pBack );
+			}
+			/* BIGWORLD_END */
 			pushStack( pFrame );
 
 			break;
@@ -172,14 +188,19 @@ public:
 	static void handleStack( PyFrameObject * pFrame, int action, PyObject * pArg )
 	{
 		BW_GUARD_DISABLED;
+		/* BIGWORLD_BEGIN(3.13 migration) */
+		PyCodeObject * pCode = pFrame ? PyFrame_GetCode( pFrame ) : NULL;
+		const char * codeName =
+			pCode ? PyUnicode_AsUTF8( pCode->co_name ) : NULL;
+		/* BIGWORLD_END */
 		switch (action)
 		{
 		case PyTrace_CALL:
-			g_profiler.addEntry( PyString_AsString( pFrame->f_code->co_name ),
+			g_profiler.addEntry( codeName,
 				Profiler::EVENT_START, 0, Profiler::CATEGORY_PYTHON );
 			break;
 		case PyTrace_RETURN:
-			g_profiler.addEntry( PyString_AsString( pFrame->f_code->co_name ),
+			g_profiler.addEntry( codeName,
 				Profiler::EVENT_END, 0, Profiler::CATEGORY_PYTHON );
 			break;
 		case PyTrace_C_CALL:
@@ -281,18 +302,62 @@ namespace Python_Memhooks
 
 	void* realloc( void* mem, size_t size )
 	{
-		// Ignoring python leaks for now, until all other leaks are 
+		// Ignoring python leaks for now, until all other leaks are
 		// resolved.
 		BW::Allocator::allocTrackingIgnoreBegin();
-		
+
 		MEMTRACKER_SCOPED( Script_Python );
 		void* ptr = bw_realloc( mem, size );
-		
+
 		BW::Allocator::allocTrackingIgnoreEnd();
 
 		return ptr;
 	}
 }
+
+
+#if !defined(PYMODULE)
+/* BIGWORLD_BEGIN(3.13 migration)
+ * Context-free adapters matching PyObjectArenaAllocator's signature. The
+ * arena is carved out of one big block, so plain BW_Py_malloc/BW_Py_free
+ * (which forward to libc when no hook is registered) are all that is
+ * needed; the ctx pointer is unused.
+ */
+static void * bwPyArenaAlloc( void * /*ctx*/, size_t size )
+{
+	return BW_Py_malloc( size );
+}
+
+static void bwPyArenaFree( void * /*ctx*/, void * ptr, size_t /*size*/ )
+{
+	BW_Py_free( ptr );
+}
+
+/* BIGWORLD_BEGIN(3.13 migration)
+ * PyMemAllocatorEx entry points take a leading context pointer; wrap the
+ * BWHooks allocators to match.
+ */
+static void * bwPyRawMalloc( void * /*ctx*/, size_t size )
+{
+	return BW_Py_malloc( size );
+}
+
+static void * bwPyRawCalloc( void * /*ctx*/, size_t nelem, size_t elsize )
+{
+	return BW_Py_calloc( nelem, elsize );
+}
+
+static void * bwPyRawRealloc( void * /*ctx*/, void * ptr, size_t newSize )
+{
+	return BW_Py_realloc( ptr, newSize );
+}
+
+static void bwPyRawFree( void * /*ctx*/, void * ptr )
+{
+	BW_Py_free( ptr );
+}
+/* BIGWORLD_END */
+#endif // !defined(PYMODULE)
 
 
 /**
@@ -306,24 +371,36 @@ void Script::printStack()
 
 	const PyThreadState * tstate = PyThreadState_GET();
 
-	if ((tstate != NULL) && (tstate->frame != NULL))
-	{
-		const PyFrameObject * frame = tstate->frame;
+	/* BIGWORLD_BEGIN(3.13 migration)
+	 * PyThreadState.frame and PyFrameObject fields are no longer exposed:
+	 * walk the stack with PyThreadState_GetFrame/PyFrame_GetBack and read
+	 * attributes through the accessors. The frame references returned are
+	 * strong references and must be released.
+	 */
+	PyFrameObject * frame = tstate ? PyThreadState_GetFrame(
+		const_cast< PyThreadState * >( tstate ) ) : NULL;
 
+	if (frame != NULL)
+	{
 		DEBUG_MSG( "Python stack trace:\n" );
 		while (frame != NULL)
 		{
-			const int line = frame->f_lineno;
+			const int line = PyFrame_GetLineNumber( frame );
+			PyCodeObject * pCode = PyFrame_GetCode( frame );
 			const char * filename =
-				PyString_AsString( frame->f_code->co_filename );
+				PyUnicode_AsUTF8( pCode->co_filename );
 			const char * funcname =
-				PyString_AsString( frame->f_code->co_name );
+				PyUnicode_AsUTF8( pCode->co_name );
 
 			DEBUG_MSG( "    %s(%d): %s\n", filename, line, funcname );
 
-			frame = frame->f_back;
+			PyFrameObject * pBack = PyFrame_GetBack( frame );
+			Py_DECREF( frame );
+			Py_XDECREF( pCode );
+			frame = pBack;
 		}
 	}
+	/* BIGWORLD_END */
 }
 
 
@@ -344,7 +421,7 @@ bool Script::init( const PyImportPaths & appPaths, const char * componentName )
 	{
 		BW_Py_Hooks pythonHooks;
 		bw_zero_memory( &pythonHooks, sizeof( pythonHooks ) );
-		
+
 		//pythonHooks.mallocHook = Python_Memhooks::malloc;
 		//pythonHooks.freeHook = Python_Memhooks::free;
 		//pythonHooks.reallocHook = Python_Memhooks::realloc;
@@ -354,6 +431,29 @@ bool Script::init( const PyImportPaths & appPaths, const char * componentName )
 			BW::Allocator::allocTrackingIgnoreEnd;
 
 		BW_Py_setHooks( &pythonHooks );
+
+		/* BIGWORLD_BEGIN(3.13 migration)
+		 * Route CPython's raw allocator and the pymalloc arenas through the
+		 * BWHooks layer using the official embedding interfaces. This
+		 * replaces the 2.7 #define malloc/realloc/free redirection inside
+		 * obmalloc.c/pymem.h. Both must be installed before
+		 * Py_Initialize(). When no malloc hook is registered these forward
+		 * to libc exactly like the unhooked 2.7 build did.
+		 */
+		PyMemAllocatorEx rawAllocator;
+		memset( &rawAllocator, 0, sizeof( rawAllocator ) );
+		rawAllocator.malloc = bwPyRawMalloc;
+		rawAllocator.calloc = bwPyRawCalloc;
+		rawAllocator.realloc = bwPyRawRealloc;
+		rawAllocator.free = bwPyRawFree;
+		PyMem_SetAllocator( PYMEM_DOMAIN_RAW, &rawAllocator );
+
+		PyObjectArenaAllocator arenaAllocator;
+		memset( &arenaAllocator, 0, sizeof( arenaAllocator ) );
+		arenaAllocator.alloc = bwPyArenaAlloc;
+		arenaAllocator.free = bwPyArenaFree;
+		PyObject_SetArenaAllocator( &arenaAllocator );
+		/* BIGWORLD_END */
 	}
 #endif
 
@@ -399,9 +499,13 @@ bool Script::init( const PyImportPaths & appPaths, const char * componentName )
 	// Py_VerboseFlag = 2;
 	Py_FrozenFlag = 1; // Suppress errors from getpath.c
 
-
+	/* BIGWORLD_BEGIN(3.13 migration)
+	 * Py_TabcheckFlag was removed: mixed tab/space indentation has been a
+	 * SyntaxError in Python 3 since 3.x, so the flag has no equivalent.
 	// Warn if tab and spaces are mixed in indentation.
 	Py_TabcheckFlag = 1;
+	 */
+	/* BIGWORLD_END */
 	Py_NoSiteFlag = 1;
 	Py_IgnoreEnvironmentFlag = 1;
 
@@ -417,7 +521,30 @@ bool Script::init( const PyImportPaths & appPaths, const char * componentName )
 	if (g_scriptArgc)
 #endif
 	{
-		PySys_SetArgv( g_scriptArgc, g_scriptArgv );
+		/* BIGWORLD_BEGIN(3.13 migration)
+		 * PySys_SetArgv was removed in Python 3.13. Assign sys.argv
+		 * directly; note this drops the 2.7 side effect of prepending
+		 * argv[0]'s directory to sys.path (PySys_SetArgvEx semantics),
+		 * which is handled by PyConfig alone now.
+		 */
+		PyObject * pArgvList = PyList_New( g_scriptArgc );
+		if (pArgvList != NULL)
+		{
+			for (int i = 0; i < g_scriptArgc; ++i)
+			{
+				PyObject * pArg = PyUnicode_FromString( g_scriptArgv[i] );
+				if ((pArg == NULL) ||
+						(PyList_SetItem( pArgvList, i, pArg ) != 0))
+				{
+					Py_XDECREF( pArg );
+					break;
+				}
+			}
+
+			PySys_SetObject( "argv", pArgvList );
+			Py_DECREF( pArgvList );
+		}
+		/* BIGWORLD_END */
 	}
 
 #if !BWCLIENT_AS_PYTHON_MODULE
@@ -461,7 +588,12 @@ bool Script::init( const PyImportPaths & appPaths, const char * componentName )
 	s_pOurInitTimeModules = PyDict_Copy( PySys_GetObject( "modules" ) );
 	s_pMainThreadState = PyThreadState_Get();
 	s_defaultContext = s_pMainThreadState;
-	PyEval_InitThreads();
+	/* BIGWORLD_BEGIN(3.13 migration)
+	 * PyEval_InitThreads() was removed in Python 3.13. The GIL is always
+	 * enabled and initialisation-time thread setup is handled by
+	 * Py_Initialize() itself.
+	 */
+	/* BIGWORLD_END */
 
 	BWConcurrency::setMainThreadIdleFunctions(
 		&Script::releaseLock, &Script::acquireLock );
@@ -561,7 +693,29 @@ void Script::fini( bool shouldFinalise )
 		PyObject * value = PyDict_GetItemString( modules, "__main__" );
 		if (value != NULL && PyModule_Check( value ))
 		{
-			_PyModule_Clear( value );
+			// BIGWORLD_BEGIN(3.13 migration)
+			// _PyModule_Clear() is no longer exported. Replicate its core
+			// behaviour: drop every module attribute (keeping __builtins__)
+			// so reference cycles involving the module can be collected.
+			PyObject * moduleDict = PyModule_GetDict( value );
+			PyObject * key = NULL;
+			PyObject * item = NULL;
+			Py_ssize_t pos = 0;
+			while (PyDict_Next( moduleDict, &pos, &key, &item ))
+			{
+				bool isBuiltins = false;
+				if (PyUnicode_Check( key ))
+				{
+					const char * keyStr = PyUnicode_AsUTF8( key );
+					isBuiltins = (keyStr != NULL) &&
+						(strcmp( keyStr, "__builtins__" ) == 0);
+				}
+				if (!isBuiltins)
+				{
+					PyDict_SetItem( moduleDict, key, Py_None );
+				}
+			}
+			// BIGWORLD_END
 			PyDict_SetItemString( modules, "__main__", Py_None );
 		}
 		Py_Finalize();
@@ -666,18 +820,30 @@ void Script::initThread( bool plusOwnInterpreter )
 	}
 
 
-	PyEval_AcquireLock();
+	// BIGWORLD_BEGIN(3.13 migration)
+	// Was PyEval_AcquireLock(), removed in 3.13; re-entering the GIL now
+	// goes through the main thread state. Callers arrive without the lock,
+	// same contract the old function had.
+	PyEval_RestoreThread( s_pMainThreadState );
+	// BIGWORLD_END
 
 	PyThreadState * newTState = NULL;
 
 	if (plusOwnInterpreter)
 	{
+		// BIGWORLD_BEGIN(3.13 migration)
+		// PyInterpreterState is opaque now; grab the main interpreter's
+		// sys.path through the public sys API before Py_NewInterpreter()
+		// switches us over.
+		PyObject * pMainPyPath = PySys_GetObject( "path" );
+		Py_XINCREF( pMainPyPath );
+		// BIGWORLD_END
+
 		newTState = Py_NewInterpreter();
 
 		// set the path again
-		PyObject * pMainPyPath = PyDict_GetItemString(
-			s_pMainThreadState->interp->sysdict, "path" );
 		PySys_SetObject( "path", pMainPyPath );
+		Py_XDECREF( pMainPyPath );
 
 		// put in any modules created by our init-time jobs
 		PyDict_Merge( PySys_GetObject( "modules" ), s_pOurInitTimeModules,
@@ -693,7 +859,8 @@ void Script::initThread( bool plusOwnInterpreter )
 		MF_EXIT( "failed to create a new thread object" );
 	}
 
-	PyEval_ReleaseLock();
+	// BIGWORLD(3.13 migration): Was PyEval_ReleaseLock(), removed in 3.13.
+	PyEval_SaveThread();
 
 	// and make our thread be the one global python one
 	s_defaultContext = newTState;
@@ -723,11 +890,14 @@ void Script::finiThread( bool plusOwnInterpreter )
 		{
 			//PyImport_Cleanup();	// this is the one we can't call
 			PyInterpreterState_Clear( s_defaultContext->interp );
-			PyThreadState_Swap( NULL );
+			PyThreadState_Clear( s_defaultContext );
 			PyInterpreterState_Delete( s_defaultContext->interp );
 		}
 
-		PyEval_ReleaseLock();
+		// BIGWORLD(3.13 migration): Was PyThreadState_Swap( NULL ) plus
+		// PyEval_ReleaseLock(), both gone or reshaped in 3.13; SaveThread
+		// releases the GIL and clears the current thread state pointer.
+		PyEval_SaveThread();
 	}
 	else
 	{
@@ -788,12 +958,22 @@ namespace
  *  - is of a type that has a non null tp_call (c struct) member which indicates
  *    callability otherwise (such as in functions, methods etc.)
  */
-void resolvePythonModuleAndFunctionNames( PyObject * pFunction, 
+void resolvePythonModuleAndFunctionNames( PyObject * pFunction,
 									   char * outputBuffer, size_t outputBufferSize )
 {
 	const char * moduleName   = NULL;
 	const char * functionName = NULL;
-	PyObject * pModuleNameObj = NULL;
+
+	/* BIGWORLD_BEGIN(3.13 migration)
+	 * PyFunctionObject internals are no longer public and the memory behind
+	 * PyUnicode_AsUTF8() belongs to the string object, so strong references
+	 * to the name objects are held until the StringBuilder below has
+	 * consumed them (the 2.7 code relied on interning after an early
+	 * Py_DECREF).
+	 */
+	PyObject * pModuleNameHolder = NULL;
+	PyObject * pFunctionNameHolder = NULL;
+	/* BIGWORLD_END */
 
 	// code is based on PyEval_GetFuncName code from third_party/python/Python/ceval.c
 	if (PyMethod_Check(pFunction))
@@ -804,15 +984,30 @@ void resolvePythonModuleAndFunctionNames( PyObject * pFunction,
 	}
 	else if (PyFunction_Check(pFunction))
 	{
-		// no allocation code path
-		functionName = PyString_AsString(((PyFunctionObject*)pFunction)->func_name);
-		pModuleNameObj = PyFunction_GET_MODULE(pFunction);
+		pFunctionNameHolder = PyObject_GetAttrString( pFunction, "__name__" );
+		if (pFunctionNameHolder != NULL)
+		{
+			if (PyUnicode_Check( pFunctionNameHolder ))
+			{
+				functionName = PyUnicode_AsUTF8( pFunctionNameHolder );
+			}
+			else
+			{
+				Py_CLEAR( pFunctionNameHolder );
+				PyErr_Clear();
+			}
+		}
+		else
+		{
+			PyErr_Clear();
+		}
 	}
 	else if (PyCFunction_Check(pFunction))
 	{
 		// no allocation code path
 		functionName = ((PyCFunctionObject*)pFunction)->m_ml->ml_name;
-		pModuleNameObj = ((PyCFunctionObject*)pFunction)->m_module;
+		pModuleNameHolder = ((PyCFunctionObject*)pFunction)->m_module;
+		Py_XINCREF( pModuleNameHolder );
 	}
 	else if (PyType_Check(pFunction))
 	{
@@ -821,9 +1016,9 @@ void resolvePythonModuleAndFunctionNames( PyObject * pFunction,
 		functionName = ((PyTypeObject*)pFunction)->tp_name;
 	}
 
-	if (pModuleNameObj && PyString_Check(pModuleNameObj))
+	if (pModuleNameHolder && PyUnicode_Check(pModuleNameHolder))
 	{
-		moduleName = PyString_AsString( pModuleNameObj );
+		moduleName = PyUnicode_AsUTF8( pModuleNameHolder );
 	}
 
 	// Expensive code path, run it only it all previous attempts to resolve function and module names failed.
@@ -831,11 +1026,18 @@ void resolvePythonModuleAndFunctionNames( PyObject * pFunction,
 	if (!moduleName && (!functionName || strchr( functionName, '.' ) == NULL) &&
 		PyObject_HasAttrString( pFunction, "__module__" ))
 	{
-		PyObject *modulePyStringName = PyObject_GetAttrString( pFunction, "__module__" );
-		if (modulePyStringName)
+		pModuleNameHolder = PyObject_GetAttrString( pFunction, "__module__" );
+		if (pModuleNameHolder)
 		{
-			moduleName = PyString_AsString( modulePyStringName );
-			Py_DECREF( modulePyStringName );
+			if (PyUnicode_Check( pModuleNameHolder ))
+			{
+				moduleName = PyUnicode_AsUTF8( pModuleNameHolder );
+			}
+			else
+			{
+				Py_CLEAR( pModuleNameHolder );
+				PyErr_Clear();
+			}
 		}
 		else
 		{
@@ -844,11 +1046,18 @@ void resolvePythonModuleAndFunctionNames( PyObject * pFunction,
 	}
 	if (!functionName && PyObject_HasAttrString( pFunction, "__name__" ))
 	{
-		PyObject *functionPyStringName = PyObject_GetAttrString( pFunction, "__name__" );
-		if (functionPyStringName)
+		pFunctionNameHolder = PyObject_GetAttrString( pFunction, "__name__" );
+		if (pFunctionNameHolder)
 		{
-			functionName = PyString_AsString( functionPyStringName );
-			Py_DECREF( functionPyStringName );
+			if (PyUnicode_Check( pFunctionNameHolder ))
+			{
+				functionName = PyUnicode_AsUTF8( pFunctionNameHolder );
+			}
+			else
+			{
+				Py_CLEAR( pFunctionNameHolder );
+				PyErr_Clear();
+			}
 		}
 		else
 		{
@@ -871,6 +1080,9 @@ void resolvePythonModuleAndFunctionNames( PyObject * pFunction,
 	{
 		strBuilder.append( functionName );
 	}
+
+	Py_XDECREF( pModuleNameHolder );
+	Py_XDECREF( pFunctionNameHolder );
 }
 
 #endif // ENABLE_PROFILER
@@ -983,7 +1195,7 @@ PyObject * Script::ask( PyObject * pFunction,
 				if ( pErrStr != NULL )
 				{
 					finalError +=
-						BW::string( PyString_AsString( pErrStr ) ) + " (";
+						BW::string( PyUnicode_AsUTF8( pErrStr ) ) + " (";
 					Py_DECREF( pErrStr );
 				}
 			}
@@ -992,7 +1204,7 @@ PyObject * Script::ask( PyObject * pFunction,
 			PyObject * pErrStr = PyObject_Str( pErr );
 			if ( pErrStr != NULL )
 			{
-				finalError += PyString_AsString( pErrStr );
+				finalError += PyUnicode_AsUTF8( pErrStr );
 				Py_DECREF( pErrStr );
 			}
 
@@ -1023,19 +1235,22 @@ PyObject * Script::ask( PyObject * pFunction,
  */
 PyObject * Script::newClassInstance( PyObject * pClass )
 {
-	// This code was inspired by new_instance function in Modules/newmodule.c in
-	// the Python source code.
+	/* BIGWORLD_BEGIN(3.13 migration)
+	 * This was modelled on newmodule.c's new_instance for 2.x old-style
+	 * classes (PyInstanceObject/PyClassObject, both removed in Python 3).
+	 * The closest equivalent is object.__new__(cls): allocates the instance
+	 * without running cls.__init__.
+	 */
+	PyObject * pNewObject = PyObject_CallMethod( pClass,
+		const_cast<char *>( "__new__" ), const_cast<char *>( "(O)" ), pClass );
 
-	PyInstanceObject * pNewObject =
-		PyObject_New( PyInstanceObject, &PyInstance_Type );
+	if (pNewObject == NULL)
+	{
+		PyErr_Print();
+	}
 
-	Py_INCREF( pClass );
-	pNewObject->in_class = (PyClassObject *)pClass;
-	pNewObject->in_dict = PyDict_New();
-
-	PyObject_GC_Init( pNewObject );
-
-	return (PyObject *)pNewObject;
+	return pNewObject;
+	/* BIGWORLD_END */
 }
 
 
@@ -1080,7 +1295,11 @@ PyObject * Script::runString( const char * expr, bool printResult )
 
 	ScriptDict d = m.getDict();
 
-	PyCompilerFlags cf = { PyCF_SOURCE_IS_UTF8 };
+	// BIGWORLD(3.13 migration): PyCompilerFlags gained new fields; zero
+	// initialise so it stays forward compatible.
+	PyCompilerFlags cf;
+	memset( &cf, 0, sizeof( cf ) );
+	cf.cf_flags = PyCF_SOURCE_IS_UTF8;
 	return PyRun_StringFlags( const_cast<char*>( expr ),
 		printResult ? Py_single_input : Py_eval_input,
 		d.get(), d.get(), &cf );
@@ -1135,7 +1354,7 @@ PyModuleMethodLink::PyModuleMethodLink( const char * moduleName,
 	methodName_( methodName )
 {
 	mdReal_.ml_name = const_cast< char * >( methodName_ );
-	mdReal_.ml_meth = (PyCFunction)method;
+	mdReal_.ml_meth = BW_PYCFUNCTION_CAST( method );
 	mdReal_.ml_flags = METH_VARARGS | METH_KEYWORDS;
 	mdReal_.ml_doc = const_cast< char * >( docString );
 
@@ -1159,7 +1378,29 @@ PyModuleMethodLink::~PyModuleMethodLink()
  */
 void PyModuleMethodLink::init()
 {
-	Py_InitModule( const_cast<char *>(moduleName_), &mdReal_ );
+	/* BIGWORLD_BEGIN(3.13 migration)
+	 * Py_InitModule was removed in Python 3.x. As with PyModuleAttrLink the
+	 * module is expected to exist already (its owner creates it during
+	 * initialisation); attach the method with PyModule_AddFunctions.
+	 */
+	PyObject * pModule =
+		PyImport_AddModule( const_cast<char *>( moduleName_ ) );
+	if (pModule == NULL)
+	{
+		PyErr_Clear();
+		ERROR_MSG( "PyModuleMethodLink::init: Module '%s' not found while "
+			"adding method '%s'\n", moduleName_, methodName_ );
+		return;
+	}
+
+	PyMethodDef defs[ 2 ] = { mdReal_, { NULL, NULL, 0, NULL } };
+	if (PyModule_AddFunctions( pModule, defs ) < 0)
+	{
+		PyErr_Print();
+		ERROR_MSG( "PyModuleMethodLink::init: Failed to add method '%s' to "
+			"module '%s'\n", methodName_, moduleName_ );
+	}
+	/* BIGWORLD_END */
 }
 
 
@@ -1282,15 +1523,15 @@ PyObject * Script::buildReduceResult( const char * consName,
 int Script::setData( PyObject * pObject, bool & rBool,
 	const char * varName )
 {
-	if (PyInt_Check( pObject ))
+	if (PyLong_Check( pObject ))
 	{
-		rBool = PyInt_AsLong( pObject ) != 0;
+		rBool = PyLong_AsLong( pObject ) != 0;
 		return 0;
 	}
 
-	if (PyString_Check( pObject ))
+	if (PyUnicode_Check( pObject ))
 	{
-		char * pStr = PyString_AsString( pObject );
+		const char * pStr = PyUnicode_AsUTF8( pObject );
 		if (!_stricmp( pStr, "true" ))
 		{
 			rBool = true;
@@ -1317,9 +1558,9 @@ int Script::setData( PyObject * pObject, bool & rBool,
 int Script::setData( PyObject * pObject, int & rInt,
 	const char * varName )
 {
-	if (PyInt_Check( pObject ))
+	if (PyLong_Check( pObject ))
 	{
-		long asLong = PyInt_AsLong( pObject );
+		long asLong = PyLong_AsLong( pObject );
 		rInt = asLong;
 
 		if (asLong == rInt)
@@ -1396,9 +1637,9 @@ int Script::setData( PyObject * pObject, int64 & rInt,
 		if (!PyErr_Occurred()) return 0;
 	}
 
-	if (PyInt_Check( pObject ))
+	if (PyLong_Check( pObject ))
 	{
-		rInt = PyInt_AsLong( pObject );
+		rInt = PyLong_AsLong( pObject );
 		return 0;
 	}
 
@@ -1428,9 +1669,9 @@ int Script::setData( PyObject * pObject, uint64 & rUint,
 		if (!PyErr_Occurred()) return 0;
 	}
 
-	if (PyInt_Check( pObject ))
+	if (PyLong_Check( pObject ))
 	{
-		long intValue = PyInt_AsLong( pObject );
+		long intValue = PyLong_AsLong( pObject );
 		if (intValue >= 0)
 		{
 			rUint = (uint64)intValue;
@@ -1466,9 +1707,9 @@ int Script::setData( PyObject * pObject, uint64 & rUint,
 int Script::setData( PyObject * pObject, uint & rUint,
 	const char * varName )
 {
-	if (PyInt_Check( pObject ))
+	if (PyLong_Check( pObject ))
 	{
-		long longValue = PyInt_AsLong( pObject );
+		long longValue = PyLong_AsLong( pObject );
 		rUint = longValue;
 
 		if ((longValue >= 0) && (static_cast< long >( rUint ) == longValue))
@@ -1541,9 +1782,9 @@ int Script::setData( PyObject * pObject, double & rDouble,
 		return 0;
 	}
 
-	if (PyInt_Check( pObject ))
+	if (PyLong_Check( pObject ))
 	{
-		rDouble = PyInt_AsLong( pObject );
+		rDouble = PyLong_AsLong( pObject );
 		return 0;
 	}
 
@@ -1739,9 +1980,9 @@ int Script::setData( PyObject * pObject, Capabilities & rCaps,
 	for (Py_ssize_t i = 0; i < ncaps && good; i++)
 	{
 		PyObject * argElt = PyList_GetItem( pObject, i );	// borrowed
-		if (PyInt_Check( argElt ))
+		if (PyLong_Check( argElt ))
 		{
-			wantCaps.add( PyInt_AsLong( argElt ) );
+			wantCaps.add( PyLong_AsLong( argElt ) );
 		}
 		else
 		{
@@ -1783,7 +2024,12 @@ int Script::setData( PyObject * pObject, BW::string & rString,
 		}
 	}
 
-	if (!PyString_Check( pObject ))
+	/* BIGWORLD_BEGIN(3.13 migration)
+	 * PyString became PyUnicode (with PyUnicode_AsUTF8String above handing
+	 * us a bytes object), and PyBytes is accepted directly, mirroring the
+	 * 2.7 behaviour where str objects were byte strings.
+	 */
+	if (!PyBytes_Check( pObject ))
 	{
 		PyErr_Format( PyExc_TypeError, "%s must be set to a string.", varName );
 		return -1;
@@ -1791,9 +2037,10 @@ int Script::setData( PyObject * pObject, BW::string & rString,
 
 	char *ptr_cs;
 	Py_ssize_t len_cs;
-	PyString_AsStringAndSize( pObject, &ptr_cs, &len_cs );
+	PyBytes_AsStringAndSize( pObject, &ptr_cs, &len_cs );
 	rString.assign( ptr_cs, len_cs );
 	return 0;
+	/* BIGWORLD_END */
 }
 
 
@@ -1806,40 +2053,53 @@ int Script::setData( PyObject * pObject, BW::string & rString,
 int Script::setData( PyObject * pObject, BW::wstring & rString,
 	const char * varName )
 {
-	if (PyString_Check( pObject ) || PyUnicode_Check( pObject ))
+	/* BIGWORLD_BEGIN(3.13 migration)
+	 * PyUnicodeObject internals (PyUnicode_GET_DATA_SIZE) are gone. Accept
+	 * str, bytes and unicode-convertible objects, then use
+	 * PyUnicode_AsWideCharString for the conversion and size in one go.
+	 */
+	PyObject * pUnicode = NULL;
+
+	if (PyUnicode_Check( pObject ))
 	{
-		SmartPointer<PyObject> pUO( PyObject_Unicode( pObject ), true );
-
-		if (pUO)
-		{
-			PyUnicodeObject* unicodeObj = reinterpret_cast<PyUnicodeObject*>(pUO.getObject());
-
-			Py_ssize_t ulen = PyUnicode_GET_DATA_SIZE( unicodeObj ) / sizeof(Py_UNICODE);
-			if (ulen >= 0)
-			{
-				// In theory this is bad, because we're assuming that 
-				// sizeof(Py_UNICODE) == sizeof(wchar_t), and that ulen maps to
-				// of characters that PyUnicode_AsWideChar will write into the 
-				// destination buffer. In practice this is true, but for good measure
-				// I'm going to stick in a compile-time assert.
-				BW_STATIC_ASSERT( sizeof(Py_UNICODE) == sizeof(wchar_t), SizeOfPyUnicodeIsNotSizeOfWchar_t );
-				rString.resize(ulen);
-
-				if (rString.empty())
-				{
-					return 0;
-				}
-
-				Py_ssize_t nChars = 
-					PyUnicode_AsWideChar( unicodeObj, &rString[0], ulen );
-
-				if ( nChars != -1 )
-				{
-					return 0;
-				}
-			}
-		}
+		pUnicode = pObject;
+		Py_INCREF( pUnicode );
 	}
+	else if (PyBytes_Check( pObject ))
+	{
+		pUnicode = PyUnicode_FromEncodedObject( pObject, NULL, "strict" );
+	}
+	else
+	{
+		// BIGWORLD(3.13 migration): PyObject_Unicode() was removed;
+		// PyObject_Str() is the equivalent entry point.
+		pUnicode = PyObject_Str( pObject );
+	}
+
+	if (pUnicode != NULL)
+	{
+		// BIGWORLD(3.13 migration): PyUnicode_AsWideCharString() hands the
+		// buffer back as its return value and reports the length via the
+		// out-parameter.
+		Py_ssize_t ulen = 0;
+		wchar_t * pBuffer =
+			PyUnicode_AsWideCharString( pUnicode, &ulen );
+
+		if (pBuffer != NULL)
+		{
+			rString.assign( pBuffer, ulen );
+			PyMem_Free( pBuffer );
+			Py_DECREF( pUnicode );
+			return 0;
+		}
+
+		Py_DECREF( pUnicode );
+	}
+	else
+	{
+		PyErr_Clear();
+	}
+	/* BIGWORLD_END */
 
 	PyErr_Format( PyExc_TypeError,
 			"%s must be set to a wide string.", varName );
@@ -1859,11 +2119,11 @@ int Script::setData( PyObject * pObject, Mercury::Address & rAddr,
 {
 	if (PyTuple_Check( pObject ) &&
 		PyTuple_Size( pObject ) == 2 &&
-		PyInt_Check( PyTuple_GET_ITEM( pObject, 0 ) ) &&
-		PyInt_Check( PyTuple_GET_ITEM( pObject, 1 ) ))
+		PyLong_Check( PyTuple_GET_ITEM( pObject, 0 ) ) &&
+		PyLong_Check( PyTuple_GET_ITEM( pObject, 1 ) ))
 	{
-		rAddr.ip   = PyInt_AsLong( PyTuple_GET_ITEM( pObject, 0 ) );
-		rAddr.port = uint16( PyInt_AsLong( PyTuple_GET_ITEM( pObject, 1 ) ) );
+		rAddr.ip   = PyLong_AsLong( PyTuple_GET_ITEM( pObject, 0 ) );
+		rAddr.port = uint16( PyLong_AsLong( PyTuple_GET_ITEM( pObject, 1 ) ) );
 		return 0;
 	}
 	else
@@ -1882,16 +2142,16 @@ int Script::setData( PyObject * pObject, SpaceEntryID & entryID,
 	const char * varName )
 {
 	if (!PyTuple_Check( pObject ) || PyTuple_Size( pObject ) != 2 ||
-		!PyInt_Check( PyTuple_GetItem( pObject, 0 )) ||
-		!PyInt_Check( PyTuple_GetItem( pObject, 1 )))
+		!PyLong_Check( PyTuple_GetItem( pObject, 0 )) ||
+		!PyLong_Check( PyTuple_GetItem( pObject, 1 )))
 	{
 		PyErr_Format( PyExc_TypeError,
 			"%s must be set to a SpaceEntryID", varName );
 		return -1;
 	}
 
-	((uint32*)&entryID)[0] = PyInt_AsLong( PyTuple_GET_ITEM( pObject, 0 ) );
-	((uint32*)&entryID)[1] = PyInt_AsLong( PyTuple_GET_ITEM( pObject, 1 ) );
+	((uint32*)&entryID)[0] = PyLong_AsLong( PyTuple_GET_ITEM( pObject, 0 ) );
+	((uint32*)&entryID)[1] = PyLong_AsLong( PyTuple_GET_ITEM( pObject, 1 ) );
 
 	return 0;
 }
@@ -1915,7 +2175,7 @@ PyObject * Script::getData( const bool data )
  */
 PyObject * Script::getData( const int data )
 {
-	return PyInt_FromLong( data );
+	return PyLong_FromLong( data );
 }
 
 
@@ -1928,7 +2188,7 @@ PyObject * Script::getData( const int data )
  */
 PyObject * Script::getData( const long data )
 {
-	return PyInt_FromLong( data );
+	return PyLong_FromLong( data );
 }
 
 #endif
@@ -1943,7 +2203,7 @@ PyObject * Script::getData( const uint data )
 
 	return (long(asULong) < 0) ?
 		PyLong_FromUnsignedLong( asULong ) :
-		PyInt_FromLong( asULong );
+		PyLong_FromLong( asULong );
 }
 
 
@@ -1954,7 +2214,7 @@ PyObject * Script::getData( const int64 data )
 {
 	if (sizeof( int64 ) == sizeof( long ))
 	{
-		return PyInt_FromLong( (long)data );
+		return PyLong_FromLong( (long)data );
 	}
 	else
 	{
@@ -1974,7 +2234,7 @@ PyObject * Script::getData( const uint64 data )
 
 		if (long( asULong ) >= 0)
 		{
-			return PyInt_FromLong( asULong );
+			return PyLong_FromLong( asULong );
 		}
 	}
 
@@ -2139,7 +2399,7 @@ PyObject * Script::getData( const Capabilities & data )
 	{
 		if (data.has( i ))
 		{
-			PyObject * pBit = PyInt_FromLong( i );
+			PyObject * pBit = PyLong_FromLong( i );
 			PyList_Append( ret, pBit );
 			Py_DECREF( pBit );
 		}
@@ -2154,7 +2414,7 @@ PyObject * Script::getData( const Capabilities & data )
  */
 PyObject * Script::getData( const BW::string & data )
 {
-	PyObject * pRet = PyString_FromStringAndSize(
+	PyObject * pRet = PyUnicode_FromStringAndSize(
 		const_cast<char *>( data.data() ), data.size() );
 
 	return pRet;
@@ -2178,7 +2438,7 @@ PyObject * Script::getData( const BW::wstring & data )
  */
 PyObject * Script::getData( const char * data )
 {
-	PyObject * pRet = PyString_FromString( const_cast<char *>( data ) );
+	PyObject * pRet = PyUnicode_FromString( const_cast<char *>( data ) );
 
 	return pRet;
 }
@@ -2202,8 +2462,8 @@ PyObject * Script::getData( const Mercury::Address & addr )
 PyObject * Script::getData( const SpaceEntryID & entryID )
 {
 	PyObject * pTuple = PyTuple_New( 2 );
-	PyTuple_SET_ITEM( pTuple, 0, PyInt_FromLong( ((uint32*)&entryID)[0] ) );
-	PyTuple_SET_ITEM( pTuple, 1, PyInt_FromLong( ((uint32*)&entryID)[1] ) );
+	PyTuple_SET_ITEM( pTuple, 0, PyLong_FromLong( ((uint32*)&entryID)[0] ) );
+	PyTuple_SET_ITEM( pTuple, 1, PyLong_FromLong( ((uint32*)&entryID)[1] ) );
 	return pTuple;
 }
 
@@ -2275,7 +2535,7 @@ const BW::string Script::getMainScriptPath()
 
 	if (PyList_Size( pPath ) > 0)
 	{
-		result = PyString_AS_STRING( PyList_GetItem( pPath, 0 ) );
+		result = PyUnicode_AsUTF8( PyList_GetItem( pPath, 0 ) );
 	}
 	return result;
 }

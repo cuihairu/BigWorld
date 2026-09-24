@@ -132,9 +132,9 @@ public:
 	PY_BINARY_FUNC_METHOD(			pySeq_concat )			// x + y
 	PY_INTARG_FUNC_METHOD(			pySeq_repeat )			// x * n
 	PY_INTARG_FUNC_METHOD(			pySeq_item )			// x[i]
-	PY_INTINTARG_FUNC_METHOD(		pySeq_slice )			// x[i:j]
+	/* BIGWORLD(3.13 migration): pySeq_slice/pySeq_ass_slice were dropped;
+	 * slicing is synthesised from sq_item/sq_ass_item by Python. */
 	PY_INTOBJARG_PROC_METHOD(		pySeq_ass_item )		// x[i] = v
-	PY_INTINTOBJARG_PROC_METHOD(	pySeq_ass_slice )		// x[i:j] = v
 	PY_OBJOBJ_PROC_METHOD(			pySeq_contains )		// v in x
 	PY_BINARY_FUNC_METHOD(			pySeq_inplace_concat )	// x += y
 	PY_INTARG_FUNC_METHOD(			pySeq_inplace_repeat )	// x *= n

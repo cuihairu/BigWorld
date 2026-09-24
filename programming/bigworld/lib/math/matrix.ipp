@@ -44,7 +44,18 @@ Matrix::Matrix()
 INLINE
 void Matrix::setZero()
 {
-	memset( this, 0, sizeof( *this ) );
+	/* BIGWORLD_BEGIN(3.13 migration)
+	 * Was memset( this, 0, sizeof( *this ) ), which modern GCC rejects for
+	 * the non-trivial Matrix type (-Werror=class-memaccess).
+	 */
+	for (int row = 0; row < 4; ++row)
+	{
+		for (int col = 0; col < 4; ++col)
+		{
+			m[row][col] = 0.f;
+		}
+	}
+	/* BIGWORLD_END */
 }
 
 

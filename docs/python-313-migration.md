@@ -60,7 +60,7 @@
 
 | 批次 | 内容 | 验证 | 提交 |
 |---|---|---|---|
-| 1 | 换源 3.13.15 + 补丁重移植 + 构建系统 + 工具脚本 Py3 化 | `make libbwpython3.13` 全链通过：libbwpython3.13.a + python.exe + 54 个共享模块 + 库拷贝 | 待填 |
+| 1 | 换源 3.13.15 + 补丁重移植 + 构建系统 + 工具脚本 Py3 化 | `make libbwpython3.13` 全链通过：libbwpython3.13.a + python.exe + 57 个共享模块 + lib-dynload/Lib 拷贝 + 动态模块 smoke | `3260bdd9` |
 | 2 | lib/pyscript 移植 | libpyscript 编译通过 | 待填 |
 | 3 | 引擎其余 C++ 按目录移植 | 各目录编译 | 待填 |
 | 4 | 服务端/工具 Python 脚本 2to3 | py_compile 全量扫描 | 待填 |

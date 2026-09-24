@@ -6,7 +6,7 @@
 
 namespace BW
 {
-template < class Key, class T, class Compare = std::less< Key >, class Allocator = BW::StlAllocator< std::pair< Key, T > > >
+template < class Key, class T, class Compare = std::less< Key >, class Allocator = BW::StlAllocator< std::pair< const Key, T > > >
 class map : public std::map< Key, T, Compare, Allocator >
 {
 	typedef std::map< Key, T, Compare, Allocator > map_base;
@@ -48,7 +48,7 @@ public:
 #endif // (__cplusplus >= 201103L) || (_MSC_VER >= 1700)
 };
 
-template < class Key, class T, class Compare = std::less< Key >, class Allocator = BW::StlAllocator< std::pair< Key, T > > >
+template < class Key, class T, class Compare = std::less< Key >, class Allocator = BW::StlAllocator< std::pair< const Key, T > > >
 class multimap : public std::multimap< Key, T, Compare, Allocator >
 {
 	typedef std::multimap< Key, T, Compare, Allocator > multimap_base;

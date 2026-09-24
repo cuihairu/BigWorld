@@ -61,7 +61,9 @@ inline ScriptObject ScriptDict::getItem( const char * key,
 	// PyString_FromString does set an error, so we break the two apart
 	// rather then using PyDict_GetItemString as we do not know what caused
 	// the error.
-	PyObject * pKey = PyString_FromString( key );
+	// BIGWORLD_BEGIN(3.13 migration): was PyString_FromString.
+	PyObject * pKey = PyUnicode_FromString( key );
+	// BIGWORLD_END
 
 	if (pKey == NULL)
 	{

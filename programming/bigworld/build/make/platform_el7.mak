@@ -17,4 +17,15 @@ SYSTEM_HAS_MONGODB := 1
 # Enable C++11 as a standard compiler for EL 7
 CXXFLAGS   += $(CXX11_CXXFLAGS)
 
+# BIGWORLD_BEGIN(3.13 migration)
+# Modern GCC (>= 8) turns these into errors with -Werror; neither blocks
+# the Python 3.13 port:
+# - expansion-to-defined: long-standing preprocessor patterns in cstdmf.
+# - deprecated-declarations: CPython 3.13 headers deprecate APIs still in
+#   use across the engine (e.g. PyWeakref_GET_OBJECT); those call sites
+#   are being migrated separately.
+CXXFLAGS   += -Wno-error=expansion-to-defined
+CXXFLAGS   += -Wno-error=deprecated-declarations
+# BIGWORLD_END
+
 # build/make/platform_el7.mak

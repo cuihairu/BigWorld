@@ -732,13 +732,16 @@ PyObject * PyMatrix::py___setstate__( PyObject * args )
 		return NULL;
 	}
 	PyObject * pyStr = PyTuple_GET_ITEM( args, 0 );
-	if (!PyString_Check( pyStr ) || PyString_Size( pyStr ) != sizeof(Matrix))
+	// BIGWORLD_BEGIN(3.13 migration)
+	// Was PyString_Check/PyString_Size; a raw matrix blob is bytes now.
+	if (!PyBytes_Check( pyStr ) || PyBytes_Size( pyStr ) != sizeof(Matrix))
+	// BIGWORLD_END
 	{
 		PyErr_SetString( PyExc_ValueError,
 			"Matrix.__setstate__ was given bad state" );
 		return NULL;
 	}
-	this->set( *(Matrix*)( PyString_AsString( pyStr ) ) );
+	this->set( *(Matrix*)( PyBytes_AsString( pyStr ) ) );
 	Py_RETURN_NONE;
 }
 
@@ -1339,7 +1342,10 @@ PyObject * PyVector<V>::pyStr()
 	}
 	ostr << ')';
 
-	return PyString_FromString( ostr.str().c_str() );
+	// BIGWORLD_BEGIN(3.13 migration)
+	// Was PyString_FromString.
+	return PyUnicode_FromString( ostr.str().c_str() );
+	// BIGWORLD_END
 }
 
 
@@ -2131,7 +2137,10 @@ template <class V>
 PyObject * PyVector<V>::py___getstate__( PyObject * args )
 {
 	V v = this->getVector();
-	return PyString_FromStringAndSize( (char *)&v, sizeof( V ) );
+	// BIGWORLD_BEGIN(3.13 migration)
+	// Was PyString_FromStringAndSize; a raw value blob is bytes now.
+	return PyBytes_FromStringAndSize( (char *)&v, sizeof( V ) );
+	// BIGWORLD_END
 }
 
 template <class V>
@@ -2142,11 +2151,14 @@ PyObject * PyVector<V>::py___setstate__( PyObject * args )
 	{
 		PyObject * pStr = PyTuple_GET_ITEM( args, 0 );
 
-		if (PyString_Check( pStr ) &&
-			(PyString_Size( pStr ) == sizeof( V )))
+		// BIGWORLD_BEGIN(3.13 migration)
+		// Was PyString_Check/PyString_Size; a raw value blob is bytes now.
+		if (PyBytes_Check( pStr ) &&
+			(PyBytes_Size( pStr ) == sizeof( V )))
+		// BIGWORLD_END
 		{
 			V v;
-			memcpy( &v, PyString_AsString( pStr ), sizeof( V ) );
+			memcpy( &v, PyBytes_AsString( pStr ), sizeof( V ) );
 
 			if (!this->safeSetVector( v ))
 			{
@@ -2284,48 +2296,50 @@ int PyVector<V>::pySet_w( PyObject * value )
 template <class V>
 PyNumberMethods * PyVector_tp_as_number()
 {
+	/* BIGWORLD_BEGIN(3.13 migration)
+	 * PyNumberMethods changed shape since 2.7: nb_divide, nb_coerce,
+	 * nb_long, nb_oct and nb_hex are gone, and true division now lives in
+	 * nb_true_divide. Designated initialisers keep the wiring explicit.
+	 */
 	static PyNumberMethods tp_as_number = {
-		PyVector<V>::_py_add,				//binaryfunc nb_add;
-		PyVector<V>::_py_subtract,			//binaryfunc nb_subtract;
-		PyVector<V>::_py_multiply,			//binaryfunc nb_multiply;
-		PyVector<V>::_py_divide,			//binaryfunc nb_divide;
-		0,									//binaryfunc nb_remainder;
-		0,									//binaryfunc nb_divmod;
-		0,									//ternaryfunc nb_power;
-		PyVector<V>::_py_negative,			//unaryfunc nb_negative;
-		PyVector<V>::_py_positive,			//unaryfunc nb_positive;
-		0,									//unaryfunc nb_absolute;
-		PyVector<V>::_py_nonzero,			//inquiry nb_nonzero;
-		0,									//unaryfunc nb_invert;
-		0,									//binaryfunc nb_lshift;
-		0,									//binaryfunc nb_rshift;
-		0,									//binaryfunc nb_and;
-		0,									//binaryfunc nb_xor;
-		0,									//binaryfunc nb_or;
-		0,									//coercion nb_coerce;
-		0,									//unaryfunc nb_int;
-		0,									//unaryfunc nb_long;
-		0,									//unaryfunc nb_float;
-		0,									//unaryfunc nb_oct;
-		0,									//unaryfunc nb_hex;
-		PyVector<V>::_py_inplace_add,		//binaryfunc nb_inplace_add;
-		PyVector<V>::_py_inplace_subtract,	//binaryfunc nb_inplace_subtract;
-		PyVector<V>::_py_inplace_multiply,	//binaryfunc nb_inplace_multiply;
-		PyVector<V>::_py_inplace_divide,	//binaryfunc nb_inplace_divide;
-		0,									//binaryfunc nb_inplace_remainder;
-		0,									//ternaryfunc nb_inplace_power;
-		0,									//binaryfunc nb_inplace_lshift;
-		0,									//binaryfunc nb_inplace_rshift;
-		0,									//binaryfunc nb_inplace_and;
-		0,									//binaryfunc nb_inplace_xor;
-		0,									//binaryfunc nb_inplace_or;
-		// Added in release 2.2
-		0,									//binaryfunc nb_floor_divide;
-		0,									//binaryfunc nb_true_divide;
-		0,									//binaryfunc nb_inplace_floor_divide;
-		0,									//binaryfunc nb_inplace_true_divide;
-		// Added in release 2.5
-		0,									//unaryfunc nb_index;
+		/* Field order mirrors Include/cpython/object.h exactly; GCC's
+		 * designated initialisers require declaration order. */
+		.nb_add = PyVector<V>::_py_add,
+		.nb_subtract = PyVector<V>::_py_subtract,
+		.nb_multiply = PyVector<V>::_py_multiply,
+		.nb_remainder = 0,
+		.nb_divmod = 0,
+		.nb_power = 0,
+		.nb_negative = PyVector<V>::_py_negative,
+		.nb_positive = PyVector<V>::_py_positive,
+		.nb_absolute = 0,
+		.nb_bool = PyVector<V>::_py_nonzero,
+		.nb_invert = 0,
+		.nb_lshift = 0,
+		.nb_rshift = 0,
+		.nb_and = 0,
+		.nb_xor = 0,
+		.nb_or = 0,
+		.nb_int = 0,
+		.nb_reserved = 0,
+		.nb_float = 0,
+		.nb_inplace_add = PyVector<V>::_py_inplace_add,
+		.nb_inplace_subtract = PyVector<V>::_py_inplace_subtract,
+		.nb_inplace_multiply = PyVector<V>::_py_inplace_multiply,
+		.nb_inplace_remainder = 0,
+		.nb_inplace_power = 0,
+		.nb_inplace_lshift = 0,
+		.nb_inplace_rshift = 0,
+		.nb_inplace_and = 0,
+		.nb_inplace_xor = 0,
+		.nb_inplace_or = 0,
+		.nb_floor_divide = 0,
+		.nb_true_divide = PyVector<V>::_py_divide,
+		.nb_inplace_floor_divide = 0,
+		.nb_inplace_true_divide = PyVector<V>::_py_inplace_divide,
+		.nb_index = 0,
+		.nb_matrix_multiply = 0,
+		.nb_inplace_matrix_multiply = 0,
 	};
 	return &tp_as_number;
 }
@@ -2333,19 +2347,26 @@ PyNumberMethods * PyVector_tp_as_number()
 template <class V>
 PySequenceMethods * PyVector_tp_as_sequence()
 {
+	/* BIGWORLD_BEGIN(3.13 migration)
+	 * sq_slice/sq_ass_slice were removed; the slots survive only as
+	 * reserved void* placeholders. Slicing support would have to come
+	 * through sq_item/sq_ass_item receiving slice objects, which the
+	 * vector type never offered, so the slots stay empty.
+	 */
 	static PySequenceMethods tp_as_sequence =
 	{
-		PyVector<V>::_py_sq_length,		/* sq_length */
-		0,								/* sq_concat */
-		0,								/* sq_repeat */
-		PyVector<V>::_py_sq_item,		/* sq_item */
-		PyVector<V>::_py_sq_slice,		/* sq_slice */
-		PyVector<V>::_py_sq_ass_item,	/* sq_ass_item */
-		0,								/* sq_ass_slice */
-		0,								/* sq_contains */
-		0,								/* sq_inplace_concat */
-		0,								/* sq_inplace_repeat */
+		.sq_length = PyVector<V>::_py_sq_length,
+		.sq_concat = 0,
+		.sq_repeat = 0,
+		.sq_item = PyVector<V>::_py_sq_item,
+		.was_sq_slice = 0,
+		.sq_ass_item = PyVector<V>::_py_sq_ass_item,
+		.was_sq_ass_slice = 0,
+		.sq_contains = 0,
+		.sq_inplace_concat = 0,
+		.sq_inplace_repeat = 0,
 	};
+	return &tp_as_sequence;
 	return &tp_as_sequence;
 }
 
@@ -2422,13 +2443,16 @@ int PyVector_tp_compare( PyObject * v, PyObject * w )
 	PY_TYPEOBJECT_SPECIALISE_BASIC_SIZE( PyVector< V >, 					\
 		sizeof( PyVectorCopy< V > )	)										\
 	PY_TYPEOBJECT_SPECIALISE_CMP( PyVector< V >, 							\
-		&PyVector_tp_compare )												\
+		PyVector_tp_compare )												\
 	PY_TYPEOBJECT_SPECIALISE_SEQ( PyVector< V >, 							\
 		PyVector_tp_as_sequence< V >() )									\
 	PY_TYPEOBJECT_SPECIALISE_NUM( PyVector< V >, 							\
 		PyVector_tp_as_number< V >() )										\
+	/* BIGWORLD_BEGIN(3.13 migration): Py_TPFLAGS_CHECKTYPES was			\
+	 * removed; unchecked number protocols are the only behaviour now. */	\
 	PY_TYPEOBJECT_SPECIALISE_FLAGS( PyVector< V >, 							\
-		Py_TPFLAGS_DEFAULT | Py_TPFLAGS_CHECKTYPES )						\
+		Py_TPFLAGS_DEFAULT )												\
+	/* BIGWORLD_END */														\
 	template<>																\
 	PY_GENERAL_TYPEOBJECT_WITH_BASE_WITH_NAME( PyVector< V >, 0, 			\
 		PyVector_fullName< V >() )

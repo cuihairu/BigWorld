@@ -340,7 +340,9 @@ typedef int (*traverseproc)(PyObject *, visitproc, void *);
 
 /// This macro declares the python factory method (New) as auto-parsed
 #define PY_AUTO_FACTORY_DECLARE( CLASS_NAME, ARGS )							\
-	static PyObject * _pyNew( PyObject *, PyObject * args )					\
+	/* BIGWORLD(3.13 migration): match the newfunc signature exactly so	\
+	 * no function-pointer cast is needed for the tp_new slot. */		\
+	static PyObject * _pyNew( PyObject *, PyObject * args, PyObject * )		\
 	{																		\
 		PY_AUTO_DEFINE_INT( RETOWN, CLASS_NAME, This::New, ARGS )			\
 	}																		\
@@ -350,7 +352,9 @@ typedef int (*traverseproc)(PyObject *, visitproc, void *);
 /// This macro declares the python factory method for the given class
 /// It calls the constructor with auto-parsed arguments
 #define PY_AUTO_CONSTRUCTOR_FACTORY_DECLARE( CLASS_NAME, ARGS )				\
-	static PyObject * _pyNew( PyObject *, PyObject * args )					\
+	/* BIGWORLD(3.13 migration): match the newfunc signature exactly so	\
+	 * no function-pointer cast is needed for the tp_new slot. */		\
+	static PyObject * _pyNew( PyObject *, PyObject * args, PyObject * )		\
 	{																		\
 		PY_AUTO_DEFINE_INT( RETOWN, CLASS_NAME, new This, ARGS )			\
 	}																		\
@@ -561,8 +565,50 @@ typedef int (*traverseproc)(PyObject *, visitproc, void *);
 		iterNextFunction, iternextfunc, ITERNEXT )
 
 #define PY_TYPEOBJECT_SPECIALISE_CMP( THIS_CLASS, CMP )						\
-	PY_TYPEOBJECT_SPECIALISE_SIMPLE( THIS_CLASS,							\
-		compareFunction, cmpfunc, CMP )
+	namespace PyTypeObjectUtil 												\
+	{																		\
+		/* BIGWORLD_BEGIN(3.13 migration)									\
+		 * The legacy three-way comparator is wrapped into the 3.x			\
+		 * tp_richcompare contract: a new Py_True/Py_False reference per	\
+		 * answer, NULL when the comparator itself raised. The adapter		\
+		 * specialisation is emitted before richCompareFunction mentions	\
+		 * it so no implicit instantiation sneaks in first.					\
+		 */																	\
+		template<>															\
+		PyObject * LegacyCompareAdapter< THIS_CLASS >::richCompare(			\
+			PyObject * self, PyObject * other, int op )						\
+		{																	\
+			int order = CMP( self, other );									\
+			if ((order < 0) && PyErr_Occurred())							\
+			{																\
+				return NULL;												\
+			}																\
+			bool result = false;											\
+			switch (op)														\
+			{																\
+			case Py_LT: result = order < 0;		break;						\
+			case Py_LE: result = order <= 0;	break;						\
+			case Py_EQ: result = order == 0;	break;						\
+			case Py_NE: result = order != 0;	break;						\
+			case Py_GT: result = order > 0;		break;						\
+			case Py_GE: result = order >= 0;	break;						\
+			default:														\
+				return NULL;												\
+			}																\
+			if (result)														\
+			{																\
+				Py_RETURN_TRUE;												\
+			}																\
+			Py_RETURN_FALSE;												\
+		}																	\
+		template<>															\
+		richcmpfunc richCompareFunction< THIS_CLASS >()						\
+		{																	\
+			return &LegacyCompareAdapter< THIS_CLASS >::richCompare;		\
+		}																	\
+		/* BIGWORLD_END */													\
+	}
+
 
 #define PY_TYPEOBJECT_SPECIALISE_REPR_AND_STR( THIS_CLASS, REPR, STR )		\
 	PY_TYPEOBJECT_SPECIALISE_SIMPLE( THIS_CLASS,							\
@@ -634,73 +680,68 @@ typedef int (*traverseproc)(PyObject *, visitproc, void *);
 #define PY_GENERAL_TYPEOBJECT_WITH_BASE_WITH_NAME( THIS_CLASS, BASE, NAME )	\
 																			\
 	PyTypeObject THIS_CLASS::s_type_ =										\
-	{																		\
-		PyObject_HEAD_INIT(&PyType_Type)									\
-		0,									/* ob_size */					\
-		const_cast< char * >( NAME ),		/* tp_name */					\
-		PyTypeObjectUtil::basicSize< THIS_CLASS >(),						\
-											/* tp_basicsize */				\
-		0,									/* tp_itemsize */				\
-																			\
-		/* methods */														\
-		THIS_CLASS::_tp_dealloc,			/* tp_dealloc */				\
-		0,									/* tp_print */					\
-		0,									/* tp_getattr */				\
-		0,									/* tp_setattr */				\
-		PyTypeObjectUtil::compareFunction< THIS_CLASS >(),					\
-											/* tp_compare */				\
-		PyTypeObjectUtil::reprFunction< THIS_CLASS >(),						\
-											/* tp_repr */					\
-		PyTypeObjectUtil::asNumber< THIS_CLASS >(),							\
-											/* tp_as_number */				\
-		PyTypeObjectUtil::asSequence< THIS_CLASS >(),						\
-											/* tp_as_sequence */			\
-		PyTypeObjectUtil::asMapping< THIS_CLASS >(),						\
-											/* tp_as_mapping */				\
-		0,									/* tp_hash */					\
-		PyTypeObjectUtil::callFunction< THIS_CLASS >(),						\
-											/* tp_call */					\
-		PyTypeObjectUtil::strFunction< THIS_CLASS >(),						\
-											/* tp_str */					\
-		THIS_CLASS::_tp_getattro,			/* tp_getattro */				\
-		THIS_CLASS::_tp_setattro,			/* tp_setattro */				\
-		0,									/* tp_as_buffer */				\
-		PyTypeObjectUtil::flags< THIS_CLASS >(),							\
-											/* tp_flags */					\
-		const_cast< char * >(												\
-				PY_GET_DOC( PyTypeObjectUtil::doc< THIS_CLASS >() ) ),		\
-											/* tp_doc */					\
-		0,									/* tp_traverse */				\
-		0,									/* tp_clear */					\
-		0,									/* tp_richcompare */			\
-		PyTypeObjectUtil::weakListOffset< THIS_CLASS >(),					\
-											/* tp_weaklistoffset */			\
-		PyTypeObjectUtil::getIterFunction< THIS_CLASS >(),					\
-											/* tp_iter */					\
-		PyTypeObjectUtil::iterNextFunction< THIS_CLASS >(),					\
-											/* tp_iternext */				\
-		THIS_CLASS::s_getMethodDefs(),		/* tp_methods */				\
-		0,									/* tp_members */				\
-		THIS_CLASS::s_getAttributeDefs(),	/* tp_getset */					\
-		BASE,								/* tp_base */					\
-		0,									/* tp_dict */					\
-		0,									/* tp_descr_get */				\
-		0,									/* tp_descr_set */				\
-		0,									/* tp_dictoffset */				\
-		0,									/* tp_init */					\
-		0,									/* tp_alloc */					\
-		(newfunc)THIS_CLASS::_pyNew,		/* tp_new */					\
-		0,									/* tp_free */					\
-		0,									/* tp_is_gc */					\
-		0,									/* tp_bases */					\
-		0,									/* tp_mro */					\
-		0,									/* tp_cache */					\
-		0,									/* tp_subclasses */				\
-		0,									/* tp_weaklist */				\
-		0,									/* tp_del */					\
-		0,									/* tp_version_tag */			\
-	};
-
+{																		\
+	/* BIGWORLD_BEGIN(3.13 migration)										\
+	 * Was positional initialisation of the 2.7 PyTypeObject layout;		\
+	 * rebuilt with designated initialisers (tp_compare is gone and			\
+	 * tp_print was replaced by tp_vectorcall_offset). */					\
+	PyVarObject_HEAD_INIT(&PyType_Type, 0)								\
+	.tp_name = const_cast< char * >( NAME ),							\
+	.tp_basicsize = PyTypeObjectUtil::basicSize< THIS_CLASS >(),		\
+	.tp_itemsize = 0,													\
+	.tp_dealloc = THIS_CLASS::_tp_dealloc,								\
+	.tp_vectorcall_offset = 0,																												\
+	.tp_getattr = 0,													\
+	.tp_setattr = 0,													\
+	.tp_as_async = 0,																																					\
+	.tp_repr = PyTypeObjectUtil::reprFunction< THIS_CLASS >(),			\
+	.tp_as_number = PyTypeObjectUtil::asNumber< THIS_CLASS >(),			\
+	.tp_as_sequence = PyTypeObjectUtil::asSequence< THIS_CLASS >(),		\
+	.tp_as_mapping = PyTypeObjectUtil::asMapping< THIS_CLASS >(),		\
+	.tp_hash = 0,														\
+	.tp_call = PyTypeObjectUtil::callFunction< THIS_CLASS >(),			\
+	.tp_str = PyTypeObjectUtil::strFunction< THIS_CLASS >(),			\
+	.tp_getattro = THIS_CLASS::_tp_getattro,							\
+	.tp_setattro = THIS_CLASS::_tp_setattro,							\
+	.tp_as_buffer = 0,													\
+	.tp_flags = \
+		(unsigned long)PyTypeObjectUtil::flags< THIS_CLASS >(),			\
+	.tp_doc = const_cast< char * >(										\
+			PY_GET_DOC( PyTypeObjectUtil::doc< THIS_CLASS >() ) ),		\
+	.tp_traverse = 0,													\
+	.tp_clear = 0,														\
+	.tp_richcompare = \
+		PyTypeObjectUtil::richCompareFunction< THIS_CLASS >(),		\
+	.tp_weaklistoffset =												\
+		PyTypeObjectUtil::weakListOffset< THIS_CLASS >(),				\
+	.tp_iter = PyTypeObjectUtil::getIterFunction< THIS_CLASS >(),		\
+	.tp_iternext = PyTypeObjectUtil::iterNextFunction< THIS_CLASS >(),	\
+	.tp_methods = THIS_CLASS::s_getMethodDefs(),						\
+	.tp_members = 0,													\
+	.tp_getset = THIS_CLASS::s_getAttributeDefs(),						\
+	.tp_base = BASE,													\
+	.tp_dict = 0,														\
+	.tp_descr_get = 0,													\
+	.tp_descr_set = 0,													\
+	.tp_dictoffset = 0,													\
+	.tp_init = 0,														\
+	.tp_alloc = 0,														\
+	.tp_new = (newfunc)&THIS_CLASS::_pyNew,						\
+	.tp_free = 0,														\
+	.tp_is_gc = 0,														\
+	.tp_bases = 0,														\
+	.tp_mro = 0,														\
+	.tp_cache = 0,																																								\
+	.tp_subclasses = 0,													\
+	.tp_weaklist = 0,													\
+	.tp_del = 0,														\
+	.tp_version_tag = 0,												\
+	.tp_finalize = 0,																																					\
+	.tp_vectorcall = 0,																																			\
+	.tp_watched = 0,																																						\
+	.tp_versions_used = 0,																																\
+	/* BIGWORLD_END */													\
+};
 
 namespace PyTypeObjectUtil
 {
@@ -711,11 +752,15 @@ int basicSize()
 	return sizeof( T );
 }
 
+/* BIGWORLD_BEGIN(3.13 migration)
+ * cmpfunc/tp_compare are gone in 3.13; all ordering goes through
+ * tp_richcompare. The slot was dropped from the type object macros below.
 template< typename T >
 cmpfunc compareFunction()
 {
 	return 0;
 }
+BIGWORLD_END */
 
 template< typename T >
 reprfunc reprFunction()
@@ -783,6 +828,24 @@ inline Py_ssize_t weakListOffset()
 	return 0;
 }
 
+template< typename T >
+richcmpfunc richCompareFunction()
+{
+	return 0;
+}
+
+/* BIGWORLD_BEGIN(3.13 migration)
+ * Adapter used by PY_TYPEOBJECT_SPECIALISE_CMP to funnel legacy int
+ * three-way comparators through the 3.x tp_richcompare slot.
+ */
+template < class THIS_CLASS >
+struct LegacyCompareAdapter
+{
+	static PyObject * richCompare( PyObject * self, PyObject * other,
+		int op );
+};
+/* BIGWORLD_END */
+
 } // end namespace PyTypeObjectUtil
 
 
@@ -793,17 +856,27 @@ inline Py_ssize_t weakListOffset()
 		static PyMethodDef s_methods[] =									\
 		{																	\
 
+/* BIGWORLD_BEGIN(3.13 migration)
+ * GCC 15 rejects casting METH_VARARGS|METH_KEYWORDS handlers (three
+ * parameters) straight to PyCFunction (-Werror=cast-function-type). Route
+ * through void(*)(void) first, exactly as CPython does with its internal
+ * _PyCFunction_CAST helper.
+ */
+#define BW_PYCFUNCTION_CAST( FUNC ) \
+	((PyCFunction)(void (*)(void))(FUNC))
+/* BIGWORLD_END */
+
 /// This macro defines a Python method
 #define PY_METHOD( NAME )													\
-			{ #NAME, (PyCFunction)&_py_##NAME, METH_VARARGS|METH_KEYWORDS, NULL },		\
+			{ #NAME, BW_PYCFUNCTION_CAST( _py_##NAME ), METH_VARARGS|METH_KEYWORDS, NULL },		\
 
 /// This macro defines a Python method
 #define PY_METHOD_WITH_DOC( NAME, DOC_STRING )													\
-			{ #NAME, (PyCFunction)&_py_##NAME, METH_VARARGS|METH_KEYWORDS, PY_GET_DOC( DOC_STRING ) },		\
+			{ #NAME, BW_PYCFUNCTION_CAST( _py_##NAME ), METH_VARARGS|METH_KEYWORDS, PY_GET_DOC( DOC_STRING ) },		\
 
 /// This macro defines an alias for a Python method
 #define PY_METHOD_ALIAS( NAME, ALIAS )										\
-			{ #ALIAS, (PyCFunction)&_py_##NAME, METH_VARARGS|METH_KEYWORDS, NULL },		\
+			{ #ALIAS, BW_PYCFUNCTION_CAST( _py_##NAME ), METH_VARARGS|METH_KEYWORDS, NULL },		\
 
 /// This macro concludes the method definitions
 #define PY_END_METHODS()													\
@@ -920,16 +993,19 @@ inline Py_ssize_t weakListOffset()
 		POD_TYPE basicType;													\
 		if (Script::setData( this, basicType, #THIS_CLASS " setstate" ) != 0)\
 			return NULL;													\
-		return PyString_FromStringAndSize(									\
+		/* BIGWORLD_BEGIN(3.13 migration): was							\
+		 * PyString_FromStringAndSize; a raw POD blob is bytes now. */		\
+		return PyBytes_FromStringAndSize(									\
 			(char*)&basicType, sizeof(basicType) );							\
+		/* BIGWORLD_END */													\
 	}																		\
 																			\
 	PyObject * THIS_CLASS::py___setstate__( PyObject * args )				\
 	{																		\
 		PyObject * soleArg;													\
 		if (PyTuple_Size( args ) != 1 ||									\
-			!PyString_Check( soleArg = PyTuple_GET_ITEM( args, 0 ) ) ||		\
-			PyString_Size( soleArg ) != sizeof( POD_TYPE ))					\
+			!PyBytes_Check( soleArg = PyTuple_GET_ITEM( args, 0 ) ) ||		\
+			PyBytes_Size( soleArg ) != sizeof( POD_TYPE ))					\
 		{																	\
 			PyErr_SetString( PyExc_TypeError, #THIS_CLASS " getstate "		\
 				"expects a single string argument of correct length" );		\
@@ -937,7 +1013,9 @@ inline Py_ssize_t weakListOffset()
 		/* not sure how to use getData here... */							\
 		/* *this = (POD_TYPE*)PyString_AsString( soleArg ); */				\
 		PyObject * goodValue = Script::getData(								\
-			(POD_TYPE*)PyString_AsString( soleArg ) );						\
+			/* BIGWORLD_BEGIN(3.13 migration) Was PyString_AsString */		\
+			(POD_TYPE*)PyBytes_AsString( soleArg ) );						\
+			/* BIGWORLD_END */												\
 		this->copy( *goodValue );	/* hmmm */								\
 		/* this would prolly be better done with normal pickling then...*/	\
 		/* ... ah well, next commit :) */									\
@@ -1169,7 +1247,8 @@ public:
 		static PyObject * _tp_repr( PyObject * )						\
 			{ return NULL; }											\
 																		\
-		static PyObject * _pyNew( PyTypeObject * )						\
+		static PyObject * _pyNew( PyTypeObject *, PyObject *,			\
+			PyObject * )												\
 			{ return NULL; }											\
 																		\
 	private:															\

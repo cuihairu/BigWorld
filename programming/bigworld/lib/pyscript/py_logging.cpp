@@ -35,17 +35,23 @@ PyObject * py_logCommon( PyObject * args, DebugMessagePriority priority,
 	PyObject * objMessageString = PyTuple_GET_ITEM( args, 1 );
 	PyObject * objLogMetaData = PyTuple_GET_ITEM( args, 2 );
 
-	if (!PyString_Check( objCategoryString ) ||
-		!PyString_Check( objMessageString ) ||
-		(!PyString_Check( objLogMetaData ) && (objLogMetaData != Py_None)))
+	// BIGWORLD_BEGIN(3.13 migration)
+	// Was PyString_Check; str is unicode now.
+	if (!PyUnicode_Check( objCategoryString ) ||
+		!PyUnicode_Check( objMessageString ) ||
+		(!PyUnicode_Check( objLogMetaData ) && (objLogMetaData != Py_None)))
+	// BIGWORLD_END
 	{
 		PyErr_Format( PyExc_TypeError,
 			"py_log%s has invalid element types.", name );
 		return NULL;
 	}
 
-	const char * pCategoryString = PyString_AsString( objCategoryString );
-	const char * pMessageString = PyString_AsString( objMessageString );
+	// BIGWORLD_BEGIN(3.13 migration)
+	// Was PyString_AsString.
+	const char * pCategoryString = PyUnicode_AsUTF8( objCategoryString );
+	const char * pMessageString = PyUnicode_AsUTF8( objMessageString );
+	// BIGWORLD_END
 
 	if (pMessageString == NULL)
 	{
@@ -54,9 +60,13 @@ PyObject * py_logCommon( PyObject * args, DebugMessagePriority priority,
 		return NULL;
 	}
 
-	if ((objLogMetaData != Py_None) && (PyString_Size( objLogMetaData ) > 0))
+	// BIGWORLD_BEGIN(3.13 migration)
+	// Was PyString_Size/PyString_AsString.
+	if ((objLogMetaData != Py_None) &&
+			(PyUnicode_GET_LENGTH( objLogMetaData ) > 0))
 	{
-		const char * pMetaData = PyString_AsString( objLogMetaData );
+		const char * pMetaData = PyUnicode_AsUTF8( objLogMetaData );
+		// BIGWORLD_END
 
 		LogMsg( priority, pCategoryString ).
 				source( MESSAGE_SOURCE_SCRIPT ).

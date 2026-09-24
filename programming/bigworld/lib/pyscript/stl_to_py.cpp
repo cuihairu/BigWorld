@@ -28,18 +28,24 @@ PY_BEGIN_ATTRIBUTES( PySTLSequence )
 PY_END_ATTRIBUTES()
 
 
+/* BIGWORLD_BEGIN(3.13 migration)
+ * sq_slice/sq_ass_slice were removed in Python 3.x. Slicing still works:
+ * the type machinery synthesises x[i:j] and x[i:j] = v from the remaining
+ * sq_item/sq_ass_item slots, so the dedicated helpers are gone.
+ */
 PySequenceMethods PySTLSequence::s_seq_methods_ = {
-	_pySeq_length,			// inquiry sq_length;				len(x)
-	_pySeq_concat,			// binaryfunc sq_concat;			x + y
-	_pySeq_repeat,			// intargfunc sq_repeat;			x * n
-	_pySeq_item,			// intargfunc sq_item;				x[i]
-	_pySeq_slice,			// intintargfunc sq_slice;			x[i:j]
-	_pySeq_ass_item,		// intobjargproc sq_ass_item;		x[i] = v
-	_pySeq_ass_slice,		// intintobjargproc sq_ass_slice;	x[i:j] = v
-	_pySeq_contains,		// objobjproc sq_contains;			v in x
-	_pySeq_inplace_concat,	// binaryfunc sq_inplace_concat;	x += y
-	_pySeq_inplace_repeat	// intargfunc sq_inplace_repeat;	x *= n
+	.sq_length = _pySeq_length,			// len(x)
+	.sq_concat = _pySeq_concat,			// x + y
+	.sq_repeat = _pySeq_repeat,			// x * n
+	.sq_item = _pySeq_item,				// x[i]
+	.was_sq_slice = 0,
+	.sq_ass_item = _pySeq_ass_item,		// x[i] = v
+	.was_sq_ass_slice = 0,
+	.sq_contains = _pySeq_contains,		// v in x
+	.sq_inplace_concat = _pySeq_inplace_concat,	// x += y
+	.sq_inplace_repeat = _pySeq_inplace_repeat,	// x *= n
 };
+/* BIGWORLD_END */
 
 
 
@@ -159,38 +165,6 @@ PyObject * PySTLSequence::pySeq_item( Py_ssize_t index )
 
 
 /**
- *	Get the given slice
- */
-PyObject * PySTLSequence::pySeq_slice( Py_ssize_t indexA, Py_ssize_t indexB )
-{
-	int sz = holder_.size();
-
-	// put indices in range (slices don't generate index errors)
-	//if (indexA < 0) indexA += sz;
-	//if (indexB < 0) indexB += sz;
-	if (indexA < 0) indexA = 0;
-	if (indexA > sz ) indexA = sz;
-	if (indexB < 0) indexB = 0;
-	if (indexB > sz ) indexB = sz;
-
-	// quick test for empty list
-	size_t nsz = indexB - indexA;
-	if (sz == 0 || nsz <= 0) return PyList_New(0);
-
-	// build the list
-	PyObject * pList = PyList_New( nsz );
-	MF_ASSERT( sz <= INT_MAX );
-	for (size_t i = 0; i < nsz; i++)
-	{
-		PyList_SET_ITEM( pList, i, holder_[( int ) ( indexA + i ) ] );
-	}
-
-	// and return it
-	return pList;
-}
-
-
-/**
  *	Swap the item currently at the given index with the given one.
  */
 int PySTLSequence::pySeq_ass_item( Py_ssize_t index, PyObject * pItem )
@@ -218,61 +192,6 @@ int PySTLSequence::pySeq_ass_item( Py_ssize_t index, PyObject * pItem )
 	holder_.erase( ( int ) index, ( int ) ( index + 1 ) );
 	holder_.insertRange( ( int ) index, 1 );
 	int err = holder_.insert( pItem );
-
-	if (err != 0)	holder_.cancel();
-	else			holder_.commit();
-
-	return err;
-}
-
-
-/**
- *	Swap the slice defined by the given range with the given one.
- */
-int PySTLSequence::pySeq_ass_slice( Py_ssize_t indexA, Py_ssize_t indexB,
-		PyObject * pOther )
-{
-	// check that the holder is writable
-	if (!holder_.writable())
-	{
-		PyErr_Format( PyExc_TypeError,
-			"Cannot assign a slice in a read-only PySTLSequence" );
-		return -1;
-	}
-
-	// make sure we're setting it to a sequence
-	if (!PySequence_Check( pOther ))
-	{
-		PyErr_Format( PyExc_TypeError,
-			"PySTLSequence slices can only be assigned to a sequence" );
-		return -1;
-	}
-
-	int sz = holder_.size();
-	Py_ssize_t osz = PySequence_Size( pOther );
-
-	// put indices in range (slices don't generate index errors)
-	//if (indexA < 0) indexA += sz;
-	//if (indexB < 0) indexB += sz;
-	if (indexA > sz ) indexA = sz;
-	if (indexA < 0) indexA = 0;
-	if (indexB > sz ) indexB = sz;
-	if (indexB < 0) indexB = 0;
-
-	// only erase if there's something to erase
-	if (indexA < indexB) holder_.erase( ( int ) indexA, ( int ) indexB );
-
-	// add our candidates
-	//  (this should work even if pOther uses the same holder as we do)
-	int err = 0;
-	MF_ASSERT( osz <= INT_MAX );
-	holder_.insertRange( ( int ) indexA, ( int ) osz );
-	for (int i = 0; i < osz && !err; i++)
-	{
-		PyObject * pTemp = PySequence_GetItem( pOther, i );
-		err |= holder_.insert( pTemp );
-		Py_XDECREF( pTemp );
-	}
 
 	if (err != 0)	holder_.cancel();
 	else			holder_.commit();
@@ -406,30 +325,63 @@ PyObject * PySTLSequence::pySeq_inplace_repeat( Py_ssize_t n )
  */
 PyObject * PySTLSequence::pyRepr()
 {
-	PyObject *s, *comma;
 	int i;
 
-	// Copied wholesale from listobject.c's list_repr
-
+	// BIGWORLD_BEGIN(3.13 migration)
+	// Was copied wholesale from listobject.c's 2.7 list_repr, which used
+	// PyString_Concat/PyString_ConcatAndDel; rebuilt around
+	// PyUnicode_Concat, which returns a new reference instead of writing
+	// through its first argument.
 	i = Py_ReprEnter( this );		// no recursion thanks
 	if (i != 0) {
 		if (i > 0)
-			return PyString_FromString("[...]");
+			return PyUnicode_FromString("[...]");
 		return NULL;
 	}
-	s = PyString_FromString("[");
-	comma = PyString_FromString(", ");
-	for (i = 0; i < holder_.size() && s != NULL; i++) {
-		if (i > 0)
-			PyString_Concat(&s, comma);
+
+	PyObject * s = PyUnicode_FromString("[");
+	PyObject * comma = PyUnicode_FromString(", ");
+
+	for (i = 0; i < (Py_ssize_t)holder_.size() && s != NULL; i++) {
 		PyObject * pTemp = holder_[i];
-		PyString_ConcatAndDel(&s, PyObject_Repr(pTemp));
+		PyObject * pRepr = PyObject_Repr( pTemp );
 		Py_DECREF( pTemp );
+
+		if (i > 0)
+		{
+			PyObject * pJoined = PyUnicode_Concat( s, comma );
+			Py_DECREF( s );
+			s = pJoined;
+		}
+
+		if ((s != NULL) && (pRepr != NULL))
+		{
+			PyObject * pJoined = PyUnicode_Concat( s, pRepr );
+			Py_DECREF( s );
+			s = pJoined;
+		}
+		else if (pRepr == NULL)
+		{
+			Py_CLEAR( s );
+		}
+
+		Py_XDECREF( pRepr );
 	}
-	Py_XDECREF(comma);
-	PyString_ConcatAndDel(&s, PyString_FromString("]"));
+
+	Py_XDECREF( comma );
+
+	if (s != NULL)
+	{
+		PyObject * pEnd = PyUnicode_FromString("]");
+		PyObject * pJoined = (pEnd != NULL) ? PyUnicode_Concat( s, pEnd ) : NULL;
+		Py_DECREF( s );
+		Py_XDECREF( pEnd );
+		s = pJoined;
+	}
+
 	Py_ReprLeave( this );
 	return s;
+	// BIGWORLD_END
 }
 
 

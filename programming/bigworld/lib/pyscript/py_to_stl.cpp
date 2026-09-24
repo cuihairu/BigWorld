@@ -179,13 +179,17 @@ std::ostream& operator<<( std::ostream &o, const PyObjectPtrRef & rpObject )
 				}
 				else
 				{
-					o << "(" << pError->ob_type->tp_name << ")";
+					o << "(" << Py_TYPE( pError )->tp_name << ")";
 					PyErr_Clear();
 				}
 			}
 			else
 			{
-				o << PyString_AsString( pString );
+				// BIGWORLD_BEGIN(3.13 migration)
+				// Was PyString_AsString.
+				const char * pCStr = PyUnicode_AsUTF8( pString );
+				o << ((pCStr != NULL) ? pCStr : "");
+				// BIGWORLD_END
 				Py_DECREF( pString );
 			}
 		}
@@ -212,8 +216,14 @@ std::istream& operator>>( std::istream &i, PyObjectPtrRef & rpObject )
 	if (pResult == NULL)
 	{
 		PyObject * pErr = PyErr_Occurred();
+		// BIGWORLD_BEGIN(3.13 migration)
+		// Was PyString_AsString( PyObject_Str( pErr ) ), which leaked the
+		// stringified exception; hold and release it explicitly now.
+		PyObject * pErrStr = (pErr != NULL) ? PyObject_Str( pErr ) : NULL;
 		ERROR_MSG( "operator >>: Script execution returned the error '%s'\n",
-			PyString_AsString( PyObject_Str( pErr ) ) );
+			(pErrStr != NULL) ? PyUnicode_AsUTF8( pErrStr ) : "(unknown)" );
+		Py_XDECREF( pErrStr );
+		// BIGWORLD_END
 
 		PyErr_PrintEx(0);
 	}

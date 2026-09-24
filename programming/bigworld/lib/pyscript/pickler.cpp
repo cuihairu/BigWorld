@@ -121,7 +121,7 @@ BW::string Pickler::pickle( ScriptObject object )
 	{
 		ERROR_MSG( "Pickler::pickle: attempting to pickle NULL\n" );
 	}
-	else if (pObj->ob_type == &FailedUnpickle::s_type_)
+	else if (Py_TYPE( pObj ) == &FailedUnpickle::s_type_)
 	{
 		return static_cast< FailedUnpickle * >( pObj )->pickleData();
 	}
@@ -140,7 +140,12 @@ BW::string Pickler::pickle( ScriptObject object )
 		{
 			BW::string str;
 
-			str.assign( PyString_AsString( pResult ), PyString_Size( pResult ));
+			// BIGWORLD_BEGIN(3.13 migration)
+			// Was PyString_AsString/PyString_Size; the pickle protocol
+			// output is bytes now.
+			str.assign( PyBytes_AsString( pResult ),
+				PyBytes_Size( pResult ) );
+			// BIGWORLD_END
 			Py_DECREF( pResult );
 
 			return str;

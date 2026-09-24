@@ -527,7 +527,25 @@ public:
 	int compareTo( ScriptObject other,
 		const ERROR_HANDLER & errorHandler ) const
 	{
-		int result = PyObject_Compare( this->get(), other.get() );
+		// BIGWORLD_BEGIN(3.13 migration)
+		// PyObject_Compare was removed; rebuild its -1/0/1 result from
+		// rich comparisons (an error keeps the exception set for the
+		// handler below).
+		int result;
+		if (PyObject_RichCompareBool( this->get(), other.get(), Py_LT ) == 1)
+		{
+			result = -1;
+		}
+		else if (PyObject_RichCompareBool( this->get(), other.get(),
+				Py_EQ ) == 1)
+		{
+			result = 0;
+		}
+		else
+		{
+			result = 1;
+		}
+		// BIGWORLD_END
 		errorHandler.checkErrorOccured();
 		return result;
 	}
@@ -1091,7 +1109,9 @@ public:
 	 */
 	static bool check( const ScriptObject & object )
 	{
-		return PyInt_Check( object.get() );
+		// BIGWORLD_BEGIN(3.13 migration): was PyInt_Check.
+		return PyLong_Check( object.get() );
+		// BIGWORLD_END
 	}
 
 	/**
@@ -1122,8 +1142,9 @@ public:
 	static ScriptInt createFromString( const char * str, int base,
 		const ERROR_HANDLER & errorHandler )
 	{
-		PyObject * pInt = PyInt_FromString( 
-				const_cast<char*>(str), NULL, base );
+		// BIGWORLD_BEGIN(3.13 migration): was PyInt_FromString.
+		PyObject * pInt = PyLong_FromString( str, NULL, base );
+		// BIGWORLD_END
 		// Note: If overflow warnings supression may affect this
 		errorHandler.checkPtrError( pInt );
 		return ScriptInt( pInt, ScriptObject::FROM_NEW_REFERENCE );
@@ -1143,7 +1164,9 @@ public:
 		// actually just get back a reference to the existing object. So it 
 		// should be possible to change the value of 1. I suspect the behaviour 
 		// of Python in this case is undefined. :-)
-		PyObject * pInt = PyInt_FromLong( value );
+		// BIGWORLD_BEGIN(3.13 migration): was PyInt_FromLong.
+		PyObject * pInt = PyLong_FromLong( value );
+		// BIGWORLD_END
 		MF_ASSERT( pInt );
 		return ScriptInt( pInt, ScriptObject::FROM_NEW_REFERENCE );
 	}
@@ -1155,7 +1178,9 @@ public:
 	 */
 	long asLong() const
 	{
-		return PyInt_AS_LONG( this->get() );
+		// BIGWORLD_BEGIN(3.13 migration): was PyInt_AS_LONG.
+		return PyLong_AsLong( this->get() );
+		// BIGWORLD_END
 	}
 };
 
@@ -1294,7 +1319,11 @@ public:
 	 */
 	static bool check( const ScriptObject & object )
 	{
-		return PyString_Check( object.get() );
+		// BIGWORLD_BEGIN(3.13 migration)
+		// Was PyString_Check. ScriptString maps to 3.x str; BW::string
+		// payloads cross the boundary as UTF-8.
+		return PyUnicode_Check( object.get() );
+		// BIGWORLD_END
 	}
 
 
@@ -1305,7 +1334,9 @@ public:
 	 */
 	static ScriptString create( const char * str )
 	{
-		PyObject * pStr = PyString_FromString( const_cast< char * >( str ) );
+		// BIGWORLD_BEGIN(3.13 migration): was PyString_FromString.
+		PyObject * pStr = PyUnicode_FromString( str );
+		// BIGWORLD_END
 		MF_ASSERT( pStr );
 		return ScriptString( pStr, ScriptObject::FROM_NEW_REFERENCE );
 	}
@@ -1319,8 +1350,9 @@ public:
 	 */
 	static ScriptString create( const char * str, int size )
 	{
-		PyObject * pStr = PyString_FromStringAndSize( 
-				const_cast< char * >( str ), size );
+		// BIGWORLD_BEGIN(3.13 migration): was PyString_FromStringAndSize.
+		PyObject * pStr = PyUnicode_FromStringAndSize( str, size );
+		// BIGWORLD_END
 		MF_ASSERT( pStr );
 		return ScriptString( pStr, ScriptObject::FROM_NEW_REFERENCE );
 	}
@@ -1334,7 +1366,10 @@ public:
 	template<typename Traits, typename Alloc>
 	static ScriptString create( const std::basic_string<char, Traits, Alloc> & str )
 	{
-		PyObject * pStr = PyString_FromStringAndSize( str.c_str(), str.size() );
+		// BIGWORLD_BEGIN(3.13 migration): was PyString_FromStringAndSize.
+		PyObject * pStr = PyUnicode_FromStringAndSize( str.c_str(),
+			str.size() );
+		// BIGWORLD_END
 		MF_ASSERT( pStr );
 		return ScriptString( pStr, ScriptObject::FROM_NEW_REFERENCE );
 	}
@@ -1347,8 +1382,11 @@ public:
 	template<typename Traits, typename Alloc>
 	void getString( std::basic_string<char, Traits, Alloc> & str ) const
 	{
-		str.assign( PyString_AS_STRING( this->get() ),
-			PyString_GET_SIZE( this->get() ) );
+		// BIGWORLD_BEGIN(3.13 migration): was PyString_AS_STRING/GET_SIZE.
+		Py_ssize_t size = 0;
+		const char * pCStr = PyUnicode_AsUTF8AndSize( this->get(), &size );
+		str.assign( pCStr, size );
+		// BIGWORLD_END
 	}
 
 
@@ -1358,7 +1396,9 @@ public:
 	 */
 	const char * c_str() const
 	{
-		return PyString_AS_STRING( this->get() );
+		// BIGWORLD_BEGIN(3.13 migration): was PyString_AS_STRING.
+		return PyUnicode_AsUTF8( this->get() );
+		// BIGWORLD_END
 	}
 };
 
@@ -1516,7 +1556,10 @@ public:
 	 */
 	static bool check( const ScriptObject & object )
 	{
-		return PyClass_Check( object.get() );
+		// BIGWORLD_BEGIN(3.13 migration)
+		// Was PyClass_Check; class objects became types in Python 3.
+		return PyType_Check( object.get() );
+		// BIGWORLD_END
 	}
 
 	/**
@@ -1532,8 +1575,13 @@ public:
 	static ScriptClass create( ScriptTuple bases, ScriptDict dict,
 		ScriptString name, const ERROR_HANDLER & errorHandler )
 	{
-		// Unable to find docs for if new or borrowed, looks to be new
-		PyObject * pClass = PyClass_New( bases.get(), dict.get(), name.get() );
+		// BIGWORLD_BEGIN(3.13 migration)
+		// Was PyClass_New, which no longer exists; invoke type(name,
+		// bases, dict) instead.
+		PyObject * pClass = PyObject_CallFunctionObjArgs(
+			(PyObject *)&PyType_Type, name.get(), bases.get(), dict.get(),
+			NULL );
+		// BIGWORLD_END
 		errorHandler.checkPtrError( pClass );
 		return ScriptClass( pClass, ScriptObject::FROM_NEW_REFERENCE );
 	}
@@ -1626,7 +1674,12 @@ public:
 	ScriptObject getRefent() const
 	{
 		// Note: This item return Py_None if the referent no longer exists
-		PyObject * pRefedObject = PyWeakref_GET_OBJECT( this->get() );
+		// BIGWORLD_BEGIN(3.13 migration)
+		// Was PyWeakref_GET_OBJECT, which is deprecated; bwPyWeakrefGetObject
+		// keeps the borrowed-reference contract.
+		PyObject * pRefedObject =
+			bwPyWeakrefGetObject( this->get() );
+		// BIGWORLD_END
 		return ScriptObject( pRefedObject, 
 			ScriptObject::FROM_BORROWED_REFERENCE );
 	}

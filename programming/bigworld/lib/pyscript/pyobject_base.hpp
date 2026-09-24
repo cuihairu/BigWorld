@@ -31,59 +31,58 @@ static int THIS_CLASS##_tp_clear( PyObject * pObj )						\
 }																		\
 /* end of TEMPORARY */													\
 																		\
-PyTypeObject THIS_CLASS::s_type_ =										\
+PyTypeObject THIS_CLASS::s_type_ =									\
 {																		\
-	PyObject_HEAD_INIT(&PyType_Type)									\
-	0,								/* ob_size */						\
-	#THIS_CLASS,					/* tp_name */						\
-	sizeof(THIS_CLASS),				/* tp_basicsize */					\
-	0,								/* tp_itemsize */					\
-																		\
-	/* methods */														\
-	THIS_CLASS##_tp_dealloc,		/* tp_dealloc */					\
-	0,								/* tp_print */						\
-	0,								/* tp_getattr */					\
-	0,								/* tp_setattr */					\
-	0,								/* tp_compare */					\
-	_tp_repr,						/* tp_repr */						\
-	0,								/* tp_as_number */					\
-	0, /*SEQ,*/						/* tp_as_sequence */				\
-	0, /* MAP, */					/* tp_as_mapping */					\
-	0,								/* tp_hash */						\
-	0, /* CALL, */					/* tp_call */						\
-	0,								/* tp_str */						\
-	_tp_getattro,					/* tp_getattro */					\
-	_tp_setattro,					/* tp_setattro */					\
-	0,								/* tp_as_buffer */					\
-	Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE |							\
-		Py_TPFLAGS_HAVE_GC,			/* tp_flags */						\
-	PY_GET_DOC( DOC_STRING ),		/* tp_doc */						\
-	THIS_CLASS##_tp_traverse,		/* tp_traverse */					\
-	THIS_CLASS##_tp_clear,			/* tp_clear */						\
-	0,								/* tp_richcompare */				\
-	0,								/* tp_weaklistoffset */				\
-	0,								/* tp_iter */						\
-	0,								/* tp_iternext */					\
-	THIS_CLASS::s_getMethodDefs(),	/* tp_methods */					\
-	0,								/* tp_members */					\
-	THIS_CLASS::s_getAttributeDefs(),/* tp_getset */					\
-	&Super::s_type_,				/* tp_base */						\
-	0,								/* tp_dict */						\
-	0,								/* tp_descr_get */					\
-	0,								/* tp_descr_set */					\
-	0,								/* tp_dictoffset */					\
-	0,								/* tp_init */						\
-	0,								/* tp_alloc */						\
-	0,								/* tp_new */						\
-	PyObject_GC_Del,				/* tp_free */						\
-	0,								/* tp_is_gc */						\
-	0,								/* tp_bases */						\
-	0,								/* tp_mro */						\
-	0,								/* tp_cache */						\
-	0,								/* tp_subclasses */					\
-	0,								/* tp_weaklist */					\
-	0,								/* tp_del */						\
-	0,								/* tp_version_tag */				\
+	/* BIGWORLD_BEGIN(3.13 migration)										\
+	 * Was positional initialisation of the 2.7 PyTypeObject layout;		\
+	 * rebuilt with designated initialisers (tp_compare is gone and			\
+	 * tp_print was replaced by tp_vectorcall_offset). */					\
+	PyVarObject_HEAD_INIT(&PyType_Type, 0)								\
+	.tp_name = #THIS_CLASS,											\
+	.tp_basicsize = sizeof(THIS_CLASS),								\
+	.tp_itemsize = 0,													\
+	.tp_dealloc = THIS_CLASS##_tp_dealloc,							\
+	.tp_getattr = 0,													\
+	.tp_setattr = 0,													\
+	.tp_repr = _tp_repr,												\
+	.tp_as_number = 0,													\
+	.tp_as_sequence = 0,												\
+	.tp_as_mapping = 0,													\
+	.tp_hash = 0,														\
+	.tp_call = 0,														\
+	.tp_str = 0,														\
+	.tp_getattro = _tp_getattro,										\
+	.tp_setattro = _tp_setattro,										\
+	.tp_as_buffer = 0,													\
+	.tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE |				\
+		Py_TPFLAGS_HAVE_GC,											\
+	.tp_doc = PY_GET_DOC( DOC_STRING ),								\
+	.tp_traverse = THIS_CLASS##_tp_traverse,							\
+	.tp_clear = THIS_CLASS##_tp_clear,									\
+	.tp_richcompare = 0,												\
+	.tp_weaklistoffset = 0,												\
+	.tp_iter = 0,														\
+	.tp_iternext = 0,													\
+	.tp_methods = THIS_CLASS::s_getMethodDefs(),						\
+	.tp_members = 0,													\
+	.tp_getset = THIS_CLASS::s_getAttributeDefs(),						\
+	.tp_base = &Super::s_type_,										\
+	.tp_dict = 0,														\
+	.tp_descr_get = 0,													\
+	.tp_descr_set = 0,													\
+	.tp_dictoffset = 0,													\
+	.tp_init = 0,														\
+	.tp_alloc = 0,														\
+	.tp_new = 0,														\
+	.tp_free = PyObject_GC_Del,										\
+	.tp_is_gc = 0,														\
+	.tp_bases = 0,														\
+	.tp_mro = 0,														\
+	.tp_subclasses = 0,													\
+	.tp_weaklist = 0,													\
+	.tp_del = 0,														\
+	.tp_version_tag = 0,												\
+	/* BIGWORLD_END */													\
 };																		\
 
 // pyobject_base.hpp

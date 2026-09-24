@@ -208,11 +208,15 @@ public:
 			{
 				if (shouldRemove ||
 						(arguments_.count(
-							string( PyString_AsString( key ) ) ) == 0))
+							/* BIGWORLD_BEGIN(3.13 migration) Was PyString_AsString */
+							string( PyUnicode_AsUTF8( key ) ) ) == 0))
+							/* BIGWORLD_END */
 				{
 					PyErr_Format( PyExc_TypeError,
 						"Invalid keyword argument: \"%s\"",
-						PyString_AsString( key ) );
+						/* BIGWORLD_BEGIN(3.13 migration) Was PyString_AsString */
+						PyUnicode_AsUTF8( key ) );
+						/* BIGWORLD_END */
 
 					return EXCEPTION_RAISED;
 				}

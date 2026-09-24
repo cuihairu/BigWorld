@@ -441,7 +441,7 @@ bool PyDataSection::pySetAttribute( const ScriptString & attrObj,
 				// TODO: Create ScriptUnicode
 				wchar_t buf[256];
 				Py_ssize_t nChars = PyUnicode_AsWideChar( 
-					(PyUnicodeObject*)value.get(), buf, 255 );
+					value.get(), buf, 255 );
 				if ( nChars != -1 )
 				{
 					buf[nChars] = L'\0';
@@ -497,7 +497,11 @@ bool PyDataSection::pySetAttribute( const ScriptString & attrObj,
  */
 PyObject * PyDataSection::subscript( PyObject* pathArg )
 {
-	char * path = PyString_AsString( pathArg );
+	// BIGWORLD_BEGIN(3.13 migration)
+	// Was PyString_AsString; str is unicode now and PyUnicode_AsUTF8 sets
+	// an error on failure, which the check below consumes.
+	const char * path = PyUnicode_AsUTF8( pathArg );
+	// BIGWORLD_END
 
 	if(PyErr_Occurred())
 	{
@@ -551,11 +555,14 @@ PyObject* PyDataSection::py_has_key( PyObject* args )
 
 	if (pSection_->openSection( sectionName ))
 	{
-		return PyInt_FromLong(1);
+		// BIGWORLD_BEGIN(3.13 migration)
+		// Was PyInt_FromLong(1)/PyInt_FromLong(0).
+		return PyBool_FromLong(1);
+		// BIGWORLD_END
 	}
 	else
 	{
-		return PyInt_FromLong(0);
+		return PyBool_FromLong(0);
 	}
 }
 
@@ -580,7 +587,11 @@ PyObject* PyDataSection::py_keys( PyObject* /*args*/ )
 	for (int i = 0; i < size; i++)
 	{
 		PyList_SetItem( pList, i,
-			PyString_FromString( pSection_->childSectionName( i ).c_str() ) );
+			// BIGWORLD_BEGIN(3.13 migration)
+			// Was PyString_FromString.
+			PyUnicode_FromString(
+				pSection_->childSectionName( i ).c_str() ) );
+			// BIGWORLD_END
 	}
 
 	return pList;
@@ -645,7 +656,10 @@ PyObject* PyDataSection::py_items( PyObject* /*args*/ )
 		PyObject * pTuple = PyTuple_New( 2 );
 
 		PyTuple_SetItem( pTuple, 0,
-			PyString_FromString( pChild->sectionName().c_str() ) );
+			// BIGWORLD_BEGIN(3.13 migration)
+			// Was PyString_FromString.
+			PyUnicode_FromString( pChild->sectionName().c_str() ) );
+			// BIGWORLD_END
 		PyTuple_SetItem( pTuple, 1, new PyDataSection( pChild ) );
 
 		PyList_SetItem( pList, i, pTuple );
@@ -685,12 +699,14 @@ void PyDataSection::asBinary( const BW::string & v ) const
 /*
  *	This is a simple helper function used by the read functions.
  */
-inline char * getStringArg( PyObject * args )
+// BIGWORLD_BEGIN(3.13 migration)
+// Was char * + PyString_Check/PyString_AsString; str is unicode now.
+inline const char * getStringArg( PyObject * args )
 {
 	if (PyTuple_Size( args ) == 1 &&
-		PyString_Check( PyTuple_GetItem( args, 0 ) ))
+		PyUnicode_Check( PyTuple_GetItem( args, 0 ) ))
 	{
-		return PyString_AsString( PyTuple_GetItem( args, 0 ) );
+		return PyUnicode_AsUTF8( PyTuple_GetItem( args, 0 ) );
 	}
 	else
 	{
@@ -698,6 +714,7 @@ inline char * getStringArg( PyObject * args )
 		return NULL;
 	}
 }
+// BIGWORLD_END
 
 #define IMPLEMENT_READ_VALUE_WITH_METHOD( METHOD, TYPE, M2 )						\
 PyObject * PyDataSection::py_##METHOD( PyObject * args )						\
@@ -725,17 +742,17 @@ PyObject * PyDataSection::py_##METHOD( PyObject * args )						\
 #define IMPLEMENT_READ_VALUES( METHOD, TYPE )									\
 PyObject * PyDataSection::py_##METHOD( PyObject * args )						\
 {																				\
-	char * path = getStringArg( args );											\
+	const char * path = getStringArg( args );								\
 																				\
 	if (path == NULL)															\
 	{																			\
 		return NULL;															\
 	}																			\
 																				\
-	BW::vector< TYPE > values;													\
-																				\
-	pSection_->METHOD( path, values );											\
-																				\
+	BW::vector< TYPE > values;												\
+																			\
+	pSection_->METHOD( path, values );												\
+																			\
 	PyObject * pTuple = PyTuple_New( values.size() );							\
 																				\
 	for (uint i = 0; i < values.size(); i++)									\
@@ -1532,26 +1549,29 @@ PyObject * PyDataSection::py_write( PyObject * args )
 		return NULL;
 	}
 
-	if (PyInt_Check( pValueObject ))
+	// BIGWORLD_BEGIN(3.13 migration)
+	// Was PyInt_Check; PyInt has been folded into PyLong and out-of-range
+	// values now raise OverflowError inside py_writeInt (call py_writeInt64
+	// explicitly for 64-bit values). The 2.7 str branch routed bytes to
+	// py_writeString and unicode to py_writeWideString; with the 3.x text
+	// model there is a single str type, which routes to py_writeString
+	// (call py_writeWideString explicitly for wide-string sections).
+	if (PyLong_Check( pValueObject ))
 	{
 		return this->py_writeInt( args );
 	}
+	// BIGWORLD_END
 	else if (PyFloat_Check( pValueObject ))
 	{
 		return this->py_writeFloat( args );
 	}
-	else if (PyString_Check( pValueObject ))
+	// BIGWORLD_BEGIN(3.13 migration)
+	// Was PyString_Check; see the note above.
+	else if (PyUnicode_Check( pValueObject ))
 	{
 		return this->py_writeString( args );
 	}
-	else if (PyUnicode_Check( pValueObject ))
-	{
-		return this->py_writeWideString( args );
-	}
-	else if (PyLong_Check( pValueObject ))
-	{
-		return this->py_writeInt64( args );
-	}
+	// BIGWORLD_END
 	else if (PySequence_Check( pValueObject ))
 	{
 		const Py_ssize_t size = PySequence_Size( pValueObject );
@@ -1754,7 +1774,10 @@ PyObject * PyDataSection::py_createSection( PyObject * args )
  */
 PyObject * PyDataSection::py_createSectionFromString( PyObject * args )
 {
-	char * string = getStringArg( args );
+	// BIGWORLD_BEGIN(3.13 migration)
+	// getStringArg now returns const char *.
+	const char * string = getStringArg( args );
+	// BIGWORLD_END
 
 	if (string == NULL)
 	{
@@ -1800,7 +1823,10 @@ PyObject * PyDataSection::py_createSectionFromString( PyObject * args )
  */
 PyObject * PyDataSection::py_deleteSection( PyObject * args )
 {
-	char * path( NULL );
+	// BIGWORLD_BEGIN(3.13 migration)
+	// Was char *; PyUnicode_AsUTF8 returns const char *.
+	const char * path( NULL );
+	// BIGWORLD_END
 	PyDataSection * pDeleteSection( NULL );
 
 	if (PyTuple_Size( args ) != 1)
@@ -1810,10 +1836,13 @@ PyObject * PyDataSection::py_deleteSection( PyObject * args )
 	}
 
 	PyObject * pItem = PyTuple_GetItem( args, 0 );
-	if (PyString_Check( pItem ))
+	// BIGWORLD_BEGIN(3.13 migration)
+	// Was PyString_Check/PyString_AsString.
+	if (PyUnicode_Check( pItem ))
 	{
-		path = PyString_AsString( pItem );
+		path = PyUnicode_AsUTF8( pItem );
 	}
+	// BIGWORLD_END
 	else if (PyDataSection::Check( pItem ))
 	{
 		pDeleteSection =  (PyDataSection*)pItem;
