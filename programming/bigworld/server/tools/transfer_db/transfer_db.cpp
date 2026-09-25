@@ -31,9 +31,9 @@ BW_SINGLETON_STORAGE( TransferDB )
  */
 TransferDB::TransferDB() :
 //	eventDispatcher_(),
-	pEventDispatcher_( 0 ),
-	pWatcherNub_( 0 ),
-	pLoggerMessageForwarder_( 0 )
+	pEventDispatcher_( nullptr ),
+	pWatcherNub_( nullptr ),
+	pLoggerMessageForwarder_( nullptr )
 {
 }
 

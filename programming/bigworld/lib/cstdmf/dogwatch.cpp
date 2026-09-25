@@ -335,7 +335,7 @@ DogWatchManager::iterator & DogWatchManager::iterator::operator=(
  *	@retval	true	If both iterators refer to the same element.
  *	@retval false	Otherwise.
  */
-bool DogWatchManager::iterator::operator==( const iterator & iter )
+bool DogWatchManager::iterator::operator==( const iterator & iter ) const
 {
 	return (iter.pTable_ == pTable_ && iter.id_ == id_);
 }

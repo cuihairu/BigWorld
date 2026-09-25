@@ -15,7 +15,7 @@ int main( int argc, char* argv[] )
 
 	BW::Allocator::setCrashOnLeak( true );
 
-	const std::auto_ptr<CStdMf> cstdmfSingleton( new CStdMf );
+	const std::unique_ptr<CStdMf> cstdmfSingleton( new CStdMf );
 
 	int result = BWUnitTest::runTest( "particle", argc, argv );
 

@@ -76,12 +76,14 @@ $(sslMakefileFilePath): $(sslConfigureFilePath)
 # BIGWORLD(3.13 migration): this used to be declared .INTERMEDIATE, which
 # deletes the stamp after every make invocation -- so each binary build
 # re-ran the full `make clean build_ssl build_crypto` (several minutes) and
-# concurrent builds stomped on each other's libcrypto.a. A normal rule
-# keeps the stamp: the full rebuild now happens only when the Makefile
-# (i.e. the Configure output) changes.
+# concurrent builds stomped on each other's libcrypto.a. The stamp must also
+# be physically created (touch $@): a rule whose recipe does not produce its
+# target makes make re-run it on every invocation, which reintroduced the
+# same concurrent-rebuild stomp.
 $(sslBuildConfPlatformPath).intermediate: $(sslMakefileFilePath)
 	rm -f $(BW_SSL_LIB_SOURCE) $(BW_CRYPTO_LIB_SOURCE)
 	$(MAKE_WITHOUT_JOBSERVER) -C $(OPENSSL_BUILD_DIR) clean build_ssl build_crypto
+	touch $@
 
 $(sslBuildConfPlatformPath): $(sslBuildConfPlatformPath).intermediate
 $(BW_SSL_LIB_SOURCE): $(sslBuildConfPlatformPath).intermediate

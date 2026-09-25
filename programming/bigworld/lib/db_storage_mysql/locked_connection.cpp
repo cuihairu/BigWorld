@@ -15,7 +15,7 @@ BW_BEGIN_NAMESPACE
 MySqlLockedConnection::MySqlLockedConnection(
 		const DBConfig::ConnectionInfo & connectionInfo ) :
 	connectionInfo_( connectionInfo ),
-	pConnection_( NULL ),
+	pConnection_( nullptr ),
 	dbLock_( connectionInfo.generateLockName() )
 {
 }
@@ -112,7 +112,7 @@ bool MySqlLockedConnection::connect( bool shouldLock )
 					connectionInfo_.port,
 					connectionInfo_.database.c_str() );
 				delete pConnection_;
-				pConnection_ = NULL;
+				pConnection_ = nullptr;
 			}
 		}
 	}
@@ -126,7 +126,7 @@ bool MySqlLockedConnection::connect( bool shouldLock )
 			e.what() );
 		isConnectedAndLocked = false;
 		delete pConnection_;
-		pConnection_ = NULL;
+		pConnection_ = nullptr;
 	}
 
 	return isConnectedAndLocked;

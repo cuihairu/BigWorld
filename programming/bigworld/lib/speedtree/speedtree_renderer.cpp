@@ -318,7 +318,7 @@ namespace
 
     //-- looks slightly ugly because we lose auto life-time control. But it's lesser of two evils.
     //-- Initialization of the smart pointer performed in SpeedTreeRenderer::init and reseting in fini().
-    std::auto_ptr<speedtree::SpeedTreeRendererCommon> g_commonRenderData;
+    std::unique_ptr<speedtree::SpeedTreeRendererCommon> g_commonRenderData;
 }
 //--------------------------------------------------------------------------------------------------
 //-- end unnamed namespace.
@@ -2258,7 +2258,7 @@ TSpeedTreeType::TreeTypePtr TSpeedTreeType::getTreeTypeObject(const char * filen
     if ( !result.exists() )
     {
         START_TIMER(actualLoading);
-        typedef std::auto_ptr< TSpeedTreeType > RendererAutoPtr;
+        typedef std::unique_ptr< TSpeedTreeType > RendererAutoPtr;
         RendererAutoPtr renderer(new TSpeedTreeType);
 
         // not using speedtree's clone function here because

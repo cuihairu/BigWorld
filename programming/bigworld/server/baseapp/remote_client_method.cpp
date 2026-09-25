@@ -140,7 +140,7 @@ PyObject * RemoteClientMethod::pyCall( PyObject * args )
 
 	if (pRecordingEntityChannel_)
 	{
-		std::auto_ptr< MemoryOStream > pRecordingStream( new MemoryOStream() );
+		std::unique_ptr< MemoryOStream > pRecordingStream( new MemoryOStream() );
 		if (!pMethodDescription_->addToClientStream( source, *pRecordingStream,
 			pMailBox_->id() ))
 		{

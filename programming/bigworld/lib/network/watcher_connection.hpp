@@ -61,8 +61,8 @@ private:
 
 	WatcherNub & nub_;
 	Mercury::EventDispatcher & dispatcher_;
-	std::auto_ptr<Endpoint> pEndpoint_;
-	std::auto_ptr<BufferedTcpEndpoint> pBufferedTcpEndpoint_;
+	std::unique_ptr<Endpoint> pEndpoint_;
+	std::unique_ptr<BufferedTcpEndpoint> pBufferedTcpEndpoint_;
 
 	uint32 receivedSize_;
 	uint32 messageSize_;

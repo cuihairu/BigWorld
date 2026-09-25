@@ -910,7 +910,7 @@ bool LogStorageMongoDB::initVersionColl(
 	}
 	else
 	{
-		std::auto_ptr< mongo::DBClientCursor > cursor = conn_.query(
+		std::unique_ptr< mongo::DBClientCursor > cursor = conn_.query(
 				versionCollName.c_str(), mongo::BSONObj() );
 
 		if (!cursor.get())

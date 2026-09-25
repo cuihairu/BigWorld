@@ -35,8 +35,8 @@ SecondaryDatabaseTable::SecondaryDatabaseTable(
 			SecondaryDatabase & database, const BW::string & tableName ):
 		database_( database ),
 		tableName_( tableName ),
-		pGetDataQuery_( NULL ),
-		pGetNumRowsQuery_( NULL )
+		pGetDataQuery_( nullptr ),
+		pGetNumRowsQuery_( nullptr )
 {}
 
 

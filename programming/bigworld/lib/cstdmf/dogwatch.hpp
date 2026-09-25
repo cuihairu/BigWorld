@@ -207,9 +207,9 @@ public:
 
 		CSTDMF_DLL iterator & operator=( const iterator & iter );
 
-		CSTDMF_DLL bool operator==( const iterator & iter );
+		CSTDMF_DLL bool operator==( const iterator & iter ) const;
 		/// This method implements the not equals operator.
-		CSTDMF_DLL bool operator!=( const iterator & iter ) { return !(*this == iter); }
+		CSTDMF_DLL bool operator!=( const iterator & iter ) const { return !(*this == iter); }
 		CSTDMF_DLL iterator & operator++();
 
 		CSTDMF_DLL iterator begin() const;

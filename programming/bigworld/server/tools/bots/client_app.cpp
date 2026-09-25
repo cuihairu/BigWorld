@@ -381,9 +381,9 @@ ClientApp::ClientApp( const BW::string & name, const BW::string & password,
     transport_( transport ),
     tag_( tag ),
     speed_( 6.f + float(rand())*2.f/float(RAND_MAX) ),
-    pMovementController_( NULL ),
+    pMovementController_( nullptr ),
     autoMove_( true ),
-    pDest_( NULL ),
+    pDest_( nullptr ),
     entities_()
 {
     pConnection_->setHandler( this );

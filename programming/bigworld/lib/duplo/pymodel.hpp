@@ -386,7 +386,7 @@ public:
 		RETDATA, getIKConstraintSystemFromData, END );
 	
 	static PyModelPtr createTestPyModel(
-		std::auto_ptr<SuperModel> superModel );
+		std::unique_ptr<SuperModel> superModel );
 
 	virtual const PyModel * getPyModel() const { return this; };
 

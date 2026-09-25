@@ -49,7 +49,7 @@ public:
 	const char * componentName() const;
 
 	virtual BinaryOStream * getStream( const MethodDescription & methodDesc,
-		   std::auto_ptr< Mercury::ReplyMessageHandler > pHandler );
+		   std::unique_ptr< Mercury::ReplyMessageHandler > pHandler );
 
 	static EntityMailBoxRef static_ref( PyObject * pThis )
 		{ return ((const ServerEntityMailBox*)pThis)->ref(); }
@@ -70,7 +70,7 @@ public:
 
 protected:
 	virtual BinaryOStream * getStreamEx( const MethodDescription & methodDesc,
-		   std::auto_ptr< Mercury::ReplyMessageHandler > pHandler ) = 0;
+		   std::unique_ptr< Mercury::ReplyMessageHandler > pHandler ) = 0;
 
 	Mercury::Address			addr_;
 	EntityID					id_;
@@ -99,7 +99,7 @@ public:
 protected:
 	BinaryOStream * getStreamCommon( const MethodDescription & methodDesc,
 			const Mercury::InterfaceElement & ie, 
-			std::auto_ptr< Mercury::ReplyMessageHandler > pHandler );
+			std::unique_ptr< Mercury::ReplyMessageHandler > pHandler );
 
 };
 
@@ -126,7 +126,7 @@ public:
 	PY_RO_ATTRIBUTE_SET( client )
 
 	virtual BinaryOStream * getStreamEx( const MethodDescription & methodDesc, 
-			std::auto_ptr< Mercury::ReplyMessageHandler > pHandler );
+			std::unique_ptr< Mercury::ReplyMessageHandler > pHandler );
 
 	virtual const MethodDescription * findMethod( const char * attr ) const;
 	virtual EntityMailBoxRef::Component component() const;
@@ -158,7 +158,7 @@ public:
 	PY_RO_ATTRIBUTE_SET( client )
 
 	virtual BinaryOStream * getStreamEx( const MethodDescription & methodDesc, 
-			std::auto_ptr< Mercury::ReplyMessageHandler > pHandler );
+			std::unique_ptr< Mercury::ReplyMessageHandler > pHandler );
 	virtual const MethodDescription * findMethod( const char * attr ) const;
 	virtual EntityMailBoxRef::Component component() const;
 

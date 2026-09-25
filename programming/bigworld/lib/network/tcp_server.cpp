@@ -31,7 +31,7 @@ TCPServer::TCPServer( NetworkInterface & networkInterface,
 		networkInterface_( networkInterface ),
 		backlog_( backlog ),
 		serverSocket_(),
-		pStreamFilterFactory_( NULL )
+		pStreamFilterFactory_( nullptr )
 {
 }
 

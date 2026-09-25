@@ -16,6 +16,7 @@
 
 #include "server/bwconfig.hpp"
 #include "server/backup_hash_chain.hpp"
+#include <random>
 
 
 BW_BEGIN_NAMESPACE
@@ -200,7 +201,7 @@ void BackupSender::restartBackupCycle( const Bases & bases )
 
 	// Randomise the backup so we do not load ourselves if contiguous
 	// blocks of large entities exist in the bases collection.
-	std::random_shuffle( basesToBackUp_.begin(), basesToBackUp_.end() );
+	std::shuffle( basesToBackUp_.begin(), basesToBackUp_.end(), std::mt19937( std::random_device()() ) );
 
 	// TODO: It would be nicer if we maintained the random order. Currently,
 	// it would be possible for an entity not to be backed up for twice the

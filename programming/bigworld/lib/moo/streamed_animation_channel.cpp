@@ -473,7 +473,7 @@ StreamedAnimation::CacheRecord::~CacheRecord()
 		}
 	}
 
-	pData_ = NULL;
+	pData_ = nullptr;
 }
 
 

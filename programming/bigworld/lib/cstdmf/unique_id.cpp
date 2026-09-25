@@ -125,7 +125,6 @@ BW_HASH_NAMESPACE_BEGIN
 
 template<>
 struct hash< BW::UniqueID > 
-	: public std::unary_function<BW::UniqueID, std::size_t>
 {
 	size_t operator()( const BW::UniqueID & v ) const
 	{

@@ -4,7 +4,7 @@
 
 BW_BEGIN_NAMESPACE
 
-AssetClient * AssetLock::s_pAssetClient_ = NULL;
+AssetClient * AssetLock::s_pAssetClient_ = nullptr;
 
 AssetLock::AssetLock()
 {

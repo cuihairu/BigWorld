@@ -62,13 +62,13 @@ extern int EditorChunkNavmeshCacheBase_token;
 extern int PyLogging_token;
 extern int ResMgr_token;
 
-typedef std::auto_ptr< TextureFeeds > TextureFeedsPtr;
+typedef std::unique_ptr< TextureFeeds > TextureFeedsPtr;
 static TextureFeedsPtr s_pTextureFeeds;
 
-typedef std::auto_ptr< Terrain::Manager > TerrainManagerPtr;
+typedef std::unique_ptr< Terrain::Manager > TerrainManagerPtr;
 static TerrainManagerPtr s_pTerrainManager;
 
-typedef std::auto_ptr< LensEffectManager > LensEffectManagerPtr;
+typedef std::unique_ptr< LensEffectManager > LensEffectManagerPtr;
 LensEffectManagerPtr s_pLensEffectManager;
 
 namespace OfflineProcessor

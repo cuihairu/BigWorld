@@ -162,7 +162,7 @@ private:
 	RecursiveMutex			texturesLock_;
 
 
-	std::auto_ptr< TextureStreamingManager > streamingManager_;
+	std::unique_ptr< TextureStreamingManager > streamingManager_;
 
 	bool					fullHouse_;
 	int						lodMode_;

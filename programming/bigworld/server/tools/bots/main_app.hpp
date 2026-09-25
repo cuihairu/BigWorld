@@ -153,7 +153,7 @@ private:
 	void addBotWithName( const BW::string & botName,
 		const BW::string & botPassword );
 
-	std::auto_ptr< StreamEncoder > 	pLogOnParamsEncoder_;
+	std::unique_ptr< StreamEncoder > 	pLogOnParamsEncoder_;
 
 	typedef BW::list< ClientAppPtr > Bots;
 	Bots bots_;

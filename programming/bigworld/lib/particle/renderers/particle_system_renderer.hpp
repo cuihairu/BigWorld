@@ -125,7 +125,7 @@ struct BGUpdateData
 
 	RenderT *                           spr_;
 	Moo::BaseTexturePtr                 texture_;
-	// std::auto_ptr<class BackgroundTask> task_;
+	// std::unique_ptr<class BackgroundTask> task_;
 };
 
 

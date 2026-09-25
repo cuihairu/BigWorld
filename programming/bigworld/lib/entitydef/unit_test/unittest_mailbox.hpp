@@ -31,7 +31,7 @@ public:
 	}
 
 	BinaryOStream * getStream( const MethodDescription & methodDesc, 
-		std::auto_ptr< Mercury::ReplyMessageHandler > pHandler )
+		std::unique_ptr< Mercury::ReplyMessageHandler > pHandler )
 	{
 		return NULL;
 	}

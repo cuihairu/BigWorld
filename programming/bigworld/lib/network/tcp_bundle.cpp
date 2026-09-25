@@ -28,7 +28,7 @@ TCPBundle::TCPBundle( TCPChannel & channel ) :
 		frameStartOffset_( sizeof( Offset ) ),
 		pFrameData_( new MemoryOStream() ),
 		pMessageData_( new MemoryOStream() ),
-		pCurrentMessage_( NULL ),
+		pCurrentMessage_( nullptr ),
 		isCurrentMessageRequest_( false )
 {
 	pFrameData_->reserve( sizeof( Flags ) );

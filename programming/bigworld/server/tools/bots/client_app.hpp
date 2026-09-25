@@ -137,7 +137,7 @@ private:
 
 	// Attributes
 	SimpleSpaceDataStorage				spaceDataStorage_;
-	std::auto_ptr< BWServerConnection >	pConnection_;
+	std::unique_ptr< BWServerConnection >	pConnection_;
 
 	bool			isDestroyed_;
 	bool			isDormant_;
@@ -151,9 +151,9 @@ private:
 	BW::string		tag_;
 	float			speed_;
 
-	std::auto_ptr< MovementController >	pMovementController_;
+	std::unique_ptr< MovementController >	pMovementController_;
 	bool								autoMove_;
-	std::auto_ptr< Vector3 >			pDest_;
+	std::unique_ptr< Vector3 >			pDest_;
 
 	ScriptObject	entities_;
 

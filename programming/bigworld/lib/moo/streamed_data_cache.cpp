@@ -677,7 +677,7 @@ namespace
 			const StreamedDataCache::EntryInfo& info, 
 			uint32 headerStart ) :
 		valid_(false),
-		pData_(NULL),
+		pData_(nullptr),
 		dataSize_(0),
 		offset_(0)
 

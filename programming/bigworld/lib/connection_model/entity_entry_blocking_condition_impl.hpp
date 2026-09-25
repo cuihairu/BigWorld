@@ -17,7 +17,7 @@ private: /// Handler interface
 private: /// C++ Housekeeping
 	// Only EntityEntryBlocker may create an instance of this class
 	friend class EntityEntryBlocker;
-	EntityEntryBlockingConditionImpl() : pHandler_( NULL ) {};
+	EntityEntryBlockingConditionImpl() : pHandler_( nullptr ) {};
 	// Disallow delete except from our own decRef
 	// and hence disallow subclassing
 	~EntityEntryBlockingConditionImpl();

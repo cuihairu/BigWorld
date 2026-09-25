@@ -56,16 +56,16 @@ private:
 	bool								soundEnabled_;
 
 	PathedFilename						preferencesFilename_;
-	typedef std::auto_ptr< FontManager > FontManagerPtr;
+	typedef std::unique_ptr< FontManager > FontManagerPtr;
 	FontManagerPtr pFontManager_;
 	
-	typedef std::auto_ptr< TextureFeeds > TextureFeedsPtr;
+	typedef std::unique_ptr< TextureFeeds > TextureFeedsPtr;
 	TextureFeedsPtr pTextureFeeds_;
 
-	typedef std::auto_ptr< PostProcessing::Manager > PostProcessingManagerPtr;
+	typedef std::unique_ptr< PostProcessing::Manager > PostProcessingManagerPtr;
 	PostProcessingManagerPtr pPostProcessingManager_;
 
-	typedef std::auto_ptr< LensEffectManager > LensEffectManagerPtr;
+	typedef std::unique_ptr< LensEffectManager > LensEffectManagerPtr;
 	LensEffectManagerPtr pLensEffectManager_;
 
 public:
@@ -77,7 +77,7 @@ public:
 	static GUIProgressDisplay *			s_pGUIProgress_;
 	static ProgressTask *				s_pStartupProgTask_;
 
-	std::auto_ptr<Renderer>				renderer_;
+	std::unique_ptr<Renderer>				renderer_;
 
 
 	InputHandler* pInputHandler_;
@@ -86,7 +86,7 @@ public:
 	ConnectionControl * pConnectionControl_;
 
 #if SCALEFORM_SUPPORT	
-	typedef std::auto_ptr< ScaleformBW::Manager > ScaleFormBWManagerPtr;
+	typedef std::unique_ptr< ScaleformBW::Manager > ScaleFormBWManagerPtr;
 	ScaleFormBWManagerPtr pScaleFormBWManager_;
 #endif
 };

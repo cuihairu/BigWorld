@@ -116,7 +116,7 @@ namespace
     private:
         Moo::EffectMaterialPtr m_material;
     };
-    std::auto_ptr<MapVisualizer> g_mapVisualizer;
+    std::unique_ptr<MapVisualizer> g_mapVisualizer;
 
     //----------------------------------------------------------------------------------------------
     void doGaussianBlur(

@@ -458,7 +458,7 @@ private:
 	typedef BW::map< Mercury::Address, Mercury::Address > BaseAppExtAddresses;
 	BaseAppExtAddresses 			baseAppExtAddresses_;
 
-	std::auto_ptr< Mercury::StreamFilterFactory > 
+	std::unique_ptr< Mercury::StreamFilterFactory > 
 									pStreamFilterFactory_;
 	Mercury::TCPServer				tcpServer_;
 };

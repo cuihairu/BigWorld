@@ -41,8 +41,8 @@ public:
 private:
 	SecondaryDatabase & 				database_;
 	BW::string 						tableName_;
-	std::auto_ptr< SqliteStatement > 	pGetDataQuery_;
-	std::auto_ptr< SqliteStatement > 	pGetNumRowsQuery_;
+	std::unique_ptr< SqliteStatement > 	pGetDataQuery_;
+	std::unique_ptr< SqliteStatement > 	pGetNumRowsQuery_;
 };
 
 BW_END_NAMESPACE

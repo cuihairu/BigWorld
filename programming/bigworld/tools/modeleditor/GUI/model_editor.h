@@ -83,7 +83,7 @@ private:
 
 	MEPythonAdapter* pPythonAdapter_;
 
-	std::auto_ptr< GUI::MenuHelper > menuHelper_;
+	std::unique_ptr< GUI::MenuHelper > menuHelper_;
 
 	BOOL parseCommandLineMF();
 		

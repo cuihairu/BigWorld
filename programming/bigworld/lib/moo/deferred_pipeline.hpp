@@ -122,8 +122,8 @@ private:
     bool                            m_enabled;
 
     //-- ToDo: reconsider.
-    std::auto_ptr<HDRSupport>  m_HDRSupport;
-    std::auto_ptr<SSAOSupport> m_SSAOSupport;
+    std::unique_ptr<HDRSupport>  m_HDRSupport;
+    std::unique_ptr<SSAOSupport> m_SSAOSupport;
     
     //-- copy of one of the g-buffer textures.
     //-- Note: for now this copy is only for RGBA8 format.
@@ -134,10 +134,10 @@ private:
     ComObjectWrap<DX::Surface>      m_surfaces[COLOR_BUFFERS];
 
     //-- sub-systems.
-    std::auto_ptr<DecalsManager>    m_decalsManager;
-    std::auto_ptr<LightsManager>    m_lightsManager;
-    std::auto_ptr<Moo::ShadowManager> m_dynamicShadowManager;
-    std::auto_ptr<SpeedTreeOptimizer> m_spt;
+    std::unique_ptr<DecalsManager>    m_decalsManager;
+    std::unique_ptr<LightsManager>    m_lightsManager;
+    std::unique_ptr<Moo::ShadowManager> m_dynamicShadowManager;
+    std::unique_ptr<SpeedTreeOptimizer> m_spt;
 };
 
 BW_END_NAMESPACE

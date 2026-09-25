@@ -25,7 +25,7 @@ BW::string PackerHelper::s_inPath;
 BW::string PackerHelper::s_outPath;
 
 #ifndef MF_SERVER
-std::auto_ptr<Renderer> s_pRenderer;
+std::unique_ptr<Renderer> s_pRenderer;
 #endif // MF_SERVER
 
 void PackerHelper::paths( const BW::string& inPath, const BW::string& outPath )

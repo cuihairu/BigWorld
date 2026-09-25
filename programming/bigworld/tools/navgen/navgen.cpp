@@ -129,16 +129,16 @@ int forcePyLogging_token = PyLogging_token;
 static AutoConfigString s_LanguageFile( "system/language" );
 static AutoConfigString s_engineConfigXML("system/engineConfigXML");
 
-typedef std::auto_ptr< FontManager > FontManagerPtr;
+typedef std::unique_ptr< FontManager > FontManagerPtr;
 static FontManagerPtr s_pFontManager;
 
-typedef std::auto_ptr< TextureFeeds > TextureFeedsPtr;
+typedef std::unique_ptr< TextureFeeds > TextureFeedsPtr;
 static TextureFeedsPtr s_pTextureFeeds;
 
-typedef std::auto_ptr< Terrain::Manager > TerrainManagerPtr;
+typedef std::unique_ptr< Terrain::Manager > TerrainManagerPtr;
 static TerrainManagerPtr s_pTerrainManager;
 
-typedef std::auto_ptr< LensEffectManager > LensEffectManagerPtr;
+typedef std::unique_ptr< LensEffectManager > LensEffectManagerPtr;
 static LensEffectManagerPtr s_pLensEffectManager;
 
 #define ZOOM_FACTOR         1.5f
@@ -335,7 +335,7 @@ ChunkView           g_chunkView;
 IWaypointView*      g_pView;
 HWND                g_hWindow           = NULL;
 
-std::auto_ptr<Renderer> g_pRenderer;
+std::unique_ptr<Renderer> g_pRenderer;
 
 HWND                g_hMooWindow        = NULL;
 HWND                g_hHelpWindow       = NULL;
@@ -4884,7 +4884,7 @@ int bwWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR commandLine, int)
         return 0;
 
 #if ENABLE_ASSET_PIPE
-    typedef std::auto_ptr< AssetClient > AssetClientPtr;
+    typedef std::unique_ptr< AssetClient > AssetClientPtr;
     AssetClientPtr pAssetClient(new AssetClient);
 #endif
 

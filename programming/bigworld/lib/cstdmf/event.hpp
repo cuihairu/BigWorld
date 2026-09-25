@@ -85,7 +85,9 @@ private:
 		 * Equality operator to facilitate removal of registered 
 		 * handlers.
 		 */
-		bool operator==( const EventDelegate & other )
+		// BIGWORLD(c++23 migration): const-qualified -- C++20 rewritten
+		// candidates make a non-const member ambiguous.
+		bool operator==( const EventDelegate & other ) const
 		{
 			return other.pStubMethod_ == pStubMethod_ &&
 				other.pTarget_ == pTarget_;

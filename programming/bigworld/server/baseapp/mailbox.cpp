@@ -50,7 +50,7 @@ public:
 
 	virtual ScriptObject pyGetAttribute( const ScriptString & attrObj );
 	virtual BinaryOStream * getStreamEx( const MethodDescription & methodDesc, 
-			std::auto_ptr< Mercury::ReplyMessageHandler > pHandler );
+			std::unique_ptr< Mercury::ReplyMessageHandler > pHandler );
 	virtual EntityMailBoxRef::Component component() const;
 	virtual const MethodDescription * findMethod( const char * attr ) const;
 };
@@ -80,7 +80,7 @@ ScriptObject CellViaBaseMailBox::pyGetAttribute( const ScriptString & attrObj )
 
 BinaryOStream * CellViaBaseMailBox::getStreamEx(
 		const MethodDescription & methodDesc,
-		std::auto_ptr< Mercury::ReplyMessageHandler > pHandler )
+		std::unique_ptr< Mercury::ReplyMessageHandler > pHandler )
 {
 	Mercury::Bundle & bundle = this->bundle();
 
@@ -144,7 +144,7 @@ public:
 
 	virtual ScriptObject pyGetAttribute( const ScriptString & attrObj );
 	virtual BinaryOStream * getStreamEx( const MethodDescription & methodDesc,
-		std::auto_ptr< Mercury::ReplyMessageHandler > pHandler );
+		std::unique_ptr< Mercury::ReplyMessageHandler > pHandler );
 	virtual EntityMailBoxRef::Component component() const;
 	virtual const MethodDescription * findMethod( const char * attr ) const;
 };
@@ -178,10 +178,13 @@ ScriptObject BaseViaCellMailBox::pyGetAttribute( const ScriptString & attrObj )
  */
 BinaryOStream * BaseViaCellMailBox::getStreamEx(
 		const MethodDescription & methodDesc,
-		std::auto_ptr< Mercury::ReplyMessageHandler > pHandler )
+		std::unique_ptr< Mercury::ReplyMessageHandler > pHandler )
 {
 	return this->getStreamCommon(
-			methodDesc, CellAppInterface::callBaseMethod, pHandler );
+			methodDesc, CellAppInterface::callBaseMethod,
+			// BIGWORLD(c++23 migration): was an auto_ptr copy (ownership
+			// transfer); unique_ptr needs an explicit move.
+			std::move( pHandler ) );
 }
 
 
@@ -230,7 +233,7 @@ public:
 	virtual ~ClientViaBaseMailBox() { }
 
 	virtual BinaryOStream * getStreamEx( const MethodDescription & methodDesc, 
-		std::auto_ptr< Mercury::ReplyMessageHandler > pHandler );
+		std::unique_ptr< Mercury::ReplyMessageHandler > pHandler );
 	virtual EntityMailBoxRef::Component component() const;
 	virtual const MethodDescription * findMethod( const char * attr ) const;
 
@@ -257,7 +260,7 @@ PY_SCRIPT_CONVERTERS( ClientViaBaseMailBox )
  */
 BinaryOStream * ClientViaBaseMailBox::getStreamEx( 
 		const MethodDescription & methodDesc,
-		std::auto_ptr< Mercury::ReplyMessageHandler > pHandler )
+		std::unique_ptr< Mercury::ReplyMessageHandler > pHandler )
 {
 	Mercury::Bundle & bundle = this->bundle();
 
@@ -348,7 +351,7 @@ public:
 	virtual ~ClientViaCellMailBox() { }
 
 	virtual BinaryOStream * getStreamEx( const MethodDescription & methodDesc,
-			std::auto_ptr< Mercury::ReplyMessageHandler > pHandler );
+			std::unique_ptr< Mercury::ReplyMessageHandler > pHandler );
 	virtual EntityMailBoxRef::Component component() const;
 	virtual const MethodDescription * findMethod( const char * attr ) const;
 
@@ -375,7 +378,7 @@ PY_SCRIPT_CONVERTERS( ClientViaCellMailBox )
  */
 BinaryOStream * ClientViaCellMailBox::getStreamEx( 
 		const MethodDescription & methodDesc,
-		std::auto_ptr< Mercury::ReplyMessageHandler > pHandler )
+		std::unique_ptr< Mercury::ReplyMessageHandler > pHandler )
 {
 	Mercury::Bundle & bundle = this->bundle();
 
@@ -545,7 +548,7 @@ ScriptObject ServerEntityMailBox::pyGetAttribute( const ScriptString & attrObj )
  */
 BinaryOStream * ServerEntityMailBox::getStream(
 					const MethodDescription & methodDesc,
-					std::auto_ptr< Mercury::ReplyMessageHandler > pHandler )
+					std::unique_ptr< Mercury::ReplyMessageHandler > pHandler )
 {
 	if (!MainThreadTracker::isCurrentThreadMain())
 	{
@@ -558,7 +561,9 @@ BinaryOStream * ServerEntityMailBox::getStream(
 		return NULL;
 	}
 
-	return this->getStreamEx( methodDesc, pHandler );
+	// BIGWORLD(c++23 migration): was an auto_ptr copy (ownership transfer);
+	// unique_ptr needs an explicit move.
+	return this->getStreamEx( methodDesc, std::move( pHandler ) );
 }
 
 
@@ -750,7 +755,7 @@ Mercury::UDPChannel * CommonCellEntityMailBox::pChannel() const
 BinaryOStream * CommonCellEntityMailBox::getStreamCommon(
 		const MethodDescription & methodDesc, 
 		const Mercury::InterfaceElement & ie,
-		std::auto_ptr< Mercury::ReplyMessageHandler > pHandler )
+		std::unique_ptr< Mercury::ReplyMessageHandler > pHandler )
 {
 	Mercury::UDPChannel * pChannel = this->pChannel();
 
@@ -895,10 +900,13 @@ PyObject * CellEntityMailBox::pyGet_client()
  */
 BinaryOStream * CellEntityMailBox::getStreamEx(
 	const MethodDescription & methodDesc,
-	std::auto_ptr< Mercury::ReplyMessageHandler > pHandler )
+	std::unique_ptr< Mercury::ReplyMessageHandler > pHandler )
 {
 	return this->getStreamCommon( methodDesc,
-		CellAppInterface::runScriptMethod, pHandler );
+		CellAppInterface::runScriptMethod,
+		// BIGWORLD(c++23 migration): was an auto_ptr copy (ownership
+		// transfer); unique_ptr needs an explicit move.
+		std::move( pHandler ) );
 }
 
 
@@ -1053,7 +1061,7 @@ PyObject * BaseEntityMailBox::pyGet_client()
  */
 BinaryOStream * BaseEntityMailBox::getStreamEx(
 		const MethodDescription & methodDesc,
-	 	std::auto_ptr< Mercury::ReplyMessageHandler > pHandler )
+	 	std::unique_ptr< Mercury::ReplyMessageHandler > pHandler )
 {
 	Mercury::Bundle & bundle = this->bundle();
 

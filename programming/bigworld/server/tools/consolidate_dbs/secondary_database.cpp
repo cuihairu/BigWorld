@@ -30,7 +30,7 @@ bool tableAgeComparator( const shared_ptr< SecondaryDatabaseTable > & t1,
  */
 SecondaryDatabase::SecondaryDatabase() :
 		path_(),
-		pConnection_( NULL ),
+		pConnection_( nullptr ),
 		tables_(),
 		numEntities_( 0 )
 {

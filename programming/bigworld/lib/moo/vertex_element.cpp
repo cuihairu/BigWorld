@@ -85,7 +85,7 @@ uint32 VertexElement::StorageEntryCount()
 
 // pair.first (enum val) equality
 template < class PairType >
-struct EqualsVal : public std::unary_function< PairType, bool >
+struct EqualsVal
 {
 	typedef typename PairType::first_type value_type;
 	value_type val_;
@@ -99,7 +99,7 @@ struct EqualsVal : public std::unary_function< PairType, bool >
 
 // pair.second (name string) equality
 template < class PairType >
-struct EqualsName : public std::unary_function< PairType, bool >
+struct EqualsName
 {
 	const BW::StringRef & name_;
 	EqualsName( const BW::StringRef & name ) : name_(name) {}

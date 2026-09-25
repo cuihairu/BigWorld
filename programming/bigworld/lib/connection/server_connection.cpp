@@ -118,7 +118,7 @@ ServerConnection::ServerConnection(
 	numMovementBytes_(),
 	numNonMovementBytes_(),
 	numOverheadBytes_(),
-	pHandler_( NULL ),
+	pHandler_( nullptr ),
 	id_( EntityID( -1 ) ),
 	selectedEntityID_( EntityID( -1 ) ),
 	spaceID_( 0 ),
@@ -155,7 +155,7 @@ ServerConnection::ServerConnection(
 	controlledEntities_(),
 	dataDownloads_(),
 	pBlockCipher_( NULL ),
-	pLogOnParamsEncoder_( NULL ),
+	pLogOnParamsEncoder_( nullptr ),
 	timerHandle_(),
 	challengeFactories_( challengeFactories ),
 	condemnedInterfaces_( condemnedInterfaces ),
@@ -590,7 +590,7 @@ void ServerConnection::disconnect( bool informServer /* = true */,
 	dataDownloads_.clear();
 
 	// forget the handler and the session key
-	pHandler_ = NULL;
+	pHandler_ = nullptr;
 	sessionKey_ = 0;
 
         // Discard the network interface so we can have a new port, and

@@ -3910,12 +3910,12 @@ PyModel::ScopedCurrentModelHolder::~ScopedCurrentModelHolder()
  *	objects if required.
  *
  *	@param superModel The SuperModel the result owns. It's deliberately passed
- *		by value as auto_ptr because this function is taking ownership.
+ *		by value as unique_ptr because this function is taking ownership.
  *	
  *	@return A PyModel that has taken ownership of @a superModel (if it's
  *		not NULL).
  */
-PyModelPtr PyModel::createTestPyModel( std::auto_ptr<SuperModel> superModel )
+PyModelPtr PyModel::createTestPyModel( std::unique_ptr<SuperModel> superModel )
 {
 	return PyModelPtr(
 		new PyModel( superModel.release() ), PyModelPtr::STEAL_REFERENCE );

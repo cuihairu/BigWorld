@@ -294,13 +294,13 @@ private:
 
 	// Init some singletons
 	InputDevices inputDevices_;
-	typedef std::auto_ptr<CameraApp> CameraAppPtr;
+	typedef std::unique_ptr<CameraApp> CameraAppPtr;
 	CameraAppPtr pCameraApp_;
 
 	bool quiting_;
 
 #if ENABLE_ASSET_PIPE
-	typedef std::auto_ptr< AssetClient > AssetClientPtr;
+	typedef std::unique_ptr< AssetClient > AssetClientPtr;
 	AssetClientPtr pAssetClient_;
 #else
 	AssetClient* pAssetClient_;

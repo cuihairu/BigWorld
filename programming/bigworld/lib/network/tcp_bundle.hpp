@@ -83,7 +83,7 @@ private:
 	Offset					frameStartOffset_;
 	MemoryOStream * 		pFrameData_;
 	MemoryOStream * 		pMessageData_;
-	std::auto_ptr< InterfaceElement >
+	std::unique_ptr< InterfaceElement >
 							pCurrentMessage_;
 
 	bool					isCurrentMessageRequest_;

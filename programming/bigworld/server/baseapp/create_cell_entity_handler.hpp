@@ -56,7 +56,7 @@ private:
 	void cellCreationFailure();
 
 	BasePtr pBase_;
-	std::auto_ptr< Mercury::ReplyMessageHandler > pHandler_;
+	std::unique_ptr< Mercury::ReplyMessageHandler > pHandler_;
 	EntityID nearbyID_;
 };
 

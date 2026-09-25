@@ -685,7 +685,7 @@ void sendToBaseApps( const Mercury::InterfaceElement & ifElt,
  *	This class is a functor to be used as a predicate for @ref BaseAppsIterator.
  *	The predicate excludes the given app.
  */
-class BaseAppsExcluding : public std::unary_function<const BaseApp &, bool>
+class BaseAppsExcluding
 {
 public:
 	BaseAppsExcluding( const BaseApp * exclude ) : exclude_( exclude ) { }

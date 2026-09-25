@@ -59,7 +59,7 @@ BW_SINGLETON_STORAGE( ConsolidateDBsApp )
 ConsolidateDBsApp::ConsolidateDBsApp( bool shouldStopOnError ) :
 	DatabaseToolApp(),
 	internalIP_( 0 ),
-	pDBApp_( NULL ),
+	pDBApp_( nullptr ),
 	connectionInfo_(),
 	consolidationDir_( "/tmp/" ),
 	consolidationErrors_(),

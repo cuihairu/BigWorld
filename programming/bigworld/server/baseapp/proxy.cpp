@@ -527,7 +527,7 @@ Proxy::Proxy( EntityID id, DatabaseID dbID, EntityType * pType ) :
 	totalBytesDownloaded_( 0 ),
 	pProxyPusher_( NULL ),
 	lastLatencyCheckTime_( 0 ),
-	pBufferedClientBundle_( NULL ),
+	pBufferedClientBundle_( nullptr ),
 	pRateLimiter_( NULL ),
 	cellHasWitness_( false ),
 	cellBackupHasWitness_( false ),
@@ -536,7 +536,7 @@ Proxy::Proxy( EntityID id, DatabaseID dbID, EntityType * pType ) :
 	avgClientBundleDataUnits_( EMA::calculateBiasFromNumSamples(
 			CLIENT_BUNDLE_MOVING_AVERAGE_SAMPLES ), 
 		1.f ),
-	pPendingReLogOn_( NULL ),
+	pPendingReLogOn_( nullptr ),
 	inactivityTimeout_( BaseAppConfig::inactivityTimeout() )
 {
 	// TRACE_MSG( "Proxy::Proxy: id = %u\n", this->id() );

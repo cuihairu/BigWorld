@@ -29,7 +29,7 @@ namespace { // anonymous
 // Named constants
 const char* LOG_FILENAME = "stats.txt";
 
-std::auto_ptr<std::ostream> f_logFile;
+std::unique_ptr<std::ostream> f_logFile;
 
 double f_logFrameThreshold = std::numeric_limits<float>::max();
 double f_percentThreshold  = 0.005;
@@ -93,7 +93,7 @@ class FrameLoggerTask : public MainLoopTask
 
 	bool lastEnableDraw_;
 };
-std::auto_ptr<FrameLoggerTask> f_frameLoogerInstance;
+std::unique_ptr<FrameLoggerTask> f_frameLoogerInstance;
 
 } // namespace anonymous
 

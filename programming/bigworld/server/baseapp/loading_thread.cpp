@@ -118,7 +118,7 @@ private:
 				Py_DECREF( pRes );
 			}
 			// Needed if isDisowned returns false below.
-			pHandler_ = NULL;
+			pHandler_ = nullptr;
 		}
 
 		// Returning true causes this object to be deleted.
@@ -503,7 +503,7 @@ private:
 				PyObject_GetAttrString( pHandler_.get(), "onFinish" ),
 				PyTuple_New( 0 ), "onFinish", true );
 			// Needed if isDisowned return false below.
-			pHandler_ = NULL;
+			pHandler_ = nullptr;
 		}
 
 		// isDisowned is needed to avoid a race condition. The loading thread
@@ -536,7 +536,7 @@ private:
 	// The current data section and where we are up to in it.
 	DataSectionPtr pMainThreadDS_;
 	DataSection::iterator mainThreadIter_;
-	std::auto_ptr< Filter > pFilter_;
+	std::unique_ptr< Filter > pFilter_;
 	// Used to cache the matrix of the current data section
 	Matrix mainThreadMatrix_;
 
@@ -622,7 +622,7 @@ PyObject * py_fetchFromChunks( PyObject * args )
 	}
 	else if (PySequence_Check( pMatches ))
 	{
-		std::auto_ptr< FetchFromChunksJob::SetFilter >
+		std::unique_ptr< FetchFromChunksJob::SetFilter >
 			pSetFilter( new FetchFromChunksJob::SetFilter() );
 		int size = PySequence_Length( pMatches );
 

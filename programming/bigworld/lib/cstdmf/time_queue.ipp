@@ -354,7 +354,7 @@ inline void TimeQueueNode::cancel( bool shouldCallOnRelease )
 		{
 			pHandler_->decTimerRegisterCount();
 		}
-		pHandler_ = NULL;
+		pHandler_ = nullptr;
 	}
 
 	owner_.onCancel();

@@ -18,7 +18,7 @@
 #include "delegate_interface/game_delegate.hpp"
 
 #if defined( __GNUC__ )
-#include <tr1/type_traits>
+#include <type_traits>
 #else /* defined( __GNUC__ ) */
 #include <type_traits>
 #endif /* defined( __GNUC__ ) */
@@ -558,10 +558,10 @@ Base * EntityType::newEntityBase( EntityID id, DatabaseID dbID )
 
 	Base * pNewBase = NULL;
 
-	BW_STATIC_ASSERT( std::tr1::is_polymorphic< Base >::value == false,
+	BW_STATIC_ASSERT( std::is_polymorphic< Base >::value == false,
 		Base_is_virtual_but_uses_PyType_GenericAlloc );
 
-	BW_STATIC_ASSERT( std::tr1::is_polymorphic< Proxy >::value == false,
+	BW_STATIC_ASSERT( std::is_polymorphic< Proxy >::value == false,
 		Proxy_is_virtual_but_uses_PyType_GenericAlloc );
 
 	if (this->isProxy())

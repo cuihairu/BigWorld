@@ -24,7 +24,7 @@ BWEntity::BWEntity( BWConnection * pBWConnection ):
 		pVehicle_( NULL ),
 		pBWConnection_( pBWConnection ),
 		isPlayer_( false ),
-		pFilter_( NULL ),
+		pFilter_( nullptr ),
 		localPosition_( 0.f, 0.f, 0.f ),
 		localDirection_(),
 		isInAoI_( false ),

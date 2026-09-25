@@ -57,7 +57,7 @@ public:
 
 private:
 
-	std::auto_ptr<IClientSpaceFactory> pFactory_;
+	std::unique_ptr<IClientSpaceFactory> pFactory_;
 
 	typedef BW::map< SpaceID, ClientSpace * > SpaceMap;
 	SpaceMap spaces_;

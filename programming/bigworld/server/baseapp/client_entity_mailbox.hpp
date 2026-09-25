@@ -28,7 +28,7 @@ public:
 
 	virtual ScriptObject pyGetAttribute( const ScriptString & attrObj );
 	virtual BinaryOStream * getStream( const MethodDescription & methodDesc, 
-		std::auto_ptr< Mercury::ReplyMessageHandler > pHandler );
+		std::unique_ptr< Mercury::ReplyMessageHandler > pHandler );
 	virtual void sendStream();
 	virtual const MethodDescription * findMethod( const char * attr ) const;
 

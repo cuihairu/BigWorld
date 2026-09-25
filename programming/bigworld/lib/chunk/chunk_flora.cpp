@@ -22,7 +22,7 @@ BW_BEGIN_NAMESPACE
 
 ///Constructor.
 ChunkFlora::ChunkFlora():
-	pData_(NULL),
+	pData_(nullptr),
 	ecotypeIDs_(NULL),
 	width_(0),
 	height_(0),
@@ -105,7 +105,7 @@ bool ChunkFlora::load( DataSectionPtr pSection, Chunk * pChunk )
 		pData_ = new BinaryBlock( data, len );
 		BinSection* pData = new BinSection( "float", pData_ );		
 		pData->save(pChunk->mapping()->path() + resName);
-		pData_ = NULL;		
+		pData_ = nullptr;		
 	}*/
 
 	return false;

@@ -117,7 +117,7 @@ int BitReader::bitsRequired( uint numValues )
 	// get the expected bit width of the current index
 	--numValues;
 
-	register int nbits;
+	int nbits;
 #if defined( __clang__ ) || defined( __ANDROID__ ) || defined(_WIN64) || \
 		defined( EMSCRIPTEN )
 	nbits = 0;

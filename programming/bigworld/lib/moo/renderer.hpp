@@ -175,7 +175,7 @@ private:
 private:
     bool                                        m_inited;
     IRendererPipeline::EType                    m_type;
-    std::auto_ptr<IRendererPipeline>            m_pipeline;
+    std::unique_ptr<IRendererPipeline>            m_pipeline;
 
     //-- common graphics settings.
     int                                         m_options[IRendererPipeline::GRAPHICS_SETTING_COUNT];

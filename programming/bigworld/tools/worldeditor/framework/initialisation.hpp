@@ -42,7 +42,7 @@ private:
 	friend std::ostream& operator<<( std::ostream&, const Initialisation& );
 
 private:
-	static std::auto_ptr<Renderer> renderer_;
+	static std::unique_ptr<Renderer> renderer_;
 
 	static bool inited_;
 };

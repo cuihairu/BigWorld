@@ -92,7 +92,7 @@ private:
 
 	TCPConnectionOpenerListener & 	listener_;
 	NetworkInterface & 				networkInterface_;
-	std::auto_ptr< Endpoint > 		pEndpoint_;
+	std::unique_ptr< Endpoint > 		pEndpoint_;
 	Address 						connectAddress_;
 	TimerHandle 					timerHandle_;
 	void * 							pUserData_;

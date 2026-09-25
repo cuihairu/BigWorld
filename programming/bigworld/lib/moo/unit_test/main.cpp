@@ -19,7 +19,7 @@ int main( int argc, char * argv[] )
 
 	BW::Allocator::setCrashOnLeak( true );
 	
-	const std::auto_ptr<CStdMf> cstdmfSingleton( new CStdMf );
+	const std::unique_ptr<CStdMf> cstdmfSingleton( new CStdMf );
 
 	//For the unit tests, we force a particular resource path.
 	const char * myargv[] =

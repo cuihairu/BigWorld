@@ -49,10 +49,10 @@ int ChunkTree_token;
 ChunkTree::ChunkTree() :
     BaseChunkTree(),
 #if SPEEDTREE_SUPPORT
-    tree_(NULL),
+    tree_(nullptr),
 #endif
     reflectionVisible_(false),
-    errorInfo_(NULL),
+    errorInfo_(nullptr),
     castsShadow_( true )
 {}
 
@@ -124,7 +124,7 @@ bool ChunkTree::loadTree(const char * filename, int seed, Chunk * chunk)
     {
         // load the speedtree
         using speedtree::SpeedTreeRenderer;
-        std::auto_ptr< SpeedTreeRenderer > speedTree(new SpeedTreeRenderer);
+        std::unique_ptr< SpeedTreeRenderer > speedTree(new SpeedTreeRenderer);
 
         Matrix world = chunk ? chunk->transform() : Matrix::identity;
         world.preMultiply( this->transform() );

@@ -100,7 +100,7 @@ private:
     float                       m_desiredFrameRate;     // No more frame limiting (Bug 4834)
     State                       m_state;
     static ParticleEditorApp    *s_instance;
-	std::auto_ptr< GUI::MenuHelper > menuHelper_;
+	std::unique_ptr< GUI::MenuHelper > menuHelper_;
 };
 
 extern ParticleEditorApp theApp;

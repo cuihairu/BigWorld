@@ -26,7 +26,7 @@ int main( int argc, char* argv[] )
 
     BW::Allocator::setCrashOnLeak( true );
     
-    const std::auto_ptr<CStdMf> cstdmfSingleton( new CStdMf );
+    const std::unique_ptr<CStdMf> cstdmfSingleton( new CStdMf );
 
     //For the unit tests, we force a particular resource path.
     const char * myargv[] =
@@ -69,7 +69,7 @@ int main( int argc, char* argv[] )
         return 1;
     }
 
-    std::auto_ptr<Renderer> pRenderer( new Renderer );
+    std::unique_ptr<Renderer> pRenderer( new Renderer );
 
     if (!Moo::init( true, true ))
     {

@@ -91,7 +91,7 @@ public:
 	PY_RO_ATTRIBUTE_SET( client )
 
 	virtual BinaryOStream * getStream( const MethodDescription & methodDesc, 
-		std::auto_ptr< Mercury::ReplyMessageHandler > pHandler );
+		std::unique_ptr< Mercury::ReplyMessageHandler > pHandler );
 	void sendStream();
 	virtual const MethodDescription * findMethod( const char * attr ) const;
 	virtual EntityMailBoxRef::Component component() const;
@@ -151,7 +151,7 @@ public:
 	PY_RO_ATTRIBUTE_SET( client )
 
 	virtual BinaryOStream * getStream( const MethodDescription & methodDesc,
-			std::auto_ptr< Mercury::ReplyMessageHandler > pHandler );
+			std::unique_ptr< Mercury::ReplyMessageHandler > pHandler );
 	virtual const MethodDescription * findMethod( const char * attr ) const;
 	virtual EntityMailBoxRef::Component component() const;
 };

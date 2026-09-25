@@ -40,7 +40,7 @@ private:
 	bool canSeeTerrain_;
 	float dGameTime_;
 
-	typedef std::auto_ptr< Terrain::Manager > TerrainManagerPtr;
+	typedef std::unique_ptr< Terrain::Manager > TerrainManagerPtr;
 	TerrainManagerPtr terrainManager_;
 
 public:

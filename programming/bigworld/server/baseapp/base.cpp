@@ -1418,7 +1418,7 @@ void Base::callCellMethod( const Mercury::Address & srcAddr,
 
 	if (pDescription != NULL)
 	{
-		std::auto_ptr< Mercury::ReplyMessageHandler > pReplyHandler;
+		std::unique_ptr< Mercury::ReplyMessageHandler > pReplyHandler;
 
 		if (header.replyID != Mercury::REPLY_ID_NONE)
 		{
@@ -1427,7 +1427,10 @@ void Base::callCellMethod( const Mercury::Address & srcAddr,
 		}
 
 		BinaryOStream * pBOS = pCellEntityMailBox_->getStream( *pDescription,
-				pReplyHandler );
+				// BIGWORLD(c++23 migration): getStream() takes the handler
+				// unique_ptr by value; was an auto_ptr copy (ownership
+				// transfer), now an explicit move.
+				std::move( pReplyHandler ) );
 
 	    if (pBOS == NULL)
 		{
@@ -2136,7 +2139,7 @@ bool Base::writeToDB( WriteDBFlags flags, WriteToDBReplyStructPtr pReplyStruct,
 		}
 
 		Mercury::Channel & channel = baseApp.getChannel( dbApp.address() );
-		std::auto_ptr< Mercury::Bundle > pBundle( channel.newBundle() );
+		std::unique_ptr< Mercury::Bundle > pBundle( channel.newBundle() );
 
 		BinaryOStream * pStream = pBundle.get();
 
@@ -3262,19 +3265,25 @@ bool Base::teleport( const EntityMailBoxRef & nearbyBaseMB )
  *		reply message, otherwise NULL is returned and the Python error state is
  *		set.
  */
-std::auto_ptr< Mercury::ReplyMessageHandler >
+std::unique_ptr< Mercury::ReplyMessageHandler >
 	Base::prepareForCellCreate( const char * errorPrefix )
 {
 	if (!this->checkAssociatedCellEntity( false, errorPrefix ))
 	{
-		return std::auto_ptr< Mercury::ReplyMessageHandler >( NULL );
+		// BIGWORLD(c++23 migration): was unique_ptr( NULL ) -- ambiguous
+		// between pointer and nullptr_t constructors; nullptr converts
+		// implicitly.
+		return nullptr;
 	}
 
 	if (!this->pType()->canBeOnCell())
 	{
 		PyErr_Format( PyExc_AttributeError, "%sBase %d has no cell script.",
 				errorPrefix, int(id_) );
-		return std::auto_ptr< Mercury::ReplyMessageHandler >( NULL );
+		// BIGWORLD(c++23 migration): was unique_ptr( NULL ) -- ambiguous
+		// between pointer and nullptr_t constructors; nullptr converts
+		// implicitly.
+		return nullptr;
 	}
 
 	Mercury::ReplyMessageHandler * pHandler =
@@ -3283,7 +3292,7 @@ std::auto_ptr< Mercury::ReplyMessageHandler >
 	isCreateCellPending_ = true;
 	isGetCellPending_ = true;
 
-	return std::auto_ptr< Mercury::ReplyMessageHandler >( pHandler );
+	return std::unique_ptr< Mercury::ReplyMessageHandler >( pHandler );
 }
 
 
@@ -3342,7 +3351,7 @@ bool Base::createCellEntity( const ServerEntityMailBoxPtr & pNearbyMB )
 		return false;
 	}
 
-	std::auto_ptr< Mercury::ReplyMessageHandler > pHandler(
+	std::unique_ptr< Mercury::ReplyMessageHandler > pHandler(
 		this->prepareForCellCreate( errorPrefix ) );
 
 	if (!pHandler.get())
@@ -3496,7 +3505,7 @@ bool Base::createInSpace( SpaceID spaceID, const char * pyErrorPrefix )
 	// The entity may currently be in the same space but may be in a different
 	// space by the time the createCellEntity message arrives.
 
-	std::auto_ptr< Mercury::ReplyMessageHandler > pHandler(
+	std::unique_ptr< Mercury::ReplyMessageHandler > pHandler(
 		this->prepareForCellCreate( pyErrorPrefix ) );
 
 	if (!pHandler.get())
@@ -3507,7 +3516,7 @@ bool Base::createInSpace( SpaceID spaceID, const char * pyErrorPrefix )
 	Mercury::Channel & channel = BaseApp::getChannel( app.cellAppMgrAddr() );
 	// We don't use the channel's own bundle here because the streaming might
 	// fail and the message might need to be aborted halfway through.
-	std::auto_ptr< Mercury::Bundle > pBundle( channel.newBundle() );
+	std::unique_ptr< Mercury::Bundle > pBundle( channel.newBundle() );
 	pBundle->startRequest( CellAppMgrInterface::createEntity, pHandler.get() );
 	*pBundle << spaceID;
 
@@ -3554,7 +3563,7 @@ PyObject * Base::py_createInNewSpace( PyObject * args, PyObject * kwargs )
 		return NULL;
 	}
 
-	std::auto_ptr< Mercury::ReplyMessageHandler > pHandler(
+	std::unique_ptr< Mercury::ReplyMessageHandler > pHandler(
 		this->prepareForCellCreate( errorPrefix ) );
 
 	if (!pHandler.get())
@@ -3574,7 +3583,7 @@ PyObject * Base::py_createInNewSpace( PyObject * args, PyObject * kwargs )
 
 	// We don't use the channel's own bundle here because the streaming might
 	// fail and the message might need to be aborted halfway through.
-	std::auto_ptr< Mercury::Bundle > pBundle( channel.newBundle() );
+	std::unique_ptr< Mercury::Bundle > pBundle( channel.newBundle() );
 
 	// Start a request to the Cell App Manager.
 	pBundle->startRequest( CellAppMgrInterface::createEntityInNewSpace,

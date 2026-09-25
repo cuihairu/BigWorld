@@ -163,7 +163,7 @@ BaseStreamingTask::BaseStreamingTask() :
 	BackgroundTask( "Streaming Task" ), 
 	bandwidthUsed_( 0 ), 
 	bandwidthEstimate_( 0 ), 
-	streamingManager_( NULL )
+	streamingManager_( nullptr )
 {
 }
 
@@ -270,7 +270,7 @@ void BaseStreamingTask::reportCompletion()
 		streamingManager_->reportCompletion( this );
 	}
 
-	streamingManager_ = NULL;
+	streamingManager_ = nullptr;
 }
 
 void BaseStreamingTask::reportBandwidthUsed( size_t bytes )

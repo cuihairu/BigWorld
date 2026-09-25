@@ -30,13 +30,13 @@ namespace DependencyUnitTest
 		// Create a test xml section
 		DataSectionPtr xmlSection = new XMLSection( "DependencyUnitTest" );
 		// Create and initialise a dependency
-		std::auto_ptr< T > dependency( createTestDependency<T>() );
+		std::unique_ptr< T > dependency( createTestDependency<T>() );
 		// Set the dependency to critical if we are testing critical dependencies
 		dependency->setCritical( criticalDependency );
 		// Attempt to serialise the dependency out
 		if (!dependency->serialiseOut( xmlSection )) return false;
 		// Create a new dependency
-		std::auto_ptr< T > newDependency( new T() );
+		std::unique_ptr< T > newDependency( new T() );
 		// Attempt to serialise the new dependency in from the section we just serialised out
 		if (!newDependency->serialiseIn( xmlSection )) return false;
 		// Check the critical flag matches what we set it to

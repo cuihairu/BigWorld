@@ -1986,7 +1986,7 @@ bool ZipFileSystem::writeFile( const BW::StringRef& path,
 
 		fileIter->writeFile( pTempFile, offset );
 
-		fileIter->pData_ = NULL;//release the memory
+		fileIter->pData_ = nullptr;//release the memory
 
 		fileEntries ++;
 	}

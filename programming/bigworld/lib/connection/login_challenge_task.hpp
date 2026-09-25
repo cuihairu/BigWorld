@@ -24,7 +24,7 @@ public:
 	~LoginChallengeTask();
 
 	bool isFinished() const { return isFinished_; }
-	void disassociate() { pHandler_ = NULL; }
+	void disassociate() { pHandler_ = nullptr; }
 	void perform();
 	MemoryOStream & data() { return response_; }
 	float calculationDuration() { return calculationDuration_; }

@@ -81,13 +81,15 @@ public:
 	bool empty() const;
 
 	template <bool ISCONST = false>
-	struct IteratorBase :
-		public std::iterator<std::random_access_iterator_tag,
-								typename choose<ISCONST, const T, T>::type >
+	struct IteratorBase
 	{
-		typedef typename IteratorBase::reference reference;
-		typedef typename IteratorBase::pointer pointer;
-		typedef typename IteratorBase::difference_type difference_type;
+		// BIGWORLD(c++23 migration): std::iterator was removed in C++20,
+		// declare the associated types directly.
+		typedef std::random_access_iterator_tag iterator_category;
+		typedef typename choose<ISCONST, const T, T>::type value_type;
+		typedef std::ptrdiff_t difference_type;
+		typedef typename choose<ISCONST, const T, T>::type * pointer;
+		typedef typename choose<ISCONST, const T, T>::type & reference;
 
 		typedef typename choose<ISCONST, const This, This>::type owner_type;
 

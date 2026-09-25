@@ -69,7 +69,7 @@ private:
 
 	uint32						internalIP_;
 
-	std::auto_ptr< DBApp >		pDBApp_;
+	std::unique_ptr< DBApp >		pDBApp_;
 
 	DBConfig::ConnectionInfo 	connectionInfo_;
 

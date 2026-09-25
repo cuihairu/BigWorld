@@ -2626,7 +2626,7 @@ static bool createEntityOnBaseApp( const BW::string & entityType,
 		return false;
 	}
 
-	std::auto_ptr< CreateBaseReplyHandler > pHandler(
+	std::unique_ptr< CreateBaseReplyHandler > pHandler(
 		new CreateBaseReplyHandler( pCallbackFunc ) );
 
 	Mercury::Channel & channel = CellApp::getChannel( 
@@ -2634,7 +2634,7 @@ static bool createEntityOnBaseApp( const BW::string & entityType,
 
 	// We don't use the channel's own bundle here because the streaming might
 	// fail and the message might need to be aborted halfway through.
-	std::auto_ptr< Mercury::Bundle > pBundle( channel.newBundle() );
+	std::unique_ptr< Mercury::Bundle > pBundle( channel.newBundle() );
 	pBundle->startRequest( BaseAppIntInterface::createBaseWithCellData,
 		pHandler.get() );
 

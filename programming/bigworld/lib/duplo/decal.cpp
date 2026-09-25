@@ -1363,7 +1363,7 @@ int Decal::addDecalGroup(
 	}
 	
 	// wrap pointer to safety.
-	std::auto_ptr<Moo::VertexBuffer> vertexBuffer(new Moo::VertexBuffer());
+	std::unique_ptr<Moo::VertexBuffer> vertexBuffer(new Moo::VertexBuffer());
 
 	DecalGroup decalGroup;
 	decalGroup.name = groupName;
@@ -1396,7 +1396,7 @@ int Decal::addDecalGroup(
 		buffersMemoryAllocated_ += triCount * 3 * sizeof( DecalVertex ) / 1024;
 	}
 
-	// release auto_ptr.
+	// release unique_ptr.
 	decalGroup.pVertexBuffer = vertexBuffer.release();
 	decalGroups_.push_back(decalGroup);
 

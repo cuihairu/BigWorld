@@ -179,7 +179,7 @@ private:
 
 	// Properties common to all BWConnection classes
 	BWEntities 								entities_;
-	std::auto_ptr< BWServerMessageHandler >	pMessageHandler_;
+	std::unique_ptr< BWServerMessageHandler >	pMessageHandler_;
 };
 
 BW_END_NAMESPACE

@@ -99,7 +99,10 @@ BW::string UserLog::activeSegmentSuffix() const
 {
 	if (!this->hasActiveSegments())
 	{
-		return NULL;
+		// BIGWORLD(c++23 migration): was `return NULL` -- constructing a
+		// std::string from nullptr is undefined behaviour and C++23 (P2166R1)
+		// deletes that constructor outright.
+		return BW::string();
 	}
 
 	return userSegments_[0]->getSuffix();

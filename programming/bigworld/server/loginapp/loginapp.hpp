@@ -168,9 +168,9 @@ private:
 	void onChallengeTypeModified( const BW::string & oldValue,
 			const BW::string & newValue );
 
-	std::auto_ptr< StreamEncoder > 	pLogOnParamsEncoder_;
+	std::unique_ptr< StreamEncoder > 	pLogOnParamsEncoder_;
 	Mercury::NetworkInterface		extInterface_;
-	std::auto_ptr< Mercury::StreamFilterFactory > 
+	std::unique_ptr< Mercury::StreamFilterFactory > 
 									pStreamFilterFactory_;
 	Mercury::TCPServer 				tcpServer_;
 

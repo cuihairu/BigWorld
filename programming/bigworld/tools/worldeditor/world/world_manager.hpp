@@ -705,10 +705,10 @@ private:
 	HCURSOR savedCursor_;
 	SimpleMutex savedCursorMutex_;
 	SmartPointer<FencesToolView> fencesToolView_;
-	typedef std::auto_ptr<HeightMap> HeightMapPtr;
+	typedef std::unique_ptr<HeightMap> HeightMapPtr;
 	HeightMapPtr pHeightMap_;
 
-	typedef std::auto_ptr< Terrain::Manager > TerrainManagerPtr;
+	typedef std::unique_ptr< Terrain::Manager > TerrainManagerPtr;
 	TerrainManagerPtr pTerrainManager_;
 
 	class InitFailureCleanup;

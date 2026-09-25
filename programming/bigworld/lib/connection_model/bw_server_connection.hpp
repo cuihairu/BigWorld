@@ -90,7 +90,7 @@ private:
 	void postUpdate() /* override */;
 	bool shouldSendToServerNow() const /* override */;
 
-	std::auto_ptr< SmartServerConnection > 	pServerConnection_;
+	std::unique_ptr< SmartServerConnection > 	pServerConnection_;
 
 	ServerMessageHandler * pServerMessageHandler_;
 };

@@ -104,7 +104,7 @@ public:
 				networkInterface_ ),
 			endpoint_(),
 			pChannel_( NULL ),
-			pChannelFinder_( NULL ),
+			pChannelFinder_( nullptr ),
 			nextSeqNum_( 0 ),
 			version_( 0 )
 	{
@@ -165,7 +165,7 @@ protected:
 		{ nextSeqNum_ = 0; }
 
 
-	std::auto_ptr< TestChannelVersionLocalHandler > pHandler_;
+	std::unique_ptr< TestChannelVersionLocalHandler > pHandler_;
 
 	Mercury::EventDispatcher eventDispatcher_;
 	Mercury::NetworkInterface networkInterface_;
@@ -175,7 +175,7 @@ protected:
 	Endpoint endpoint_;
 
 	Mercury::UDPChannelPtr pChannel_;
-	std::auto_ptr< SingleChannelFinder > pChannelFinder_;
+	std::unique_ptr< SingleChannelFinder > pChannelFinder_;
 
 private:
 	Mercury::SeqNum nextSeqNum_;

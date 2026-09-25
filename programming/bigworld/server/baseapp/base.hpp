@@ -319,7 +319,7 @@ private:
 	void restoreNonDefAttributes( BinaryIStream & stream );
 	void restoreCellData( BinaryIStream & stream );
 
-	std::auto_ptr< Mercury::ReplyMessageHandler >
+	std::unique_ptr< Mercury::ReplyMessageHandler >
 		prepareForCellCreate( const char * errorPrefix );
 	bool addCellCreationData( Mercury::Bundle & bundle,
 		const char * errorPrefix );

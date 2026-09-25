@@ -54,7 +54,7 @@ class CellViaBaseMailBox : public CommonBaseEntityMailBox
 
 		virtual ScriptObject pyGetAttribute( const ScriptString & attrObj );
 		virtual BinaryOStream * getStream( const MethodDescription & methodDesc,
-			std::auto_ptr< Mercury::ReplyMessageHandler > pHandler );
+			std::unique_ptr< Mercury::ReplyMessageHandler > pHandler );
 		virtual EntityMailBoxRef::Component component() const;
 		virtual const MethodDescription * findMethod( const char * attr ) const;
 };
@@ -85,7 +85,7 @@ ScriptObject CellViaBaseMailBox::pyGetAttribute( const ScriptString & attrObj )
 
 BinaryOStream * CellViaBaseMailBox::getStream(
 		const MethodDescription & methodDesc,
-		std::auto_ptr< Mercury::ReplyMessageHandler > pHandler )
+		std::unique_ptr< Mercury::ReplyMessageHandler > pHandler )
 {
 	Mercury::Bundle & bundle = this->bundle();
 
@@ -147,7 +147,7 @@ class BaseViaCellMailBox : public CellEntityMailBox
 
 		virtual ScriptObject pyGetAttribute( const ScriptString & attrObj );
 		virtual BinaryOStream * getStream( const MethodDescription & methodDesc, 
-			std::auto_ptr< Mercury::ReplyMessageHandler > pHandler );
+			std::unique_ptr< Mercury::ReplyMessageHandler > pHandler );
 		virtual EntityMailBoxRef::Component component() const;
 		virtual const MethodDescription * findMethod( const char * attr ) const;
 };
@@ -194,7 +194,7 @@ ScriptObject BaseViaCellMailBox::pyGetAttribute( const ScriptString & attrObj )
 
 BinaryOStream * BaseViaCellMailBox::getStream(
 		const MethodDescription & methodDesc,
-		std::auto_ptr< Mercury::ReplyMessageHandler > pHandler )
+		std::unique_ptr< Mercury::ReplyMessageHandler > pHandler )
 {
 	Mercury::Channel * pChannel = this->pChannel();
 	if (!pChannel)
@@ -265,7 +265,7 @@ public:
 	virtual ~ClientViaBaseMailBox() { }
 
 	virtual BinaryOStream * getStream( const MethodDescription & methodDesc,
-			std::auto_ptr< Mercury::ReplyMessageHandler > pHandler );
+			std::unique_ptr< Mercury::ReplyMessageHandler > pHandler );
 	virtual EntityMailBoxRef::Component component() const;
 	virtual const MethodDescription * findMethod( const char * attr ) const;
 
@@ -314,7 +314,7 @@ PY_SCRIPT_CONVERTERS( ClientViaBaseMailBox )
 
 BinaryOStream * ClientViaBaseMailBox::getStream(
 		const MethodDescription & methodDesc,
-		std::auto_ptr< Mercury::ReplyMessageHandler > pHandler )
+		std::unique_ptr< Mercury::ReplyMessageHandler > pHandler )
 {
 	Mercury::Bundle & bundle = this->bundle();
 
@@ -402,7 +402,7 @@ public:
 	virtual ~ClientViaCellMailBox() { }
 
 	virtual BinaryOStream * getStream( const MethodDescription & methodDesc,
-		std::auto_ptr< Mercury::ReplyMessageHandler > pHandler );
+		std::unique_ptr< Mercury::ReplyMessageHandler > pHandler );
 	virtual EntityMailBoxRef::Component component() const;
 	virtual const MethodDescription * findMethod( const char * attr ) const;
 
@@ -426,7 +426,7 @@ PY_SCRIPT_CONVERTERS( ClientViaCellMailBox )
 
 BinaryOStream * ClientViaCellMailBox::getStream(
 		const MethodDescription & methodDesc,
-		std::auto_ptr< Mercury::ReplyMessageHandler > pHandler )
+		std::unique_ptr< Mercury::ReplyMessageHandler > pHandler )
 {
 	Mercury::Channel * pChannel = this->pChannel();
 	if (!pChannel)
@@ -796,7 +796,7 @@ void CellEntityMailBox::sendStream()
  */
 BinaryOStream * CellEntityMailBox::getStream(
 		const MethodDescription & methodDesc, 
-		std::auto_ptr< Mercury::ReplyMessageHandler > pHandler )
+		std::unique_ptr< Mercury::ReplyMessageHandler > pHandler )
 {
 	Mercury::Channel * pChannel = this->pChannel();
 	if (!pChannel)
@@ -1032,7 +1032,7 @@ PyObject * BaseEntityMailBox::pyGet_client()
  */
 BinaryOStream * BaseEntityMailBox::getStream(
 		const MethodDescription & methodDesc,
-		std::auto_ptr< Mercury::ReplyMessageHandler > pHandler )
+		std::unique_ptr< Mercury::ReplyMessageHandler > pHandler )
 {
 	Mercury::Bundle & bundle = this->bundle();
 

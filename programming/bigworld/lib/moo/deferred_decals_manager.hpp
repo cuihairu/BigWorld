@@ -257,7 +257,7 @@ private:
 
     //-- for dynamic decals.
     float                               m_time;
-    std::auto_ptr<DynamicDecalManager>  m_dynamicDecalsManager;
+    std::unique_ptr<DynamicDecalManager>  m_dynamicDecalsManager;
 
     DebugRender                         m_debugRenderType;
     bool                                m_debugDrawEnabled;

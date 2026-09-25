@@ -68,7 +68,7 @@ private:
 	DatabaseID childID_;
 	bool childHasTable_;
 
-	// auto_ptr's so we can delay instantiation
+	// unique_ptrs so we can delay instantiation
 	Query selectQuery_;
 
 	Query selectChildrenQuery_;

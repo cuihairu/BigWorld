@@ -157,7 +157,7 @@ PyObject * PyEntityMailBox::callMethod(
 	}
 
 	BinaryOStream * pBOS = this->getStream( *pMethodDescription,
-			std::auto_ptr< Mercury::ReplyMessageHandler >( pReplyHandler ) );
+			std::unique_ptr< Mercury::ReplyMessageHandler >( pReplyHandler ) );
 
 	if (pBOS == NULL)
 	{

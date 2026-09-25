@@ -263,15 +263,15 @@ DefaultSpaceConverter::DefaultSpaceConverter( const BW::string& params ) :
 	vloScene_.addType( &water_ );
 
 	settings().addBoundGenerator( 
-		std::tr1::bind( &CompiledSpace::Terrain2Writer::boundBox, &terrain2_ ) );
+		std::bind( &CompiledSpace::Terrain2Writer::boundBox, &terrain2_ ) );
 	settings().addBoundGenerator( 
-		std::tr1::bind( &CompiledSpace::ParticleSystemWriter::boundBox, &particles_ ) );
+		std::bind( &CompiledSpace::ParticleSystemWriter::boundBox, &particles_ ) );
 	settings().addBoundGenerator( 
-		std::tr1::bind( &CompiledSpace::StaticSceneWriter::boundBox, &staticScene_ ) );
+		std::bind( &CompiledSpace::StaticSceneWriter::boundBox, &staticScene_ ) );
 	settings().addBoundGenerator( 
-		std::tr1::bind( &CompiledSpace::StaticSceneWriter::boundBox, &vloScene_ ) );
+		std::bind( &CompiledSpace::StaticSceneWriter::boundBox, &vloScene_ ) );
 	settings().addBoundGenerator( 
-		std::tr1::bind( &CompiledSpace::LightSceneWriter::boundBox, &lightWriter_ ) );
+		std::bind( &CompiledSpace::LightSceneWriter::boundBox, &lightWriter_ ) );
 
 	// Configure handlers
 	converter().addIgnoreHandler( "transform" );

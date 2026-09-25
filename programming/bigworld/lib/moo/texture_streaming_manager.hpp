@@ -579,7 +579,7 @@ private:
 	bool canSacrificeDetail( const StreamingTextureEntry & entry );
 
 	TextureManager * pTextureManager_;
-	std::auto_ptr< StreamingManager > pStreamingManager_;
+	std::unique_ptr< StreamingManager > pStreamingManager_;
 	SmartPointer< StreamingTextureEvaluationTask > pEvaluationTask_;
 
 	typedef PackedObjectPool< StreamingTextureEntry, StreamingTextureHandle > 

@@ -139,22 +139,22 @@ private:
     Floor*              floor_;
     ChunkSpacePtr       space_;
 
-    std::auto_ptr<Renderer> m_renderer;
+    std::unique_ptr<Renderer> m_renderer;
 
-    std::auto_ptr< AssetClient > pAssetClient_;
-    typedef std::auto_ptr< FontManager > FontManagerPtr;
+    std::unique_ptr< AssetClient > pAssetClient_;
+    typedef std::unique_ptr< FontManager > FontManagerPtr;
     FontManagerPtr pFontManager_;
 
-    typedef std::auto_ptr< TextureFeeds > TextureFeedsPtr;
+    typedef std::unique_ptr< TextureFeeds > TextureFeedsPtr;
     TextureFeedsPtr pTextureFeeds_;
 
-    typedef std::auto_ptr< Terrain::Manager > TerrainManagerPtr;
+    typedef std::unique_ptr< Terrain::Manager > TerrainManagerPtr;
     TerrainManagerPtr pTerrainManager_;
 
-    typedef std::auto_ptr< PostProcessing::Manager > PostProcessingManagerPtr;
+    typedef std::unique_ptr< PostProcessing::Manager > PostProcessingManagerPtr;
     PostProcessingManagerPtr pPostProcessingManager_;
 
-    typedef std::auto_ptr< LensEffectManager > LensEffectManagerPtr;
+    typedef std::unique_ptr< LensEffectManager > LensEffectManagerPtr;
     LensEffectManagerPtr pLensEffectManager_;
 };
 

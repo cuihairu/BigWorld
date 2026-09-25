@@ -231,7 +231,7 @@ private:
 	///Stores the node graph for this SuperModel, or NULL if the combined node
 	///graph of the constituent visuals doesn't meet the SuperModelNodeTree
 	///requirements.
-	std::auto_ptr<SuperModelNodeTree> instanceNodeTree_;
+	std::unique_ptr<SuperModelNodeTree> instanceNodeTree_;
 	///Used to store the number of times regenerateInstanceNodeTree invoked.
 	uint32 numInstanceNodeTreeRegens_;
 };

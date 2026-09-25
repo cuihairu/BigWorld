@@ -580,7 +580,7 @@ bool MethodDescription::addToClientStream( DataSource & source,
 	MF_ASSERT( this->component() == MethodDescription::CLIENT );
 	MF_ASSERT( this->isExposed() );
 
-	std::auto_ptr< MemoryOStream > pLengthStream( new MemoryOStream );
+	std::unique_ptr< MemoryOStream > pLengthStream( new MemoryOStream );
 
 	this->addSubMessageIDToStream( *pLengthStream );
 

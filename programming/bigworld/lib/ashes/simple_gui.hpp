@@ -166,7 +166,7 @@ private:
 	mutable MouseCursor * pMouseCursor_;
 
 	//SmartPointer< SimpleGUIComponent >	pRoot_;
-	typedef std::auto_ptr< struct DragInfo >	DragInfoPtr;
+	typedef std::unique_ptr< struct DragInfo >	DragInfoPtr;
 	Components			components_;
 
 	Vector2				resolutionOverride_;

@@ -1,7 +1,9 @@
 #
 # Configuration for EL 7-based platforms
 #
-CXX11_CXXFLAGS := -std=c++11
+# BIGWORLD(c++23 migration): was -std=c++11. GCC 15 in this image supports
+# the full C++23 language; see docs/cpp23-migration.md.
+CXX11_CXXFLAGS := -std=c++23
 
 # Test if the system installed Mongo DB library, 0 is installed. Now as we are
 # building and linking to mongodb cxx driver locally, the testing is not

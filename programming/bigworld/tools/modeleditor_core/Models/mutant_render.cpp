@@ -101,7 +101,7 @@ void Mutant::drawModel( Moo::DrawContext& drawContext )
 
 	// Using auto-pointer to make sure our SkyBoxScopedSetup get's deleted on
 	// exit, if it's ever created (isSkyBox_ == true).
-	std::auto_ptr< SkyBoxScopedSetup > skySetup;
+	std::unique_ptr< SkyBoxScopedSetup > skySetup;
 	if (isSkyBox_)
 	{
 		// Create a SkyBoxScopedSetup to get the viewport right and avoid 

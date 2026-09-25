@@ -25,7 +25,7 @@ BW_BEGIN_NAMESPACE
 		pPyEntity_()
 {
 	MF_ASSERT( BotsConfig::shouldUseScripts() );
-	BW_STATIC_ASSERT( std::tr1::is_polymorphic< PyEntity >::value == false,
+	BW_STATIC_ASSERT( std::is_polymorphic< PyEntity >::value == false,
 		PyEntity_is_virtual_but_uses_PyType_GenericAlloc );
 
 	PyObject * pObject = type.type().genericAlloc( ScriptErrorPrint() );

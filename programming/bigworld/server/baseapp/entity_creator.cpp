@@ -581,7 +581,7 @@ PyObject * EntityCreator::createBaseCommon( const Mercury::Address * pAddr,
 
 		Mercury::Channel & channel = BaseApp::getChannel( baseAppAddr );
 
-		std::auto_ptr< Mercury::Bundle > pBundle( channel.newBundle() );
+		std::unique_ptr< Mercury::Bundle > pBundle( channel.newBundle() );
 
 		pBundle->startRequest( BaseAppIntInterface::createBaseWithCellData,
 			   pHandler );
@@ -1256,7 +1256,7 @@ ScriptObject EntityCreator::createBaseRemotelyFromTemplate(
 
 	Mercury::Channel & channel = BaseApp::getChannel( destAddr );
 
-	std::auto_ptr< Mercury::Bundle > pBundle( channel.newBundle() );
+	std::unique_ptr< Mercury::Bundle > pBundle( channel.newBundle() );
 
 	pBundle->startRequest( BaseAppIntInterface::createBaseFromTemplate,
 		   pHandler );

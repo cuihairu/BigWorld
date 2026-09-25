@@ -72,7 +72,7 @@ public:
 	void setMipLevels(int mipLevels);
 
 private:
-	std::auto_ptr<struct TextureAggregatorPimpl> pimpl_;
+	std::unique_ptr<struct TextureAggregatorPimpl> pimpl_;
 };
 
 } // namespace Moo

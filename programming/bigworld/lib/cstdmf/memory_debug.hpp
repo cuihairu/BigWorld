@@ -273,26 +273,23 @@ private:
 		bool validAddress;
 	};
 	
-	struct HashCallstackHeaderPtr : public std::unary_function< 
-		const CallstackHeader*, std::size_t >
+	struct HashCallstackHeaderPtr
 	{
 		std::size_t operator()( const CallstackHeader* ) const;
 	};
 
-	struct EqualsCallstackHeaderPtr : public std::binary_function< 
-		const CallstackHeader*, const CallstackHeader*, bool >
+	struct EqualsCallstackHeaderPtr
 	{
 		bool operator()( const CallstackHeader*, 
 			const CallstackHeader* ) const;
 	};
 
-	struct HashCStr : public std::unary_function< const char*, std::size_t >
+	struct HashCStr
 	{
 		std::size_t operator()( const char* ) const;
 	};
 
-	struct EqualsCStr : public std::binary_function< const char*, const char*, 
-		bool >
+	struct EqualsCStr
 	{
 		bool operator()( const char*, const char* ) const;
 	};

@@ -2552,7 +2552,7 @@ void BaseApp::backupBaseEntity( const Mercury::Address & srcAddr,
 	if (header.replyID != Mercury::REPLY_ID_NONE)
 	{
 		Mercury::Channel & channel = BaseApp::getChannel( srcAddr );
-		std::auto_ptr< Mercury::Bundle > pBundle( channel.newBundle() );
+		std::unique_ptr< Mercury::Bundle > pBundle( channel.newBundle() );
 		pBundle->startReply( header.replyID );
 		channel.send( pBundle.get() );
 	}

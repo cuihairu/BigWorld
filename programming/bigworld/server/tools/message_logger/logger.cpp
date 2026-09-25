@@ -1460,7 +1460,7 @@ void Logger::handleRegisterRequest(
 			WatcherEndpoint & watcherEndpoint )
 {
 	MemoryIStream is( data, dataLen );
-	std::auto_ptr< Component > pComponent( new Component( watcherEndpoint ) );
+	std::unique_ptr< Component > pComponent( new Component( watcherEndpoint ) );
 	pComponent->read( is );
 
 	if (is.error() || is.remainingLength() > 0)

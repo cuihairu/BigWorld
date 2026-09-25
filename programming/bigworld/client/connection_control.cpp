@@ -314,7 +314,7 @@ ConnectionControl::ConnectionControl() :
     dispatcher_(),
     entityFactory_(),
     spaceDataStorage_(),
-    pConnection_( NULL ),
+    pConnection_( nullptr ),
     connectionHelper_(
         entityFactory_,
         spaceDataStorage_,
@@ -325,7 +325,7 @@ ConnectionControl::ConnectionControl() :
     isExpectingPlayerCreation_( false ),
 #if ENABLE_WATCHERS
     loggerMessageEndpoint_(),
-    pLoggerMessageForwarder_( NULL ),
+    pLoggerMessageForwarder_( nullptr ),
     pCommsWatcherProvider_( NULL ),
     pEntitiesWatcherProvider_( NULL ),
     pNetworkInterfaceWatcherProvider_( NULL ),
@@ -1440,7 +1440,7 @@ void ConnectionControl::destroyMainConnection()
     // part of various time-keeping methods e.g. App::getGameTimeFrameStart().
 
     BWConnection * pConnection = pConnection_;
-    pConnection_ = NULL;
+    pConnection_ = nullptr;
 
     offlineTime_ = pConnection->clientTime();
 

@@ -455,8 +455,8 @@ namespace Moo
 		bool						isHWInstancingAvailable() const;
 	private:
 
-		std::auto_ptr<FullscreenQuad>			fsQuad_;
-		std::auto_ptr<CustomAA>					customAA_;
+		std::unique_ptr<FullscreenQuad>			fsQuad_;
+		std::unique_ptr<CustomAA>					customAA_;
 		ComObjectWrap< DX::Texture >	getTextureFromReuseList( 
 											uint32 width, uint32 height, int nLevels,
 											uint32 usage, D3DFORMAT fmt, D3DPOOL pool);

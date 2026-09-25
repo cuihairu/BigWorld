@@ -452,7 +452,7 @@ App::App( const BW::string &	configFilename,
 	currentState_( STATE_UNINITIALISED ),
 	inputDevices_(),
 	quiting_( false ),
-	pAssetClient_( NULL )
+	pAssetClient_( nullptr )
 {
 	BW_GUARD;
 

@@ -37,7 +37,7 @@ bool ChecksumScheme::verifyFromStream( BinaryIStream & in,
 	}
 
 	BinaryIStream * pChecksumStream = &in;
-	std::auto_ptr< MemoryOStream > pChecksumBuffer;
+	std::unique_ptr< MemoryOStream > pChecksumBuffer;
 
 	if (pChecksum)
 	{

@@ -68,7 +68,9 @@ public:
 	/**
 	 *	Check if security information is the same between two login requests.
 	 */
-	bool operator==( const LogOnParams & other )
+	// BIGWORLD(c++23 migration): const-qualified -- C++20 rewritten
+	// candidates made the non-const member ambiguous.
+	bool operator==( const LogOnParams & other ) const
 	{
 		return username_ == other.username_ &&
 			password_ == other.password_ &&

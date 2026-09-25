@@ -191,7 +191,7 @@ void AssetServer::serverThreadFunc( void * arg )
 			AssetServer_Locals::PipeInfo pInfo;
 			pInfo.hPipe_ = hPipe;
 			pInfo.assetServer_ = &assetServer;
-			std::auto_ptr< SimpleThread > pipeThread( new SimpleThread( pipeThreadFunc, &pInfo ) );
+			std::unique_ptr< SimpleThread > pipeThread( new SimpleThread( pipeThreadFunc, &pInfo ) );
 			if (pipeThread->handle() == NULL)
 			{
 				// if the thread failed, disconnect the pipe

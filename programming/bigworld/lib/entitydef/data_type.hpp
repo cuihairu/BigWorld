@@ -41,7 +41,7 @@ class DataType : public ReferenceCount
 public:
 	class StreamElement;
 protected:
-	typedef std::auto_ptr<StreamElement> StreamElementPtr;
+	typedef std::unique_ptr<StreamElement> StreamElementPtr;
 
 public:
 	/**
@@ -322,10 +322,17 @@ public:
 	 *	This is an iterator for outputting StreamElements needed to stream
 	 *	this particular DataType instance.
 	 */
-	class const_iterator :
-		public std::iterator< std::input_iterator_tag, const StreamElement >
+	class const_iterator
 	{
 	public:
+		// BIGWORLD(c++23 migration): std::iterator was removed in C++20,
+		// declare the associated types directly.
+		typedef std::input_iterator_tag iterator_category;
+		typedef const StreamElement value_type;
+		typedef std::ptrdiff_t difference_type;
+		typedef const StreamElement * pointer;
+		typedef const StreamElement & reference;
+
 		// Copy-constructible, copy-assignable and destructible
 		BWENTITY_API const_iterator( const const_iterator & other );
 		BWENTITY_API const_iterator & operator=( const_iterator other );
@@ -367,7 +374,7 @@ public:
 
 		const DataType & root_;
 		bool useChild_;
-		std::auto_ptr<const_iterator> pChildIt_;
+		std::unique_ptr<const_iterator> pChildIt_;
 		size_t index_;
 		size_t size_;
 		bool isNone_;

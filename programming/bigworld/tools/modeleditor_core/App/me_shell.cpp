@@ -71,7 +71,7 @@ MeShell::MeShell()
     : hInstance_(NULL)
     , hWndApp_(NULL)
     , hWndGraphics_(NULL)
-    , renderer_(NULL)
+    , renderer_(nullptr)
     , romp_(NULL)
     , inited_(false)
 {

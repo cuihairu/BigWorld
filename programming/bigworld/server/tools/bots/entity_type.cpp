@@ -20,7 +20,7 @@
 #include "resmgr/bwresource.hpp"
 
 #if defined( __GNUC__ )
-#include <tr1/type_traits>
+#include <type_traits>
 #else /* defined( __GNUC__ ) */
 #include <type_traits>
 #endif /* defined( __GNUC__ ) */

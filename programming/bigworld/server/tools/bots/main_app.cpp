@@ -119,7 +119,7 @@ GameTime MainAppTimeQueue::time() const
 MainApp::MainApp( Mercury::EventDispatcher & mainDispatcher, 
 			Mercury::NetworkInterface & networkInterface ) :
 		ServerApp( mainDispatcher, networkInterface ),
-		pLogOnParamsEncoder_( NULL ), // initialised below in the constructor
+		pLogOnParamsEncoder_( nullptr ), // initialised below in the constructor
 		localTime_( 0.0 ),
 		gameTimer_(),
 		chunkTimer_(),
@@ -1083,7 +1083,7 @@ void MainApp::initWatchers()
  */
 bool MainApp::initLogOnParamsEncoder( const BW::string & path )
 {
-	std::auto_ptr< RSAStreamEncoder > pEncoder( 
+	std::unique_ptr< RSAStreamEncoder > pEncoder( 
 		new RSAStreamEncoder( /* keyIsPrivate */ false ) );
 
 	DataSectionPtr pPublicKey = BWResource::openSection( path );

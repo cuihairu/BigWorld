@@ -380,7 +380,7 @@ private:
 
 	PyServicesMap			* pPyServicesMap_;
 
-	typedef std::auto_ptr< Terrain::Manager > TerrainManagerPtr;
+	typedef std::unique_ptr< Terrain::Manager > TerrainManagerPtr;
 	TerrainManagerPtr pTerrainManager_;
 
 	friend class CellAppResourceReloader;

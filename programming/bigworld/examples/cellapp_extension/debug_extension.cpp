@@ -119,7 +119,7 @@ PY_AUTO_MODULE_FUNCTION( RETDATA,
 
 
 /*
- *	This method returns a Python blob (string) containing the data that would
+ *	This method returns a Python blob (bytes) containing the data that would
  *	be added to the network when a real entity is being offloaded.
  */
 PyObject * calcOffloadData( ScriptObject pEnt )
@@ -143,7 +143,9 @@ PyObject * calcOffloadData( ScriptObject pEnt )
 	MemoryOStream stream;
 	pEntity->writeRealDataToStream( stream, true );
 
-	return PyString_FromStringAndSize( static_cast< char * >( stream.data() ),
+	// BIGWORLD(3.13 migration): was PyString_FromStringAndSize -- the Py2
+	// str API; binary stream data maps to Py3 bytes.
+	return PyBytes_FromStringAndSize( static_cast< char * >( stream.data() ),
 			stream.size() );
 }
 PY_AUTO_MODULE_FUNCTION( RETOWN,
@@ -151,7 +153,7 @@ PY_AUTO_MODULE_FUNCTION( RETOWN,
 
 
 /*
- *	This method returns a Python blob (string) containing the data that would
+ *	This method returns a Python blob (bytes) containing the data that would
  *	be added to the network when a real entity is being backed up.
  */
 PyObject * calcCellBackupData( PyObjectPtr pEnt )
@@ -175,7 +177,9 @@ PyObject * calcCellBackupData( PyObjectPtr pEnt )
 	MemoryOStream stream;
 	pEntity->pReal()->writeBackupProperties( stream );
 
-	return PyString_FromStringAndSize( static_cast< char * >( stream.data() ),
+	// BIGWORLD(3.13 migration): was PyString_FromStringAndSize -- the Py2
+	// str API; binary stream data maps to Py3 bytes.
+	return PyBytes_FromStringAndSize( static_cast< char * >( stream.data() ),
 			stream.size() );
 }
 PY_AUTO_MODULE_FUNCTION( RETOWN,

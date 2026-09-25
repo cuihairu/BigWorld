@@ -37,7 +37,7 @@ int main( int argc, char * argv[] )
 
     BW::Allocator::setCrashOnLeak( true );
     
-    const std::auto_ptr<CStdMf> cstdmfSingleton( new CStdMf );
+    const std::unique_ptr<CStdMf> cstdmfSingleton( new CStdMf );
 
     // saved away for the test harness
     BaseResMgrUnitTestHarness::s_cmdArgC = argc;
@@ -81,7 +81,7 @@ int main( int argc, char * argv[] )
         return 1;
     }
 
-    std::auto_ptr<Renderer> pRenderer( new Renderer );
+    std::unique_ptr<Renderer> pRenderer( new Renderer );
     pRenderer->init( true, true );
 
     if (!Moo::init( true, true ))

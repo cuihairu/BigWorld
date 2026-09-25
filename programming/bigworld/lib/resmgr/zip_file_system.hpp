@@ -165,7 +165,7 @@ private:
 	{
 	public:
 		//TODO: move out inlines and comment
-		LocalFile() : filename_(""), pData_(NULL), localOffset_(0),
+		LocalFile() : filename_(""), pData_(nullptr), localOffset_(0),
 					isFolder_(false), bCompressed_(false)
 		{
 			this->clear();
@@ -210,7 +210,7 @@ private:
 		void clear()
 		{
 			memset(&header_, 0, sizeof(LocalHeader));
-			pData_ = NULL;
+			pData_ = nullptr;
 			filename_ = "";
 			loadedHeader_ = false;
 		}

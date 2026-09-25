@@ -39,7 +39,7 @@ namespace Moo
 		PPAASupport& ppaa()	{ return *m_ppaa.get(); }
 
 	private:
-		std::auto_ptr<PPAASupport>	m_ppaa;
+		std::unique_ptr<PPAASupport>	m_ppaa;
 		uint						m_mode;
 		uint						m_modesCount;
 	};

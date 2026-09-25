@@ -72,7 +72,7 @@ bool g_inited = false;
 
 // Ideally, this pointer should not be used. It is a fallback if the singleton
 // instance of BWResource was not created at the application level.
-std::auto_ptr< BWResource > s_pBWResourceInstance;
+std::unique_ptr< BWResource > s_pBWResourceInstance;
 }
 
 typedef BW::vector<BW::string> STRINGVECTOR;

@@ -15,9 +15,9 @@ namespace Moo
 	static AutoConfigString s_textureDetailLevels( "system/textureDetailLevels" );
 
 	TextureDetailLevelManager::TextureDetailLevelManager()
-		: pTextureDetails_( NULL )
+		: pTextureDetails_( nullptr )
 #if ENABLE_ASSET_PIPE
-		, pAssetClient_(NULL)
+		, pAssetClient_(nullptr)
 #endif
 	{
 

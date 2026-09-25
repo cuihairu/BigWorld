@@ -35,7 +35,7 @@ EffectManager::EffectManager()
 	, effectsLock_()
 	, listeners_()
 #if ENABLE_ASSET_PIPE
-	, pAssetClient_( NULL )
+	, pAssetClient_( nullptr )
 #endif
 {
 	BW_GUARD;

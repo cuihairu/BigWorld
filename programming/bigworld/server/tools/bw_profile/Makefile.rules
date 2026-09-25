@@ -11,7 +11,10 @@ cxxSource =						\
 dependsOn = cstdmf
 
 usePython := 1
-useSystemPython := 1
+# BIGWORLD(c++23 migration): was useSystemPython := 1 -- see
+# message_logger/Makefile.message_reader for rationale; build against the
+# vendored 3.13 headers instead of an arbitrary system python.
+useSystemPython := 0
 
 include $(BW_COMPONENT_FOOTER)
 

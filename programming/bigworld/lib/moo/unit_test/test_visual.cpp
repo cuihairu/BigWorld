@@ -11,7 +11,7 @@ TEST( BSPTreeHelper_testCreateVertexList )
 	{
 		// No triangles
 		RealWTriangleSet empty;
-		std::auto_ptr<BSPTree> emptyBsp( BSPTreeTool::buildBSP( empty ) );
+		std::unique_ptr<BSPTree> emptyBsp( BSPTreeTool::buildBSP( empty ) );
 
 		// Test Empty
 		BW::vector<Moo::VertexXYZL> results;
@@ -26,7 +26,7 @@ TEST( BSPTreeHelper_testCreateVertexList )
 			Vector3( 1.0f, 2.0f, 3.0f ),
 			Vector3( 3.0f, 2.0f, 1.0f ),
 			TRIANGLE_NOCOLLIDE ) );
-		std::auto_ptr<BSPTree> singleNoCollideBsp(
+		std::unique_ptr<BSPTree> singleNoCollideBsp(
 			BSPTreeTool::buildBSP( singleNoCollide ) );
 
 		// Test Single (no collision)
@@ -42,7 +42,7 @@ TEST( BSPTreeHelper_testCreateVertexList )
 			Vector3( 1.0f, 2.0f, 3.0f ),
 			Vector3( 3.0f, 2.0f, 1.0f ),
 			0 ) );
-		std::auto_ptr<BSPTree> singleCollideBsp(
+		std::unique_ptr<BSPTree> singleCollideBsp(
 			BSPTreeTool::buildBSP( singleCollide ) );
 
 		// Test Single (with collision)

@@ -30,7 +30,7 @@ void WriteToDBReplyStruct::onWriteToDBComplete( bool succeeded )
 		pHandler_->onWriteToDBComplete( succeeded_ );
 
 		// The handler callback method should only be called once.
-		pHandler_ = NULL;
+		pHandler_ = nullptr;
 	}
 }
 
@@ -50,7 +50,7 @@ void WriteToDBReplyStruct::onBackupComplete()
 		pHandler_->onWriteToDBComplete( succeeded_ );
 
 		// The handler callback method should be called once.
-		pHandler_ = NULL;
+		pHandler_ = nullptr;
 	}
 }
 

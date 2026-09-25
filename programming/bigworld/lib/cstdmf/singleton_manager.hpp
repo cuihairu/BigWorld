@@ -79,7 +79,7 @@ public:
 private:
 	typedef StringRefUnorderedMap< InstanceFunc > CollectionType;
 	CollectionType s_Singletons;
-	static std::auto_ptr< SingletonManager > s_pInstance;
+	static std::unique_ptr< SingletonManager > s_pInstance;
 };
 
 BW_END_NAMESPACE

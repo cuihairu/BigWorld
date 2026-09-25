@@ -491,7 +491,7 @@ private:
     BW::string          secondaryDBPrefix_;
     uint                secondaryDBIndex_;
 
-    std::auto_ptr< Consolidator >       pConsolidator_;
+    std::unique_ptr< Consolidator >       pConsolidator_;
 
     bool                                shouldCacheLogOnRecords_;
     LogOnRecordsCache                   logOnRecordsCache_;

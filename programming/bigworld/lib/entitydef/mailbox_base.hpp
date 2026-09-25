@@ -74,8 +74,8 @@ public:
 	 *						reply handler to use.
 	 */
 	virtual BinaryOStream * getStream( const MethodDescription & methodDesc, 
-			std::auto_ptr< Mercury::ReplyMessageHandler > pHandler =
-				std::auto_ptr< Mercury::ReplyMessageHandler >() ) = 0;
+			std::unique_ptr< Mercury::ReplyMessageHandler > pHandler =
+				std::unique_ptr< Mercury::ReplyMessageHandler >() ) = 0;
 	virtual void sendStream() = 0;
 	static PyObject * constructFromRef( const EntityMailBoxRef & ref );
 	static bool reduceToRef( PyObject * pObject, EntityMailBoxRef * pRefOutput );

@@ -212,7 +212,7 @@ bool PyBillingResponse::loadEntity( const BW::string & entityType,
 
 	pHandler_->onGetEntityKeyForAccountSuccess( entityKey, dataForClient,
 		dataForBaseEntity );
-	pHandler_ = NULL;
+	pHandler_ = nullptr;
 
 	return true;
 }
@@ -235,7 +235,7 @@ bool PyBillingResponse::loadEntityByName( const BW::string & entityType,
 	pHandler_->onGetEntityKeyForAccountLoadFromUsername( entityTypeID,
 			entityName, shouldCreateUnknown, shouldRememberUnknown,
 			dataForClient, dataForBaseEntity );
-	pHandler_ = NULL;
+	pHandler_ = nullptr;
 
 	return true;
 }
@@ -254,7 +254,7 @@ bool PyBillingResponse::createNewEntity( const BW::string & entityType,
 
 	pHandler_->onGetEntityKeyForAccountCreateNew( entityTypeID,
 			shouldRemember, dataForClient, dataForBaseEntity );
-	pHandler_ = NULL;
+	pHandler_ = nullptr;
 
 	return true;
 }
@@ -331,7 +331,7 @@ bool PyBillingResponse::sendFailure( LogOnStatus status,
 	}
 
 	pHandler_->onGetEntityKeyForAccountFailure( status, errorMsg );
-	pHandler_ = NULL;
+	pHandler_ = nullptr;
 
 	return true;
 }

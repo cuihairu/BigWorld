@@ -1255,7 +1255,7 @@ void LookUpBasesByIndexHandler::handleMessage( const Mercury::Address & source,
 		"BigWorld.lookUpBasesByIndex: " );
 
 	// Script::call decrefs pHandler_ and the argument tuple for us.
-	pHandler_ = NULL;
+	pHandler_ = nullptr;
 
 	Py_DECREF( pList );
 
@@ -1285,7 +1285,7 @@ void LookUpBasesByIndexHandler::notifyFailure()
 		"BigWorld.lookUpBasesByIndex: " );
 
 	// Script::call decrefs pHandler_ and the argument tuple for us.
-	pHandler_ = NULL;
+	pHandler_ = nullptr;
 }
 
 

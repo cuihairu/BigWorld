@@ -75,7 +75,7 @@ Entity::Census Entity::census_;
 static uint32 s_entitiesCurrent = 0;
 static uint32 s_entitiesEver = 0;
 typedef BW::map<BW::string, std::pair<uint32, uint32> > ETypes;
-static const std::auto_ptr<ETypes> s_entitiesOfType( new ETypes );
+static const std::unique_ptr<ETypes> s_entitiesOfType( new ETypes );
 #endif
 
 ///	Constructor
@@ -102,7 +102,7 @@ Entity::Entity( EntityType & type, BWConnection * pBWConnection ) :
 {
 	BW_GUARD;
 
-	BW_STATIC_ASSERT( std::tr1::is_polymorphic< PyEntity >::value == false,
+	BW_STATIC_ASSERT( std::is_polymorphic< PyEntity >::value == false,
 		PyEntity_is_virtual_but_uses_PyType_GenericAlloc );
 
 	PyObject * pObject = PyType_GenericAlloc( type.pClass(), 0 );

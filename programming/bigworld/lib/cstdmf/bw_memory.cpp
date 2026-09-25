@@ -59,7 +59,7 @@ void * bw_new( size_t size )
 
 //-----------------------------------------------------------------------------
 
-void * bw_new( size_t size, const std::nothrow_t & ) throw()
+void * bw_new( size_t size, const std::nothrow_t & ) noexcept
 {
 	if (size == 0)
 	{
@@ -98,7 +98,7 @@ void * bw_new_array( size_t size )
 
 //-----------------------------------------------------------------------------
 
-void * bw_new_array( size_t size, const std::nothrow_t & ) throw()
+void * bw_new_array( size_t size, const std::nothrow_t & ) noexcept
 {
 	if (size == 0)
 	{
@@ -110,28 +110,28 @@ void * bw_new_array( size_t size, const std::nothrow_t & ) throw()
 
 //-----------------------------------------------------------------------------
 
-void bw_delete( void * p ) throw()
+void bw_delete( void * p ) noexcept
 {
 	BW::Allocator::deallocate( p );
 }
 
 //-----------------------------------------------------------------------------
 
-void bw_delete( void * p, const std::nothrow_t & ) throw()
+void bw_delete( void * p, const std::nothrow_t & ) noexcept
 {
 	BW::Allocator::deallocate( p );
 }
 
 //-----------------------------------------------------------------------------
 
-void bw_delete_array( void * p ) throw()
+void bw_delete_array( void * p ) noexcept
 {
 	BW::Allocator::deallocate( p );
 }
 
 //-----------------------------------------------------------------------------
 
-void bw_delete_array( void * p, const std::nothrow_t & ) throw()
+void bw_delete_array( void * p, const std::nothrow_t & ) noexcept
 {
 	BW::Allocator::deallocate( p );
 }

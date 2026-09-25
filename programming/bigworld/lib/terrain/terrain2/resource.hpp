@@ -101,7 +101,7 @@ namespace Terrain
 			virtual ~ResourceTask()
 			{
 				// remove reference to task from host resource
-				resource_->task_ = NULL;
+				resource_->task_ = nullptr;
 			};
 
 			virtual void doBackgroundTask( TaskManager & mgr )
@@ -175,7 +175,7 @@ namespace Terrain
 			required_( RR_No ),
 			object_(NULL),
 			streamType_( defaultStreamType() ),
-			task_( NULL )
+			task_( nullptr )
 	{
 	}
 

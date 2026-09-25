@@ -104,6 +104,19 @@ bool watcherStringToValue( const char * valueStr, const char *& value )
 	return false;
 }
 
+// BIGWORLD(c++23 migration): libstdc++ in C++23 mode drops
+// operator>>(istream, void*&), so pointer-typed watcher values no longer
+// compile through the generic stringstream path -- whose behaviour was
+// undefined anyway (it would read a string into an uninitialized char*
+// buffer). Pointer values now simply fail to convert from strings,
+// matching the const char* overload above.
+template <class VALUE_TYPE>
+inline
+bool watcherStringToValue( const char * valueStr, VALUE_TYPE * & value )
+{
+	return false;
+}
+
 inline
 bool watcherStringToValue( const char * valueStr, BW::string & value )
 {

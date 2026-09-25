@@ -49,7 +49,7 @@ void * operator new[]( size_t sz )
 
 
 NOINLINE
-void * operator new( size_t sz, const std::nothrow_t & nt ) throw()
+void * operator new( size_t sz, const std::nothrow_t & nt ) noexcept
 {
 	init();
 	return (*s_allocFuncs.newNoThrow_)( sz, nt );
@@ -57,35 +57,35 @@ void * operator new( size_t sz, const std::nothrow_t & nt ) throw()
 
 
 NOINLINE
-void * operator new[]( size_t sz, const std::nothrow_t & nt ) throw()
+void * operator new[]( size_t sz, const std::nothrow_t & nt ) noexcept
 {
 	init();
 	return (*s_allocFuncs.newArrayNoThrow_)( sz, nt );
 }
 
 NOINLINE
-void operator delete( void * p ) throw()
+void operator delete( void * p ) noexcept
 {
 	init();
 	(*s_allocFuncs.delete_)( p );
 }
 
 NOINLINE
-void operator delete( void * p, const std::nothrow_t & nt ) throw()
+void operator delete( void * p, const std::nothrow_t & nt ) noexcept
 {
 	init();
 	(*s_allocFuncs.deleteNoThrow_)( p, nt );
 }
 
 NOINLINE
-void operator delete[]( void * p ) throw()
+void operator delete[]( void * p ) noexcept
 {
 	init();
 	(*s_allocFuncs.deleteArray_)( p );
 }
 
 NOINLINE
-void operator delete[]( void * p, const std::nothrow_t & nt ) throw()
+void operator delete[]( void * p, const std::nothrow_t & nt ) noexcept
 {
 	init();
 	(*s_allocFuncs.deleteArrayNoThrow_)( p, nt );

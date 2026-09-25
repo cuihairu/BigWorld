@@ -18,7 +18,7 @@ BWMessageForwarder::BWMessageForwarder(
 		Mercury::EventDispatcher & dispatcher,
 		Mercury::NetworkInterface & networkInterface ) :
 	watcherNub_(),
-	pForwarder_( NULL )
+	pForwarder_( nullptr )
 {
 	BW::string path( configPath );
 

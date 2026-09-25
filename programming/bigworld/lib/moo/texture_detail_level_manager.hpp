@@ -41,7 +41,7 @@ public:
 private:
 	void loadDetailLevels( const BW::StringRef & textureDetailsName );
 
-	std::auto_ptr< HierarchicalConfig >	pTextureDetails_;
+	std::unique_ptr< HierarchicalConfig >	pTextureDetails_;
 #if ENABLE_ASSET_PIPE
 	AssetClient * pAssetClient_;
 #endif

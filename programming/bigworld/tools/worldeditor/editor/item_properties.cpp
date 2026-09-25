@@ -347,7 +347,7 @@ bool ChunkItemMatrix::commitState( bool revertToRecord, bool addUndoBarrier )
 		? dynamic_cast< EditorChunkModelVLORef * >( pItem_.get() )
 		: NULL;
 
-	std::auto_ptr< EditorChunkModel::BigModelLoader > bigModelLoader;
+	std::unique_ptr< EditorChunkModel::BigModelLoader > bigModelLoader;
 	if( chunkVLO )
 	{
 		//Suppress model too big warning

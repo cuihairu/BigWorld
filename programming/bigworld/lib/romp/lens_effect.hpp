@@ -142,7 +142,9 @@ public:
 	virtual void tick( float dTime, float visibility );	
 	virtual void draw();
 
-	int operator==( const LensEffect & other );
+	// BIGWORLD(c++23 migration): const-qualified -- C++20 rewritten
+	// candidates make a non-const member ambiguous.
+	int operator==( const LensEffect & other ) const;
 
 	const OcclusionLevels & occlusionLevels() const;
 

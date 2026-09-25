@@ -44,11 +44,11 @@ private:
 		const BW::string & loggerID, bool isVerbose );
 
 
-	std::auto_ptr< Mercury::EventDispatcher > pEventDispatcher_;
+	std::unique_ptr< Mercury::EventDispatcher > pEventDispatcher_;
 
-	std::auto_ptr< WatcherNub > pWatcherNub_;
+	std::unique_ptr< WatcherNub > pWatcherNub_;
 
-	std::auto_ptr< LoggerMessageForwarder > pLoggerMessageForwarder_;
+	std::unique_ptr< LoggerMessageForwarder > pLoggerMessageForwarder_;
 };
 
 BW_END_NAMESPACE

@@ -40,7 +40,7 @@ void StaticLightContainer::addLights( StaticLightContainer* from )
  * Functor to add a light if it intersects the boundingbox
  */
 template<class LightType>
-class LightInserter : public std::unary_function<LightType, void>
+class LightInserter
 {
 private:
 	const BoundingBox& bb_;

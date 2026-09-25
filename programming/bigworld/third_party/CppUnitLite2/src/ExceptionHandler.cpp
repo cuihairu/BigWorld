@@ -48,9 +48,13 @@ void Handle (TestResult& result, const TestException& exception,
 void Handle (TestResult& result, const char* condition, 
              const char* testname, const char* filename, int linenumber)
 {
-    if (!g_bHandleExceptions) 
+    // BIGWORLD(c++23 migration): braces added -- gcc 15 -Werror=misleading-indentation
+    // flags the tab-indented statement below as visually guarded by this if.
+    if (!g_bHandleExceptions)
+    {
         throw;
-    
+    }
+
 	const size_t size = 1024;
 	char msg[size] = {"Unhandled exception "};
 	strncat( msg, condition, size - strlen( msg ) - 1 );

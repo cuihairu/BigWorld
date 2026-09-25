@@ -838,8 +838,8 @@ void LoggerMessageForwarder::parseAndSend(
 	// Two output streams: One with a raw JSON metadata string, one with a
 	// stream of metadata arguments. Pointers because there's no need for them
 	// unless there's metadata in the message.
-	std::auto_ptr<MemoryOStream> pOsWithMetaDataV2_9;
-	std::auto_ptr<MemoryOStream> pOsWithMetaDataV14_4;
+	std::unique_ptr<MemoryOStream> pOsWithMetaDataV2_9;
+	std::unique_ptr<MemoryOStream> pOsWithMetaDataV14_4;
 
 	// pMetaData may be nonexistent (NULL) from sources that have no use for
 	// it. Only write it if we have a non-NULL pointer.

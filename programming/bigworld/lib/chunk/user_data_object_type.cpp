@@ -9,7 +9,7 @@
 #include "cstdmf/guard.hpp"
 
 #if defined( __GNUC__ )
-#include <tr1/type_traits>
+#include <type_traits>
 #else /* defined( __GNUC__ ) */
 #include <type_traits>
 #endif /* defined( __GNUC__ ) */
@@ -75,7 +75,7 @@ UserDataObject * UserDataObjectType::newUserDataObject(
 		return NULL;
 	}
 
-	BW_STATIC_ASSERT( std::tr1::is_polymorphic<UserDataObject>::value == false,
+	BW_STATIC_ASSERT( std::is_polymorphic<UserDataObject>::value == false,
 		UserDataObject_is_virtual_but_uses_PyType_GenericAlloc );
 
 	PyObject * pObject = PyType_GenericAlloc( pPyType_, 0 );

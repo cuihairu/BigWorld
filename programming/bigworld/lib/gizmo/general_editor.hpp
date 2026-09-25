@@ -8,6 +8,7 @@
 #include "pyscript/script.hpp"
 
 #include "value_type.hpp"
+#include <random>
 
 BW_BEGIN_NAMESPACE
 
@@ -148,7 +149,7 @@ public:
 			hashIndex_[ i ] = i;
 		}
 
-		std::random_shuffle( hashIndex_, hashIndex_ + NAME_BUCKET );
+		std::shuffle( hashIndex_, hashIndex_ + NAME_BUCKET, std::mt19937( std::random_device()() ) );
 	}
 
 	static void fini()

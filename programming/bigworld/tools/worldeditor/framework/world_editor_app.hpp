@@ -59,10 +59,10 @@ private:
 	AppFunctorPtr			pAppFunctor_;
 	LPCTSTR					oldAppName_;
 
-	typedef std::auto_ptr< WorldManager > WorldManagerPtr;
+	typedef std::unique_ptr< WorldManager > WorldManagerPtr;
 	WorldManagerPtr		    pWorldManager_;
 
-	std::auto_ptr< GUI::MenuHelper > menuHelper_;
+	std::unique_ptr< GUI::MenuHelper > menuHelper_;
 };
 
 

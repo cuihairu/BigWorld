@@ -77,7 +77,7 @@ MySqlDatabase::MySqlDatabase(
 		dispatcher_( dispatcher ),
 		pEntityDefs_( NULL ),
 		entityTypeMappings_(),
-		pConnection_( NULL )
+		pConnection_( nullptr )
 {
 	dispatcher.addFrequentTask( this );
 	bgTaskManager_.initWatchers( "MySqlDatabase", TASK_WARN_THRESHOLD );
@@ -206,7 +206,7 @@ bool MySqlDatabase::shutDown()
 	try
 	{
 		delete pConnection_;
-		pConnection_ = NULL;
+		pConnection_ = nullptr;
 		reconnectTimerHandle_.cancel();
 
 		return true;

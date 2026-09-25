@@ -10,6 +10,7 @@
 #include "compatibility.hpp"
 #include "pyobject_base.hpp"
 #include "pyobject_pointer.hpp"
+#include "pytypeobject_head.hpp"
 #include "py_factory_method_link.hpp"
 
 #include "script/script_object.hpp"
@@ -35,6 +36,10 @@ inline bool streq( const char * strA, const char * strB )
 	// Do the initial character comparision first for speed.
 	return *strA == *strB && strcmp( strA, strB ) == 0;
 }
+
+// BIGWORLD(c++23 migration): BW_PYTYPEOBJECT_HEAD_INIT now lives in
+// pytypeobject_head.hpp (included above) so raw-CPython code outside
+// pyscript can share it.
 
 /// Deprecated, use Py_RETURN_NONE instead
 /// This macro returns the Python Py_None object.
@@ -685,7 +690,7 @@ typedef int (*traverseproc)(PyObject *, visitproc, void *);
 	 * Was positional initialisation of the 2.7 PyTypeObject layout;		\
 	 * rebuilt with designated initialisers (tp_compare is gone and			\
 	 * tp_print was replaced by tp_vectorcall_offset). */					\
-	PyVarObject_HEAD_INIT(&PyType_Type, 0)								\
+	BW_PYTYPEOBJECT_HEAD_INIT( &PyType_Type )								\
 	.tp_name = const_cast< char * >( NAME ),							\
 	.tp_basicsize = PyTypeObjectUtil::basicSize< THIS_CLASS >(),		\
 	.tp_itemsize = 0,													\

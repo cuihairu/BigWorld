@@ -69,14 +69,14 @@ private:
 	// Member data
 	Mercury::EventDispatcher eventDispatcher_;
 
-	std::auto_ptr< SignalHandler > pSignalHandler_;
+	std::unique_ptr< SignalHandler > pSignalHandler_;
 
-	std::auto_ptr< WatcherNub >
+	std::unique_ptr< WatcherNub >
 							pWatcherNub_;
-	std::auto_ptr< LoggerMessageForwarder > 
+	std::unique_ptr< LoggerMessageForwarder > 
 							pLoggerMessageForwarder_;
 
-	std::auto_ptr< MySqlLockedConnection >
+	std::unique_ptr< MySqlLockedConnection >
 							pLockedConn_;
 	EntityDefs 				entityDefs_;
 };

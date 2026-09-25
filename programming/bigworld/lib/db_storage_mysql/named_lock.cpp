@@ -84,7 +84,7 @@ bool releaseNamedLock( MySql & connection, const BW::string & lockName )
  *	@param lockName		The name of the lock to hold.
  */ 		
 NamedLock::NamedLock( const BW::string & lockName ) :
-	pConnection_( NULL ),
+	pConnection_( nullptr ),
 	lockName_( lockName )
 {
 }
@@ -133,7 +133,7 @@ bool NamedLock::unlock()
 				"Forgetting connection.\n" );
 		}
 
-		pConnection_ = NULL;
+		pConnection_ = nullptr;
 		return true;
 	}
 

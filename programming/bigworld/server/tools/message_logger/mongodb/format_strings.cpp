@@ -55,7 +55,7 @@ bool FormatStringsMongoDB::init()
 {
 	try
 	{
-		std::auto_ptr< mongo::DBClientCursor > cursor = conn_.query(
+		std::unique_ptr< mongo::DBClientCursor > cursor = conn_.query(
 				namespace_.c_str(),	mongo::BSONObj() );
 
 		if (!cursor.get())

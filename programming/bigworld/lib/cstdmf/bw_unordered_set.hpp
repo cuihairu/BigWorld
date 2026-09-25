@@ -3,20 +3,16 @@
 
 #include "stl_fixed_sized_allocator.hpp"
 
-#if _MSC_VER
 #include <unordered_set>
-#else
-#include <tr1/unordered_set>
-#endif
 
 #include "bw_hash.hpp"
 
 namespace BW
 {
 template < class Key, class Hash = BW::hash< Key >, class KeyEqual = std::equal_to< Key >, class Allocator = BW::StlAllocator< Key > >
-class unordered_set : public std::tr1::unordered_set< Key, Hash, KeyEqual, Allocator >
+class unordered_set : public std::unordered_set< Key, Hash, KeyEqual, Allocator >
 {
-	typedef std::tr1::unordered_set< Key, Hash, KeyEqual, Allocator > type_base;
+	typedef std::unordered_set< Key, Hash, KeyEqual, Allocator > type_base;
 public:
 	typedef typename type_base::size_type size_type;
 
@@ -62,9 +58,9 @@ public:
 };
 
 template < class Key, class Hash = BW::hash< Key >, class KeyEqual = std::equal_to< Key >, class Allocator = BW::StlAllocator< Key > >
-class unordered_multiset : public std::tr1::unordered_multiset< Key, Hash, KeyEqual, Allocator >
+class unordered_multiset : public std::unordered_multiset< Key, Hash, KeyEqual, Allocator >
 {
-	typedef std::tr1::unordered_multiset< Key, Hash, KeyEqual, Allocator > type_base;
+	typedef std::unordered_multiset< Key, Hash, KeyEqual, Allocator > type_base;
 public:
 	typedef typename type_base::size_type size_type;
 

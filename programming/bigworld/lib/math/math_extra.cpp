@@ -103,7 +103,7 @@ uint32 ones32( uint32 x )
 // Sourced from: http://aggregate.org/MAGIC/#Log2%20of%20an%20Integer
 uint32 log2ceil( uint32 x )
 {
-	register int y = (x & (x - 1));
+	int y = (x & (x - 1));
 
 	y |= -y;
 	y >>= (32 - 1);

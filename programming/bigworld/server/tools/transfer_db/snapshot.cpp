@@ -145,7 +145,7 @@ void RSyncChildProcessHelper::onChildAboutToExec()
  *	Constructor.
  */
 Snapshot::Snapshot() :
-	pSignalProcessor_( 0 )
+	pSignalProcessor_( nullptr )
 {
 }
 
@@ -156,7 +156,7 @@ Snapshot::Snapshot() :
 bool Snapshot::init( BW::string destinationIP, BW::string destinationPath,
 	BW::string limitKbps )
 {
-	// The SignalProcessor is an auto_ptr so that it can be destroyed in the
+	// The SignalProcessor is a unique_ptr so that it can be destroyed in the
 	// child process to avoid any issues with it still referring to the event
 	// dispatcher.
 	pSignalProcessor_.reset( new SignalProcessor(
@@ -546,7 +546,7 @@ bool Snapshot::transferPrimary()
 bool Snapshot::backupSqliteDatabase( const BW::string & srcPath,
 	const BW::string & destPath )
 {
-	std::auto_ptr< SqliteConnection > pSrcDB( new SqliteConnection );
+	std::unique_ptr< SqliteConnection > pSrcDB( new SqliteConnection );
 	if (!pSrcDB->open( srcPath.c_str() ))
 	{
 		ERROR_MSG( "Snapshot::backupSqliteDatabase: "
@@ -554,7 +554,7 @@ bool Snapshot::backupSqliteDatabase( const BW::string & srcPath,
 		return false;
 	}
 
-	std::auto_ptr< SqliteConnection > pDestDB( new SqliteConnection );
+	std::unique_ptr< SqliteConnection > pDestDB( new SqliteConnection );
 	if (!pDestDB->open( destPath.c_str() ))
 	{
 		ERROR_MSG( "Snapshot::backupSqliteDatabase: "

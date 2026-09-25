@@ -22,7 +22,7 @@ BW_BEGIN_NAMESPACE
  *	Default Constructor.
  */
 LogMetaData::LogMetaData() :
-	pData_( NULL ), pRawJSON_( NULL )
+	pData_( nullptr ), pRawJSON_( nullptr )
 { }
 
 

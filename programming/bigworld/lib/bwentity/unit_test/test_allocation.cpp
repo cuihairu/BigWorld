@@ -146,7 +146,7 @@ TEST( allocation_MemoryOStream_autoptr )
 {
 	s_newCalled = false;
 	s_freeCalled = false;
-	std::auto_ptr<BW::MemoryOStream> pStream( new BW::MemoryOStream() );
+	std::unique_ptr<BW::MemoryOStream> pStream( new BW::MemoryOStream() );
 	pStream.reset( NULL );
 	CHECK( !s_newCalled );
 	CHECK( !s_freeCalled );
@@ -179,7 +179,7 @@ TEST( allocation_MemoryOStream_autoptr_virtual )
 {
 	s_newCalled = false;
 	s_freeCalled = false;
-	std::auto_ptr<BW::BinaryOStream> pStream( new BW::MemoryOStream() );
+	std::unique_ptr<BW::BinaryOStream> pStream( new BW::MemoryOStream() );
 	pStream.reset( NULL );
 	CHECK( !s_newCalled );
 	CHECK( !s_freeCalled );
@@ -214,7 +214,7 @@ TEST( allocation_CondemnedInterfaces_autoptr )
 {
 	s_newCalled = false;
 	s_freeCalled = false;
-	std::auto_ptr<BW::CondemnedInterfaces> pCondemnedInterfaces(
+	std::unique_ptr<BW::CondemnedInterfaces> pCondemnedInterfaces(
 		new BW::CondemnedInterfaces() );
 	pCondemnedInterfaces.reset( NULL );
 	CHECK( !s_newCalled );
@@ -250,7 +250,7 @@ TEST( allocation_LoginChallengeFactories_autoptr )
 {
 	s_newCalled = false;
 	s_freeCalled = false;
-	std::auto_ptr<BW::LoginChallengeFactories> pLoginChallengeFactories(
+	std::unique_ptr<BW::LoginChallengeFactories> pLoginChallengeFactories(
 		new BW::LoginChallengeFactories() );
 	pLoginChallengeFactories.reset( NULL );
 	CHECK( !s_newCalled );
@@ -286,7 +286,7 @@ TEST( allocation_SpaceDataMappings_autoptr )
 {
 	s_newCalled = false;
 	s_freeCalled = false;
-	std::auto_ptr<BW::SpaceDataMappings> pSpaceDataMappings(
+	std::unique_ptr<BW::SpaceDataMappings> pSpaceDataMappings(
 		new BW::SpaceDataMappings() );
 	pSpaceDataMappings.reset( NULL );
 	CHECK( !s_newCalled );
@@ -335,7 +335,7 @@ TEST( allocation_AvatarFilter_autoptr )
 {
 	s_newCalled = false;
 	s_freeCalled = false;
-	std::auto_ptr< BW::AvatarFilter > pAvatarFilter(
+	std::unique_ptr< BW::AvatarFilter > pAvatarFilter(
 		new BW::AvatarFilter( MovementFilterEnvironmentStub::instance() ) );
 	pAvatarFilter.reset( NULL );
 	CHECK( !s_newCalled );
@@ -371,7 +371,7 @@ TEST( allocation_AvatarFilter_autoptr_virtual )
 {
 	s_newCalled = false;
 	s_freeCalled = false;
-	std::auto_ptr< BW::MovementFilter > pAvatarFilter(
+	std::unique_ptr< BW::MovementFilter > pAvatarFilter(
 		new BW::AvatarFilter( MovementFilterEnvironmentStub::instance() ) );
 	pAvatarFilter.reset( NULL );
 	CHECK( !s_newCalled );
@@ -436,7 +436,7 @@ TEST_F( BWServerConectionTestFixture, allocation_BWServerConnection_autoptr )
 
 	s_newCalled = false;
 	s_freeCalled = false;
-	std::auto_ptr<BW::BWServerConnection> pConnection(this->createConnection());
+	std::unique_ptr<BW::BWServerConnection> pConnection(this->createConnection());
 	pConnection.reset( NULL );
 	CHECK( !s_newCalled );
 	CHECK( !s_freeCalled );
@@ -469,7 +469,7 @@ TEST_F( BWServerConectionTestFixture, allocation_BWServerConnection_autoptr_virt
 {
 	s_newCalled = false;
 	s_freeCalled = false;
-	std::auto_ptr<BW::BWConnection> pConnection(this->createConnection());
+	std::unique_ptr<BW::BWConnection> pConnection(this->createConnection());
 	pConnection.reset( NULL );
 	CHECK( !s_newCalled );
 	CHECK( !s_freeCalled );

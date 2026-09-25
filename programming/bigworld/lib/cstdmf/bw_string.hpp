@@ -72,7 +72,7 @@ typedef std::basic_stringstream< wchar_t, std::char_traits< wchar_t >,
 } // namespace BW
 
 #if defined( __GNUC__ ) || (_MSC_VER >= 1600) || defined( __clang__ )
-// Modern compilers require template specialisations of str::tr1::hash
+// Modern compilers require template specialisations of std::hash
 // for BW::string and BW::wstring
 
 #include "bw_hash.hpp"
@@ -82,7 +82,7 @@ typedef std::basic_stringstream< wchar_t, std::char_traits< wchar_t >,
 BW_HASH_NAMESPACE_BEGIN
 
 template<>
-struct hash<BW::string> : public std::unary_function<BW::string, std::size_t>
+struct hash<BW::string>
 {
 	std::size_t operator()(const BW::string& s) const
 	{
@@ -91,7 +91,7 @@ struct hash<BW::string> : public std::unary_function<BW::string, std::size_t>
 };
 
 template<>
-struct hash<BW::wstring> : public std::unary_function<BW::wstring, std::size_t>
+struct hash<BW::wstring>
 {
 	std::size_t operator()(const BW::wstring& s) const
 	{

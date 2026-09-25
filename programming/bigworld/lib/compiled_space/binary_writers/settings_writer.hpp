@@ -26,7 +26,7 @@ public:
 	virtual void postProcess();
 	virtual bool write( BinaryFormatWriter& writer );
 
-	typedef std::tr1::function< const AABB() > BoundGeneratorFunc;
+	typedef std::function< const AABB() > BoundGeneratorFunc;
 
 	void addBounds( const AABB& bb );
 	void addBoundGenerator( BoundGeneratorFunc callback );

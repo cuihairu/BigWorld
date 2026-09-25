@@ -3421,8 +3421,7 @@ BW_END_NAMESPACE
 BW_HASH_NAMESPACE_BEGIN
 
 template<>
-struct hash< BW_NAMESPACE IKCDependencyGraphKey > : public std::unary_function<
-	BW_NAMESPACE IKCDependencyGraphKey, std::size_t >
+struct hash< BW_NAMESPACE IKCDependencyGraphKey >
 {
 public:
 	std::size_t operator()( const BW_NAMESPACE IKCDependencyGraphKey & v ) const

@@ -479,7 +479,7 @@ private:
 	ReplayFileType 			replayFileType_;
 	BW::string 				replayFilePath_;
 
-	std::auto_ptr< EntityVolatileCache >
+	std::unique_ptr< EntityVolatileCache >
 							pVolatileCache_;
 };
 

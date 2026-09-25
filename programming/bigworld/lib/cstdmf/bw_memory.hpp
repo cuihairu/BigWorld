@@ -8,13 +8,13 @@
 namespace std { struct nothrow_t; }
 
 CSTDMF_DLL void *    bw_new( size_t size );
-CSTDMF_DLL void *    bw_new( size_t size, const std::nothrow_t & ) throw();
+CSTDMF_DLL void *    bw_new( size_t size, const std::nothrow_t & ) noexcept;
 CSTDMF_DLL void *    bw_new_array( size_t size );
-CSTDMF_DLL void *    bw_new_array( size_t size, const std::nothrow_t & ) throw();
-CSTDMF_DLL void      bw_delete( void * ptr ) throw();
-CSTDMF_DLL void      bw_delete( void * ptr, const std::nothrow_t & ) throw();
-CSTDMF_DLL void      bw_delete_array( void * ptr ) throw();
-CSTDMF_DLL void      bw_delete_array( void * ptr, const std::nothrow_t & ) throw();
+CSTDMF_DLL void *    bw_new_array( size_t size, const std::nothrow_t & ) noexcept;
+CSTDMF_DLL void      bw_delete( void * ptr ) noexcept;
+CSTDMF_DLL void      bw_delete( void * ptr, const std::nothrow_t & ) noexcept;
+CSTDMF_DLL void      bw_delete_array( void * ptr ) noexcept;
+CSTDMF_DLL void      bw_delete_array( void * ptr, const std::nothrow_t & ) noexcept;
 CSTDMF_DLL void *    bw_malloc( size_t size );
 CSTDMF_DLL void      bw_free( void * ptr );
 CSTDMF_DLL void *    bw_malloc_aligned( size_t size, size_t alignment );

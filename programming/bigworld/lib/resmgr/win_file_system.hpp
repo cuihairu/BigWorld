@@ -117,7 +117,7 @@ private:
 		void* mappedPtr_;
 		void* userPtr_;
 
-		struct CompareFunc : public std::unary_function<MemoryMappedFile, void*>
+		struct CompareFunc
 		{
 			CompareFunc( void* ptr ) : ptr_(ptr) { }
 			bool operator()(const MemoryMappedFile& other)

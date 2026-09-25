@@ -107,7 +107,7 @@ namespace Moo {
         float getBlendDistance() const; // between dyanmic and static
 
         DynamicShadow* m_pShadowsWrapper;
-        std::auto_ptr<SemiDynamicShadow> m_semiDynamicShadows;
+        std::unique_ptr<SemiDynamicShadow> m_semiDynamicShadows;
 
         bool m_isShadowQualityChanged;
 

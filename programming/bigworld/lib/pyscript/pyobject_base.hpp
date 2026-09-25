@@ -37,7 +37,7 @@ PyTypeObject THIS_CLASS::s_type_ =									\
 	 * Was positional initialisation of the 2.7 PyTypeObject layout;		\
 	 * rebuilt with designated initialisers (tp_compare is gone and			\
 	 * tp_print was replaced by tp_vectorcall_offset). */					\
-	PyVarObject_HEAD_INIT(&PyType_Type, 0)								\
+	BW_PYTYPEOBJECT_HEAD_INIT( &PyType_Type )								\
 	.tp_name = #THIS_CLASS,											\
 	.tp_basicsize = sizeof(THIS_CLASS),								\
 	.tp_itemsize = 0,													\

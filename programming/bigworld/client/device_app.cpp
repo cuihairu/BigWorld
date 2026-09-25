@@ -63,7 +63,7 @@ DeviceApp::DeviceApp() :
         dRenderTime_( 0.f ),
         soundEnabled_( true ),
         pInputHandler_( NULL ),
-        pAssetClient_( NULL ),
+        pAssetClient_( nullptr ),
         pConnectionControl_( NULL )
 {
     BW_GUARD;

@@ -75,7 +75,7 @@ protected:
 	virtual void syncInit();
 
 #if SPEEDTREE_SUPPORT
-	std::auto_ptr< speedtree::SpeedTreeRenderer > tree_;
+	std::unique_ptr< speedtree::SpeedTreeRenderer > tree_;
 #endif
 
 	bool        reflectionVisible_;
@@ -90,7 +90,7 @@ protected:
 		BW::string filename;
 		int seed;
 	};
-	std::auto_ptr<ErrorInfo> errorInfo_;
+	std::unique_ptr<ErrorInfo> errorInfo_;
 
 	bool			castsShadow_;
 

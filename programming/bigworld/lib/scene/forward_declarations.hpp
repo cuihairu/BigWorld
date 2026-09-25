@@ -3,9 +3,7 @@
 
 //-----------------------------------------------------------------------------
 // System headers
-#if !defined( _MSC_VER )
-#include <tr1/functional>
-#endif // !defined( _MSC_VER )
+#include <functional>
 
 //-----------------------------------------------------------------------------
 // Library Forward declarations
@@ -21,8 +19,8 @@ class SceneListener;
 class IntersectionSet;
 
 
-typedef std::tr1::function< void(const SceneObject&) > ConstSceneObjectCallback;
-typedef std::tr1::function< void(SceneObject&) > SceneObjectCallback;
+typedef std::function< void(const SceneObject&) > ConstSceneObjectCallback;
+typedef std::function< void(SceneObject&) > SceneObjectCallback;
 
 namespace SceneTypeSystem
 {

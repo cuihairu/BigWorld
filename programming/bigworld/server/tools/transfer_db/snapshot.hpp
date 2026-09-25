@@ -46,7 +46,7 @@ private:
 	BW::string destinationPath_;
 	BW::string limitKbps_;
 
-	std::auto_ptr< SignalProcessor > pSignalProcessor_;
+	std::unique_ptr< SignalProcessor > pSignalProcessor_;
 };
 
 BW_END_NAMESPACE

@@ -117,7 +117,7 @@ bool DataType::addToStream( DataSource & source, BinaryOStream & stream,
 		if (iter->isSubstreamEnd())
 		{
 			MF_ASSERT( !subStreams.empty() );
-			std::auto_ptr<MemoryOStream> pLastStream( subStreams.back() );
+			std::unique_ptr<MemoryOStream> pLastStream( subStreams.back() );
 			subStreams.pop_back();
 			// Second-last stream
 			BinaryOStream & prevStream =
@@ -138,7 +138,7 @@ bool DataType::addToStream( DataSource & source, BinaryOStream & stream,
 			"and substream end correctly.\n" );
 		while (!subStreams.empty())
 		{
-			std::auto_ptr< MemoryOStream > pExtraStream( subStreams.back() );
+			std::unique_ptr< MemoryOStream > pExtraStream( subStreams.back() );
 			subStreams.pop_back();
 		}
 	}
@@ -191,7 +191,7 @@ bool DataType::createFromStream( BinaryIStream & stream, DataSink & sink,
 		if (iter->isSubstreamEnd())
 		{
 			MF_ASSERT( !subStreams.empty() );
-			std::auto_ptr< MemoryIStream > pInnerStream( subStreams.back() );
+			std::unique_ptr< MemoryIStream > pInnerStream( subStreams.back() );
 			subStreams.pop_back();
 			if (pInnerStream->error() || pInnerStream->remainingLength() != 0)
 			{
@@ -211,7 +211,7 @@ bool DataType::createFromStream( BinaryIStream & stream, DataSink & sink,
 				"and substream end correctly.\n" );
 		while (!subStreams.empty())
 		{
-			std::auto_ptr< MemoryIStream > pExtraStream( subStreams.back() );
+			std::unique_ptr< MemoryIStream > pExtraStream( subStreams.back() );
 			subStreams.pop_back();
 		}
 	}
@@ -777,7 +777,7 @@ bool operator==( const DataType::const_iterator & lhs,
 
 	// NOTE: pCurrent_ is only checked for NULL-ness, it's value is a
 	// consequence of the other member variables. (This makes the
-	// copy-constructor easier since we're holding an auto_ptr to it)
+	// copy-constructor easier since we're holding a unique_ptr to it)
 
 	// Check the easy values
 	if (lhs.useChild_ != rhs.useChild_ ||

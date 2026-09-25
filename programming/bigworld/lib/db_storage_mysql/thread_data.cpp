@@ -20,7 +20,7 @@ BW_BEGIN_NAMESPACE
  *	Constructor.
  */
 MySqlThreadData::MySqlThreadData( const DBConfig::ConnectionInfo & connInfo ) :
-	pConnection_( NULL ),
+	pConnection_( nullptr ),
 	connectionInfo_( connInfo )
 {
 }
@@ -56,7 +56,7 @@ bool MySqlThreadData::onStart( BackgroundTaskThread & thread )
 void MySqlThreadData::onEnd( BackgroundTaskThread & thread )
 {
 	delete pConnection_;
-	pConnection_ = NULL;
+	pConnection_ = nullptr;
 	mysql_thread_end();
 }
 

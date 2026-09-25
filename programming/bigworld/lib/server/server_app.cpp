@@ -85,7 +85,7 @@ ServerApp::ServerApp( Mercury::EventDispatcher & mainDispatcher,
 	buildDate_(),
 	updatables_(),
 	lastAdvanceTime_( 0 ),
-	pSignalHandler_( NULL )
+	pSignalHandler_( nullptr )
 {
 #if ENABLE_PROFILER
 	g_profiler.init( 12*1024*1024, ServerAppConfig::profilerMaxThreads() );

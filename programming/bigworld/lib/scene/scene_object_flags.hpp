@@ -54,8 +54,7 @@ private:
 BW_HASH_NAMESPACE_BEGIN
 
 template<>
-struct hash<BW::SceneObjectFlags> : 
-	public std::unary_function<BW::SceneObject, std::size_t>
+struct hash<BW::SceneObjectFlags>
 {
 	std::size_t operator()(const BW::SceneObjectFlags& s) const
 	{

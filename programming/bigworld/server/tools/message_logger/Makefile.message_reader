@@ -56,7 +56,13 @@ dependsOn = 		\
 	cstdmf
 
 usePython = 1
-useSystemPython := 1
+# BIGWORLD(c++23 migration): was useSystemPython := 1 -- these tools kept
+# the upstream system-python config, which on modern hosts resolves to an
+# arbitrary /usr/include/pythonX.Y and diverges from the vendored 3.13
+# headers every other component uses (e.g. _Py_IMMORTAL_REFCNT only exists
+# in the vendored 3.13 public headers). Build against the vendored
+# interpreter like everything else.
+useSystemPython := 0
 noObjectDirectoryRule := 1
 
 ifeq ($(SYSTEM_HAS_MONGODB),1)

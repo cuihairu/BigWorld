@@ -23,7 +23,7 @@ DEFINE_CREATE_EDITOR_PROPERTY_STUB
 ConverterInfo visualProcessorInfo;
 ResourceCallbacks resourceCallbacks;
 
-static std::auto_ptr<Renderer> s_pRenderer;
+static std::unique_ptr<Renderer> s_pRenderer;
 
 PLUGIN_INIT_FUNC
 {

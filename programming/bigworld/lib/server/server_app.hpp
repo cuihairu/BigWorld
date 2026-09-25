@@ -191,7 +191,7 @@ private:
 	void callUpdatables();
 
 	uint64 lastAdvanceTime_;
-	std::auto_ptr< SignalHandler > pSignalHandler_;
+	std::unique_ptr< SignalHandler > pSignalHandler_;
 };
 
 BW_END_NAMESPACE

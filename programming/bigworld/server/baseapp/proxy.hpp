@@ -409,7 +409,7 @@ private:
 
 	GameTime			lastLatencyCheckTime_;
 
-	std::auto_ptr< Mercury::DeferredBundle > pBufferedClientBundle_;
+	std::unique_ptr< Mercury::DeferredBundle > pBufferedClientBundle_;
 
 	RateLimitMessageFilterPtr		pRateLimiter_;
 
@@ -421,7 +421,7 @@ private:
 
 	EMA				avgClientBundleDataUnits_;
 
-	std::auto_ptr< PendingReLogOn > pPendingReLogOn_;
+	std::unique_ptr< PendingReLogOn > pPendingReLogOn_;
 
 	// The override for baseApp/inactivityTimeout config option
 	float inactivityTimeout_;

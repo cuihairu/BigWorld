@@ -119,25 +119,25 @@ private:
 	HWND						hWndApp_;			// application window
 	HWND						hWndGraphics_;		// 3D window
 
-	std::auto_ptr<Renderer> renderer_;
+	std::unique_ptr<Renderer> renderer_;
 
 	RompHarness *			romp_;
 	bool					inited_;
 
-	std::auto_ptr< AssetClient > pAssetClient_;
-	typedef std::auto_ptr< FontManager > FontManagerPtr;
+	std::unique_ptr< AssetClient > pAssetClient_;
+	typedef std::unique_ptr< FontManager > FontManagerPtr;
 	FontManagerPtr pFontManager_;
 	
-	typedef std::auto_ptr< TextureFeeds > TextureFeedsPtr;
+	typedef std::unique_ptr< TextureFeeds > TextureFeedsPtr;
 	TextureFeedsPtr pTextureFeeds_;
 
-	typedef std::auto_ptr< Terrain::Manager > TerrainManagerPtr;
+	typedef std::unique_ptr< Terrain::Manager > TerrainManagerPtr;
 	TerrainManagerPtr pTerrainManager_;
 
-	typedef std::auto_ptr< PostProcessing::Manager > PostProcessingManagerPtr;
+	typedef std::unique_ptr< PostProcessing::Manager > PostProcessingManagerPtr;
 	PostProcessingManagerPtr pPostProcessingManager_;
 
-	typedef std::auto_ptr< LensEffectManager > LensEffectManagerPtr;
+	typedef std::unique_ptr< LensEffectManager > LensEffectManagerPtr;
 	LensEffectManagerPtr pLensEffectManager_;
 };
 

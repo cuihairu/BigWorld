@@ -389,7 +389,7 @@ bool ConnectionThreadData::getUidFromDB( const BW::string & dbName,
 
 	try
 	{
-		std::auto_ptr<mongo::DBClientCursor> cursor = conn_.query(
+		std::unique_ptr<mongo::DBClientCursor> cursor = conn_.query(
 			uidCollName.c_str(), mongo::BSONObj() );
 
 		if (!cursor.get())
@@ -648,7 +648,7 @@ bool ConnectionThreadData::getCollectionNames( mongo::DBClientConnection & conn,
 		// MongoDB changes its own db schema. However this is easy to test out,
 		// so we just adopt this solution.
 		BW::string ns = dbName + ".system.namespaces";
-		std::auto_ptr<mongo::DBClientCursor> cursor = conn.query(
+		std::unique_ptr<mongo::DBClientCursor> cursor = conn.query(
 				ns.c_str(), mongo::BSONObj() );
 
 		if (!cursor.get())

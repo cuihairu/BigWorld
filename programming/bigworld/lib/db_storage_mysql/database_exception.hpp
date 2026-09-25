@@ -16,9 +16,9 @@ class DatabaseException : public std::exception
 {
 public:
 	DatabaseException( MYSQL * pConnection );
-	~DatabaseException() throw();
+	~DatabaseException() noexcept;
 
-	virtual const char * what() const throw() { return errStr_.c_str(); }
+	virtual const char * what() const noexcept { return errStr_.c_str(); }
 
 	bool shouldRetry() const;
 	bool isLostConnection() const;

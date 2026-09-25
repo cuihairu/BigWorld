@@ -37,7 +37,7 @@ namespace speedtree
 	{
 	public:
 		typedef SmartPointer< TSpeedTreeType > TreeTypePtr;
-		typedef std::auto_ptr< CSpeedTreeRT > CSpeedTreeRTPtr;
+		typedef std::unique_ptr< CSpeedTreeRT > CSpeedTreeRTPtr;
 
 		typedef BW::vector< TSpeedTreeType* > RendererVector;
 		typedef BW::vector< RendererVector > RendererGroupVector;
@@ -296,7 +296,7 @@ namespace speedtree
 		static SimpleMutex s_vertexListLock_;
 
 		// Tree definition data
-		typedef std::auto_ptr< BSPTree > BSPTreePtr;
+		typedef std::unique_ptr< BSPTree > BSPTreePtr;
 		CSpeedTreeRTPtr speedTree_;
 
 		//-- Represents unique wind parameters for each unique type of tree. This class also helps
@@ -332,7 +332,7 @@ namespace speedtree
 			uint					  m_leafAnglesCount;
 			BW::vector<float>		  m_anglesTable;
 			BW::vector<Matrix>		  m_windMatrices;
-			std::auto_ptr<CSpeedWind> m_speedWind;
+			std::unique_ptr<CSpeedWind> m_speedWind;
 		};
 
 		//-- default wind animation as a fall-back and instance of wind animation as an per-type wind

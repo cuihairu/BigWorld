@@ -20,7 +20,7 @@ class InputHandlerEntry
 {
 	static const uint32 INFORM_COUNT = 100000;
 public:
-	InputHandlerEntry() : pHandler_( NULL ), name_( ), numTriggers_( 0 ),
+	InputHandlerEntry() : pHandler_( nullptr ), name_( ), numTriggers_( 0 ),
 		numErrors_( 0 )
 	{
 	}

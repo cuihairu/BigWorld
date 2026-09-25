@@ -82,7 +82,7 @@ private:
 	typedef BW::list< DeferredMessage > DeferredMessages;
 
 	DeferredMessages messages_;
-	std::auto_ptr< MemoryOStream > pData_;
+	std::unique_ptr< MemoryOStream > pData_;
 };
 
 

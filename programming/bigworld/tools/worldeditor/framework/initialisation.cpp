@@ -44,25 +44,25 @@ BW_BEGIN_NAMESPACE
 class TextureFeeds;
 
 static AutoConfigString s_engineConfigXML("system/engineConfigXML");
-static std::auto_ptr< AssetClient > s_pAssetClient_( NULL );
+static std::unique_ptr< AssetClient > s_pAssetClient_( nullptr );
 
-typedef std::auto_ptr< FontManager > FontManagerPtr;
+typedef std::unique_ptr< FontManager > FontManagerPtr;
 static FontManagerPtr s_pFontManager;
 
-typedef std::auto_ptr< TextureFeeds > TextureFeedsPtr;
+typedef std::unique_ptr< TextureFeeds > TextureFeedsPtr;
 static TextureFeedsPtr s_pTextureFeeds;
 
-typedef std::auto_ptr< PostProcessing::Manager > PostProcessingManagerPtr;
+typedef std::unique_ptr< PostProcessing::Manager > PostProcessingManagerPtr;
 static PostProcessingManagerPtr s_pPostProcessingManager;
 
-typedef std::auto_ptr< LensEffectManager > LensEffectManagerPtr;
+typedef std::unique_ptr< LensEffectManager > LensEffectManagerPtr;
 static LensEffectManagerPtr s_pLensEffectManager;
 
 HINSTANCE Initialisation::s_hInstance = NULL;
 HWND Initialisation::s_hWndApp = NULL;
 HWND Initialisation::s_hWndGraphics = NULL;
 
-std::auto_ptr<Renderer> Initialisation::renderer_;
+std::unique_ptr<Renderer> Initialisation::renderer_;
 
 bool Initialisation::inited_ = false;
 

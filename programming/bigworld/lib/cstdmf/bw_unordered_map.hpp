@@ -3,11 +3,7 @@
 
 #include "stl_fixed_sized_allocator.hpp"
 
-#if _MSC_VER || defined( EMSCRIPTEN )
 #include <unordered_map>
-#else
-#include <tr1/unordered_map>
-#endif
 
 #include "bw_hash.hpp"
 
@@ -15,17 +11,10 @@
 namespace BW
 {
 
-#if defined( EMSCRIPTEN ) || (defined( _MSC_VER ) && _MSC_VER >= 1910)
-
+// BIGWORLD(c++23 migration): std::unordered_map everywhere, the std::tr1
+// fallback is gone.
 #define STD_UNORDERED_MAP std::unordered_map
 #define STD_UNORDERED_MULTIMAP std::unordered_multimap
-
-#else // !defined( EMSCRIPTEN )
-
-#define STD_UNORDERED_MAP std::tr1::unordered_map
-#define STD_UNORDERED_MULTIMAP std::tr1::unordered_multimap
-
-#endif
 
 
 template < class Key, class T, class Hash = BW::hash< Key >, class KeyEqual = std::equal_to< Key >, class Allocator = BW::StlAllocator< std::pair< const Key, T > > >

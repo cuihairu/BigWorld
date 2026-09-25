@@ -23,7 +23,7 @@ DatabaseException::DatabaseException( MYSQL * pConnection ) :
 /**
  *	Destructor.
  */
-DatabaseException::~DatabaseException() throw()
+DatabaseException::~DatabaseException() noexcept
 {
 }
 

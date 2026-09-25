@@ -47,7 +47,7 @@ private:
 
 	BW::string							path_;
 
-	std::auto_ptr< SqliteConnection > 	pConnection_;
+	std::unique_ptr< SqliteConnection > 	pConnection_;
 
 	typedef BW::vector< shared_ptr< SecondaryDatabaseTable > > Tables;
 	Tables 								tables_;

@@ -583,8 +583,7 @@ inline std::basic_ostream< CharT, Traits > & operator<<(
 BW_HASH_NAMESPACE_BEGIN
 
 template<>
-struct hash< BW::StringRef > : 
-	public std::unary_function< BW::StringRef, std::size_t >
+struct hash< BW::StringRef >
 {
 	std::size_t operator()(const BW::StringRef & s) const
 	{
@@ -593,8 +592,7 @@ struct hash< BW::StringRef > :
 };
 
 template<>
-struct hash< BW::WStringRef > : 
-	public std::unary_function< BW::WStringRef, std::size_t >
+struct hash< BW::WStringRef >
 {
 	std::size_t operator()(const BW::WStringRef & s) const
 	{

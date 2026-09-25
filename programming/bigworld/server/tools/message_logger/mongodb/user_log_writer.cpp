@@ -205,7 +205,7 @@ bool UserLogWriter::writeComponent( mongo::BSONObj & obj )
 				obj.getIntField( COMPONENTS_KEY_PID ) );
 		objBuilder.append( COMPONENTS_KEY_COMPONENT,
 				obj.getIntField( COMPONENTS_KEY_COMPONENT ) );
-		std::auto_ptr< mongo::DBClientCursor > cursor =
+		std::unique_ptr< mongo::DBClientCursor > cursor =
 			connectionData_.conn_.query(
 			componentCollName.c_str(),
 			mongo::BSONObj( objBuilder.obj() ));

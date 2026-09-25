@@ -4,6 +4,7 @@
 
 #include "cstdmf/bw_deque.hpp"
 #include "cstdmf/bw_vector.hpp"
+#include <random>
 
 BW_BEGIN_NAMESPACE
 
@@ -192,7 +193,7 @@ void generateRandomOrdering( size_t numNodes,
 		return;
 	}
 
-	std::random_shuffle( order.begin() + 1, order.end() );
+	std::shuffle( order.begin() + 1, order.end(), std::mt19937( std::random_device()() ) );
 }
 
 template <typename StorageType>

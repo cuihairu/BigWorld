@@ -79,11 +79,11 @@ namespace
 	 *		unexpected data. It's guaranteed to have an instance node tree
 	 *		with nodes for all IKCS_TEST_MODEL_NODES.
 	 */
-	std::auto_ptr<SuperModel> loadTestModel()
+	std::unique_ptr<SuperModel> loadTestModel()
 	{
 		BW::vector<BW::string> modelIds( 1, IKCS_TEST_MODEL_NAME );
 
-		std::auto_ptr<SuperModel> result( new SuperModel( modelIds ) );
+		std::unique_ptr<SuperModel> result( new SuperModel( modelIds ) );
 		if (result->nModels() != static_cast<int>( modelIds.size() ) )
 		{
 			DEBUG_MSG( "Failed to load all test models.\n" );
@@ -174,7 +174,7 @@ TEST( IKConstraintSystem_ConstraintTarget )
 {
 	BW_GUARD;
 	
-	const std::auto_ptr<SuperModel> testModel = loadTestModel();
+	const std::unique_ptr<SuperModel> testModel = loadTestModel();
 	RETURN_ON_FAIL_CHECK( testModel.get() != NULL );
 	IKConstraintSystemPtr system = createIKCS();
 
@@ -249,7 +249,7 @@ TEST( IKConstraintSystem_ConstraintSourceMatrixProvider )
 	
 	CHECK_EQUAL( ConstraintSource::NONE, mpcs->getDependency().first );
 
-	const std::auto_ptr<SuperModel> testModel = loadTestModel();
+	const std::unique_ptr<SuperModel> testModel = loadTestModel();
 	RETURN_ON_FAIL_CHECK( testModel.get() != NULL );
 	IKConstraintSystemPtr system = createIKCS();
 
@@ -271,7 +271,7 @@ TEST( IKConstraintSystem_ConstraintSourceModelNode )
 {
 	BW_GUARD;
 	
-	const std::auto_ptr<SuperModel> testModel = loadTestModel();
+	const std::unique_ptr<SuperModel> testModel = loadTestModel();
 	RETURN_ON_FAIL_CHECK( testModel.get() != NULL );
 	IKConstraintSystemPtr system = createIKCS();
 
@@ -303,7 +303,7 @@ TEST( IKConstraintSystem_PointConstraint )
 	const uint32 SEED = 2;
 	BWRandom random( SEED );
 	
-	const std::auto_ptr<SuperModel> testModel = loadTestModel();
+	const std::unique_ptr<SuperModel> testModel = loadTestModel();
 	RETURN_ON_FAIL_CHECK( testModel.get() != NULL );
 	const SuperModelNodeTree * nodeTree = testModel->getInstanceNodeTree();
 	MF_ASSERT( nodeTree != NULL );
@@ -390,7 +390,7 @@ TEST( IKConstraintSystem_OrientConstraint )
 	const uint32 SEED = 3;
 	BWRandom random( SEED );
 	
-	const std::auto_ptr<SuperModel> testModel = loadTestModel();
+	const std::unique_ptr<SuperModel> testModel = loadTestModel();
 	RETURN_ON_FAIL_CHECK( testModel.get() != NULL );
 	const SuperModelNodeTree * nodeTree = testModel->getInstanceNodeTree();
 	MF_ASSERT( nodeTree != NULL );
@@ -478,7 +478,7 @@ TEST( IKConstraintSystem_AimConstraint )
 	const uint32 SEED = 4;
 	BWRandom random( SEED );
 	
-	const std::auto_ptr<SuperModel> testModel = loadTestModel();
+	const std::unique_ptr<SuperModel> testModel = loadTestModel();
 	RETURN_ON_FAIL_CHECK( testModel.get() != NULL );
 	const SuperModelNodeTree * nodeTree = testModel->getInstanceNodeTree();
 	MF_ASSERT( nodeTree != NULL );
@@ -582,7 +582,7 @@ TEST( IKConstraintSystem_ParentConstraint )
 	const uint32 SEED = 5;
 	BWRandom random( SEED );
 	
-	const std::auto_ptr<SuperModel> testModel = loadTestModel();
+	const std::unique_ptr<SuperModel> testModel = loadTestModel();
 	RETURN_ON_FAIL_CHECK( testModel.get() != NULL );
 	const SuperModelNodeTree * nodeTree = testModel->getInstanceNodeTree();
 	MF_ASSERT( nodeTree != NULL );
@@ -680,7 +680,7 @@ TEST( IKConstraintSystem_ParentConstraint )
 ///Test the ConstraintConstraintSource class.
 TEST( IKConstraintSystem_ConstraintConstraintSource )
 {
-	const std::auto_ptr<SuperModel> testModel = loadTestModel();
+	const std::unique_ptr<SuperModel> testModel = loadTestModel();
 	RETURN_ON_FAIL_CHECK( testModel.get() != NULL );
 	const SuperModelNodeTree * nodeTree = testModel->getInstanceNodeTree();
 	MF_ASSERT( nodeTree != NULL );

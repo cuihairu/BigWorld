@@ -55,7 +55,7 @@ public:
 
 private:
 	class Detail;
-	std::auto_ptr<Detail> detail_;
+	std::unique_ptr<Detail> detail_;
 
 	BW::vector<StaticTextureStreamingTypes::Usage> usages_;
 };

@@ -13,7 +13,7 @@ namespace
 TreeNode::TreeNode() :
     parent_(NULL),
     htreeitem_(NULL),
-    tree_(NULL),
+    tree_(nullptr),
     expanded_(false)
 {
 }
@@ -22,7 +22,7 @@ TreeNode::TreeNode() :
     parent_(NULL),
     htreeitem_(NULL),
     label_(label),
-    tree_(NULL),
+    tree_(nullptr),
     expanded_(false)
 {
 }
@@ -36,7 +36,7 @@ TreeNode::TreeNode() :
     children_.clear();
     parent_    = NULL;
     htreeitem_ = NULL;
-    tree_      = NULL;
+    tree_      = nullptr;
 }
 
 TreeNode::operator HTREEITEM() const

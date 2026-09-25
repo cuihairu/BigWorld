@@ -113,7 +113,7 @@ bool FixedDictMetaDataType::parseCustomClass( DataSectionPtr pSection,
 DataTypePtr FixedDictMetaDataType::getType( DataSectionPtr pSection )
 {
 	// Process <Properties> section just like CLASS
-	std::auto_ptr< FixedDictDataType > pFixedDictType( 
+	std::unique_ptr< FixedDictDataType > pFixedDictType( 
 		ClassMetaDataType::buildType( pSection, *this ) );
 
 	if (pFixedDictType.get() == NULL)

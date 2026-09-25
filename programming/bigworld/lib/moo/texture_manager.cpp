@@ -88,7 +88,7 @@ TextureManager::TextureManager()
 	, useDummyTexture_( false )
 	, pDetailLevels_( NULL )
 #if ENABLE_ASSET_PIPE
-	, pAssetClient_(NULL)
+	, pAssetClient_(nullptr)
 #endif
 {
 	BW_GUARD;

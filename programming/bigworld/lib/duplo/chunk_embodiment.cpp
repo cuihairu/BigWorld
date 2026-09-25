@@ -61,7 +61,7 @@ void ChunkEmbodiment::registerConverter( Converter cfn )
 	if (s_converters_ == NULL)
 	{
 		s_converters_ = new Converters;
-		static std::auto_ptr< Converters > destroyConvertors( s_converters_ );
+		static std::unique_ptr< Converters > destroyConvertors( s_converters_ );
 	}
 	s_converters_->push_back( cfn );
 }

@@ -16,6 +16,7 @@
 #include "resmgr/bwresource.hpp"
 #include "server/bwconfig.hpp"
 #include "server/reviver_common.hpp"
+#include <random>
 
 
 DECLARE_DEBUG_COMPONENT2( "Reviver", 0 )
@@ -344,7 +345,7 @@ void Reviver::handleTimeout( TimerHandle handle, void * arg )
 					++mapIter;
 				}
 
-				std::random_shuffle( deactive.begin(), deactive.end() );
+				std::shuffle( deactive.begin(), deactive.end(), std::mt19937( std::random_device()() ) );
 
 				iter = deactive.begin();
 				endIter = deactive.end();

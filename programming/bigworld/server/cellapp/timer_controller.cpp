@@ -76,7 +76,7 @@ Controller::FactoryFnRet TimerController::New(
  *	@param interval		Duration in game ticks between subsequent callbacks
  */
 TimerController::TimerController( GameTime start, GameTime interval ) :
-	pHandler_( NULL ),
+	pHandler_( nullptr ),
 	start_( start ),
 	interval_( interval ),
 	timerHandle_()
@@ -120,7 +120,7 @@ void TimerController::stopReal( bool /*isFinalStop*/ )
 	{
 		// Detach from the handler so that cancel does not call stop again.
 		pHandler_->pController( NULL );
-		pHandler_ = NULL;
+		pHandler_ = nullptr;
 
 		timerHandle_.cancel();
 	}
@@ -180,7 +180,7 @@ void TimerController::handleTimeout()
 void TimerController::onHandlerRelease()
 {
 	MF_ASSERT( pHandler_ );
-	pHandler_ = NULL;
+	pHandler_ = nullptr;
 	this->cancel();
 }
 

@@ -13,6 +13,7 @@
 #include "db/db_config.hpp"
 
 #include "network/channel_owner.hpp"
+#include <random>
 
 
 BW_BEGIN_NAMESPACE
@@ -158,8 +159,7 @@ void Archiver::restartArchiveCycle( Bases & bases )
 	// Randomise the list of entities to archive so we don't
 	// hit the database with too many of the same entity type,
 	// if they have been added in a big block.
-	std::random_shuffle( basesToArchive_.begin(),
-		basesToArchive_.end() );
+	std::shuffle( basesToArchive_.begin(), basesToArchive_.end(), std::mt19937( std::random_device()() ) );
 
 	// TODO: It would be nicer if we maintained the random
 	// order. Currently, it would be possible for an entity not

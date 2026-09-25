@@ -82,7 +82,7 @@ namespace AssetProcessorScript
 
 static bool g_inited = false;
 
-static std::auto_ptr<Renderer> s_pRenderer;
+static std::unique_ptr<Renderer> s_pRenderer;
 
 void init()
 {

@@ -73,7 +73,7 @@ WorldApp::WorldApp() :
     canSeeTerrain_( false ),
     wireFrameStatus_( 0 ),
     debugSortedTriangles_( 0 ),
-    pAssetClient_( NULL )
+    pAssetClient_( nullptr )
 {
     BW_GUARD;
     MainLoopTasks::root().add( this, "World/App", NULL );

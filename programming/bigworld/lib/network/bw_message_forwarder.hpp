@@ -26,7 +26,7 @@ public:
 
 private:
 	WatcherNub watcherNub_;
-	std::auto_ptr< LoggerMessageForwarder > pForwarder_;
+	std::unique_ptr< LoggerMessageForwarder > pForwarder_;
 };
 
 

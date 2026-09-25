@@ -22,7 +22,7 @@ typedef class BW::vector<class WorldTriangle> RealWTriangleSet;
 
 namespace speedtree {
 
-typedef std::auto_ptr< BSPTree > BSPTreePtr;
+typedef std::unique_ptr< BSPTree > BSPTreePtr;
 
 void computeTreeGeometry(
 	CSpeedTreeRT & speedTree,

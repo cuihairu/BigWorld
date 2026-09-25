@@ -104,7 +104,7 @@ private:
         Chunks_drawCullingHUD();
     }
 };
-std::auto_ptr<CullDebugTask> s_cullDebugInstance;
+std::unique_ptr<CullDebugTask> s_cullDebugInstance;
 
 } // namespace anonymous
 #endif // MF_SERVER

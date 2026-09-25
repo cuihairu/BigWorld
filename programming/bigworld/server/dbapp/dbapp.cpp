@@ -139,7 +139,7 @@ DBApp::DBApp( Mercury::EventDispatcher & mainDispatcher,
     mailboxRemapCheckCount_( 0 ),
     secondaryDBPrefix_(),
     secondaryDBIndex_( 0 ),
-    pConsolidator_( NULL ),
+    pConsolidator_( nullptr ),
     shouldCacheLogOnRecords_( false )
 {
     mainDispatcher.maxWait( 0.02 );

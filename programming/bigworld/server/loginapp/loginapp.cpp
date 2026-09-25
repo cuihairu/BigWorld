@@ -117,7 +117,7 @@ uint16 getExternalPort()
 LoginApp::LoginApp( Mercury::EventDispatcher & mainDispatcher,
 		Mercury::NetworkInterface & intInterface ) :
 	ServerApp( mainDispatcher, intInterface ),
-	pLogOnParamsEncoder_( NULL ),
+	pLogOnParamsEncoder_( nullptr ),
 	extInterface_( &mainDispatcher,
 			Mercury::NETWORK_INTERFACE_EXTERNAL,
 			getExternalPort(),
@@ -621,7 +621,7 @@ void LoginApp::handleFailure( const Mercury::Address & addr,
 				addr.c_str(), status, pDescription ? pDescription : "none" );
 
 		Mercury::Bundle * pBundle = NULL;
-		std::auto_ptr< Mercury::Bundle > pTempBundle;
+		std::unique_ptr< Mercury::Bundle > pTempBundle;
 
 		if (pChannel)
 		{

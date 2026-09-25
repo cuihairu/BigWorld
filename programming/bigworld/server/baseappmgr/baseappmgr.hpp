@@ -422,7 +422,7 @@ private:
 	BaseAppSubSet			baseApps_;
 	ServiceAppSubSet		serviceApps_;
 
-	std::auto_ptr< BackupHashChain >	pBackupHashChain_;
+	std::unique_ptr< BackupHashChain >	pBackupHashChain_;
 
 	typedef BW::map< BW::string, BW::string > SharedData;
 	SharedData 		sharedBaseAppData_; // Authoritative copy

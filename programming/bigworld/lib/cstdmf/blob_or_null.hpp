@@ -14,7 +14,7 @@ class BinaryOStream;
 class BlobOrNull
 {
 public:
-	BlobOrNull() : pData_( NULL ), length_( 0 ) {}	// NULL blob
+	BlobOrNull() : pData_( nullptr ), length_( 0 ) {}	// nullptr blob
 	BlobOrNull( const char * pData, uint32 len ) :
 		pData_( pData ), length_( len ) {}
 
