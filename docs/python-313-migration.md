@@ -38,6 +38,14 @@
 - 补齐 git 执行位：`build/make/*.sh *.py`、`third_party/openssl/Configure`
 - `build/make/third_party_openssl.mak`：拷贝后 `chmod -R +w` → `u+rwX`（保留脚本执行位）
 
+批次 3 期间构建系统的追加改动（gcc 15 / glibc 新环境踩坑）：
+
+- `common_footer_config.mak`：全 BW 静态库用 `-Wl,--start-group/--end-group` 包裹（单遍链接器不回溯，替代原 Havok 特判）
+- `third_party_openssl.mak`：configure 加 `-std=gnu89`（C23 `bool` 关键字与 openssl 0.9.8 参数名冲突）；configure 后 `sed -i 's/-DTERMIO\b/-DTERMIOS/g'`（termio.h 被现代 glibc 移除，源码同步在 `ui_openssl.c`/`read_pwd.c` 加 TERMIOS 条件）；删除 `.INTERMEDIATE` 声明（stamp 被反复清理导致 openssl 全量重建 + 并发构建写坏 libcrypto.a）
+- `server/Makefile.rules`：cellappmgr 提前到 tools 之前（规避 message_logger 的 `useMongoDB := 1` 全局变量泄漏进其链接行）
+- `platform_el7.mak`：恢复 mongodb 探测并以 `ifeq` 包住
+- `discover_python.sh`：`[ == ]` → `[ = ]`（/bin/sh=dash 下 bashism 曾致探测静默失败，错误文本混入链接行）
+
 ## 4. BWHooks 官方接口方案（替代 #define 重定向）
 
 2.7 的机制是在 obmalloc.c/pymem.h 里 `#define malloc BW_Py_malloc` 等，把 CPython 内部所有裸 malloc 兜进钩子层。3.13 采用官方嵌入接口等价实现：
@@ -61,9 +69,9 @@
 | 批次 | 内容 | 验证 | 提交 |
 |---|---|---|---|
 | 1 | 换源 3.13.15 + 补丁重移植 + 构建系统 + 工具脚本 Py3 化 | `make libbwpython3.13` 全链通过：libbwpython3.13.a + python.exe + 57 个共享模块 + lib-dynload/Lib 拷贝 + 动态模块 smoke | `3260bdd9` |
-| 2 | lib/pyscript 移植 | libpyscript 编译通过 | 待填 |
-| 3 | 引擎其余 C++ 按目录移植 | 各目录编译 | 待填 |
-| 4 | 服务端/工具 Python 脚本 2to3 | py_compile 全量扫描 | 待填 |
+| 2 | lib/pyscript 移植 | libpyscript 编译通过 | `ee940e96` |
+| 3 | 引擎其余 C++ 按目录移植（基础库/游戏库/pyscript 残留/common/server 主程序/tools 六组，含 `build(python)` 构建系统组） | 九个 server 主程序 + tools（bots/message_logger/_bwlog.so/bw_profile/bwmachined）全部编译链接通过；cellapp/baseappmgr/loginapp/dbappmgr/reviver 冒烟（启动至无 bw.xml 预期退出，无 Traceback/段错误）；活代码 Py2 API 残留清零 | `ef48c2e5`（构建+三方库）、`871a6589`（基础库）、`bd8ff4cc`（游戏库）、`57b3f1e4`（pyscript/script）、`f86028c6`（common+server）、`7f3cf5ce`（tools） |
+| 4 | 服务端/工具 Python 脚本 2to3（bw_internal 181 + examples 15 + build 散点 + res_packer + eg_tcpechoserver，共 204 文件） | py_compile 全量 204/204（迁移前基线 65 失败）；手工修复 simplejson/encoder.py 的 Py2 局部绑定 hack；活代码 Py2 API 残留清零 | `b3bd5fd7` |
 
 ---
 
