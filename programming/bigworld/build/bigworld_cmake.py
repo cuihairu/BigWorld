@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-from __future__ import print_function
+
 
 import argparse
 import getpass
@@ -249,7 +249,7 @@ def chooseItem( prompt, items, deprecated = False, experimental = False, targets
 	choice = None
 	while choice is None:
 		try:
-			choice = int(raw_input('> '))
+			choice = int(input('> '))
 			choice -= 1
 			if choice < 0 or choice >= len( items ):
 				choice = None
@@ -274,7 +274,7 @@ def editableList( prompt, items ):
 		choice = None
 
 		try:
-			choice = int(raw_input('> '))
+			choice = int(input('> '))
 			choice -= 1
 			if choice < 0 or choice >= len(items):
 				choice = None
@@ -285,7 +285,7 @@ def editableList( prompt, items ):
 			break
 
 		if len(items[choice]) == 2:
-			items[choice][1] = raw_input(items[choice][0] + "> ")
+			items[choice][1] = input(items[choice][0] + "> ")
 		else:
 			items[choice][1] = chooseItem(items[choice][0], items[choice][2])
 
@@ -325,8 +325,8 @@ def testPlinkConnection( username, hostname, privateKeyPath, linuxPath ):
 
 
 def getServerOptions(allowRsync = False):
-	hostname = raw_input('Hostname> ')
-	server_directory = raw_input('Linux "programming/bigworld" path> ')
+	hostname = input('Hostname> ')
+	server_directory = input('Linux "programming/bigworld" path> ')
 
 	CONNECTION_TYPES = [
 		dict( label = "Putty SSH Session to Windows Mount", value = "PUTTY_SSH" ),
@@ -335,7 +335,7 @@ def getServerOptions(allowRsync = False):
 	connection_type = chooseItem( "How do you wish to connect to the server?", 
 			CONNECTION_TYPES )
 
-	private_key_path = raw_input('Private key path if needed> ')
+	private_key_path = input('Private key path if needed> ')
 
 	hasValidConfig = False
 
@@ -435,7 +435,7 @@ def generate( targetName, generator, cmakeExe, cmakeOpts, buildDir, dryRun ):
 			configs.append( 'Consumer_Release' )
 
 	# output out command
-	print
+	print()
 	print(']', ' '.join( cmd ) )
 
 	# write and execute the cmake run bat file

@@ -18,21 +18,21 @@ def run( cmd, returnLines=False ):
 	line = pipe.readline()
 	try:
 		while line:
-			print( line.rstrip() )
+			print(( line.rstrip() ))
 			if returnLines == True:
 				outputs.append( line )
 			line = pipe.readline()
 		exitStatusOk = ( pipe.close() == None )
-	except IOError, e:
-		print "Error while terminating build script pipe."
-		print str( e )
+	except IOError as e:
+		print("Error while terminating build script pipe.")
+		print(str( e ))
 
 	return ( exitStatusOk, outputs )
 
 
 #Special run procedure using the subprocess (better with command spaces)
 def subprocessRun( args ):
-	print "running %s " % ( args )
+	print("running %s " % ( args ))
 	outputs = []
 	process = subprocess.Popen( args, stderr=subprocess.PIPE, stdout=subprocess.PIPE )
 	pollResult = process.poll()
@@ -41,11 +41,11 @@ def subprocessRun( args ):
 		sys.stdout.write( stdoutdata )
 		sys.stderr.write( stderrdata )
 		pollResult = process.poll()
-	print "here %s " % pollResult
+	print("here %s " % pollResult)
 	return pollResult == 0
 
 def fail():
-		print
+		print()
 		print( "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^" )
 		print( "!!! Aborting due to previous errors !!!" )
 		sys.exit( 1 )
@@ -53,7 +53,7 @@ def fail():
 def list_dir( dir, action ):
 	""" This function runs an action on all files in a specific path """
 	if not os.path.isdir( dir ):
-		print "%s is not a directory" % ( dir )
+		print("%s is not a directory" % ( dir ))
 		return
 	for file in os.listdir( dir ):
 		path = os.path.join( dir, file )
@@ -96,7 +96,7 @@ if isWindows():
 	sys.path.append( os.path.normpath( "c:/scripts/common" ) )
 
 else:
-	if os.environ.has_key( "USER" ) and \
+	if "USER" in os.environ and \
 		os.path.exists( "/home/%s/myscripts/common" % os.environ[ "USER" ] ):
 
 		userName = os.environ[ "USER" ]
@@ -105,13 +105,13 @@ else:
 
 
 	addedPath= "/home/%s/myscripts/common" % userName
-	print "Appending to PYTHON_PATH: '%s'" % addedPath
+	print("Appending to PYTHON_PATH: '%s'" % addedPath)
 	sys.path.append(addedPath)
 
 def chdir( directory ):
-	print "build_common.chdir: changing directory to '%s'" % directory
+	print("build_common.chdir: changing directory to '%s'" % directory)
 
-	if not os.environ.has_key( "DEBUG_COMMANDS" ) or \
+	if "DEBUG_COMMANDS" not in os.environ or \
 		not os.environ[ "DEBUG_COMMANDS" ] == "1":
 
 		os.chdir( directory )
@@ -122,9 +122,9 @@ def runCmd( cmd, useSpecial=False, allowFailure=False ):
 	outputs = []
 	usedCmd = cmd
 
-	print "* Executing build_common.runCmd( '%s' )" % usedCmd
+	print("* Executing build_common.runCmd( '%s' )" % usedCmd)
 
-	if not os.environ.has_key( "DEBUG_COMMANDS" ) or \
+	if "DEBUG_COMMANDS" not in os.environ or \
 		not os.environ[ "DEBUG_COMMANDS" ] == "1" or \
 		forceRunning:
 
@@ -135,7 +135,7 @@ def runCmd( cmd, useSpecial=False, allowFailure=False ):
 			ret, outputs = run( usedCmd, True )
 
 		if not ret and not allowFailure:
-			print "ERROR: build_common.runCmd: failed '%s'" % usedCmd
+			print("ERROR: build_common.runCmd: failed '%s'" % usedCmd)
 			fail()
 
 	return (ret, outputs)

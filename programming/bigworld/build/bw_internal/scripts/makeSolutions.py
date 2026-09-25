@@ -17,7 +17,7 @@ def createSolution(python_exe, cmake, number):
 	
 	f.close()
 	cmd = python_exe + " " + cmake + " < " + file
-	print cmd
+	print(cmd)
 	return subprocess.call( cmd, shell=True)
 
 
@@ -46,17 +46,17 @@ def main():
 	(options, args) = opt.parse_args()
 	
 	if None == options.cmake:
-		print "\nPlease specify the location of the cmake file\n"
+		print("\nPlease specify the location of the cmake file\n")
 		opt.print_help()
 		return 1
 		
 	if None == options.solNumbers:
-		print "\nPlease specify solution numbers you want to create\n"
+		print("\nPlease specify solution numbers you want to create\n")
 		opt.print_help()
 		return 1
 		
 	if not os.path.exists(options.cmake):
-		print "\nCant find %s\n", options.cmake
+		print("\nCant find %s\n", options.cmake)
 		opt.print_help()
 		return 1
 		
@@ -68,7 +68,7 @@ def main():
 		
 	if None != options.python:
 		if not os.path.exists(options.python):
-			print "\nCant find %s\n", options.python
+			print("\nCant find %s\n", options.python)
 			opt.print_help()
 			return 1
 		else:
@@ -84,7 +84,7 @@ def main():
 			int(number)
 			buildsNumber.append(build)
 		except:
-			print "\n" + build + " is not a number\n\n"
+			print("\n" + build + " is not a number\n\n")
 			opt.print_help()
 			return 1
 			

@@ -158,7 +158,7 @@ def bind_values(clause):
     return v
 
 def _quote_ddl_expr(element):
-    if isinstance(element, basestring):
+    if isinstance(element, str):
         element = element.replace("'", "''")
         return "'%s'" % element
     else:
@@ -263,7 +263,7 @@ def join_condition(a, b, ignore_nonexistent_tables=False, a_subset=None):
                     key=lambda fk:fk.parent._creation_order):
             try:
                 col = fk.get_referent(left)
-            except exc.NoReferenceError, nrte:
+            except exc.NoReferenceError as nrte:
                 if nrte.table_name == left.name:
                     raise
                 else:
@@ -278,7 +278,7 @@ def join_condition(a, b, ignore_nonexistent_tables=False, a_subset=None):
                         key=lambda fk:fk.parent._creation_order):
                 try:
                     col = fk.get_referent(b)
-                except exc.NoReferenceError, nrte:
+                except exc.NoReferenceError as nrte:
                     if nrte.table_name == b.name:
                         raise
                     else:
@@ -397,11 +397,11 @@ class Annotated(object):
 # so that the resulting objects are pickleable.
 annotated_classes = {}
 
-for cls in expression.__dict__.values() + [schema.Column, schema.Table]:
+for cls in list(expression.__dict__.values()) + [schema.Column, schema.Table]:
     if isinstance(cls, type) and issubclass(cls, expression.ClauseElement):
-        exec "class Annotated%s(Annotated, cls):\n" \
-             "    pass" % (cls.__name__, ) in locals()
-        exec "annotated_classes[cls] = Annotated%s" % (cls.__name__)
+        exec("class Annotated%s(Annotated, cls):\n" \
+             "    pass" % (cls.__name__, ), locals())
+        exec("annotated_classes[cls] = Annotated%s" % (cls.__name__))
 
 def _deep_annotate(element, annotations, exclude=None):
     """Deep copy the given ClauseElement, annotating each element 
@@ -652,7 +652,7 @@ class AliasedRow(object):
         return self.row[self.map[key]]
 
     def keys(self):
-        return self.row.keys()
+        return list(self.row.keys())
 
 
 class ClauseAdapter(visitors.ReplacingCloningVisitor):

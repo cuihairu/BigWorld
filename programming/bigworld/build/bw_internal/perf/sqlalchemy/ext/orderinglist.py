@@ -294,7 +294,7 @@ class OrderingList(list):
             if stop < 0:
                 stop += len(self)
 
-            for i in xrange(start, stop, step):
+            for i in range(start, stop, step):
                 self.__setitem__(i, entity[i])
         else:
             self._order_entity(index, entity, True)
@@ -317,8 +317,8 @@ class OrderingList(list):
     def __reduce__(self):
         return _reconstitute, (self.__class__, self.__dict__, list(self))
 
-    for func_name, func in locals().items():
-        if (util.callable(func) and func.func_name == func_name and
+    for func_name, func in list(locals().items()):
+        if (util.callable(func) and func.__name__ == func_name and
             not func.__doc__ and hasattr(list, func_name)):
             func.__doc__ = getattr(list, func_name).__doc__
     del func_name, func

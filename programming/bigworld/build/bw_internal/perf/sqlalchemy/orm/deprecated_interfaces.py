@@ -5,7 +5,7 @@
 # the MIT License: http://www.opensource.org/licenses/mit-license.php
 
 from sqlalchemy import event, util
-from interfaces import EXT_CONTINUE
+from .interfaces import EXT_CONTINUE
 
 
 class MapperExtension(object):

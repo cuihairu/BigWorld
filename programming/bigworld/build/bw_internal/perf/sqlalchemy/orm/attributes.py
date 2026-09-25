@@ -1066,7 +1066,7 @@ class History(tuple):
     def __new__(cls, added, unchanged, deleted):
         return tuple.__new__(cls, (added, unchanged, deleted))
 
-    def __nonzero__(self):
+    def __bool__(self):
         return self != HISTORY_BLANK
 
     def empty(self):

@@ -5,7 +5,7 @@ import tempfile
 import xml.etree.ElementTree as ET
 import time
 import threading
-import util
+from . import util
 
 XML_LOCATION = "scripts/testing/openautomate"
 TIMEOUT = 900
@@ -42,7 +42,7 @@ def _flushResCache( path ):
 					typeDict[ "*." + filename.split('.')[-1] ] = 1
 
 		if len( typeDict ):
-			sList = ",".join( typeDict.keys() )
+			sList = ",".join( list(typeDict.keys()) )
 			touch( path, sList )
 
 	touchAll( path )
@@ -58,10 +58,10 @@ class Command(object):
 		def target():
 			self.returncode = 0
 			try:
-				print self.cmd
+				print(self.cmd)
 				self.subprocess_output = subprocess.check_output( self.cmd, 
 										stderr=subprocess.STDOUT, shell=True )
-			except subprocess.CalledProcessError, e:
+			except subprocess.CalledProcessError as e:
 				self.subprocess_output = e.output
 				self.returncode = e.returncode
 
@@ -90,7 +90,7 @@ def _exec( exePath, xmlPath, flags ):
 	
 	if res != 0:
 		sys.stderr.write( "\ERROR EXECUTING:\n> " + cmd + "\n\n" )
-		print subprocess_output
+		print(subprocess_output)
 		raise util.BWTestingError( "The client did not cleanly shut down.\n" +
 			subprocess_output )
 
@@ -132,17 +132,17 @@ def runScript( exePath, flags, resPath, scriptName, scriptIndex=None, primer_run
 	for runCount in range(totalRunCount):
 		xmlPath = resolveXMLPath( scriptName, scriptIndex )
 		
-		print "\t%s%s" % (scriptName, scriptIndex if scriptIndex is not None else ""),
-		print ", ".join( collectBenchmarkNames( resPath, scriptName, scriptIndex ) ),
+		print("\t%s%s" % (scriptName, scriptIndex if scriptIndex is not None else ""), end=' ')
+		print(", ".join( collectBenchmarkNames( resPath, scriptName, scriptIndex ) ), end=' ')
 		if totalRunCount > 1:
-			print "run %d/%d" % (runCount+1, totalRunCount)
+			print("run %d/%d" % (runCount+1, totalRunCount))
 		else:
-			print
+			print()
 		
 		if needFlushResCache:
-			print "\t\tFS cache flush...",
+			print("\t\tFS cache flush...", end=' ')
 			_flushResCache( resPath )
-			print "done."
+			print("done.")
 		
 		_exec( exePath, xmlPath, flags )		
 	

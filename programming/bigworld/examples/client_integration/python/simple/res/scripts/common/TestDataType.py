@@ -28,8 +28,8 @@ class TestDataType:
 		stream = struct.pack( "i", obj.intValue )
 		stream += writePascalString( obj.stringValue )
 
-		stream += struct.pack( "i", len( obj.dictValue.keys() ) )
-		for key in obj.dictValue.keys():
+		stream += struct.pack( "i", len( list(obj.dictValue.keys()) ) )
+		for key in list(obj.dictValue.keys()):
 			stream += writePascalString( key )
 			stream += writePascalString( obj.dictValue[key] )
 		return stream
@@ -60,9 +60,9 @@ class TestDataType:
 		section.writeString( "stringValue", obj.stringValue )
 		s = section.createSection( "dictValue" )
 
-		for key in obj.dictValue.keys():
+		for key in list(obj.dictValue.keys()):
 			v = s.createSection( "value" )
-			print key, obj.dictValue[key]
+			print(key, obj.dictValue[key])
 			v.writeString( "key", key )
 			v.writeString( "value", obj.dictValue[key] )
 
@@ -76,7 +76,7 @@ class TestDataType:
 		stringValue = section.readString( "stringValue" )
 		dictValue = {}
 
-		for value in section["dictValue"].values():
+		for value in list(section["dictValue"].values()):
 			dictValue[value["key"].asString] = value["value"].asString
 
 		return Test( intValue, stringValue, dictValue )

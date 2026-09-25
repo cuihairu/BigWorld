@@ -665,7 +665,7 @@ class BIT(sqltypes.TypeEngine):
 
         def process(value):
             if value is not None:
-                v = 0L
+                v = 0
                 for i in map(ord, value):
                     v = v << 8 | i
                 return v
@@ -1138,7 +1138,7 @@ class SET(_StringType):
     def bind_processor(self, dialect):
         super_convert = super(SET, self).bind_processor(dialect)
         def process(value):
-            if value is None or isinstance(value, (int, long, basestring)):
+            if value is None or isinstance(value, (int, str)):
                 pass
             else:
                 if None in value:
@@ -1315,7 +1315,7 @@ class MySQLCompiler(compiler.SQLCompiler):
           of a SELECT.
           
         """
-        if isinstance(select._distinct, basestring):
+        if isinstance(select._distinct, str):
             return select._distinct.upper() + " "
         elif select._distinct:
             return "DISTINCT "
@@ -1403,7 +1403,7 @@ class MySQLDDLCompiler(compiler.DDLCompiler):
         constraint_string = super(MySQLDDLCompiler, self).create_table_constraints(table)
 
         engine_key = '%s_engine' % self.dialect.name
-        is_innodb = table.kwargs.has_key(engine_key) and \
+        is_innodb = engine_key in table.kwargs and \
                     table.kwargs[engine_key].lower() == 'innodb'
 
         auto_inc_column = table._autoincrement_column
@@ -1456,7 +1456,7 @@ class MySQLDDLCompiler(compiler.DDLCompiler):
                 k[len(self.dialect.name)+1:].upper(), 
                 v
             )
-            for k, v in table.kwargs.items()
+            for k, v in list(table.kwargs.items())
             if k.startswith('%s_' % self.dialect.name)
         )
 
@@ -1987,7 +1987,7 @@ class MySQLDialect(default.DefaultDialect):
                 have = rs.rowcount > 0
                 rs.close()
                 return have
-            except exc.DBAPIError, e:
+            except exc.DBAPIError as e:
                 if self._extract_error_code(e.orig) == 1146:
                     return False
                 raise
@@ -2263,7 +2263,7 @@ class MySQLDialect(default.DefaultDialect):
         rp = None
         try:
             rp = connection.execute(st)
-        except exc.DBAPIError, e:
+        except exc.DBAPIError as e:
             if self._extract_error_code(e.orig) == 1146:
                 raise exc.NoSuchTableError(full_name)
             else:
@@ -2287,7 +2287,7 @@ class MySQLDialect(default.DefaultDialect):
         try:
             try:
                 rp = connection.execute(st)
-            except exc.DBAPIError, e:
+            except exc.DBAPIError as e:
                 if self._extract_error_code(e.orig) == 1146:
                     raise exc.NoSuchTableError(full_name)
                 else:
@@ -2418,7 +2418,7 @@ class MySQLTableDefinitionParser(object):
         for nope in ('auto_increment', 'data directory', 'index directory'):
             options.pop(nope, None)
 
-        for opt, val in options.items():
+        for opt, val in list(options.items()):
             state.table_options['%s_%s' % (self.dialect.name, opt)] = val
 
     def _parse_column(self, line, state):
@@ -2559,11 +2559,11 @@ class MySQLTableDefinitionParser(object):
 
         _final = self.preparer.final_quote
 
-        quotes = dict(zip(('iq', 'fq', 'esc_fq'),
+        quotes = dict(list(zip(('iq', 'fq', 'esc_fq'),
                           [re.escape(s) for s in
                            (self.preparer.initial_quote,
                             _final,
-                            self.preparer._escape_identifier(_final))]))
+                            self.preparer._escape_identifier(_final))])))
 
         self._pr_name = _pr_compile(
             r'^CREATE (?:\w+ +)?TABLE +'

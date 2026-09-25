@@ -3,8 +3,8 @@ import xml.etree.ElementTree as ET
 
 if len(sys.argv) != 4:
 	if len(sys.argv) > 1:
-		print "Invalid command line"
-	print sys.argv[0]+" <binary_path> <proj_name> <proj_path>"
+		print("Invalid command line")
+	print(sys.argv[0]+" <binary_path> <proj_name> <proj_path>")
 	sys.exit(1)
 binary_path = sys.argv[1]
 proj_name = sys.argv[2]
@@ -32,7 +32,7 @@ def copyConditional(propertyGroup, newElement, tree, oldElement):
 		element = item.find('msbuild:'+'/msbuild:'.join(oldElement), namespaces=namespaces)
 		if element is not None:
 			attribs = {}
-			if item.attrib.has_key("Condition"):
+			if "Condition" in item.attrib:
 				attribs["Condition"]=item.attrib["Condition"]
 			ET.SubElement(propertyGroup, newElement, attribs).text = \
 				element.text.replace("%("+oldElement[-1]+")","%("+newElement+")")

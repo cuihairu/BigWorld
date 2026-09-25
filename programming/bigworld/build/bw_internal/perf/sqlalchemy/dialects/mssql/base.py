@@ -271,7 +271,7 @@ class _MSDate(sqltypes.Date):
         def process(value):
             if isinstance(value, datetime.datetime):
                 return value.date()
-            elif isinstance(value, basestring):
+            elif isinstance(value, str):
                 return datetime.date(*[
                         int(x or 0) 
                         for x in self._reg.match(value).groups()
@@ -302,7 +302,7 @@ class TIME(sqltypes.TIME):
         def process(value):
             if isinstance(value, datetime.datetime):
                 return value.time()
-            elif isinstance(value, basestring):
+            elif isinstance(value, str):
                 return datetime.time(*[
                         int(x or 0) 
                         for x in self._reg.match(value).groups()])
@@ -1140,7 +1140,7 @@ class MSDialect(default.DefaultDialect):
                  query_timeout=None,
                  use_scope_identity=True,
                  max_identifier_length=None,
-                 schema_name=u"dbo", **opts):
+                 schema_name="dbo", **opts):
         self.query_timeout = int(query_timeout or 0)
         self.schema_name = schema_name
 
@@ -1160,7 +1160,7 @@ class MSDialect(default.DefaultDialect):
 
     def initialize(self, connection):
         super(MSDialect, self).initialize(connection)
-        if self.server_version_info[0] not in range(8, 17):
+        if self.server_version_info[0] not in list(range(8, 17)):
             # FreeTDS with version 4.2 seems to report here
             # a number like "95.10.255".  Don't know what 
             # that is.  So emit warning.
@@ -1187,7 +1187,7 @@ class MSDialect(default.DefaultDialect):
             try:
                 default_schema_name = connection.scalar(query, name=user_name)
                 if default_schema_name is not None:
-                    return unicode(default_schema_name)
+                    return str(default_schema_name)
             except:
                 pass
         return self.schema_name
@@ -1225,7 +1225,7 @@ class MSDialect(default.DefaultDialect):
         s = sql.select([tables.c.table_name],
             sql.and_(
                 tables.c.table_schema == current_schema,
-                tables.c.table_type == u'BASE TABLE'
+                tables.c.table_type == 'BASE TABLE'
             ),
             order_by=[tables.c.table_name]
         )
@@ -1239,7 +1239,7 @@ class MSDialect(default.DefaultDialect):
         s = sql.select([tables.c.table_name],
             sql.and_(
                 tables.c.table_schema == current_schema,
-                tables.c.table_type == u'VIEW'
+                tables.c.table_type == 'VIEW'
             ),
             order_by=[tables.c.table_name]
         )
@@ -1308,7 +1308,7 @@ class MSDialect(default.DefaultDialect):
             if row['index_id'] in indexes:
                 indexes[row['index_id']]['column_names'].append(row['name'])
 
-        return indexes.values()
+        return list(indexes.values())
 
     @reflection.cache
     def get_view_definition(self, connection, viewname, schema=None, **kw):
@@ -1528,5 +1528,5 @@ class MSDialect(default.DefaultDialect):
             local_cols.append(scol)
             remote_cols.append(rcol)
 
-        return fkeys.values()
+        return list(fkeys.values())
 

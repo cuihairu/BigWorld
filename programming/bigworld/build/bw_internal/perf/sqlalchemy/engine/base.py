@@ -20,8 +20,8 @@ __all__ = [
     'StringIO', 'Transaction', 'TwoPhaseTransaction',
     'connection_memoize']
 
-import inspect, StringIO, sys, operator
-from itertools import izip
+import inspect, io, sys, operator
+
 from sqlalchemy import exc, schema, util, types, log, interfaces, \
     event, events
 from sqlalchemy.sql import expression, util as sql_util
@@ -1247,7 +1247,7 @@ class Connection(Connectable):
 
         try:
             self.engine.dialect.do_begin(self.connection)
-        except Exception, e:
+        except Exception as e:
             self._handle_dbapi_exception(e, None, None, None, None)
             raise
 
@@ -1261,7 +1261,7 @@ class Connection(Connectable):
             try:
                 self.engine.dialect.do_rollback(self.connection)
                 self.__transaction = None
-            except Exception, e:
+            except Exception as e:
                 self._handle_dbapi_exception(e, None, None, None, None)
                 raise
         else:
@@ -1276,7 +1276,7 @@ class Connection(Connectable):
         try:
             self.engine.dialect.do_commit(self.connection)
             self.__transaction = None
-        except Exception, e:
+        except Exception as e:
             self._handle_dbapi_exception(e, None, None, None, None)
             raise
 
@@ -1509,7 +1509,7 @@ class Connection(Connectable):
             dialect = self.dialect
             ctx = dialect.execution_ctx_cls._init_default(
                                 dialect, self, conn)
-        except Exception, e:
+        except Exception as e:
             self._handle_dbapi_exception(e, None, None, None, None)
             raise
 
@@ -1556,7 +1556,7 @@ class Connection(Connectable):
 
         distilled_params = self.__distill_params(multiparams, params)
         if distilled_params:
-            keys = distilled_params[0].keys()
+            keys = list(distilled_params[0].keys())
         else:
             keys = []
 
@@ -1645,7 +1645,7 @@ class Connection(Connectable):
                 conn = self._revalidate_connection()
 
             context = constructor(dialect, self, conn, *args)
-        except Exception, e:
+        except Exception as e:
             self._handle_dbapi_exception(e, 
                         str(statement), parameters, 
                         None, None)
@@ -1689,7 +1689,7 @@ class Connection(Connectable):
                                     statement, 
                                     parameters, 
                                     context)
-        except Exception, e:
+        except Exception as e:
             self._handle_dbapi_exception(
                                 e, 
                                 statement, 
@@ -1756,7 +1756,7 @@ class Connection(Connectable):
                                 cursor, 
                                 statement, 
                                 parameters)
-        except Exception, e:
+        except Exception as e:
             self._handle_dbapi_exception(
                                 e, 
                                 statement, 
@@ -1772,7 +1772,7 @@ class Connection(Connectable):
         """
         try:
             cursor.close()
-        except Exception, e:
+        except Exception as e:
             try:
                 ex_text = str(e)
             except TypeError:
@@ -1796,8 +1796,7 @@ class Connection(Connectable):
             raise exc.DBAPIError.instance(statement, 
                                             parameters, 
                                             e, 
-                                            self.dialect.dbapi.Error), \
-                                            None, sys.exc_info()[2]
+                                            self.dialect.dbapi.Error).with_traceback(sys.exc_info()[2])
             # end Py2K
         self._reentrant_error = True
         try:
@@ -1847,8 +1846,7 @@ class Connection(Connectable):
                                     parameters, 
                                     e, 
                                     self.dialect.dbapi.Error,
-                                    connection_invalidated=is_disconnect), \
-                                    None, sys.exc_info()[2]
+                                    connection_invalidated=is_disconnect).with_traceback(sys.exc_info()[2])
             # end Py2K
 
         finally:
@@ -1861,7 +1859,7 @@ class Connection(Connectable):
         Compiled: _execute_compiled,
         schema.SchemaItem: _execute_default,
         schema.DDLElement: _execute_ddl,
-        basestring: _execute_text
+        str: _execute_text
     }
 
     @util.deprecated("0.7", "Use the create() method on the given schema "
@@ -2600,7 +2598,7 @@ except ImportError:
             return list(self)
 
         def __iter__(self):
-            for processor, value in izip(self._processors, self._row):
+            for processor, value in zip(self._processors, self._row):
                 if processor is None:
                     yield value
                 else:
@@ -2617,7 +2615,7 @@ except ImportError:
             except TypeError:
                 if isinstance(key, slice):
                     l = []
-                    for processor, value in izip(self._processors[key],
+                    for processor, value in zip(self._processors[key],
                                                  self._row[key]):
                         if processor is None:
                             l.append(value)
@@ -2638,7 +2636,7 @@ except ImportError:
         def __getattr__(self, name):
             try:
                 return self[name]
-            except KeyError, e:
+            except KeyError as e:
                 raise AttributeError(e.args[0])
 
 
@@ -2687,7 +2685,7 @@ class RowProxy(BaseRowProxy):
     def items(self):
         """Return a list of tuples, each tuple containing a key/value pair."""
         # TODO: no coverage here
-        return [(key, self[key]) for key in self.iterkeys()]
+        return [(key, self[key]) for key in self.keys()]
 
     def keys(self):
         """Return the list of keys as strings represented by this RowProxy."""
@@ -2805,7 +2803,7 @@ class ResultMetaData(object):
     def _key_fallback(self, key, raiseerr=True):
         map = self._keymap
         result = None
-        if isinstance(key, basestring):
+        if isinstance(key, str):
             result = map.get(key.lower())
         # fallback for targeting a ColumnElement to a textual expression
         # this is a rare use case which only occurs when matching text()
@@ -2849,8 +2847,8 @@ class ResultMetaData(object):
         return {
             '_pickled_keymap': dict(
                 (key, index)
-                for key, (processor, obj, index) in self._keymap.iteritems()
-                if isinstance(key, (basestring, int))
+                for key, (processor, obj, index) in self._keymap.items()
+                if isinstance(key, (str, int))
             ),
             'keys': self.keys
         }
@@ -2858,9 +2856,9 @@ class ResultMetaData(object):
     def __setstate__(self, state):
         # the row has been processed at pickling time so we don't need any
         # processor anymore
-        self._processors = [None for _ in xrange(len(state['keys']))]
+        self._processors = [None for _ in range(len(state['keys']))]
         self._keymap = keymap = {}
-        for key, index in state['_pickled_keymap'].iteritems():
+        for key, index in state['_pickled_keymap'].items():
             # not preserving "obj" here, unfortunately our
             # proxy comparison fails with the unpickle
             keymap[key] = (None, None, index)
@@ -2960,7 +2958,7 @@ class ResultProxy(object):
         """
         try:
             return self.context.rowcount
-        except Exception, e:
+        except Exception as e:
             self.connection._handle_dbapi_exception(
                               e, None, None, self.cursor, self.context)
             raise
@@ -2982,7 +2980,7 @@ class ResultProxy(object):
         """
         try:
             return self._saved_cursor.lastrowid
-        except Exception, e:
+        except Exception as e:
             self.connection._handle_dbapi_exception(
                                  e, None, None, 
                                  self._saved_cursor, self.context)
@@ -3205,7 +3203,7 @@ class ResultProxy(object):
             l = self.process_rows(self._fetchall_impl())
             self.close()
             return l
-        except Exception, e:
+        except Exception as e:
             self.connection._handle_dbapi_exception(
                                     e, None, None, 
                                     self.cursor, self.context)
@@ -3225,7 +3223,7 @@ class ResultProxy(object):
             if len(l) == 0:
                 self.close()
             return l
-        except Exception, e:
+        except Exception as e:
             self.connection._handle_dbapi_exception(
                                     e, None, None, 
                                     self.cursor, self.context)
@@ -3245,7 +3243,7 @@ class ResultProxy(object):
             else:
                 self.close()
                 return None
-        except Exception, e:
+        except Exception as e:
             self.connection._handle_dbapi_exception(
                                     e, None, None, 
                                     self.cursor, self.context)
@@ -3262,7 +3260,7 @@ class ResultProxy(object):
 
         try:
             row = self._fetchone_impl()
-        except Exception, e:
+        except Exception as e:
             self.connection._handle_dbapi_exception(
                                     e, None, None, 
                                     self.cursor, self.context)
@@ -3425,9 +3423,9 @@ class BufferedColumnResultProxy(ResultProxy):
         # constructed.
         metadata._orig_processors = metadata._processors
         # replace the all type processors by None processors.
-        metadata._processors = [None for _ in xrange(len(metadata.keys))]
+        metadata._processors = [None for _ in range(len(metadata.keys))]
         keymap = {}
-        for k, (func, obj, index) in metadata._keymap.iteritems():
+        for k, (func, obj, index) in metadata._keymap.items():
             keymap[k] = (None, obj, index)
         self._metadata._keymap = keymap
 
@@ -3448,7 +3446,7 @@ class BufferedColumnResultProxy(ResultProxy):
         if size is None:
             return self.fetchall()
         l = []
-        for i in xrange(size):
+        for i in range(size):
             row = self.fetchone()
             if row is None:
                 break

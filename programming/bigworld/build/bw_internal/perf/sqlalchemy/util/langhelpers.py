@@ -15,15 +15,15 @@ import re
 import sys
 import types
 import warnings
-from compat import update_wrapper, set_types, threading, callable, inspect_getfullargspec, py3k_warning
+from .compat import update_wrapper, set_types, threading, callable, inspect_getfullargspec, py3k_warning
 from sqlalchemy import exc
 
 def _unique_symbols(used, *bases):
     used = set(used)
     for base in bases:
         pool = itertools.chain((base,),
-                               itertools.imap(lambda i: base + str(i),
-                                              xrange(1000)))
+                               map(lambda i: base + str(i),
+                                              range(1000)))
         for sym in pool:
             if sym not in used:
                 used.add(sym)
@@ -39,7 +39,7 @@ def decorator(target):
         if not inspect.isfunction(fn):
             raise Exception("not a decoratable function")
         spec = inspect_getfullargspec(fn)
-        names = tuple(spec[0]) + spec[1:3] + (fn.func_name,)
+        names = tuple(spec[0]) + spec[1:3] + (fn.__name__,)
         targ_name, fn_name = _unique_symbols(names, 'target', 'fn')
 
         metadata = dict(target=targ_name, fn=fn_name)
@@ -48,7 +48,7 @@ def decorator(target):
         code = 'lambda %(args)s: %(target)s(%(fn)s, %(apply_kw)s)' % (
                 metadata)
         decorated = eval(code, {targ_name:target, fn_name:fn})
-        decorated.func_defaults = getattr(fn, 'im_func', fn).func_defaults
+        decorated.__defaults__ = getattr(fn, 'im_func', fn).__defaults__
         return update_wrapper(decorated, fn)
     return update_wrapper(decorate, target)
 
@@ -79,7 +79,7 @@ def get_cls_kwargs(cls):
         ctr = class_.__dict__.get('__init__', False)
         if (not ctr or
             not isinstance(ctr, types.FunctionType) or
-            not isinstance(ctr.func_code, types.CodeType)):
+            not isinstance(ctr.__code__, types.CodeType)):
             stack.update(class_.__bases__)
             continue
 
@@ -96,7 +96,7 @@ def get_cls_kwargs(cls):
 try:
     from inspect import CO_VARKEYWORDS
     def inspect_func_args(fn):
-        co = fn.func_code
+        co = fn.__code__
         nargs = co.co_argcount
         names = co.co_varnames
         args = list(names[:nargs])
@@ -234,8 +234,8 @@ def getargspec_init(method):
 def unbound_method_to_callable(func_or_cls):
     """Adjust the incoming callable such that a 'self' argument is not required."""
 
-    if isinstance(func_or_cls, types.MethodType) and not func_or_cls.im_self:
-        return func_or_cls.im_func
+    if isinstance(func_or_cls, types.MethodType) and not func_or_cls.__self__:
+        return func_or_cls.__func__
     else:
         return func_or_cls
 
@@ -275,7 +275,7 @@ class portable_instancemethod(object):
 
     """
     def __init__(self, meth):
-        self.target = meth.im_self
+        self.target = meth.__self__
         self.name = meth.__name__
 
     def __call__(self, *arg, **kw):
@@ -295,7 +295,7 @@ def class_hierarchy(cls):
 
     """
     # Py2K
-    if isinstance(cls, types.ClassType):
+    if isinstance(cls, type):
         return list()
     # end Py2K
     hier = set([cls])
@@ -303,10 +303,10 @@ def class_hierarchy(cls):
     while process:
         c = process.pop()
         # Py2K
-        if isinstance(c, types.ClassType):
+        if isinstance(c, type):
             continue
         for b in (_ for _ in c.__bases__
-                  if _ not in hier and not isinstance(_, types.ClassType)):
+                  if _ not in hier and not isinstance(_, type)):
         # end Py2K
         # Py3K
         #for b in (_ for _ in c.__bases__
@@ -373,9 +373,9 @@ def monkeypatch_proxied_specials(into_cls, from_cls, skip=None, only=None,
               "return %(name)s.%(method)s%(d_args)s" % locals())
 
         env = from_instance is not None and {name: from_instance} or {}
-        exec py in env
+        exec(py, env)
         try:
-            env[method].func_defaults = fn.func_defaults
+            env[method].__defaults__ = fn.__defaults__
         except AttributeError:
             pass
         setattr(into_cls, method, env[method])
@@ -618,7 +618,7 @@ class importlater(object):
 
 # from paste.deploy.converters
 def asbool(obj):
-    if isinstance(obj, (str, unicode)):
+    if isinstance(obj, str):
         obj = obj.strip().lower()
         if obj in ['true', 'yes', 'on', 'y', 't', '1']:
             return True
@@ -677,13 +677,13 @@ def counter():
     """Return a threadsafe counter function."""
 
     lock = threading.Lock()
-    counter = itertools.count(1L)
+    counter = itertools.count(1)
 
     # avoid the 2to3 "next" transformation...
     def _next():
         lock.acquire()
         try:
-            return counter.next()
+            return next(counter)
         finally:
             lock.release()
 
@@ -742,9 +742,9 @@ def dictlike_iteritems(dictlike):
     #    return dictlike.items()
     # Py2K
     if hasattr(dictlike, 'iteritems'):
-        return dictlike.iteritems()
-    elif hasattr(dictlike, 'items'):
         return iter(dictlike.items())
+    elif hasattr(dictlike, 'items'):
+        return iter(list(dictlike.items()))
     # end Py2K
 
     getter = getattr(dictlike, '__getitem__', getattr(dictlike, 'get', None))
@@ -754,11 +754,11 @@ def dictlike_iteritems(dictlike):
 
     if hasattr(dictlike, 'iterkeys'):
         def iterator():
-            for key in dictlike.iterkeys():
+            for key in dictlike.keys():
                 yield key, getter(key)
         return iterator()
     elif hasattr(dictlike, 'keys'):
-        return iter((key, getter(key)) for key in dictlike.keys())
+        return iter((key, getter(key)) for key in list(dictlike.keys()))
     else:
         raise TypeError(
             "Object '%r' is not dict-like" % dictlike)
@@ -868,7 +868,7 @@ def warn(msg, stacklevel=3):
        be controlled.
 
     """
-    if isinstance(msg, basestring):
+    if isinstance(msg, str):
         warnings.warn(msg, exc.SAWarning, stacklevel=stacklevel)
     else:
         warnings.warn(msg, stacklevel=stacklevel)

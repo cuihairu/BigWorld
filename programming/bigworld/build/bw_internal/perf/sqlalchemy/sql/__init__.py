@@ -64,6 +64,6 @@ from sqlalchemy.sql.expression import (
 
 from sqlalchemy.sql.visitors import ClauseVisitor
 
-__tmp = locals().keys()
+__tmp = list(locals().keys())
 __all__ = sorted([i for i in __tmp if not i.startswith('__')])
 

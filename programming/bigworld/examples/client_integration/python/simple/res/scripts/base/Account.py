@@ -33,12 +33,12 @@ class Account( BigWorld.Proxy ):
 
 	def __init__( self ):
 		BigWorld.Proxy.__init__( self )
-		print "Account.__init__:"
+		print("Account.__init__:")
 		self.count = 0
 
 
 	def onClientDeath( self ):
-		print "Account.onClientDeath:", self.id
+		print("Account.onClientDeath:", self.id)
 		self.destroy()
 
 
@@ -47,13 +47,13 @@ class Account( BigWorld.Proxy ):
 		This callback is called when the client signals that it is ready to
 		receive entity updates after logging in
 		"""
-		print "Account.onEntitiesEnabled:", self.id
+		print("Account.onEntitiesEnabled:", self.id)
 		self.addTimer( 1.0, 1.0 )
 
 
 	def onTimer( self, timerId, userData ):
 		self.count += 1
-		print "Account.onTimer:", self.count
+		print("Account.onTimer:", self.count)
 		self.client.chatMessage( "Hello from the base: " + str( self.count ) )
 
 		if self.count == 5:
@@ -62,7 +62,7 @@ class Account( BigWorld.Proxy ):
 			# Create an instance of the corresponding ClientAvatar entity
 			# with the name from the 'character' property and
 			# call back on handleNewCharacter()
-			print "Loading", self.character
+			print("Loading", self.character)
 			BigWorld.createBaseFromDB( "ClientAvatar", self.character,
 				self.handleNewCharacter )
 
@@ -75,7 +75,7 @@ class Account( BigWorld.Proxy ):
 		newEntity is either None if the loading failed, or the ClientAvatar
 		entity.
 		"""
-		print "Account.handleNewCharacter:", self.id
+		print("Account.handleNewCharacter:", self.id)
 		if newEntity != None:
 			# we have loaded the ClientAvatar entity!
 			# The client should now talk to that entity, and we can
@@ -83,7 +83,7 @@ class Account( BigWorld.Proxy ):
 			self.giveClientTo( newEntity )
 			self.destroy()
 		else:
-			print "Failed to create new entity"
+			print("Failed to create new entity")
 			self.client.chatMessage( "Failed to load the character" )
 
 

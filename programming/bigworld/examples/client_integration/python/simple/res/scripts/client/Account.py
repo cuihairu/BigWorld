@@ -14,13 +14,13 @@ import BigWorld
 class Account( BigWorld.Entity ):
 	def __init__( self ):
 		BigWorld.Entity.__init__( self )
-		print "Client: Account.__init__"
-		print self.__dict__
-		print dir(self)
+		print("Client: Account.__init__")
+		print(self.__dict__)
+		print(dir(self))
 		self.tick = 0
 
 	def chatMessage( self, msg ):
-		print "Account.chatMessage:", msg
+		print("Account.chatMessage:", msg)
 
 	def onTick( self, t ):
 #		print "Account.onTick"

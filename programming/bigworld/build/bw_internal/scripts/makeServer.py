@@ -77,8 +77,8 @@ def main():
 		tempConfigs=["Hybrid", "Debug"]
 
 	else:
-		print "ERROR: Invalid build configuration specified: '%s'" % \
-			options.build_configurations
+		print("ERROR: Invalid build configuration specified: '%s'" % \
+			options.build_configurations)
 		sys.exit( 1 )
 
 
@@ -95,7 +95,7 @@ def main():
 
 		usedConfigs.append( config )
 
-	print "usedConfigs %s " % usedConfigs
+	print("usedConfigs %s " % usedConfigs)
 
 	build( mfRoot, "/bigworld/src/server",
 			options.clean, usedConfigs, True )

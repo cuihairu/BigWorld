@@ -49,7 +49,7 @@ class EvaluatorCompiler(object):
         return lambda obj: get_corresponding_attr(obj)
 
     def visit_clauselist(self, clause):
-        evaluators = map(self.process, clause.clauses)
+        evaluators = list(map(self.process, clause.clauses))
         if clause.operator is operators.or_:
             def evaluate(obj):
                 has_null = False
@@ -76,7 +76,7 @@ class EvaluatorCompiler(object):
         return evaluate
 
     def visit_binary(self, clause):
-        eval_left,eval_right = map(self.process, [clause.left, clause.right])
+        eval_left,eval_right = list(map(self.process, [clause.left, clause.right]))
         operator = clause.operator
         if operator is operators.is_:
             def evaluate(obj):

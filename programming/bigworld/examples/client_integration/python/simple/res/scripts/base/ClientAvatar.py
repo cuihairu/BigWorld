@@ -17,16 +17,16 @@ class ClientAvatar( BigWorld.Proxy ):
 
 	def __init__( self ):
 		BigWorld.Proxy.__init__( self )
-		print "ClientAvatar.__init__:", self.__dict__, self.databaseID
+		print("ClientAvatar.__init__:", self.__dict__, self.databaseID)
 
 
 	def onEntitiesEnabled( self ):
-		print "ClientAvatar.onEntitiesEnabled:", self.id
+		print("ClientAvatar.onEntitiesEnabled:", self.id)
 		self.createCellEntity( BigWorld.globalBases[ "DefaultSpace" ].cell )
 
 
 	def onClientDeath( self ):
-		print "ClientAvatar.onClientDeath:", self.id
+		print("ClientAvatar.onClientDeath:", self.id)
 		if hasattr( self, "cell" ):
 			self.destroyCellEntity()
 		else:
@@ -34,7 +34,7 @@ class ClientAvatar( BigWorld.Proxy ):
 
 
 	def logOff( self ):
-		print "ClientAvatar.logOff:", self.id
+		print("ClientAvatar.logOff:", self.id)
 		if hasattr( self, "cell" ):
 			self.destroyCellEntity()
 		else:

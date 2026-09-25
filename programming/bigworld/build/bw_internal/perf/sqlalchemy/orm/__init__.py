@@ -1564,7 +1564,7 @@ def contains_eager(*keys, **kwargs):
     alias = kwargs.pop('alias', None)
     if kwargs:
         raise exceptions.ArgumentError('Invalid kwargs for contains_eag'
-                'er: %r' % kwargs.keys())
+                'er: %r' % list(kwargs.keys()))
     return strategies.EagerLazyOption(keys, lazy='joined',
             propagate_to_loaders=False, chained=True), \
         strategies.LoadEagerFromAliasOption(keys, alias=alias, chained=True)

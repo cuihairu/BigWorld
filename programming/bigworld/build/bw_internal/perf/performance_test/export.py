@@ -145,8 +145,8 @@ def main():
 			benchmarkName = columnFilters[4]
 			columnName = columnFilters[5]
 		except IndexError:
-			print "ERROR: Not enough filter arguments provided to column:", arg
-			print COLUMN_FORMAT_USAGE
+			print("ERROR: Not enough filter arguments provided to column:", arg)
+			print(COLUMN_FORMAT_USAGE)
 			return FAILURE
 			
 		columns.append( OutputColumn( dbSession, hostname, configuration, executable, branchName, benchmarkName, columnName, options.column_value ) )
@@ -189,8 +189,8 @@ def main():
 
 def printUsage( parser ):
 	parser.print_help()
-	print
-	print COLUMN_FORMAT_USAGE
-	print '\tvalid executableTypes:', ', '.join( EXE_TYPES )
+	print()
+	print(COLUMN_FORMAT_USAGE)
+	print('\tvalid executableTypes:', ', '.join( EXE_TYPES ))
 	
 		

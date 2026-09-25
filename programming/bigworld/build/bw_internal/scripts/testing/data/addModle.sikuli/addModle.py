@@ -44,7 +44,7 @@ if len(sys.argv) > 1:
     modeleditor_path = sys.argv[1] + modeleditor_path
     model_path = sys.argv[1] + model_path
 else:
-    print "ERORR: missing argumants for the Model and Model editor location"
+    print("ERORR: missing argumants for the Model and Model editor location")
     modeleditor_path = "c:\\bw\\2_current" + modeleditor_path
     model_path = "c:\\bw\\2_current" + model_path
     #sys.exit(1)

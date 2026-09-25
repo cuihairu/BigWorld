@@ -10,7 +10,7 @@ functionality."""
 from sqlalchemy import exc
 import warnings
 import re
-from langhelpers import decorator
+from .langhelpers import decorator
 
 def warn_deprecated(msg, stacklevel=3):
     warnings.warn(msg, exc.SADeprecationWarning, stacklevel=stacklevel)

@@ -411,7 +411,7 @@ class SQLiteDDLCompiler(compiler.DDLCompiler):
 
     def visit_foreign_key_constraint(self, constraint):
 
-        local_table = constraint._elements.values()[0].parent.table
+        local_table = list(constraint._elements.values())[0].parent.table
         remote_table = list(constraint._elements.values())[0].column.table
 
         if local_table.schema != remote_table.schema:

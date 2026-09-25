@@ -2,9 +2,9 @@ import glob
 import optparse
 import os
 import sys
-import reporter
+from . import reporter
 import subprocess
-import util
+from . import util
 import shutil
 
 SIKULIX_EXE="c:\\Sikulix\\runIDE.cmd"
@@ -20,8 +20,8 @@ def runInternalTest( testDir, sikulixExe, url, branchName ):
 	sikulixExe = sikulixExe.replace( "\\", "/" )
 	
 	
-	if not os.environ.has_key("JAVA_HOME"):
-		print "JAVA_HOME Variable does not exist\n"
+	if "JAVA_HOME" not in os.environ:
+		print("JAVA_HOME Variable does not exist\n")
 		return 1
 	basePath = os.environ["JAVA_HOME"]
 	
@@ -45,27 +45,27 @@ def runInternalTest( testDir, sikulixExe, url, branchName ):
 			shutil.copy(os.path.join( test, MODELEDITOR_OPTION_FILE ), modelEditorOption_file)
 		elif os.path.exists( modelEditorOption_file+"_cp" ):
 			#use defualt
-			print "using default ME option file"
+			print("using default ME option file")
 			shutil.copy(modelEditorOption_file+"_cp", modelEditorOption_file)
 
 		if os.path.exists( os.path.join( test, MODELEDITOR_LAYOUT_FILE ) ):
 			shutil.copy(os.path.join( test, MODELEDITOR_LAYOUT_FILE ), modelEditorLayout_file)
 		elif os.path.exists( modelEditorLayout_file+"_cp" ):
 			#use defualt
-			print "using default ME layout file"
+			print("using default ME layout file")
 			shutil.copy(modelEditorLayout_file+"_cp", modelEditorLayout_file)
 		
 		cmd = [sikulixExe, "-r", test, "--args", os.getcwd(),"-c"]
-		print cmd
+		print(cmd)
 		
 		stdout, stderr = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
 		try:
 			subprocess.check_output("taskkill /im " + "modeleditor.exe" + " /f")
-		except subprocess.CalledProcessError, e:
+		except subprocess.CalledProcessError as e:
 			pass
 
 		report_test = ""
-		print stdout
+		print(stdout)
 		output = stdout.split("\r")
 		for line in output:
 			if "[error]" in line:
@@ -114,17 +114,17 @@ def run_modeleditor_UItest():
 	(options, args) = parser.parse_args() 
 	
 	if None == options.testDir:
-		print "\nPlease specify the test directory\n"
+		print("\nPlease specify the test directory\n")
 		parser.print_help()
 		return 1
 	
 	if not os.path.exists( options.testDir ):
-		print options.testDir + " is not a valid path.\n"
+		print(options.testDir + " is not a valid path.\n")
 		parser.print_help()
 		return 1
 	
 	if not os.path.exists( options.sikulix ):
-		print options.sikulix + " is not a valid path.\n"
+		print(options.sikulix + " is not a valid path.\n")
 		parser.print_help()
 		return 1
 		

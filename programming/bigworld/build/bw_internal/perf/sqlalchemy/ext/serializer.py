@@ -62,7 +62,7 @@ import base64
 # Py3K
 #from io import BytesIO as byte_buffer
 # Py2K
-from cStringIO import StringIO as byte_buffer
+from io import StringIO as byte_buffer
 # end Py2K
 
 # Py3K

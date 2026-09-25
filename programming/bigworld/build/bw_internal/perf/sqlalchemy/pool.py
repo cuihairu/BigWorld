@@ -53,7 +53,7 @@ def clear_managers():
     All pools and connections are disposed.
     """
 
-    for manager in proxies.itervalues():
+    for manager in proxies.values():
         manager.close()
     proxies.clear()
 
@@ -319,7 +319,7 @@ class _ConnectionRecord(object):
             self.connection.close()
         except (SystemExit, KeyboardInterrupt):
             raise
-        except Exception, e:
+        except Exception as e:
             self.__pool.logger.debug(
                         "Connection %r threw an error on close: %s",
                         self.connection, e)
@@ -330,7 +330,7 @@ class _ConnectionRecord(object):
             connection = self.__pool._creator()
             self.__pool.logger.debug("Created new connection %r", connection)
             return connection
-        except Exception, e:
+        except Exception as e:
             self.__pool.logger.debug("Error on connect(): %s", e)
             raise
 
@@ -351,7 +351,7 @@ def _finalize_fairy(connection, connection_record, pool, ref, echo):
             # Immediately close detached instances
             if connection_record is None:
                 connection.close()
-        except Exception, e:
+        except Exception as e:
             if connection_record is not None:
                 connection_record.invalidate(e=e)
             if isinstance(e, (SystemExit, KeyboardInterrupt)):
@@ -459,7 +459,7 @@ class _ConnectionFairy(object):
                                             self._connection_record,
                                             self)
                 return self
-            except exc.DisconnectionError, e:
+            except exc.DisconnectionError as e:
                 self._pool.logger.info(
                 "Disconnection detected on checkout: %s", e)
                 self._connection_record.invalidate(e)
@@ -946,7 +946,7 @@ class _DBProxy(object):
         self._create_pool_mutex = threading.Lock()
 
     def close(self):
-        for key in self.pools.keys():
+        for key in list(self.pools.keys()):
             del self.pools[key]
 
     def __del__(self):

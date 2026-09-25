@@ -73,12 +73,12 @@ def index_symbol_sources(src_dir, bin_dir, ini_file, p4_ticket, quiet, dry_run):
 			path = env['PATH'] + os.pathsep + perl_path
 			env['PATH'] = path
 			if not quiet:
-				print('PATH=%s' % env['PATH'])
+				print(('PATH=%s' % env['PATH']))
 	# Set P4PASSWD if we've been given a p4 login ticket
 	if p4_ticket:
 		env['P4PASSWD'] = p4_ticket
 		if not quiet:
-			print('P4PASSWD=%s' % env['P4PASSWD'])
+			print(('P4PASSWD=%s' % env['P4PASSWD']))
 	cmd = [p4index_cmd,
 			'-Ini=%s' % os.path.normpath(ini_file),
 			'-Source=%s' % os.path.normpath(src_dir), 
@@ -86,7 +86,7 @@ def index_symbol_sources(src_dir, bin_dir, ini_file, p4_ticket, quiet, dry_run):
 	if not quiet:
 		cmd.append('/debug')
 	if not quiet or dry_run:
-		print(' '.join(cmd))
+		print((' '.join(cmd)))
 	if not dry_run:
 		p = subprocess.Popen(cmd, env=env)
 		p.communicate()
@@ -120,7 +120,7 @@ def store_symbols(bin_dir, sym_dir, nocopy, product_name, product_version,
 		# display verbose output
 		cmd.append('/o')
 	if dry_run or not quiet:
-		print(' '.join(cmd))
+		print((' '.join(cmd)))
 	if not dry_run:
 		subprocess.check_call(cmd)
 

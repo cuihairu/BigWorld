@@ -11,14 +11,14 @@ import BigWorld
 class ClientOnly( BigWorld.Entity ):
 	def __init__( self ):
 		BigWorld.Entity.__init__( self )
-		print "ClientOnly.__init__:"
-		print self.__dict__
+		print("ClientOnly.__init__:")
+		print(self.__dict__)
 
 	def onFinish( self ):
 		pass
 
 	def method1( self, msg ):
-		print "ClientOnly.method1:", self.id, ":", msg
+		print("ClientOnly.method1:", self.id, ":", msg)
 
 	def onTick( self, t ):
 		return

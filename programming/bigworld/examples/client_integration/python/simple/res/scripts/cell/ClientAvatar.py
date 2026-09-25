@@ -23,7 +23,7 @@ class ClientAvatar( BigWorld.Entity ):
 		"""
 		BigWorld.Entity.__init__( self )
 
-		print "ClientAvatar.__init__:", self.__dict__
+		print("ClientAvatar.__init__:", self.__dict__)
 
 		# add a timer - calls back on onTimer when done
 		self._timer1 = self.addTimer( 1.0, 0.0 )

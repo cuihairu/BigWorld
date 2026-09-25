@@ -45,7 +45,7 @@ class ReportHolder:
 		mailBody += "Changelist %s\n" % (self.changelist)
 		
 		indentation = "    "
-		print "Sending e-mail (%d reports)..." % len(self.reports)
+		print("Sending e-mail (%d reports)..." % len(self.reports))
 		for report in self.reports:
 			status = "succeeded"
 			if not report.success:
@@ -67,7 +67,7 @@ class ReportHolder:
 			mailTitle = "[%s] OK: %s" % ( self.category, self.name )
 			
 		_sendEmail( EMAIL_ADDRESSES, mailTitle, mailBody )
-		print "Finished sending report!"
+		print("Finished sending report!")
 	
 	def addReport( self, report ):
 		assert( isinstance( report, Report ) )

@@ -10,21 +10,21 @@ UNIT_TEST_DIR = os.path.normpath(
 				)
 
 def cleanOldTests():
-	print "* winMakeUnitTests.cleanOldTests() from", UNIT_TEST_DIR
+	print("* winMakeUnitTests.cleanOldTests() from", UNIT_TEST_DIR)
 
 	try:
 		shutil.rmtree( UNIT_TEST_DIR )
 		if not os.path.exists( UNIT_TEST_DIR ):
 			os.makedirs( UNIT_TEST_DIR )
-	except Exception, e:
-		print "* Not removing test dir:", str( e )
+	except Exception as e:
+		print("* Not removing test dir:", str( e ))
 
 
 def _runExe( fileName ):
 	if fileName.find( ".exe" ) != -1:
 		if fileName.find( ".manifest" ) == -1:
-			print
-			print "* Running unit test '%s'" % fileName
+			print()
+			print("* Running unit test '%s'" % fileName)
 			build_common.runCmd( fileName )
 
 

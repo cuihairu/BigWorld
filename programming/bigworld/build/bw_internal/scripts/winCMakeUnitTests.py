@@ -54,15 +54,15 @@ ENABLED_UNIT_TEST_DIRS = (
 def cleanOldTests(codeCoverage):
 	# Clean all unit tests
 	for testDir in ALL_UNIT_TEST_DIRS:
-		print
-		print "* winMakeUnitTests.cleanOldTests() from", testDir
+		print()
+		print("* winMakeUnitTests.cleanOldTests() from", testDir)
 		
 		filelist = [ f for f in os.listdir( testDir ) \
 			if (f.rfind( "unit_test" ) != -1) ]
 		for f in filelist:
 			fileToRemove = os.path.normpath(
 				os.path.join( testDir, f ) )
-			print "Removing " + fileToRemove
+			print("Removing " + fileToRemove)
 			os.remove( fileToRemove )
 
 def _runExe( fileName, codeCoverage ):
@@ -72,8 +72,8 @@ def _runExe( fileName, codeCoverage ):
 
 	# Check if it is excluded
 	if testName in EXCLUDED_TESTS:
-		print
-		print "* Disabled unit test '%s'" % fileName
+		print()
+		print("* Disabled unit test '%s'" % fileName)
 
 	# Attempt to run the test
 	elif fileName.find( ".exe" ) != -1:
@@ -82,8 +82,8 @@ def _runExe( fileName, codeCoverage ):
 				#run code coverage on 32bit debug file only
 				_runCodeCoverage( fileName.replace("_h.exe", "_d.exe") )
 			else:
-				print
-				print "* Running unit test '%s'" % fileName
+				print()
+				print("* Running unit test '%s'" % fileName)
 				build_common.runCmd( fileName + " -v" )
 
 def _runCodeCoverage( debugFileName ):
@@ -91,8 +91,8 @@ def _runCodeCoverage( debugFileName ):
 	testName = os.path.basename( debugFileName ).split("_unit_test")[0]
 	
 	if testName in EXCLUDED_COVERAGE_TESTS:
-		print
-		print "* Disabled unit test coverage '%s'" % debugFileName
+		print()
+		print("* Disabled unit test coverage '%s'" % debugFileName)
 	else:
 		outputFolder = os.path.join( COVERAGE_VALIDATOR_DIRECTORY, testName )
 		if not os.path.exists(outputFolder):
@@ -124,14 +124,14 @@ def _runCodeCoverage( debugFileName ):
 		+ "-program " + debugFileName + sourceFileFilter + " -saveSession " \
 		+ session + exportVariables
 
-		print "\n* Running unit test '%s' with code coverage" % debugFileName
+		print("\n* Running unit test '%s' with code coverage" % debugFileName)
 		build_common.runCmd( cmd )
 		
 		
 		
 		summaryNode = ET.parse(xmlOutputFile).getroot().find('SUMMARY')
-		print "CODE COVERAGE: PERCENTAGE OF VISITED LINES IN LIB= " \
-				+ summaryNode.find('NUMBER_OF_VISITED_LINES_PC').text
+		print("CODE COVERAGE: PERCENTAGE OF VISITED LINES IN LIB= " \
+				+ summaryNode.find('NUMBER_OF_VISITED_LINES_PC').text)
 
 				
 def _MergeCCResult( ):
@@ -167,7 +167,7 @@ def _MergeCCResult( ):
 			
 			#for each session, merge result to the Main session
 			sessionToMerge = os.path.join( COVERAGE_VALIDATOR_DIRECTORY, folder, s ) 
-			print "Merged " + s + " into the report"
+			print("Merged " + s + " into the report")
 			
 			if not os.path.exists( mainSession ):
 				#we build the merge report on the first result
@@ -179,7 +179,7 @@ def _MergeCCResult( ):
 					+ " -saveMergeResult " + mainSession
 			os.system( cmd )			
 			
-	print "EXPORT " + mainSession
+	print("EXPORT " + mainSession)
 	cmd = COVERAGE_VALIDATOR_CMD + " -hideUI -refreshCoverage -refreshFunctions"\
 			+ " -refreshFilesAndLines -loadSession " + mainSession 				\
 			+ " -exportAsHTML " + mainSessionPath + ".html" + " -exportAsXML "	\
@@ -199,18 +199,18 @@ def _MergeCCResult( ):
 def runUnitTests(codeCoverage = False):
 
 	if codeCoverage and not os.path.exists( COVERAGE_VALIDATOR_EXE ):
-		print "Code Coverage application is not installed."
-		print COVERAGE_VALIDATOR_CMD
+		print("Code Coverage application is not installed.")
+		print(COVERAGE_VALIDATOR_CMD)
 		codeCoverage = False
 		
 	for testDir in ENABLED_UNIT_TEST_DIRS:
-		print "* running unit tests in directory " + testDir
+		print("* running unit tests in directory " + testDir)
 
 		filelist = fnmatch.filter(os.listdir(testDir), '*unit_test*.exe')
 		for f in filelist:
 			fileToRun = os.path.normpath(
 				os.path.join( testDir, f ) )
-			print "* test found. Name: " + fileToRun
+			print("* test found. Name: " + fileToRun)
 			currDir = os.getcwd()
 			os.chdir( testDir )
 			_runExe( fileToRun, codeCoverage )

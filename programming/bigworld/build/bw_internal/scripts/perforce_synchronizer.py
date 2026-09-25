@@ -5,8 +5,8 @@ import optparse
 
 try:
 	from P4 import P4, P4Exception
-except ImportError, ve:
-	print "Cannot find P4Python, please istall p4Python first."
+except ImportError as ve:
+	print("Cannot find P4Python, please istall p4Python first.")
 	
 SERVER = "pershap4p:1669"
 
@@ -49,31 +49,31 @@ class perforceManager:
 		self.p4.password = password
 	
 	def connect( self ):
-		print "Connecting to Perforce server..."
+		print("Connecting to Perforce server...")
 		self.p4.connect()
-		print "Logging in..."
+		print("Logging in...")
 		self.p4.run_login()
 		
 	def disconnect( self ):
-		print "Disconnecting..."
+		print("Disconnecting...")
 		self.p4.disconnect()
 		
 	def verifyWorkSpace( self, workSpaceConfig ):
-		print "Verifying workSpaces..."
+		print("Verifying workSpaces...")
 		
 		needSave = False
 		client = self.p4.fetch_client( workSpaceConfig['Client'] )
 
-		for key, val in workSpaceConfig.items():
+		for key, val in list(workSpaceConfig.items()):
 			if client[key] != val:
 				client[key] = val
 				needSave = True
 		if needSave:
-			print "Workspace " + client['Client'] + " has been changed, saving to perforce..."
+			print("Workspace " + client['Client'] + " has been changed, saving to perforce...")
 			self.p4.save_client( client )
 		
 	def sync( self, workSpace ):
-		print "Syncing " + workSpace + "..."
+		print("Syncing " + workSpace + "...")
 		self.p4.client = workSpace
 		try:
 			#The fastest way to revert changed files is to delete and recover them,
@@ -83,20 +83,20 @@ class perforceManager:
 				os.unlink( modifiedItem['clientFile'] )
 
 			if len( self.p4.run_diff( "-sd" ) ):
-				print "The client has been changed, reverting all..."
+				print("The client has been changed, reverting all...")
 				self.p4.run_sync( "-f" )
 			else:
 				self.p4.run_sync()
-		except P4Exception, e:
-			print e.value
+		except P4Exception as e:
+			print(e.value)
 			
 				
-		print workSpace + " synced!"
+		print(workSpace + " synced!")
 		
 		return True
 	
 def syncFromPerforce( server, username, password, workSpaceConfig ):
-	print "Starting..."
+	print("Starting...")
 
 	result = False
 	try:
@@ -105,13 +105,13 @@ def syncFromPerforce( server, username, password, workSpaceConfig ):
 		p.verifyWorkSpace( workSpaceConfig )
 		result = p.sync( workSpaceConfig['Client'] )
 		p.disconnect()
-	except P4Exception, e:
+	except P4Exception as e:
 		if len(e.value):
-			print "Perforce exception: ", e.value
+			print("Perforce exception: ", e.value)
 			return False
 	
 	if result:
-		print "Done!"
+		print("Done!")
 		
 	return result
 
@@ -138,15 +138,15 @@ def main():
 	(options, args) = opt.parse_args()
 
 	if options.user == None or options.password == None:
-		print "ERROR: Please specify username and password to login the Perforce server"
+		print("ERROR: Please specify username and password to login the Perforce server")
 		return False
 	
 	if options.workspace == None:
-		print "ERROR: Please specify the workspace to sync"
+		print("ERROR: Please specify the workspace to sync")
 		return False
 	
-	if not WORKSPACES.has_key( options.workspace ):
-		print "ERROR: The specified workspace doesn't exist"
+	if options.workspace not in WORKSPACES:
+		print("ERROR: The specified workspace doesn't exist")
 		return False
 		
 	if options.rootpath == None:

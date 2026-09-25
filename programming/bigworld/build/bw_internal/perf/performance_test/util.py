@@ -1,7 +1,7 @@
 import os
 import re
 import xml.etree.ElementTree as ET
-import constants
+from . import constants
 import stat
 
 class BWTestingError( Exception ):
@@ -61,7 +61,7 @@ def parseXMLValue( xmlFilePath, nodeName, defaultVal ):
 	try:
 		doc = ET.parse( xmlFilePath )
 	except IOError:
-		print "ERROR: error reading XML", xmlFilePath
+		print("ERROR: error reading XML", xmlFilePath)
 		return defaultVal
 		
 	root = doc.getroot()

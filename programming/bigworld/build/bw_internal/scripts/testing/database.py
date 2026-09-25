@@ -2,7 +2,7 @@ import os
 import sys
 import csv
 import socket
-from constants import *
+from .constants import *
 
 from datetime import datetime
 

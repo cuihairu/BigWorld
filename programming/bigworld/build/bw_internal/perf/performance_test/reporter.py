@@ -40,7 +40,7 @@ class ReportHolder:
 		failCount = 0
 		mailBody = ""
 		indentation = "    "
-		print "Sending e-mail (%d reports)..." % len(self.reports)
+		print("Sending e-mail (%d reports)..." % len(self.reports))
 		for report in self.reports:
 			status = "succeeded"
 			if not report.success:
@@ -62,7 +62,7 @@ class ReportHolder:
 			mailTitle = "[Performance Testing] OK: %s" % self.name
 			
 		_sendEmail( addressList, mailTitle, mailBody )
-		print "Finished sending report!"
+		print("Finished sending report!")
 	
 	def addReport( self, report ):
 		assert( isinstance(report, Report ) )

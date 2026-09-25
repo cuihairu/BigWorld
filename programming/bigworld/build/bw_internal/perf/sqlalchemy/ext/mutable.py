@@ -431,7 +431,7 @@ class Mutable(MutableBase):
     def changed(self):
         """Subclasses should call this method whenever change events occur."""
 
-        for parent, key in self._parents.items():
+        for parent, key in list(self._parents.items()):
             flag_modified(parent, key)
 
     @classmethod
@@ -517,7 +517,7 @@ class _MutableCompositeMeta(type):
         cls._setup_listeners()
         return type.__init__(cls, classname, bases, dict_)
 
-class MutableComposite(MutableBase):
+class MutableComposite(MutableBase, metaclass=_MutableCompositeMeta):
     """Mixin that defines transparent propagation of change
     events on a SQLAlchemy "composite" object to its
     owning parent or parents.
@@ -533,12 +533,11 @@ class MutableComposite(MutableBase):
        in memory usage.
 
     """
-    __metaclass__ = _MutableCompositeMeta
 
     def changed(self):
         """Subclasses should call this method whenever change events occur."""
 
-        for parent, key in self._parents.items():
+        for parent, key in list(self._parents.items()):
 
             prop = object_mapper(parent).get_property(key)
             for value, attr_name in zip(

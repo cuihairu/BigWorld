@@ -32,7 +32,7 @@ def str_to_datetime_processor_factory(regexp, type_):
             if m is None:
                 raise ValueError("Couldn't parse %s string: "
                                 "'%s'" % (type_.__name__ , value))
-            return type_(*map(int, m.groups(0)))
+            return type_(*list(map(int, m.groups(0))))
     return process
 
 def boolean_to_int(value):

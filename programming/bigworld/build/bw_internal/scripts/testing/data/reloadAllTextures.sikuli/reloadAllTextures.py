@@ -35,17 +35,17 @@ def waitForNOTTextureRanger():
     
 def TestReloadAllTextures():
     waitForTextureRanger()
-    print "Move Textures"
+    print("Move Textures")
     moveTexture(dir_path, dir_path + "\\animations")
-    print "Refrush model"
+    print("Refrush model")
     click(FOCOUSE_ON_PROGRAM)
     type("t", KEY_CTRL)
     click(FOCOUSE_ON_PROGRAM)
     waitForNOTTextureRanger()
-    print "Return Textures"
+    print("Return Textures")
     moveTexture(dir_path + "\\animations", dir_path)
     sleep(1)
-    print "Refrush model"
+    print("Refrush model")
     click(FOCOUSE_ON_PROGRAM)
     type("t", KEY_CTRL)
     sleep(1)
@@ -62,7 +62,7 @@ if len(sys.argv) > 1:
     modeleditor_path = sys.argv[1] + modeleditor_path
     dir_path = sys.argv[1] + dir_path
 else:
-    print "ERORR: missing argumants for the Model and Model editor location"
+    print("ERORR: missing argumants for the Model and Model editor location")
     modeleditor_path = "c:\\bw\\2_current" + modeleditor_path
     dir_path = "c:\\bw\\2_current" + dir_path
     #sys.exit(1)

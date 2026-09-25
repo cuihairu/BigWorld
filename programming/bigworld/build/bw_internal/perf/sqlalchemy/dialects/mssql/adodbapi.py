@@ -34,7 +34,7 @@ class MSDialect_adodbapi(MSDialect):
 
     @classmethod
     def import_dbapi(cls):
-        import adodbapi as module
+        from . import adodbapi as module
         return module
 
     colspecs = util.update_copy(

@@ -1086,9 +1086,9 @@ def _as_declarative(cls, classname, dict_):
 
         class_mapped = _is_mapped_class(base)
         if class_mapped:
-            parent_columns = base.__table__.c.keys()
+            parent_columns = list(base.__table__.c.keys())
 
-        for name,obj in vars(base).items():
+        for name,obj in list(vars(base).items()):
             if name == '__mapper_args__':
                 if not mapper_args and (
                                         not class_mapped or 
@@ -1152,7 +1152,7 @@ def _as_declarative(cls, classname, dict_):
                         ret.doc = obj.__doc__
 
     # apply inherited columns as we should
-    for k, v in potential_columns.items():
+    for k, v in list(potential_columns.items()):
         if tablename or (v.name or k) not in parent_columns:
             dict_[k] = v
 
@@ -1202,7 +1202,7 @@ def _as_declarative(cls, classname, dict_):
 
     # extract columns from the class dict
     cols = set()
-    for key, c in our_stuff.iteritems():
+    for key, c in our_stuff.items():
         if isinstance(c, (ColumnProperty, CompositeProperty)):
             for col in c.columns:
                 if isinstance(col, Column) and \
@@ -1324,7 +1324,7 @@ def _as_declarative(cls, classname, dict_):
         # in which case the mapper makes this combination).
         # See if the superclass has a similar column property.
         # If so, join them together.
-        for k, col in our_stuff.items():
+        for k, col in list(our_stuff.items()):
             if not isinstance(col, expression.ColumnElement):
                 continue
             if k in inherited_mapper._props:
@@ -1424,7 +1424,7 @@ def _deferred_relationship(cls, prop):
                     return x.cls
                 else:
                     return x
-            except NameError, n:
+            except NameError as n:
                 raise exc.InvalidRequestError(
                     "When initializing mapper %s, expression %r failed to "
                     "locate a name (%r). If this is a class name, consider "
@@ -1438,14 +1438,14 @@ def _deferred_relationship(cls, prop):
         for attr in ('argument', 'order_by', 'primaryjoin', 'secondaryjoin',
                      'secondary', '_user_defined_foreign_keys', 'remote_side'):
             v = getattr(prop, attr)
-            if isinstance(v, basestring):
+            if isinstance(v, str):
                 setattr(prop, attr, resolve_arg(v))
 
         if prop.backref and isinstance(prop.backref, tuple):
             key, kwargs = prop.backref
             for attr in ('primaryjoin', 'secondaryjoin', 'secondary',
                          'foreign_keys', 'remote_side', 'order_by'):
-               if attr in kwargs and isinstance(kwargs[attr], basestring):
+               if attr in kwargs and isinstance(kwargs[attr], str):
                    kwargs[attr] = resolve_arg(kwargs[attr])
 
 

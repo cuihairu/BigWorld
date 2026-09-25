@@ -44,7 +44,7 @@ if py3k_warning:
     import pickle
 else:
     try:
-        import cPickle as pickle
+        import pickle as pickle
     except ImportError:
         import pickle
 
@@ -90,7 +90,7 @@ if sys.version_info < (2, 6):
     # in newer pythons
     from cgi import parse_qsl
 else:
-    from urlparse import parse_qsl
+    from urllib.parse import parse_qsl
 
 # Py3K
 #from inspect import getfullargspec as inspect_getfullargspec
@@ -136,7 +136,7 @@ except ImportError:
                 args = tuple()
             else:
                 args = self.default_factory,
-            return type(self), args, None, None, self.iteritems()
+            return type(self), args, None, None, iter(self.items())
         def copy(self):
             return self.__copy__()
         def __copy__(self):
@@ -144,7 +144,7 @@ except ImportError:
         def __deepcopy__(self, memo):
             import copy
             return type(self)(self.default_factory,
-                              copy.deepcopy(self.items()))
+                              copy.deepcopy(list(self.items())))
         def __repr__(self):
             return 'defaultdict(%s, %s)' % (self.default_factory,
                                             dict.__repr__(self))

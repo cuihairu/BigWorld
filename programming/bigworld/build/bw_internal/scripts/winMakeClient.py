@@ -14,7 +14,7 @@ GetShortPathName = ctypes.windll.kernel32.GetShortPathNameW
 def convertPathToShortPath( path ):
 	bufSize = 260
 	buf = ctypes.create_unicode_buffer( bufSize )
-	retVal = GetShortPathName( unicode( path ), buf, bufSize )
+	retVal = GetShortPathName( str( path ), buf, bufSize )
 
 	if retVal == 0:
 		raise ValueError( "Unable to get the short path name" )
@@ -25,7 +25,7 @@ def convertPathToShortPath( path ):
 def buildProject( root, projectIter, devEnvCom, shouldClean,
 	shouldUseIncrediBuild ):
 
-	print
+	print()
 
 	projectStart = datetime.datetime.fromtimestamp( time.time() )
 
@@ -35,8 +35,8 @@ def buildProject( root, projectIter, devEnvCom, shouldClean,
 		projectDir = os.path.dirname( project )
 		projectSln = os.path.basename( project )
 
-		print
-		print "* Building %s in config %s" % (projectSln, config)
+		print()
+		print("* Building %s in config %s" % (projectSln, config))
 
 		os.chdir( os.path.join( root, projectDir ) )
 
@@ -62,8 +62,8 @@ def buildProject( root, projectIter, devEnvCom, shouldClean,
 		os.chdir( origDir )
 
 	projectEnd = datetime.datetime.fromtimestamp( time.time() )
-	print "* Total project build time for %s (%s) - %s" % \
-		(projectSln, config, projectEnd-projectStart)
+	print("* Total project build time for %s (%s) - %s" % \
+		(projectSln, config, projectEnd-projectStart))
 
 
 # Make a dumb assumption about where IncrediBuild is installed until
@@ -86,7 +86,7 @@ def build( vsVersion, devEnvComLong, buildType, shouldClean,
 	if shouldUseIncrediBuild:
 		pathToIncrediBuild = getIncrediBuildPath()
 		if not pathToIncrediBuild:
-			print "ERROR: Unable to locate IncrediBuild installation."
+			print("ERROR: Unable to locate IncrediBuild installation.")
 			return False
 			
 		devEnvComLong = "%s\\BuildConsole.exe" % pathToIncrediBuild
@@ -95,15 +95,15 @@ def build( vsVersion, devEnvComLong, buildType, shouldClean,
 	# os.popen complains about the spaces in C:\Program Files\...
 	devEnvCom = convertPathToShortPath( devEnvComLong ).encode( "utf8" )
 	
-	print
-	print "==== winMakeClient ===="
-	print " Build Type    :", buildType
-	print " Visual Studio :", vsVersion
-	print " IncrediBuild  :", shouldUseIncrediBuild
-	print " Dev Env       :", devEnvComLong
-	print " Dev Env short :", devEnvCom
-	print " Config Path   :", projectConfigPath
-	print
+	print()
+	print("==== winMakeClient ====")
+	print(" Build Type    :", buildType)
+	print(" Visual Studio :", vsVersion)
+	print(" IncrediBuild  :", shouldUseIncrediBuild)
+	print(" Dev Env       :", devEnvComLong)
+	print(" Dev Env short :", devEnvCom)
+	print(" Config Path   :", projectConfigPath)
+	print()
 
 	root = build_common.getRootPath()
 	projectConfigPath = os.path.join( root, projectConfigPath )
@@ -150,22 +150,22 @@ def main():
 
 	try:
 		build_common.validateVisualStudioVersion( options.visual_studio )
-	except ValueError, ve:
-		print "ERROR: Visual Studio version invalid. %s" % str( ve )
+	except ValueError as ve:
+		print("ERROR: Visual Studio version invalid. %s" % str( ve ))
 		return False
 
 	if not options.incredibuild and options.devEnvCom == None:
-		print "ERROR: Visual Studio devenv.com file must be specified."
+		print("ERROR: Visual Studio devenv.com file must be specified.")
 		return False
 
 	try:
 		buildType = build_common.stringToBuildType( options.build_type )
-	except ValueError, ve:
-		print "ERROR: %s" % str( ve )
+	except ValueError as ve:
+		print("ERROR: %s" % str( ve ))
 		return False
 		
 	if options.config == None:
-		print "ERROR: Please specify the path to the project config xml file"
+		print("ERROR: Please specify the path to the project config xml file")
 		return False
 
 	return build( options.visual_studio, options.devEnvCom,

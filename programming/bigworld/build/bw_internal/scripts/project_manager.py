@@ -36,7 +36,7 @@ class ProjectConfigIterator( object ):
 		self.currConfIndex += 1
 
 
-	def next( self ):
+	def __next__( self ):
 		isEndOfProjects = self.currProjIndex >= len( self.projects )
 		isEndOfConfigs  = self.currConfIndex >= len( self.configs )
 

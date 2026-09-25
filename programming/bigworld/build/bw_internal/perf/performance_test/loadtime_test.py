@@ -1,12 +1,12 @@
 import os
 import shutil
-import util
-import reporter
-import open_automate
+from . import util
+from . import reporter
+from . import open_automate
 
-from database import LoadTimeResult, LoadTimeReferenceValue
-from constants import *
-from util import BWTestingError
+from .database import LoadTimeResult, LoadTimeReferenceValue
+from .constants import *
+from .util import BWTestingError
 
 TEST_OUTPUT_FILE = "load_timer.txt"
 OO_LOADTIME_TEST = "loadtimeTest"
@@ -49,13 +49,13 @@ def _calculateReferenceValue( buildConfig, exeType, flags, branchName, exePath, 
 	testResults = util.parseResultsFile( fullLoadTimeOutputFile )
 	flag = False
 
-	for benchmarkName, resultValues in testResults.iteritems():
+	for benchmarkName, resultValues in testResults.items():
 		if spaceMapping[benchmarkName] == benchmarkTestName:
 			flag = True	
 
 			calculatedValue = _fpsResultInMS( resultValues )
-			print "\tReference for %s:%s (%s %s) is now %.2fms" % \
-				(branchName, spaceMapping[benchmarkName], buildConfig, exeType, calculatedValue)
+			print("\tReference for %s:%s (%s %s) is now %.2fms" % \
+				(branchName, spaceMapping[benchmarkName], buildConfig, exeType, calculatedValue))
 			LoadTimeReferenceValue.set( dbSession, buildConfig, exeType, branchName, spaceMapping[benchmarkName], calculatedValue )
 			
 	if not flag:
@@ -88,7 +88,7 @@ def _processResults( resPath, buildConfig, exeType, branchName, dbSession, chang
 	testReport += "Complete report:\n"
 	testReport += "____ \n"
 
-	for benchmarkName, resultValues in testResults.iteritems():
+	for benchmarkName, resultValues in testResults.items():
 		testReport += "\n"
 		if benchmarkName in testResults:			
 			allValues = [ float(x) for x in resultValues["elapsedTime"] ]
@@ -101,7 +101,7 @@ def _processResults( resPath, buildConfig, exeType, branchName, dbSession, chang
 		else:
 			testReport += "Data Missing\n"
 
-	print testReport
+	print(testReport)
 	
 	tag = "Load time test (%s %s)" % (buildConfig, exeType)
 	
@@ -117,14 +117,14 @@ def run( buildConfig, exeType, dbSession, reportHolder, branchTag, testName, com
 	exePath = util.resolveClientExecutable( buildConfig, exeType )
 	resPath = os.path.normpath( os.path.join( util.packageRoot(), GAME_RESOURCE_PATH ) )
 
-	print "test type: loadtime"
-	print "build configuration:", buildConfig
-	print "executable type:", exeType
-	print "executable path:", exePath
-	print "resource path:", resPath
+	print("test type: loadtime")
+	print("build configuration:", buildConfig)
+	print("executable type:", exeType)
+	print("executable path:", exePath)
+	print("resource path:", resPath)
 	
 	if branchTag:
-		print "branch tag:", branchTag
+		print("branch tag:", branchTag)
 	
 	bwversion = util.bigworldVersion()
 	
@@ -144,8 +144,8 @@ def run( buildConfig, exeType, dbSession, reportHolder, branchTag, testName, com
 	if branchTag:
 		branchName += "_" + branchTag
 	
-	print
-	print "Testing branch: %s" % branchName
+	print()
+	print("Testing branch: %s" % branchName)
 	
 	# Be sure to flush out any existing test results
 	_resetTestOutput( resPath )
@@ -162,22 +162,22 @@ def run( buildConfig, exeType, dbSession, reportHolder, branchTag, testName, com
 	if util.replaceLineInFile( engineXMLPath, engineXMLPath, 
 		"<spaceType> COMPILED_SPACE </spaceType>", 
 		"<spaceType> CHUNK_SPACE </spaceType>" ):
-		print "Replace <spaceType> COMPILED_SPACE </spaceType> with <spaceType> CHUNK_SPACE </spaceType>"
+		print("Replace <spaceType> COMPILED_SPACE </spaceType> with <spaceType> CHUNK_SPACE </spaceType>")
 		
 	scriptIndex = 0
 	
 	# Run a primer run once at the beginning and ignore the result 
 	# This will 'prime' the cache with the data we're interested in
 	if primer_run:
-		print "--run primer run--"
-		print "The results won't be saved"
+		print("--run primer run--")
+		print("The results won't be saved")
 		while open_automate.checkScriptExists( resPath, OO_LOADTIME_TEST, scriptIndex ):
 			open_automate.runScript( exePath, flags, resPath, OO_LOADTIME_TEST, scriptIndex, primer_run )
 			scriptIndex += 1
 		# flush out test results
 		_resetTestOutput( resPath )
 		scriptIndex = 0	
-		print "--End primer run--"
+		print("--End primer run--")
 		
 	while open_automate.checkScriptExists( resPath, OO_LOADTIME_TEST, scriptIndex ):
 		# Check to see if a reference value has been calculated for this test combination.
@@ -190,17 +190,17 @@ def run( buildConfig, exeType, dbSession, reportHolder, branchTag, testName, com
 				unsetReferences.append( benchmarkName )
 		
 		if len(unsetReferences) > 0:
-			print
-			print "-----"
-			print "Reference values not set for:", ", ".join( unsetReferences )
-			print "BEGIN reference calculation."
+			print()
+			print("-----")
+			print("Reference values not set for:", ", ".join( unsetReferences ))
+			print("BEGIN reference calculation.")
 			
 			_calculateReferenceValue( buildConfig, exeType, flags, branchName, exePath, resPath,
 					OO_LOADTIME_TEST, scriptIndex, dbSession, benchmarkName )
 					
-			print "END reference calculation."
-			print "-----"
-			print
+			print("END reference calculation.")
+			print("-----")
+			print()
 		
 		open_automate.runScript( exePath, flags, resPath, OO_LOADTIME_TEST, scriptIndex )
 		scriptIndex += 1

@@ -25,7 +25,7 @@ class EOLChecker( object ):
 	def __init__( self, regularExpression, shouldFix, quiet ):
 		self.hasFailures = False
 		self.svn = pysvn.Client()
-		print( "regularExpression is", regularExpression )
+		print(( "regularExpression is", regularExpression ))
 		self.regularExpression = re.compile( regularExpression )
 		self.shouldFix = shouldFix
 		self.quiet = quiet
@@ -55,15 +55,15 @@ class EOLChecker( object ):
 						try:
 							self.svn.propset( EOL_PROP_NAME, "native", fullFilePath )
 						except pysvn.ClientError as e:
-							print( "Failed for %s (%s)" % (fullFilePath, str( e )) )
+							print(( "Failed for %s (%s)" % (fullFilePath, str( e )) ))
 
 					if not self.quiet:
-						print( "No eol-style:", getPath( fullFilePath ) )
+						print(( "No eol-style:", getPath( fullFilePath ) ))
 					self.hasFailures = True
 
 				elif ENFORCE_NATIVE and props.get( fullFilePath ) != "native":
-					print( "Incorrect eol-style '%s' on: %s" % \
-						( props.get( EOL_PROP_NAME ), getPath( fullFilePath ) ) )
+					print(( "Incorrect eol-style '%s' on: %s" % \
+						( props.get( EOL_PROP_NAME ), getPath( fullFilePath ) ) ))
 					self.hasFailures = True
 
 

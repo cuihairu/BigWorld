@@ -1087,7 +1087,7 @@ class PGDialect(default.DefaultDialect):
                 "select nspname from pg_namespace where lower(nspname)=:schema",
                 bindparams=[
                     sql.bindparam(
-                        'schema', unicode(schema.lower()),
+                        'schema', str(schema.lower()),
                         type_=sqltypes.Unicode)]
             )
         )
@@ -1103,7 +1103,7 @@ class PGDialect(default.DefaultDialect):
                 "n.oid=c.relnamespace where n.nspname=current_schema() and "
                 "relname=:name",
                 bindparams=[
-                        sql.bindparam('name', unicode(table_name),
+                        sql.bindparam('name', str(table_name),
                         type_=sqltypes.Unicode)]
                 )
             )
@@ -1115,9 +1115,9 @@ class PGDialect(default.DefaultDialect):
                 "relname=:name",
                     bindparams=[
                         sql.bindparam('name', 
-                        unicode(table_name), type_=sqltypes.Unicode),
+                        str(table_name), type_=sqltypes.Unicode),
                         sql.bindparam('schema', 
-                        unicode(schema), type_=sqltypes.Unicode)] 
+                        str(schema), type_=sqltypes.Unicode)] 
                 )
             )
         return bool(cursor.first())
@@ -1131,7 +1131,7 @@ class PGDialect(default.DefaultDialect):
                     "n.nspname=current_schema() "
                     "and relname=:name",
                     bindparams=[
-                        sql.bindparam('name', unicode(sequence_name),
+                        sql.bindparam('name', str(sequence_name),
                         type_=sqltypes.Unicode)
                     ] 
                 )
@@ -1143,10 +1143,10 @@ class PGDialect(default.DefaultDialect):
                 "n.oid=c.relnamespace where relkind='S' and "
                 "n.nspname=:schema and relname=:name",
                 bindparams=[
-                    sql.bindparam('name', unicode(sequence_name),
+                    sql.bindparam('name', str(sequence_name),
                      type_=sqltypes.Unicode),
                     sql.bindparam('schema', 
-                                unicode(schema), type_=sqltypes.Unicode)
+                                str(schema), type_=sqltypes.Unicode)
                 ]
             )
             )
@@ -1156,9 +1156,9 @@ class PGDialect(default.DefaultDialect):
     def has_type(self, connection, type_name, schema=None):
         bindparams = [
             sql.bindparam('typname',
-                unicode(type_name), type_=sqltypes.Unicode),
+                str(type_name), type_=sqltypes.Unicode),
             sql.bindparam('nspname',
-                unicode(schema), type_=sqltypes.Unicode),
+                str(schema), type_=sqltypes.Unicode),
             ]
         if schema is not None:
             query = """
@@ -1211,9 +1211,9 @@ class PGDialect(default.DefaultDialect):
         """ % schema_where_clause
         # Since we're binding to unicode, table_name and schema_name must be
         # unicode.
-        table_name = unicode(table_name)
+        table_name = str(table_name)
         if schema is not None:
-            schema = unicode(schema)
+            schema = str(schema)
         s = sql.text(query, bindparams=[
             sql.bindparam('table_name', type_=sqltypes.Unicode),
             sql.bindparam('schema', type_=sqltypes.Unicode)
@@ -1252,7 +1252,7 @@ class PGDialect(default.DefaultDialect):
             current_schema = self.default_schema_name
 
         result = connection.execute(
-            sql.text(u"SELECT relname FROM pg_class c "
+            sql.text("SELECT relname FROM pg_class c "
                 "WHERE relkind = 'r' "
                 "AND '%s' = (select nspname from pg_namespace n "
                 "where n.oid = c.relnamespace) " %

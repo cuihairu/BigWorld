@@ -8,12 +8,12 @@ import subprocess
 import sys
 import time
 import threading
-import database
-import reporter
-import util
+from . import database
+from . import reporter
+from . import util
 import stat
 
-from database import SmokeTestResult
+from .database import SmokeTestResult
 
 WORLDEDITOR		= "worldeditor"
 MODELEDITOR		= "modeleditor"
@@ -93,7 +93,7 @@ class Command(object):
 			try:
 				self.subprocess_output = subprocess.check_output( self.cmd, 
 										stderr=subprocess.STDOUT, shell=True )
-			except subprocess.CalledProcessError, e:
+			except subprocess.CalledProcessError as e:
 				self.subprocess_output = e.output
 				self.returncode = e.returncode
 
@@ -157,13 +157,13 @@ def runToolsTest( build_dir, executable, test, reportHolder, branchName, changel
 		shutil.copy( test_path, temp_test_path )
 
 		# run executable
-		print "%s running %s..." % ( executable, test_name )
+		print("%s running %s..." % ( executable, test_name ))
 		cmd = "%s -noConversion -memdumpstats -unattended --script %s" % ( exe_path, test_name )
 		if options_path != "":
 			cmd += " --options %s" % ( options_path )
 		if settings_path != "":
 			cmd += " --settings %s" % ( settings_path )
-		print cmd
+		print(cmd)
 		
 		start_time = time.time()
 		command = Command(cmd)
@@ -209,7 +209,7 @@ def runToolsTest( build_dir, executable, test, reportHolder, branchName, changel
 		#add subprocess.CalledProcessError to the result
 		test_result += subprocess_output.replace( "\r","" )
 		
-		print test_result
+		print(test_result)
 		
 		# Add to DB
 		addToDB( dbType, test_name, branchName, changelist, configuration, successState, timeToRun, totalMemoryAllocations, peakAllocatedBytes, memoryLeaks)
@@ -224,7 +224,7 @@ def runClientTest( build_dir, executable, test, reportHolder, branchName, change
 
 	# copy the bwclient_preferences.xml to the bin folder
 	preferences_file_path = os.path.join(build_dir, PREFERENCES_FILE)
-	print "copy preferences.xml to " + build_dir
+	print("copy preferences.xml to " + build_dir)
 	# create a backup file for preferences.xml
 	if os.path.exists( preferences_file_path ):
 		forceDelete(BAK_FILE % ( preferences_file_path ))
@@ -254,7 +254,7 @@ def runClientTest( build_dir, executable, test, reportHolder, branchName, change
 				shutil.copy( org_space_setting_file, space_setting_path_bak )
 			# copy the space setting script to the space directory
 			shutil.copy( new_space_setting_file, org_space_setting_file )
-			print "Space settings has been changed\n"
+			print("Space settings has been changed\n")
 
 		# copy the test script to the resource directory
 		temp_test_path = os.path.join( CLIENT_SCRIPT_DIR, test_file )
@@ -263,9 +263,9 @@ def runClientTest( build_dir, executable, test, reportHolder, branchName, change
 		shutil.copy( test_path, temp_test_path )
 
 		# run executable
-		print "%s running %s..." % ( executable, test_name )
+		print("%s running %s..." % ( executable, test_name ))
 		cmd = "%s -noConversion %s -memdumpstats -unattended --script %s" % ( exe_path, flags, test_name )		
-		print cmd
+		print(cmd)
 		
 		start_time = time.time()
 		
@@ -310,7 +310,7 @@ def runClientTest( build_dir, executable, test, reportHolder, branchName, change
 			memoryLeaks = mem_stats[1]
 		#add subprocess.CalledProcessError to the result
 		test_result += subprocess_output.replace( "\r","" )
-		print test_result
+		print(test_result)
 
 		addToDB( dbType, test_name, branchName, changelist, configuration, successState, timeToRun, totalMemoryAllocations, peakAllocatedBytes, memoryLeaks )
 		
@@ -401,7 +401,7 @@ def runTests():
 	if util.replaceLineInFile( engineXMLPath, engineXMLPath, 
 		"<spaceType> COMPILED_SPACE </spaceType>", 
 		"<spaceType> CHUNK_SPACE </spaceType>" ):
-		print "Replace <spaceType> COMPILED_SPACE </spaceType> with <spaceType> CHUNK_SPACE </spaceType>"
+		print("Replace <spaceType> COMPILED_SPACE </spaceType> with <spaceType> CHUNK_SPACE </spaceType>")
 	
 	flags = ""
 	if options.compiled_space:

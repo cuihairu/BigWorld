@@ -5,10 +5,10 @@ import sqlalchemy
 
 from datetime import date
 
-import database
+from . import database
 
-from database import ReferenceValue, FrameRateResult, LoadTimeResult
-from constants import *
+from .database import ReferenceValue, FrameRateResult, LoadTimeResult
+from .constants import *
 
 TESTHOST = "TESTHOST"
 

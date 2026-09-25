@@ -13,6 +13,7 @@ from socket import error as socket_error
 
 import winCMakeClient
 import winCMakeUnitTests
+from functools import reduce
 
 def clean_metric_name(string):
 	return re.sub( '\W', '_', string )
@@ -33,7 +34,7 @@ def submitMetrics( buildTimesMetricList, graphiteServer ):
 		connection.send_metrics( buildTimesMetricList )
 		connection.close()
 	except socket_error as serr:
-		print "Warning: could not send stats to graphite - %s" % str( serr )
+		print("Warning: could not send stats to graphite - %s" % str( serr ))
 
 def main():
 	# Setup the defaults, then tweak if it is a nightly (ie: full) build
@@ -54,8 +55,8 @@ def main():
 	# Get the build type, continuous, nightly etc
 	try:
 		buildType = build_common.stringToBuildType( options.build_type )
-	except ValueError, ve:
-		print "ERROR: %s" % str( ve )
+	except ValueError as ve:
+		print("ERROR: %s" % str( ve ))
 		return False
 
 	# Load the graphite client libraries
@@ -111,7 +112,7 @@ def main():
 		unitTestsEnd = datetime.datetime.fromtimestamp( time.time() )
 		unitTestTime = ( unitTestsEnd-unitTestsStart, BT_TOTAL_PARENT, BT_UNITTESTS )
 
-	print "\n\nAll build times:"
+	print("\n\nAll build times:")
 	for buildTime in buildTimes:
 		if options.mysql:
 			dbSession = database.createSession( database.DB_PRODUCTION )
@@ -120,13 +121,13 @@ def main():
 		if options.graphite:
 			addBuildTimeToMetricList( buildTime, metricPrefix,
 				buildTimesMetricList )
-		print winCMakeClient.formatBuildTime( *buildTime )
+		print(winCMakeClient.formatBuildTime( *buildTime ))
 	
 	if buildAndRunUnitTests:
 		if options.graphite:
 			addBuildTimeToMetricList( unitTestTime, metricPrefix,
 				buildTimesMetricList )
-		print winCMakeClient.formatBuildTime( *unitTestTime )
+		print(winCMakeClient.formatBuildTime( *unitTestTime ))
 	
 	if options.graphite:
 		totalSolutionTime = ( reduce( add, (bt[0] for bt in buildTimes) ),

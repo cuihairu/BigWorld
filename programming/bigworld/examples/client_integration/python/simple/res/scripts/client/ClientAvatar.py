@@ -13,8 +13,8 @@ class ClientAvatar( BigWorld.Entity ):
 
 	def __init__( self ):
 		BigWorld.Entity.__init__( self )
-		print "ClientAvatar.__init__:"
-		print self.__dict__
+		print("ClientAvatar.__init__:")
+		print(self.__dict__)
 
 
 	def onFinish( self ):
@@ -22,7 +22,7 @@ class ClientAvatar( BigWorld.Entity ):
 
 
 	def fromCell( self, msg ):
-		print "ClientAvatar.fromCell:", self.id, ":", msg
+		print("ClientAvatar.fromCell:", self.id, ":", msg)
 		self.createLocalEntity()
 
 
@@ -32,7 +32,7 @@ class ClientAvatar( BigWorld.Entity ):
 				self.spaceID, 0, 
 				self.position, (self.roll, self.pitch, self.yaw),
 				{} )
-		print "ClientAvatar.createLocalEntity: localEntityID:", localEntityID
+		print("ClientAvatar.createLocalEntity: localEntityID:", localEntityID)
 		localEntity = BigWorld.entities[ localEntityID ]
 		localEntity.method1( "a random message" )
 		self._localEntityID = localEntityID
@@ -43,7 +43,7 @@ class ClientAvatar( BigWorld.Entity ):
 			self._tickCount += 1
 			if self._tickCount == 5:
 				res = BigWorld.destroyEntity( self._localEntityID )
-				print "ClientAvatar.tickAndDestroyLocalEntity: res = ", res
+				print("ClientAvatar.tickAndDestroyLocalEntity: res = ", res)
 		elif  hasattr( self, "_localEntityID" ):
 			self._tickCount = 0 
 		 

@@ -52,7 +52,7 @@ ONETOMANY = util.symbol('ONETOMANY')
 MANYTOONE = util.symbol('MANYTOONE')
 MANYTOMANY = util.symbol('MANYTOMANY')
 
-from deprecated_interfaces import AttributeExtension, SessionExtension, \
+from .deprecated_interfaces import AttributeExtension, SessionExtension, \
     MapperExtension
 
 
@@ -364,10 +364,10 @@ def serialize_path(path):
     if path is None:
         return None
 
-    return zip(
+    return list(zip(
         [m.class_ for m in [path[i] for i in range(0, len(path), 2)]], 
         [path[i] for i in range(1, len(path), 2)] + [None]
-    )
+    ))
 
 def deserialize_path(path):
     if path is None:
@@ -501,7 +501,7 @@ class PropertyOption(MapperOption):
         tokens = deque(self.key)
         while tokens:
             token = tokens.popleft()
-            if isinstance(token, basestring):
+            if isinstance(token, str):
                 # wildcard token
                 if token.endswith(':*'):
                     return [(token,)], []

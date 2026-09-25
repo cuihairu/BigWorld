@@ -12,7 +12,7 @@ class Space( BigWorld.Base ):
 
 	def onRegistered( self, succeeded ):
 		if not succeeded:
-			print "Failed to register space."
+			print("Failed to register space.")
 			self.destroyCellEntity()
 
 	def onLoseCell( self ):

@@ -12,7 +12,7 @@ from sqlalchemy.ext.hybrid import hybrid_property, hybrid_method
 from sqlalchemy import Column, Integer, Float, String, Enum, Date, DateTime
 from sqlalchemy.schema import UniqueConstraint
 
-from constants import *
+from .constants import *
 
 LOCAL_HOST_NAME = socket.gethostname()
 
@@ -181,7 +181,7 @@ class FrameRateResult( SQLAlchemyBase ):
 		f = open( csvFile, 'rb' )
 		
 		reader = csv.reader( f )
-		headers = reader.next()
+		headers = next(reader)
 		
 		# Map columns to indices
 		c2i = {}
@@ -207,7 +207,7 @@ class FrameRateResult( SQLAlchemyBase ):
 			
 			numRows += 1
 			
-		print
+		print()
 			
 		return numRows
 

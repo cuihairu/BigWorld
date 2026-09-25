@@ -421,7 +421,7 @@ class OracleCompiler(compiler.SQLCompiler):
 
     def get_select_hint_text(self, byfroms):
         return " ".join(
-            "/*+ %s */" % text for table, text in byfroms.items()
+            "/*+ %s */" % text for table, text in list(byfroms.items())
         )
 
     def function_argspec(self, fn, **kw):
@@ -626,14 +626,14 @@ class OracleDDLCompiler(compiler.DDLCompiler):
 class OracleIdentifierPreparer(compiler.IdentifierPreparer):
 
     reserved_words = set([x.lower() for x in RESERVED_WORDS])
-    illegal_initial_characters = set(xrange(0, 10)).union(["_", "$"])
+    illegal_initial_characters = set(range(0, 10)).union(["_", "$"])
 
     def _bindparam_requires_quotes(self, value):
         """Return True if the given identifier requires quoting."""
         lc_value = value.lower()
         return (lc_value in self.reserved_words
                 or value[0] in self.illegal_initial_characters
-                or not self.legal_characters.match(unicode(value))
+                or not self.legal_characters.match(str(value))
                 )
 
     def format_savepoint(self, savepoint):
@@ -755,12 +755,12 @@ class OracleDialect(default.DefaultDialect):
         if not self.supports_unicode_binds:
             name = name.encode(self.encoding)
         else:
-            name = unicode(name)
+            name = str(name)
         # end Py2K
         return name
 
     def _get_default_schema_name(self, connection):
-        return self.normalize_name(connection.execute(u'SELECT USER FROM DUAL').scalar())
+        return self.normalize_name(connection.execute('SELECT USER FROM DUAL').scalar())
 
     def _resolve_synonym(self, connection, desired_owner=None, desired_synonym=None, desired_table=None):
         """search for a local synonym matching the given desired owner/name.
@@ -1128,7 +1128,7 @@ class OracleDialect(default.DefaultDialect):
                 local_cols.append(local_column)
                 remote_cols.append(remote_column)
 
-        return fkeys.values()
+        return list(fkeys.values())
 
     @reflection.cache
     def get_view_definition(self, connection, view_name, schema=None,

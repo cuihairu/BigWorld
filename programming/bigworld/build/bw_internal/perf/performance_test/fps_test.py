@@ -1,14 +1,14 @@
 import os
 import shutil
-import util
-import database
-import reporter
-import open_automate
+from . import util
+from . import database
+from . import reporter
+from . import open_automate
 import stat
 
-from util import BWTestingError
-from constants import *
-from database import ReferenceValue, FrameRateResult
+from .util import BWTestingError
+from .constants import *
+from .database import ReferenceValue, FrameRateResult
 
 TEST_OUTPUT_FILE = "test_log.log"
 
@@ -47,12 +47,12 @@ def _calculateReferenceValue( buildConfig, exeType, flags, branchName, exePath, 
 	# Parse results
 	testResults = util.parseResultsFile( TEST_OUTPUT_FILE )
 	flag = False
-	for benchmarkName, resultValues in testResults.iteritems():
+	for benchmarkName, resultValues in testResults.items():
 		if benchmarkName == benchmarkTestName:
 			flag = True	
 		calculatedValue = _fpsResultInMS( resultValues )
-		print "\tReference for %s:%s (%s %s) is now %.2fms" % \
-			(branchName, benchmarkName, buildConfig, exeType, calculatedValue)
+		print("\tReference for %s:%s (%s %s) is now %.2fms" % \
+			(branchName, benchmarkName, buildConfig, exeType, calculatedValue))
 			
 		ReferenceValue.set( dbSession, buildConfig, exeType, branchName, benchmarkName, calculatedValue )
 		
@@ -89,7 +89,7 @@ def _processResults( buildConfig, exeType, branchName, dbSession, benchmarkAllNa
 	# Insert results into test database, and at the same time make a list of
 	# which tests are considered failures based on their performance.
 	failedBenchmarks = []
-	for benchmarkName, resultValues in testResults.iteritems():
+	for benchmarkName, resultValues in testResults.items():
 		# Get value to compare ourselves against
 		referenceValue = ReferenceValue.get( dbSession, buildConfig, exeType, branchName, benchmarkName )
 		if referenceValue is None:
@@ -124,7 +124,7 @@ def _processResults( buildConfig, exeType, branchName, dbSession, benchmarkAllNa
 	testReport += "Complete report:\n"
 	testReport += "____ \n"
 
-	for benchmarkName, resultValues in testResults.iteritems():
+	for benchmarkName, resultValues in testResults.items():
 		testReport += "\n"
 		testReport += benchmarkName
 		
@@ -149,7 +149,7 @@ def _processResults( buildConfig, exeType, branchName, dbSession, benchmarkAllNa
 		else:
 			testReport += "Data Missing\n"
 
-	print testReport
+	print(testReport)
 	
 	tag = "Framerate test (%s %s)" % (buildConfig, exeType)
 	
@@ -183,12 +183,12 @@ def _runInternal( branchName, flags, buildConfig, exeType, exePath, resPath,
 	if util.replaceLineInFile( xmlPath, xmlPath, 
 		"<spaceType> COMPILED_SPACE </spaceType>", 
 		"<spaceType> CHUNK_SPACE </spaceType>" ):
-		print "Replace <spaceType> COMPILED_SPACE </spaceType> with <spaceType> CHUNK_SPACE </spaceType>"
+		print("Replace <spaceType> COMPILED_SPACE </spaceType> with <spaceType> CHUNK_SPACE </spaceType>")
 
 	if util.replaceLineInFile( xmlPath, xmlPath, 
 			"<maxFrameRate>		75	</maxFrameRate>", 
 			"<maxFrameRate>		0	</maxFrameRate>" ):
-		print "Replace <maxFrameRate>		75	</maxFrameRate> with <maxFrameRate>		0	</maxFrameRate>"
+		print("Replace <maxFrameRate>		75	</maxFrameRate> with <maxFrameRate>		0	</maxFrameRate>")
 
 		
 	scriptIndex = 0	
@@ -196,15 +196,15 @@ def _runInternal( branchName, flags, buildConfig, exeType, exePath, resPath,
 	# Run a primer run once at the beginning and ignore the result 
 	# This will 'prime' the cache with the data we're interested in
 	if primer_run:
-		print "--run primer run--"
-		print "The results won't be saved"
+		print("--run primer run--")
+		print("The results won't be saved")
 		while open_automate.checkScriptExists( resPath, OO_STANDARD_TEST, scriptIndex ):
 			open_automate.runScript( exePath, flags, resPath, OO_STANDARD_TEST, scriptIndex, primer_run )
 			scriptIndex += 1
 		# flush out results
 		_resetTestOutput()
 		scriptIndex = 0	
-		print "--End primer run--"
+		print("--End primer run--")
 		
 	# Run the actual tests. There should be a finite number of numbered
 	# benchmark XML files, so continue trying to launch testing until we
@@ -222,17 +222,17 @@ def _runInternal( branchName, flags, buildConfig, exeType, exePath, resPath,
 				unsetReferences.append( benchmarkName )
 		
 		if len(unsetReferences) > 0:
-			print
-			print "-----"
-			print "Reference values not set for:", ", ".join( unsetReferences )
-			print "BEGIN reference calculation."
+			print()
+			print("-----")
+			print("Reference values not set for:", ", ".join( unsetReferences ))
+			print("BEGIN reference calculation.")
 			
 			_calculateReferenceValue( buildConfig, exeType, flags, branchName, exePath, resPath,
 					OO_STANDARD_TEST, scriptIndex, dbSession, benchmarkName )
 					
-			print "END reference calculation."
-			print "-----"
-			print
+			print("END reference calculation.")
+			print("-----")
+			print()
 	
 		# Run actual test.
 		open_automate.runScript( exePath, flags, resPath, OO_STANDARD_TEST, scriptIndex )
@@ -241,7 +241,7 @@ def _runInternal( branchName, flags, buildConfig, exeType, exePath, resPath,
 	if util.replaceLineInFile( xmlPath, xmlPath, 
 			"<maxFrameRate>		0	</maxFrameRate>", 
 			"<maxFrameRate>		75	</maxFrameRate>" ):
-		print "Replace <maxFrameRate>		0	</maxFrameRate> with <maxFrameRate>		75	</maxFrameRate>"
+		print("Replace <maxFrameRate>		0	</maxFrameRate> with <maxFrameRate>		75	</maxFrameRate>")
 	# Process results
 	reportHolder.addReport( _processResults( buildConfig, exeType, branchName, dbSession, benchmarkAllNames, changelist ) )
 
@@ -254,14 +254,14 @@ def run( buildConfig, exeType, dbSession, reportHolder, branchTag, testName, com
 	exePath = util.resolveClientExecutable( buildConfig, exeType )
 	resPath = os.path.normpath( os.path.join( util.packageRoot(), GAME_RESOURCE_PATH ) )
 
-	print "test type: framerate"
-	print "build configuration:", buildConfig
-	print "executable type:", exeType
-	print "executable path:", exePath
-	print "resource path:", resPath
+	print("test type: framerate")
+	print("build configuration:", buildConfig)
+	print("executable type:", exeType)
+	print("executable path:", exePath)
+	print("resource path:", resPath)
 	
 	if branchTag:
-		print "branch tag:", branchTag
+		print("branch tag:", branchTag)
 	
 	bwversion = util.bigworldVersion()
 	
@@ -278,8 +278,8 @@ def run( buildConfig, exeType, dbSession, reportHolder, branchTag, testName, com
 	if branchTag:
 		branchName += "_" + branchTag
 		
-	print
-	print "Testing branch: %s" % branchName
+	print()
+	print("Testing branch: %s" % branchName)
 	_runInternal( branchName,
 			flags,
 			buildConfig,

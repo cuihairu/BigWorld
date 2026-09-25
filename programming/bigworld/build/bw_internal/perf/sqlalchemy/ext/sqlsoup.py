@@ -395,7 +395,7 @@ class AutoAdd(MapperExtension):
 
     def _default__init__(ext, mapper):
         def __init__(self, **kwargs):
-            for key, value in kwargs.iteritems():
+            for key, value in kwargs.items():
                 setattr(self, key, value)
         return __init__
 
@@ -467,7 +467,7 @@ def _class_for_table(session, engine, selectable, base_cls, mapper_kwargs):
     selectable = expression._clause_element_as_expr(selectable)
     mapname = 'Mapped' + _selectable_name(selectable)
     # Py2K
-    if isinstance(mapname, unicode): 
+    if isinstance(mapname, str): 
         engine_encoding = engine.dialect.encoding 
         mapname = mapname.encode(engine_encoding)
     # end Py2K
@@ -500,7 +500,7 @@ def _class_for_table(session, engine, selectable, base_cls, mapper_kwargs):
 
     def __repr__(self):
         L = ["%s=%r" % (key, getattr(self, key, ''))
-             for key in self.__class__.c.keys()]
+             for key in list(self.__class__.c.keys())]
         return '%s(%s)' % (self.__class__.__name__, ','.join(L))
 
     for m in ['__eq__', '__repr__', '__lt__']:
@@ -542,7 +542,7 @@ class SqlSoup(object):
 
         if isinstance(engine_or_metadata, MetaData):
             self._metadata = engine_or_metadata
-        elif isinstance(engine_or_metadata, (basestring, Engine)):
+        elif isinstance(engine_or_metadata, (str, Engine)):
             self._metadata = MetaData(engine_or_metadata)
         else:
             raise ArgumentError("invalid engine or metadata argument %r" % 
@@ -670,7 +670,7 @@ class SqlSoup(object):
             ))
 
         if tablename is not None:
-            if not isinstance(tablename, basestring):
+            if not isinstance(tablename, str):
                 raise ArgumentError("'tablename' argument must be a string."
                                     )
             if selectable is not None:
@@ -800,7 +800,7 @@ class SqlSoup(object):
         """
         try:
             return self._cache[attr]
-        except KeyError, ke:
+        except KeyError as ke:
             return self.map_to(attr, tablename=attr, schema=schema)
 
     def __getattr__(self, attr):

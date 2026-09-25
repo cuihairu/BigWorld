@@ -18,17 +18,17 @@ def calcFileSizes( path ):
 		except:
 			pass
 
-	sorted = [(b,a) for a, b in totals.items()]
+	sorted = [(b,a) for a, b in list(totals.items())]
 	sorted.sort()
 	return sorted
 
 def printFileSizes( path ):
-	print "For", os.path.abspath( path )
+	print("For", os.path.abspath( path ))
 	sorted = calcFileSizes( path )
 	for a, b in sorted:
-		print "%15s %15d" % (b, a)
-	print
-	print "Total:", sum( [a for a,b in sorted] )
+		print("%15s %15d" % (b, a))
+	print()
+	print("Total:", sum( [a for a,b in sorted] ))
 
 if __name__ == "__main__":
 	try:

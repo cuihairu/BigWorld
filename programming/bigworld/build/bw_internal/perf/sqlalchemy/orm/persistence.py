@@ -46,7 +46,7 @@ def save_obj(base_mapper, states, uowtransaction, single=False):
 
     cached_connections = _cached_connection_dict(base_mapper)
 
-    for table, mapper in base_mapper._sorted_tables.iteritems():
+    for table, mapper in base_mapper._sorted_tables.items():
         insert = _collect_insert_commands(base_mapper, uowtransaction, 
                                 table, states_to_insert)
 
@@ -78,7 +78,7 @@ def post_update(base_mapper, states, uowtransaction, post_update_cols):
                                     states, uowtransaction)
 
 
-    for table, mapper in base_mapper._sorted_tables.iteritems():
+    for table, mapper in base_mapper._sorted_tables.items():
         update = _collect_post_update_commands(base_mapper, uowtransaction, 
                                             table, states_to_update, 
                                             post_update_cols)
@@ -105,7 +105,7 @@ def delete_obj(base_mapper, states, uowtransaction):
 
     table_to_mapper = base_mapper._sorted_tables
 
-    for table in reversed(table_to_mapper.keys()):
+    for table in reversed(list(table_to_mapper.keys())):
         delete = _collect_delete_commands(base_mapper, uowtransaction, 
                                 table, states_to_delete)
 
@@ -313,7 +313,7 @@ def _collect_update_commands(base_mapper, uowtransaction,
                     # history is only
                     # in a different table than the one 
                     # where the version_id_col is.
-                    for prop in mapper._columntoproperty.itervalues():
+                    for prop in mapper._columntoproperty.values():
                         history = attributes.get_state_history(
                                 state, prop.key, 
                                 attributes.PASSIVE_NO_INITIALIZE)
@@ -519,7 +519,7 @@ def _emit_insert_statements(base_mapper, uowtransaction,
     for (connection, pkeys, hasvalue, has_all_pks), \
         records in groupby(insert, 
                             lambda rec: (rec[4], 
-                                    rec[2].keys(), 
+                                    list(rec[2].keys()), 
                                     bool(rec[5]), 
                                     rec[6])
     ):
@@ -606,7 +606,7 @@ def _emit_post_update_statements(base_mapper, uowtransaction,
     # also group them into common (connection, cols) sets 
     # to support executemany().
     for key, grouper in groupby(
-        update, lambda rec: (rec[4], rec[2].keys())
+        update, lambda rec: (rec[4], list(rec[2].keys()))
     ):
         connection = key[0]
         multiparams = [params for state, state_dict, 
@@ -640,7 +640,7 @@ def _emit_delete_statements(base_mapper, uowtransaction, cached_connections,
 
         return table.delete(clause)
 
-    for connection, del_objects in delete.iteritems():
+    for connection, del_objects in delete.items():
         statement = base_mapper._memo(('delete', table), delete_stmt)
 
         connection = cached_connections[connection]

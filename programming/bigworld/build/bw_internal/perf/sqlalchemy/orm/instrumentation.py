@@ -271,7 +271,7 @@ class ClassManager(dict):
 
     @property
     def attributes(self):
-        return self.itervalues()
+        return iter(self.values())
 
     ## InstanceState management
 
@@ -330,7 +330,7 @@ class ClassManager(dict):
         """TODO"""
         return self.get_impl(key).hasparent(state, optimistic=optimistic)
 
-    def __nonzero__(self):
+    def __bool__(self):
         """All ClassManagers are non-zero regardless of attribute state."""
         return True
 
@@ -663,11 +663,11 @@ def __init__(%(apply_pos)s):
     # end Py2K
 
     env = locals().copy()
-    exec func_text in env
+    exec(func_text, env)
     __init__ = env['__init__']
     __init__.__doc__ = original__init__.__doc__
     if func_defaults:
-        __init__.func_defaults = func_defaults
+        __init__.__defaults__ = func_defaults
     # Py3K
     #if func_kw_defaults:
     #    __init__.__kwdefaults__ = func_kw_defaults

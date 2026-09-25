@@ -70,7 +70,7 @@ def main( testType ):
 		return FAILURE
 
 	if buildConfig not in BUILD_CONFIGS:
-		print "%s is not in %s" % (buildConfig,BUILD_CONFIGS)
+		print("%s is not in %s" % (buildConfig,BUILD_CONFIGS))
 		printUsage( parser )
 		return FAILURE
 	
@@ -81,7 +81,7 @@ def main( testType ):
 		return FAILURE
 	
 	if exeType not in EXE_TYPES:
-		print "%s is not in %s" % (exeType,EXE_TYPES)
+		print("%s is not in %s" % (exeType,EXE_TYPES))
 		printUsage( parser )
 		return FAILURE	
 		
@@ -95,12 +95,12 @@ def main( testType ):
 	try:
 		bwversion = performance_test.util.bigworldVersion()
 	except performance_test.util.BWTestingError as e:
-		print "Could not determine BigWorld version from cwd: '%s'" % os.getcwd()
+		print("Could not determine BigWorld version from cwd: '%s'" % os.getcwd())
 		return FAILURE
 	
-	print "Performance test suite (BigWorld version %d.%d.%d)" % bwversion
-	print "Database session created (%s)" % dbType.lower()
-	print
+	print("Performance test suite (BigWorld version %d.%d.%d)" % bwversion)
+	print("Database session created (%s)" % dbType.lower())
+	print()
 	
 	if testType == TEST_FRAMERATE:
 		reportHolder = performance_test.reporter.ReportHolder(
@@ -132,7 +132,7 @@ def main( testType ):
 
 def printUsage( parser ):
 	parser.print_help()
-	print
-	print "Valid build_configs:", ", ".join( BUILD_CONFIGS )
-	print "Valid client_types:", ", ".join( EXE_TYPES )
+	print()
+	print("Valid build_configs:", ", ".join( BUILD_CONFIGS ))
+	print("Valid client_types:", ", ".join( EXE_TYPES ))
 

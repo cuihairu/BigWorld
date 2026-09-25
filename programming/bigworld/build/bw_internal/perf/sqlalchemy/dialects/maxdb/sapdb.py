@@ -11,7 +11,7 @@ class MaxDBDialect_sapdb(MaxDBDialect):
 
     @classmethod
     def dbapi(cls):
-        from sapdb import dbapi as _dbapi
+        from .sapdb import dbapi as _dbapi
         return _dbapi
 
     def create_connect_args(self, url):

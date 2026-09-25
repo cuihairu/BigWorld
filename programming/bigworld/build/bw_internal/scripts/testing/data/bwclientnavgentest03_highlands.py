@@ -31,7 +31,7 @@ def coExitAfterLoadSpace():
 	try:
 		# Calculate path path
 		path = BigWorld.navigatePathPoints( avatarPlayer.position, target )
-	except ValueError, e:
+	except ValueError as e:
 		BigWorld.criticalExit( "Unable to calculate the Path" )
 		
 	targetPosAndYaw = avatarPlayer.seeker.getPosAndYawToTarget( 

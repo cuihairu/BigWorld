@@ -230,7 +230,7 @@ class _NativeUnicodeMixin(object):
                 if value is None:
                     return value
                 else:
-                    return unicode(value)
+                    return str(value)
             return process
         else:
             return super(_NativeUnicodeMixin, self).bind_processor(dialect)
@@ -325,10 +325,10 @@ class OracleExecutionContext_cx_oracle(OracleExecutionContext):
                                     (fromname.encode(self.dialect.encoding), 
                                     toname.encode(self.dialect.encoding)) 
                                     for fromname, toname in 
-                                    quoted_bind_names.items()
+                                    list(quoted_bind_names.items())
                                 )
             for param in self.parameters:
-                for fromname, toname in quoted_bind_names.items():
+                for fromname, toname in list(quoted_bind_names.items()):
                     param[toname] = param[fromname]
                     del param[fromname]
 
@@ -342,7 +342,7 @@ class OracleExecutionContext_cx_oracle(OracleExecutionContext):
 
         # if a single execute, check for outparams
         if len(self.compiled_parameters) == 1:
-            for bindparam in self.compiled.binds.values():
+            for bindparam in list(self.compiled.binds.values()):
                 if bindparam.isoutparam:
                     dbtype = bindparam.type.dialect_impl(self.dialect).\
                                     get_dbapi_type(self.dialect.dbapi)
@@ -370,7 +370,7 @@ class OracleExecutionContext_cx_oracle(OracleExecutionContext):
         if hasattr(self, 'out_parameters') and self.compiled.returning:
             returning_params = dict(
                                     (k, v.getvalue()) 
-                                    for k, v in self.out_parameters.items()
+                                    for k, v in list(self.out_parameters.items())
                                 )
             return ReturningResultProxy(self, returning_params)
 
@@ -389,7 +389,7 @@ class OracleExecutionContext_cx_oracle(OracleExecutionContext):
                     len(self.compiled_parameters) == 1:
                 result.out_parameters = out_parameters = {}
 
-                for bind, name in self.compiled.bind_names.items():
+                for bind, name in list(self.compiled.bind_names.items()):
                     if name in self.out_parameters:
                         type = bind.type
                         impl_type = type.dialect_impl(self.dialect)
@@ -405,7 +405,7 @@ class OracleExecutionContext_cx_oracle(OracleExecutionContext):
             else:
                 result.out_parameters = dict(
                                             (k, v.getvalue()) 
-                                            for k, v in self.out_parameters.items()
+                                            for k, v in list(self.out_parameters.items())
                                         )
 
         return result
@@ -425,11 +425,11 @@ class OracleExecutionContext_cx_oracle_with_unicode(OracleExecutionContext_cx_or
     """
     def __init__(self, *arg, **kw):
         OracleExecutionContext_cx_oracle.__init__(self, *arg, **kw)
-        self.statement = unicode(self.statement)
+        self.statement = str(self.statement)
 
     def _execute_scalar(self, stmt):
         return super(OracleExecutionContext_cx_oracle_with_unicode, self).\
-                            _execute_scalar(unicode(stmt))
+                            _execute_scalar(str(stmt))
 
 class ReturningResultProxy(base.FullyBufferedResultProxy):
     """Result proxy which stuffs the _returning clause + outparams into the fetch."""
@@ -651,7 +651,7 @@ class OracleDialect_cx_oracle(OracleDialect):
                             arraysize=cursor.arraysize)
             # allow all strings to come back natively as Unicode
             elif defaultType in (cx_Oracle.STRING, cx_Oracle.FIXED_CHAR):
-                return cursor.var(unicode, size, cursor.arraysize)
+                return cursor.var(str, size, cursor.arraysize)
 
         def on_connect(conn):
             conn.outputtypehandler = output_type_handler
@@ -688,18 +688,18 @@ class OracleDialect_cx_oracle(OracleDialect):
 
         # Py2K
         if self._cx_oracle_with_unicode:
-            for k, v in opts.items():
+            for k, v in list(opts.items()):
                 if isinstance(v, str):
-                    opts[k] = unicode(v)
+                    opts[k] = str(v)
         else:
-            for k, v in opts.items():
-                if isinstance(v, unicode):
+            for k, v in list(opts.items()):
+                if isinstance(v, str):
                     opts[k] = str(v)
         # end Py2K
 
         if 'mode' in url.query:
             opts['mode'] = url.query['mode']
-            if isinstance(opts['mode'], basestring):
+            if isinstance(opts['mode'], str):
                 mode = opts['mode'].upper()
                 if mode == 'SYSDBA':
                     opts['mode'] = self.dbapi.SYSDBA

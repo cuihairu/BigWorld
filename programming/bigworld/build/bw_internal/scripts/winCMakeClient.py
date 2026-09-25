@@ -200,9 +200,9 @@ def check_arch( option, opt, value ):
 
 		# Check that architecture name is valid
 		if buildConfig["disabledArchitecture"] not in BUILD_ARCHITECTURES:
-			print( "Unknown architecture name '" +
+			print(( "Unknown architecture name '" +
 				buildConfig["disabledArchitecture"] +
-				"'" )
+				"'" ))
 			raise ValueError
 		
 		# Done
@@ -252,7 +252,7 @@ def build( vsVersion,
 	if shouldUseIncrediBuild:
 		pathToIncrediBuild = getIncrediBuildPath()
 		if not pathToIncrediBuild:
-			print "ERROR: Unable to locate IncrediBuild installation."
+			print("ERROR: Unable to locate IncrediBuild installation.")
 			return False
 			
 		devEnvComLong = "%s\\BuildConsole.exe" % pathToIncrediBuild
@@ -263,11 +263,11 @@ def build( vsVersion,
 
 	root = build_common.getRootPath() + "/bigworld/"
 	if verbose:
-		print "root ", root
+		print("root ", root)
 
 	projectPath = root + "build/"
 	if verbose:
-		print "projectPath ", projectPath
+		print("projectPath ", projectPath)
 
 	BUILD_DIRECTORY = os.path.normpath( root + BUILD_DIR_NAME )
 
@@ -277,35 +277,35 @@ def build( vsVersion,
 		
 	try:
 		os.mkdir( BUILD_DIRECTORY )
-	except OSError, e:
+	except OSError as e:
 		pass
 	os.chdir( BUILD_DIRECTORY )
 	
 	# Win64 builds are only work for 2010
 	buildArchitectures = list( BUILD_ARCHITECTURES )
 	if (vsVersion == "2005") or (vsVersion == "2008"):
-		print
-		print "%s does not support Win64 builds, disabling" % (vsVersion,)
+		print()
+		print("%s does not support Win64 builds, disabling" % (vsVersion,))
 		buildArchitectures.remove( "Win64" )
 
-	print
-	print "==== %s ====" % sys.argv[ 0 ]
-	print " Build Type    :", buildType
-	print " Visual Studio :", vsVersion
-	print " Win64 enabled :", ("Win64" in buildArchitectures)
-	print " IncrediBuild  :", shouldUseIncrediBuild
-	print " Dev Env       :", devEnvComLong
-	print " Dev Env short :", devEnvCom
-	print " DirectX SDK   :", os.getenv( "DXSDK_DIR" )
-	print " Build dir     :", BUILD_DIRECTORY
-	print
+	print()
+	print("==== %s ====" % sys.argv[ 0 ])
+	print(" Build Type    :", buildType)
+	print(" Visual Studio :", vsVersion)
+	print(" Win64 enabled :", ("Win64" in buildArchitectures))
+	print(" IncrediBuild  :", shouldUseIncrediBuild)
+	print(" Dev Env       :", devEnvComLong)
+	print(" Dev Env short :", devEnvCom)
+	print(" DirectX SDK   :", os.getenv( "DXSDK_DIR" ))
+	print(" Build dir     :", BUILD_DIRECTORY)
+	print()
 
 	# Find .cmake targets. Client, tools etc
 	detectedTargets = findCMakeTargets( projectPath )
-	print
-	print "CMake detected targets: "
+	print()
+	print("CMake detected targets: ")
 	for t in detectedTargets:
-		print t
+		print(t)
 
 	# VS version
 	if vsVersion == "2012":
@@ -315,7 +315,7 @@ def build( vsVersion,
 	elif vsVersion == "2008":
 		generatorName, generatorToken, generatorToolset = CMAKE_GENERATORS[2]
 	else:
-		print "Error: No CMake script for Visual Studio ", vsVersion
+		print("Error: No CMake script for Visual Studio ", vsVersion)
 		sys.exit( 1 )
 
 	# Targets
@@ -325,7 +325,7 @@ def build( vsVersion,
 	elif buildType == "nightly":
 		buildTargets = list( NIGHTLY_BUILD )
 	else:
-		print "No known target ", buildType
+		print("No known target ", buildType)
 		sys.exit( 1 )
 
 	# Include only projects listed on the command line
@@ -335,7 +335,7 @@ def build( vsVersion,
 				buildTargets.remove( t )
 			else:
 				if verbose:
-					print " * Including ", t["name"]
+					print(" * Including ", t["name"])
 
 	# Exclude projects listed on the command line
 	if excludedProjects is not None:
@@ -343,14 +343,14 @@ def build( vsVersion,
 			for t in buildTargets:
 				if t["name"] == excludedTarget:
 					if verbose:
-						print " * Excluding", excludedTarget
+						print(" * Excluding", excludedTarget)
 					buildTargets.remove( t )
 					break
 					
-	print
-	print "Whitelisted targets: "
+	print()
+	print("Whitelisted targets: ")
 	for t in buildTargets:
-		print t["name"]
+		print(t["name"])
 	
 	# Check list of targets is not empty
 	if not buildTargets:
@@ -422,25 +422,25 @@ def build( vsVersion,
 	for buildTarget in buildTargets:
 	
 		if verbose:
-			print "buildTarget", buildTarget
+			print("buildTarget", buildTarget)
 
 		targetName = buildTarget['name']
 
 		# Check CMake can build it
 		if not (targetName in detectedTargets):
-			print "No CMake target for ", targetName
+			print("No CMake target for ", targetName)
 			sys.exit( 1 )
 			
 		if verbose:
-			print "building target ", targetName
+			print("building target ", targetName)
 			
 		# Have to run CMake separately for 32 and 64 bit
 		for arch in buildArchitectures:
 		
 			# Check if architecture is disabled
 			if arch in buildTarget['disabledArchitectures']:
-				print
-				print "* Skipping architecture", targetName, arch, "*"
+				print()
+				print("* Skipping architecture", targetName, arch, "*")
 				continue
 
 			# Get CMake info about architecture
@@ -453,11 +453,11 @@ def build( vsVersion,
 				architectureToken,
 				architectureOutputSuffix) = CMAKE_ARCHITECTURES[1]
 			else:
-				print "Error, unknown architecture ", arch
+				print("Error, unknown architecture ", arch)
 				sys.exit( 1 )
 
 			if verbose:
-				print "arch ", architectureName
+				print("arch ", architectureName)
 
 			outputDir = "%s_%s%s" % (targetName,
 				generatorToken,
@@ -466,7 +466,7 @@ def build( vsVersion,
 				os.path.join( BUILD_DIRECTORY, outputDir ) )
 
 			if verbose:
-				print "outputDir ", outputDir
+				print("outputDir ", outputDir)
 
 			# Clean entire CMake directory
 			if (cleanType & CLEAN_ALL) != 0:
@@ -497,35 +497,35 @@ def build( vsVersion,
 			if generatorToolset:
 				cmd = cmd + r' -T %s' % generatorToolset
 
-			print
-			print ']', cmd
+			print()
+			print(']', cmd)
 
 			result, availableBuildConfigs = runCMake( cmd, outputDir )
 			if result != 0:
 				sys.exit( result )
 
 			if verbose:
-				print "availableBuildConfigs", availableBuildConfigs
+				print("availableBuildConfigs", availableBuildConfigs)
 
 			# Initially bigworld CMake solutions were always named bigworld.sln
 			slnName = os.path.join( outputDir, 'bigworld.sln' )
 			targetSlnName = os.path.join( outputDir, '%s%s.sln' % (targetName, architectureOutputSuffix) )
 			if os.path.exists( slnName ):
-				print "deprecated: bigworld.sln found"
+				print("deprecated: bigworld.sln found")
 				if os.path.exists( targetSlnName ):
 					os.unlink( targetSlnName )
 				os.rename( slnName, targetSlnName )
 			
 			if verbose:
-				print "targetSlnName ", targetSlnName
+				print("targetSlnName ", targetSlnName)
 
 			# Build Debug, Release etc
 			configs = availableBuildConfigs
 			for config in configs:
 				# Check the given build has not been blacklisted
 				if config in buildTarget['disabledBuildConfigs']:
-					print
-					print "* Skipping build config", targetName, arch, config
+					print()
+					print("* Skipping build config", targetName, arch, config)
 				else:
 					build = {
 						'solution' : targetSlnName,
@@ -539,7 +539,7 @@ def build( vsVersion,
 				# have been created
 				generateOnly = True
 				if not os.path.exists(os.path.join( PC_LINT_DIR, "lint-nt.exe" )):
-						print "Cannot find ", os.path.join( PC_LINT_DIR, "lint-nt.exe" )
+						print("Cannot find ", os.path.join( PC_LINT_DIR, "lint-nt.exe" ))
 						sys.exit( 1 )
 				pc_lint_exe = os.path.join( PC_LINT_DIR, "lint-nt" )
 				
@@ -599,7 +599,7 @@ def build( vsVersion,
 							errors = True
 
 						if lines.strip() != '':
-							print lines
+							print(lines)
 						
 				if errors:
 					sys.exit( 1 )
@@ -616,10 +616,10 @@ def build( vsVersion,
 				shouldUseIncrediBuild )
 			buildTimes.append( buildTime )
 
-		print
-		print "All build times:"
+		print()
+		print("All build times:")
 		for buildTime in buildTimes:
-			print formatBuildTime( *buildTime )
+			print(formatBuildTime( *buildTime ))
 
 	return buildTimes
 
@@ -630,9 +630,9 @@ def runCMake( command, outputDir ):
 	child = subprocess.Popen(
 		command, cwd=outputDir, shell=False, stdout=subprocess.PIPE)
 	output, errors = child.communicate()
-	print output
+	print(output)
 	if errors is not None:
-		print errors
+		print(errors)
 		return 1, None
 		
 	# Process output to get a list of available build configurations
@@ -661,8 +661,8 @@ def runCMake( command, outputDir ):
 			config = config.strip()
 			availableBuildConfigs.append( config )
 
-	except ValueError, e:
-		print "Could not detect build configurations"
+	except ValueError as e:
+		print("Could not detect build configurations")
 		return 1, None
 
 	return 0, availableBuildConfigs
@@ -676,7 +676,7 @@ def buildProject( targetSlnName,
 
 	root = targetSlnName
 
-	print
+	print()
 
 	projectStart = datetime.datetime.fromtimestamp( time.time() )
 
@@ -687,11 +687,11 @@ def buildProject( targetSlnName,
 	projectSln = os.path.basename( project )
 	
 	if verbose:
-		print "projectDir ", projectDir
-		print "projectSln ", projectSln
+		print("projectDir ", projectDir)
+		print("projectSln ", projectSln)
 
-	print
-	print "* Building %s in config %s" % (projectSln, config)
+	print()
+	print("* Building %s in config %s" % (projectSln, config))
 
 	os.chdir( os.path.join( root, projectDir ) )
 	
@@ -720,7 +720,7 @@ def buildProject( targetSlnName,
 
 	projectEnd = datetime.datetime.fromtimestamp( time.time() )
 	buildTime = ( projectEnd-projectStart, projectSln, config )
-	print formatBuildTime( *buildTime )
+	print(formatBuildTime( *buildTime ))
 	return buildTime
 
 SKIP_CMAKE_FLUSH = False
@@ -733,19 +733,19 @@ def flushCMakeCache( path ):
 	but leave any object files intact.
 	'''
 	if SKIP_CMAKE_FLUSH:
-		print
-		print "* Skipping CMake flush"
+		print()
+		print("* Skipping CMake flush")
 		return False
 
 	if not os.path.exists( path ):
-		print
-		print "* Skipping CMake flush: path not found", path
+		print()
+		print("* Skipping CMake flush: path not found", path)
 		return False
 
-	print
-	print "* Flushing CMake cache"
+	print()
+	print("* Flushing CMake cache")
 	if verbose:
-		print "walking", path
+		print("walking", path)
 	walkPaths = os.walk( path )
 
 	for (dirpath, dirnames, filenames) in walkPaths:
@@ -753,8 +753,8 @@ def flushCMakeCache( path ):
 		# Directories to remove
 		if CMAKE_DIR_TO_FLUSH in dirnames:
 			if verbose:
-				print "Removing directory tree", \
-					os.path.join( dirpath, CMAKE_DIR_TO_FLUSH )
+				print("Removing directory tree", \
+					os.path.join( dirpath, CMAKE_DIR_TO_FLUSH ))
 			shutil.rmtree( os.path.join( dirpath, CMAKE_DIR_TO_FLUSH ), onerror=del_rw )
 
 		# Files to remove
@@ -763,7 +763,7 @@ def flushCMakeCache( path ):
 			# Cache file
 			if filename == CMAKE_CACHE_FILE_NAME:
 				if verbose:
-					print "Removing file", os.path.join( dirpath, filename )
+					print("Removing file", os.path.join( dirpath, filename ))
 				os.remove( os.path.join( dirpath, filename ) )
 				
 			# Files matching extensions
@@ -771,19 +771,19 @@ def flushCMakeCache( path ):
 				fileExt = filename.split('.')[-1]
 				if fileExt in CMAKE_FILES_TO_FLUSH:
 					if verbose:
-						print "Removing file", os.path.join( dirpath, filename )
+						print("Removing file", os.path.join( dirpath, filename ))
 					os.remove( os.path.join( dirpath, filename ) )
 	return True
 
 def flushCMakeUnitTests( path ):
 
-	print
-	print "* Flushing CMake unit test dirs"
+	print()
+	print("* Flushing CMake unit test dirs")
 
 	for (dirpath, dirnames, filenames) in os.walk( path ):
 		if "unit_test.dir" in dirpath:
 			if verbose:
-				print "Removing", dirpath
+				print("Removing", dirpath)
 			shutil.rmtree( os.path.normpath( dirpath ), onerror=del_rw )
 
 	return True
@@ -793,8 +793,8 @@ def fullClean( outputDir ):
 	Remove build directory.
 	CMake generated files and object files.
 	'''
-	print
-	print "* Deleting directory", outputDir
+	print()
+	print("* Deleting directory", outputDir)
 	if os.path.exists( outputDir ):
 		shutil.rmtree( outputDir, onerror=del_rw )
 
@@ -825,7 +825,7 @@ def convertPathToShortPath( path ):
 
 	bufSize = 260
 	buf = ctypes.create_unicode_buffer( bufSize )
-	retVal = GetShortPathName( unicode( path ), buf, bufSize )
+	retVal = GetShortPathName( str( path ), buf, bufSize )
 
 	if retVal == 0:
 		raise ValueError( "Unable to get the short path name" )
@@ -954,14 +954,14 @@ def parseOptions():
 	# Validate the options
 	try:
 		build_common.validateVisualStudioVersion( options.visual_studio )
-	except ValueError, ve:
-		print "ERROR: Visual Studio version invalid. %s" % str( ve )
+	except ValueError as ve:
+		print("ERROR: Visual Studio version invalid. %s" % str( ve ))
 		return False
 
 	try:
 		buildType = build_common.stringToBuildType( options.build_type )
-	except ValueError, ve:
-		print "ERROR: %s" % str( ve )
+	except ValueError as ve:
+		print("ERROR: %s" % str( ve ))
 		return False
 		
 	# If no dev env was specified, lookup what we expect to find
@@ -973,9 +973,9 @@ def parseOptions():
 		vsToolsEnvVar = "VS%sCOMNTOOLS" % vsVerMap[ options.visual_studio ]
 		vsTools = os.getenv( vsToolsEnvVar )
 		if not vsTools:
-			print "ERROR: Unable to discover Visual Studio using env '%s'" % \
-				vsToolsEnvVar
-			print "Try specifying the dev env with --devenv"
+			print("ERROR: Unable to discover Visual Studio using env '%s'" % \
+				vsToolsEnvVar)
+			print("Try specifying the dev env with --devenv")
 
 		vsToolsDir = os.path.abspath(
 				os.path.join( vsTools, os.path.join( "..", ".." ) ) )
@@ -983,7 +983,7 @@ def parseOptions():
 							vsToolsDir, "Common7", "IDE", "devenv.com" )
 
 	if not options.incredibuild and options.devEnvCom == None:
-		print "ERROR: Visual Studio devenv.com file must be specified."
+		print("ERROR: Visual Studio devenv.com file must be specified.")
 		return False
 
 	return (options, args)
