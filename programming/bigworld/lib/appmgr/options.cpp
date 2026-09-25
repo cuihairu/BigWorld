@@ -974,7 +974,7 @@ PyObject * Options::py_setOption( PyObject * args )
 		return NULL;
 	}
 
-	if (PyInt_Check( pValueObject ))
+	if (PyLong_Check( pValueObject ))
 	{
 		return py_setOptionInt( args );
 	}
@@ -982,7 +982,7 @@ PyObject * Options::py_setOption( PyObject * args )
 	{
 		return py_setOptionFloat( args );
 	}
-	else if (PyString_Check( pValueObject ))
+	else if (PyUnicode_Check( pValueObject ))
 	{
 		return py_setOptionString( args );
 	}

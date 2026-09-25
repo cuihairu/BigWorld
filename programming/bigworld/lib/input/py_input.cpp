@@ -919,7 +919,7 @@ static PyObject * py_stringToKey( PyObject * args )
 		return NULL;
 	}
 
-	return PyInt_FromLong( KeyCode::stringToKey( str ) );
+	return PyLong_FromLong( KeyCode::stringToKey( str ) );
 }
 PY_MODULE_FUNCTION( stringToKey, BigWorld )
 
@@ -955,7 +955,7 @@ static PyObject * py_keyToString( PyObject * args )
 		return NULL;
 	}
 
-	return PyString_FromString( KeyCode::keyToString(
+	return PyUnicode_FromString( KeyCode::keyToString(
 		(KeyCode::Key) key ) );
 }
 PY_MODULE_FUNCTION( keyToString, BigWorld )
@@ -975,7 +975,7 @@ static PyObject * py_axisDirection( PyObject * args )
 		return NULL;
 	}
 
-	return PyInt_FromLong( InputDevices::joystick().stickDirection(stick) );
+	return PyLong_FromLong( InputDevices::joystick().stickDirection(stick) );
 }
 
 

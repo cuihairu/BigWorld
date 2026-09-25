@@ -203,8 +203,8 @@ PyObjectPlus( pType )
 	for (size_t i = 0; i < sz; i++)
 	{
 		PyObject * pItem = PySequence_GetItem( pResourceIDs, i );
-		if (!PyString_Check( pItem )) continue;
-		const char * resourceID = PyString_AsString( pItem );
+		if (!PyUnicode_Check( pItem )) continue;
+		const char * resourceID = PyUnicode_AsUTF8( pItem );
 		if (strlen( resourceID ) != 0)
 		{
 			resourceIDs.push_back( resourceID );
@@ -404,7 +404,7 @@ PyObject * PyResourceRefs::pyNew( PyObject * args )
 PyObject * PyResourceRefs::subscript( PyObject* resourceID )
 {
 	BW_GUARD;
-	char * res = PyString_AsString( resourceID );
+	char * res = PyUnicode_AsUTF8( resourceID );
 
 	if(PyErr_Occurred())
 	{
@@ -493,7 +493,7 @@ PyObject* PyResourceRefs::py_keys( PyObject* /*args*/ )
 	for (size_t i = 0; i < size; i++)
 	{
 		PyList_SetItem( pList, i,
-			PyString_FromString( resourceRefs_[i].id().c_str() ) );
+			PyUnicode_FromString( resourceRefs_[i].id().c_str() ) );
 	}
 
 	return pList;
@@ -532,7 +532,7 @@ PyObject* PyResourceRefs::py_items( PyObject* /*args*/ )
 		PyObject * pTuple = PyTuple_New( 2 );
 
 		PyTuple_SetItem( pTuple, 0,
-			PyString_FromString( resourceRefs_[i].id().c_str() ) );
+			PyUnicode_FromString( resourceRefs_[i].id().c_str() ) );
 		PyTuple_SetItem( pTuple, 1, this->pyResource(resourceRefs_[i].id()) );
 
 		PyList_SetItem( pList, i, pTuple );

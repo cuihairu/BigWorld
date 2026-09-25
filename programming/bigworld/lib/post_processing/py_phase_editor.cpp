@@ -142,7 +142,7 @@ BW::string PyPhaseEditor::getOutputRenderTarget() const
 		PyObjectPtr pyRTName( PyObject_GetAttrString( pyRT.get(), "name" ),	PyObjectPtr::STEAL_REFERENCE );
 		if (pyRTName)
 		{
-			ret = PyString_AS_STRING( pyRTName.get() );
+			ret = PyUnicode_AsUTF8( pyRTName.get() );
 		}
 	}
 

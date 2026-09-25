@@ -306,7 +306,7 @@ static PyObject * py_addFogEmitter( PyObject * args )
 
 	int fogEmitterID = FogController::instance().addEmitter( emitter );
 
-	return PyInt_FromLong( (long)fogEmitterID );
+	return PyLong_FromLong( (long)fogEmitterID );
 }
 PY_MODULE_FUNCTION( addFogEmitter, BigWorld )
 

@@ -293,7 +293,7 @@ namespace ScaleformBW
 
 		if (numArgs == -1)
 		{
-			methodName = PyString_AsString(args);
+			methodName = PyUnicode_AsUTF8(args);
 		}
 		if (numArgs == 0)
 		{
@@ -304,13 +304,13 @@ namespace ScaleformBW
 		{
 			PyObject* arg0 = PyTuple_GetItem(args, 0);
 
-			if (!PyString_CheckExact(arg0))
+			if (!PyUnicode_CheckExact(arg0))
 			{
 				PyErr_SetString( PyExc_Exception, "PyMovieView.invoke - The first argument must be a String.");
 				return NULL;
 			}
 
-			methodName = PyString_AsString(arg0);
+			methodName = PyUnicode_AsUTF8(arg0);
 		}
 
 		// Call result.

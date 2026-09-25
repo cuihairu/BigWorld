@@ -60,7 +60,7 @@ void PyPhaseTextureProxy::setTransient( BW::string v )
 
 	if (pyName)
 	{
-		phaseName.append( PyString_AS_STRING( pyName.get() ) );
+		phaseName.append( PyUnicode_AsUTF8( pyName.get() ) );
 	}
 
 	Moo::ScopedResourceLoadContext resLoadCtx( phaseName );

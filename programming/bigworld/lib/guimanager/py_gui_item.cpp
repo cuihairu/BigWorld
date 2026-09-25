@@ -130,7 +130,7 @@ PyObject * PyItem::subscript( PyObject* pathArg )
 {
 	BW_GUARD;
 
-	char * path = PyString_AsString( pathArg );
+	char * path = PyUnicode_AsUTF8( pathArg );
 
 	if(PyErr_Occurred())
 	{
@@ -173,11 +173,11 @@ PyObject* PyItem::py_has_key( PyObject* args )
 
 	if ((*pItem_)( itemName ))
 	{
-		return PyInt_FromLong(1);
+		return PyLong_FromLong(1);
 	}
 	else
 	{
-		return PyInt_FromLong(0);
+		return PyLong_FromLong(0);
 	}
 }
 
@@ -192,7 +192,7 @@ PyObject* PyItem::py_keys( PyObject* /*args*/ )
 	for (int i = 0; i < size; i++)
 	{
 		PyList_SetItem( pList, i,
-			PyString_FromString( (*pItem_)[ i ]->name().c_str() ) );
+			PyUnicode_FromString( (*pItem_)[ i ]->name().c_str() ) );
 	}
 
 	return pList;
@@ -225,7 +225,7 @@ PyObject* PyItem::py_items( PyObject* /*args*/ )
 		PyObject * pTuple = PyTuple_New( 2 );
 
 		PyTuple_SetItem( pTuple, 0,
-			PyString_FromString( pChild->name().c_str() ) );
+			PyUnicode_FromString( pChild->name().c_str() ) );
 		PyTuple_SetItem( pTuple, 1, new PyItem( pChild ) );
 
 		PyList_SetItem( pList, i, pTuple );
@@ -242,9 +242,9 @@ inline char * getStringArg( PyObject * args )
 	BW_GUARD;
 
 	if (PyTuple_Size( args ) == 1 &&
-		PyString_Check( PyTuple_GetItem( args, 0 ) ))
+		PyUnicode_Check( PyTuple_GetItem( args, 0 ) ))
 	{
-		return PyString_AsString( PyTuple_GetItem( args, 0 ) );
+		return PyUnicode_AsUTF8( PyTuple_GetItem( args, 0 ) );
 	}
 	else
 	{

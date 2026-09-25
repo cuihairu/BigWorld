@@ -330,7 +330,7 @@ PyObject * StaticTextProperty::pyGet()
 	BW_GUARD;
 
 	if ( text_ )
-		return PyString_FromString( text_->get().c_str() );
+		return PyUnicode_FromString( text_->get().c_str() );
 	return NULL;
 }
 
@@ -1237,7 +1237,7 @@ PyObject * ChoiceProperty::pyGet()
 	{
 		if ((*it)->asInt() == v)
 		{
-			return PyString_FromString( getName((*it)->sectionName(), *it).c_str() );
+			return PyUnicode_FromString( getName((*it)->sectionName(), *it).c_str() );
 		}
 	}
 
@@ -1245,12 +1245,12 @@ PyObject * ChoiceProperty::pyGet()
 	if (pChoices_->countChildren() != 0)
 	{
 		DataSectionPtr firstChild = pChoices_->openChild(0);
-		return PyString_FromString(
+		return PyUnicode_FromString(
 			getName(firstChild->sectionName(), firstChild).c_str() );
 	}
 
 	// return an empty string then
-	return PyString_FromString( "" );
+	return PyUnicode_FromString( "" );
 }
 
 
@@ -1274,9 +1274,9 @@ int ChoiceProperty::pySet( PyObject * value, bool transient /* = false */,
 	else
 	{
 		PyErr_Clear();
-		if (PyString_Check( value ))
+		if (PyUnicode_Check( value ))
 		{
-			asStr = PyString_AsString( value );
+			asStr = PyUnicode_AsUTF8( value );
 			isStr = true;
 		}
 	}

@@ -412,7 +412,7 @@ bool UserDataType::fromSectionToStream( DataSectionPtr pSection,
 		return false;
 	}
 
-	if (!PyString_Check( pResult ))
+	if (!PyUnicode_Check( pResult ))
 	{
 		ERROR_MSG( "UserDataType::fromSectionToStream: (%s.%s) "
 					"Method did not return a string.\n",

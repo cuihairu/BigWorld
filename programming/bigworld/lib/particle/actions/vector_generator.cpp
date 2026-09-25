@@ -50,7 +50,7 @@ VectorGenerator *VectorGenerator::parseFromPython( PyObject *args )
 
 	// Get the string containing the type of the VectorGenerator desired.
 	// It should be found in the head of the arguments list.
-	if ( ( pGeneratorType != NULL ) && PyString_Check( pGeneratorType ) )
+	if ( ( pGeneratorType != NULL ) && PyUnicode_Check( pGeneratorType ) )
 	{
 		// Retrieve the tail of the list. The argsAsTuple object is not a
 		// borrowed reference so it has to be deferenced. The same applies to
@@ -60,7 +60,7 @@ VectorGenerator *VectorGenerator::parseFromPython( PyObject *args )
 			PyTuple_Size( argsAsTuple ) );
 		Py_DECREF( argsAsTuple );
 
-		char *generatorType = PyString_AsString( pGeneratorType );
+		char *generatorType = PyUnicode_AsUTF8( pGeneratorType );
 
 		// Based on the type of the VectorGenerator, parse the rest of the
 		// list. The base class does not know how to do this, it only knows

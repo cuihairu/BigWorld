@@ -15,30 +15,29 @@ BW_BEGIN_NAMESPACE
 
 namespace // anonymous
 {
+/* BIGWORLD_BEGIN(3.13 migration)
+ * sq_slice/sq_ass_slice were removed in Python 3.x; slicing is
+ * synthesised by the type machinery from sq_item/sq_ass_item. The
+ * pySeq_slice/pySeq_ass_slice members remain for internal use.
+ */
 PySequenceMethods s_seq_methods =
 {
-	PyArrayDataInstance::_pySeq_length,		// inquiry sq_length; len(x)
-	PyArrayDataInstance::_pySeq_concat,		// binaryfunc sq_concat; x + y
-	PyArrayDataInstance::_pySeq_repeat,		// intargfunc sq_repeat; x * n
-	PyArrayDataInstance::_pySeq_item,		// intargfunc sq_item; x[i]
-	PyArrayDataInstance::_pySeq_slice,		// intintargfunc sq_slice; x[i:j]
-	PyArrayDataInstance::_pySeq_ass_item,	// intobjargproc sq_ass_item; 
-											// x[i] = v
-	PyArrayDataInstance::_pySeq_ass_slice,	// intintobjargproc sq_ass_slice;
-											// x[i:j] = v
-	PyArrayDataInstance::_pySeq_contains,	// objobjproc sq_contains;
-											// v in x
-	PyArrayDataInstance::_pySeq_inplace_concat,	
-											// binaryfunc sq_inplace_concat;
-											// x += y
-	PyArrayDataInstance::_pySeq_inplace_repeat	
-											// intargfunc sq_inplace_repeat;
-											// x *= n
+	.sq_length = PyArrayDataInstance::_pySeq_length,
+	.sq_concat = PyArrayDataInstance::_pySeq_concat,
+	.sq_repeat = PyArrayDataInstance::_pySeq_repeat,
+	.sq_item = PyArrayDataInstance::_pySeq_item,
+	.was_sq_slice = 0,
+	.sq_ass_item = PyArrayDataInstance::_pySeq_ass_item,
+	.was_sq_ass_slice = 0,
+	.sq_contains = PyArrayDataInstance::_pySeq_contains,
+	.sq_inplace_concat = PyArrayDataInstance::_pySeq_inplace_concat,
+	.sq_inplace_repeat = PyArrayDataInstance::_pySeq_inplace_repeat,
 };
+/* BIGWORLD_END */
 } // end namespace (anonymous)
 
-PY_TYPEOBJECT_SPECIALISE_CMP( PyArrayDataInstance, 
-	&PyArrayDataInstance::pyCompare );
+PY_TYPEOBJECT_SPECIALISE_CMP( PyArrayDataInstance,
+	PyArrayDataInstance::pyCompare );
 PY_TYPEOBJECT_SPECIALISE_SEQ( PyArrayDataInstance, &s_seq_methods )
 PY_TYPEOBJECT( PyArrayDataInstance )
 
@@ -252,7 +251,7 @@ PyObject * PyArrayDataInstance::pyRepr()
 			compo += ", ";
 		}
 
-		compo += PyString_AsString( pSubRepr );
+		compo += PyUnicode_AsUTF8( pSubRepr );
 		Py_DECREF( pSubRepr );
 	}
 	return Script::getData( compo + "]" );
@@ -857,7 +856,10 @@ bool PyArrayDataInstance::equals_seq( ScriptObject pOther )
 		ScriptObject pOtherElement( PySequence_GetItem( pOther.get(), i ), 
 			ScriptObject::STEAL_REFERENCE );
 
-		if (0 != PyObject_Compare( pOtherElement.get(), values_[i].get() ))
+		// BIGWORLD(3.13 migration): PyObject_Compare() was removed;
+		// this caller only needs an equality answer.
+		if (PyObject_RichCompareBool( pOtherElement.get(),
+				values_[i].get(), Py_EQ ) != 1)
 		{
 			return false;
 		}
@@ -882,7 +884,10 @@ int PyArrayDataInstance::findFrom( uint beg, PyObject * needle )
 
 	for (uint i = beg; i < values_.size(); ++i)
 	{
-		if (PyObject_Compare( needle, values_[i].get() ) == 0)
+		// BIGWORLD(3.13 migration): PyObject_Compare() was removed;
+		// findFrom only needs an equality answer.
+		if (PyObject_RichCompareBool( needle, values_[i].get(),
+				Py_EQ ) == 1)
 		{
 			return i;
 		}
@@ -944,17 +949,21 @@ int PyArrayDataInstance::pyCompare( PyObject * a, PyObject * b )
 
 	while (iterA != aValues.end() && iterB != bValues.end())
 	{
-		int compareResult = 0;
-
-		if (-1 == PyObject_Cmp( iterA->get(), iterB->get(), &compareResult ))
+		/* BIGWORLD(3.13 migration): PyObject_Cmp() was removed; assemble
+		 * the three-way answer from rich comparisons instead. */
+		int lt = PyObject_RichCompareBool( iterA->get(), iterB->get(), Py_LT );
+		if (lt != 0)
 		{
-			// Error has been raised, we should return -1 in this case.
+			// 1 means a < b, -1 means an error was raised; either way
+			// we should return -1 in this case.
 			return -1;
 		}
 
-		if (compareResult != 0)
+		int gt = PyObject_RichCompareBool( iterA->get(), iterB->get(), Py_GT );
+		if (gt != 0)
 		{
-			return compareResult;
+			// 1 means a > b, -1 means an error was raised.
+			return (gt == -1) ? -1 : 1;
 		}
 
 		++iterA;

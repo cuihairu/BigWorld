@@ -105,7 +105,7 @@ PyObject * pyInstance_model( ResourceRef& rr )
 	if (rr.data()!=NULL)
 	{		
 		PyObject * pTuple = PyTuple_New(1);
-		PyTuple_SetItem( pTuple, 0, PyString_FromString(rr.id().c_str()) );
+		PyTuple_SetItem( pTuple, 0, PyUnicode_FromString(rr.id().c_str()) );
 		PyObject * ret = PyModel::pyNew(pTuple);
 		Py_DECREF( pTuple );
 		return ret;

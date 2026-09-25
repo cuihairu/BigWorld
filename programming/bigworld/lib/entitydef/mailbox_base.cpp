@@ -361,7 +361,7 @@ PyObject * PyEntityMailBox::pyPickleReduce()
 
 	PyObject * pConsArgs = PyTuple_New( 1 );
 	PyTuple_SET_ITEM( pConsArgs, 0,
-		PyString_FromStringAndSize( (char*)&embr, sizeof(embr) ) );
+		PyBytes_FromStringAndSize( (char*)&embr, sizeof(embr) ) );
 
 	return pConsArgs;
 }
@@ -403,7 +403,7 @@ PyObject * PyEntityMailBox::pyRepr()
 		(embr.component() == EntityMailBoxRef::CLIENT_VIA_BASE) ? "ClientViaBase" :
 		(embr.component() == EntityMailBoxRef::SERVICE) ? "Service" : "???";
 
-	return PyString_FromFormat( "%s mailbox id: %d type: %d addr: %s",
+	return PyUnicode_FromFormat( "%s mailbox id: %d type: %d addr: %s",
 			location, embr.id, embr.type(), embr.addr.c_str() );
 }
 

@@ -22,7 +22,7 @@ PyMappingMethods g_fixedDictMappingMethods =
 } // end namespace (anonymous)
 
 PY_TYPEOBJECT_SPECIALISE_CMP( PyFixedDictDataInstance,
-	&PyFixedDictDataInstance::pyCompare )
+	PyFixedDictDataInstance::pyCompare )
 PY_TYPEOBJECT_SPECIALISE_MAP( PyFixedDictDataInstance,
 	&g_fixedDictMappingMethods )
 PY_TYPEOBJECT( PyFixedDictDataInstance )
@@ -98,7 +98,7 @@ void PyFixedDictDataInstance::initFieldValue( int index, ScriptObject val )
 				PyObjectPtr::STEAL_REFERENCE );
 		ERROR_MSG( "PyFixedDictDataInstance::initFieldValue: "
 					"Failed to initialise index %d with value %s\n",
-				index, PyString_AsString( pStr.get() ) );
+				index, PyUnicode_AsUTF8( pStr.get() ) );
 	}
 }
 
@@ -253,7 +253,7 @@ int PyFixedDictDataInstance::pySetFieldByKey( PyObject* self, PyObject* key,
  */
 PyObject* PyFixedDictDataInstance::getFieldByKey( PyObject* key )
 {
-	if (!PyString_Check( key ))
+	if (!PyUnicode_Check( key ))
 	{
 		PyErr_Format( PyExc_KeyError,
 				"Key type must be a string, %s given",
@@ -261,7 +261,7 @@ PyObject* PyFixedDictDataInstance::getFieldByKey( PyObject* key )
 		return NULL;
 	}
 
-	return this->getFieldByKey( PyString_AsString( key ) );
+	return this->getFieldByKey( PyUnicode_AsUTF8( key ) );
 }
 
 
@@ -283,7 +283,7 @@ PyObject* PyFixedDictDataInstance::getFieldByKey( const char * keyString )
 	}
 	else
 	{
-		PyObject * pKey = PyString_FromString( keyString );
+		PyObject * pKey = PyUnicode_FromString( keyString );
 		PyErr_SetObject( PyExc_KeyError, pKey );
 		Py_DECREF( pKey );
 		pValue = NULL;
@@ -298,7 +298,7 @@ PyObject* PyFixedDictDataInstance::getFieldByKey( const char * keyString )
  */
 int PyFixedDictDataInstance::setFieldByKey( PyObject* key, PyObject* value )
 {
-	if (!PyString_Check( key ))
+	if (!PyUnicode_Check( key ))
 	{
 		PyErr_Format( PyExc_KeyError,
 				"Key type must be a string, %s given",
@@ -306,7 +306,7 @@ int PyFixedDictDataInstance::setFieldByKey( PyObject* key, PyObject* value )
 		return -1;
 	}
 
-	return this->setFieldByKey( PyString_AsString( key ), value );
+	return this->setFieldByKey( PyUnicode_AsUTF8( key ), value );
 }
 
 /**
@@ -327,7 +327,7 @@ int PyFixedDictDataInstance::setFieldByKey( const char * keyString,
 
 	if (idx < 0)
 	{
-		PyObject * pKey = PyString_FromString( keyString );
+		PyObject * pKey = PyUnicode_FromString( keyString );
 		PyErr_SetObject( PyExc_KeyError, pKey );
 		Py_DECREF( pKey );
 		return -1;
@@ -385,7 +385,7 @@ PyObject* PyFixedDictDataInstance::py_keys(PyObject* /*args*/)
 				i < fields.end(); ++i )
 		{
 			PyList_SET_ITEM( pyKeyList, i - fields.begin(),
-							PyString_FromString( i->name_.c_str() ) );
+							PyUnicode_FromString( i->name_.c_str() ) );
 		}
 	}
 
@@ -550,10 +550,26 @@ bool PyFixedDictDataInstance::pyCompareValuesWithEqualKeys(
 		PyObject * pElementA = pFixedDictA->fieldValues_[i].get();
 		PyObject * pElementB = pFixedDictB->fieldValues_[i].get();
 
-		if (-1 == PyObject_Cmp( pElementA, pElementB, &compareResult ))
+		/* BIGWORLD(3.13 migration): was PyObject_Cmp(), removed in 3.x. */
+		int lt = PyObject_RichCompareBool( pElementA, pElementB, Py_LT );
+		if (lt == -1)
 		{
-			// Error state raised by PyObject_Cmp().
+			// Error state raised by the rich comparison.
 			return false;
+		}
+		else if (lt == 1)
+		{
+			compareResult = -1;
+		}
+		else
+		{
+			int gt = PyObject_RichCompareBool( pElementA, pElementB, Py_GT );
+			if (gt == -1)
+			{
+				// Error state raised by the rich comparison.
+				return false;
+			}
+			compareResult = (gt == 1) ? 1 : 0;
 		}
 		++i;
 	}
@@ -602,78 +618,54 @@ int PyFixedDictDataInstance::pyCompare( PyObject * a, PyObject * b )
  */
 PyObject * PyFixedDictDataInstance::pyRepr()
 {
-	Py_ssize_t count = 0;
-	PyObject *s, *temp, *colon = NULL;
-	PyObject *pieces = NULL, *result = NULL;
-
-	count = Py_ReprEnter( this );
+	Py_ssize_t count = Py_ReprEnter( this );
 	if (count != 0) {
-		return count > 0 ? PyString_FromString("{...}") : NULL;
+		/* BIGWORLD(3.13 migration): this was a port of the 2.7 dictrepr
+		 * built on PyString_Concat/_PyString_Join, both gone in 3.x.
+		 * Assemble the UTF-8 payload field by field and hand it over as
+		 * a single unicode object instead. */
+		return count > 0 ? PyUnicode_FromString( "{...}" ) : NULL;
 	}
 
-	if (this->fieldValues_.empty()) {
-		result = PyString_FromString("{}");
-		goto Done;
-	}
+	BW::string repr = "{";
 
-	pieces = PyList_New(0);
-	if (pieces == NULL)
-		goto Done;
-
-	colon = PyString_FromString(": ");
-	if (colon == NULL)
-		goto Done;
-
-	/* Do repr() on each key+value pair, and insert ": " between them.
-	   Note that repr may mutate the dict. */
-	for(FieldValues::iterator i = this->fieldValues_.begin(); i != this->fieldValues_.end(); ++i, ++count)
+	int index = 0;
+	for (FieldValues::iterator i = this->fieldValues_.begin();
+			i != this->fieldValues_.end();
+			++i, ++index)
 	{
-		int status;
-		/* Prevent repr from deleting value during key format. */
+		if (index > 0)
+		{
+			repr += ", ";
+		}
+
+		repr += this->pDataType_->getFieldName( index );
+		repr += ": ";
+
 		PyObjectPtr value = *i;
-		s = PyString_FromString(
-			this->pDataType_->getFieldName( ( int ) count).c_str());
-		PyString_Concat(&s, colon);
-		PyString_ConcatAndDel(&s, PyObject_Repr(value.get()));
-		if (s == NULL)
-			goto Done;
-		status = PyList_Append(pieces, s);
-		Py_DECREF(s);  /* append created a new ref */
-		if (status < 0)
-			goto Done;
+		PyObjectPtr valueRepr( PyObject_Repr( value.get() ),
+			PyObjectPtr::STEAL_REFERENCE );
+		if (valueRepr == NULL)
+		{
+			Py_ReprLeave( this );
+			return NULL;
+		}
+
+		const char * valueReprStr = PyUnicode_AsUTF8( valueRepr.get() );
+		if (valueReprStr == NULL)
+		{
+			Py_ReprLeave( this );
+			return NULL;
+		}
+
+		repr += valueReprStr;
 	}
 
-	/* Add "{}" decorations to the first and last items. */
-	assert(PyList_GET_SIZE(pieces) > 0);
-	s = PyString_FromString("{");
-	if (s == NULL)
-		goto Done;
-	temp = PyList_GET_ITEM(pieces, 0);
-	PyString_ConcatAndDel(&s, temp);
-	PyList_SET_ITEM(pieces, 0, s);
-	if (s == NULL)
-		goto Done;
+	repr += "}";
 
-	s = PyString_FromString("}");
-	if (s == NULL)
-		goto Done;
-	temp = PyList_GET_ITEM(pieces, PyList_GET_SIZE(pieces) - 1);
-	PyString_ConcatAndDel(&temp, s);
-	PyList_SET_ITEM(pieces, PyList_GET_SIZE(pieces) - 1, temp);
-	if (temp == NULL)
-		goto Done;
+	PyObject * result = PyUnicode_FromString( repr.c_str() );
 
-	/* Paste them all together with ", " between. */
-	s = PyString_FromString(", ");
-	if (s == NULL)
-		goto Done;
-	result = _PyString_Join(s, pieces);
-	Py_DECREF(s);
-
-Done:
-	Py_XDECREF(pieces);
-	Py_XDECREF(colon);
-	Py_ReprLeave(this);
+	Py_ReprLeave( this );
 	return result;
 }
 
@@ -696,7 +688,7 @@ PyObject * PyFixedDictDataInstance::py_getFieldNameForIndex( PyObject * args )
 		return NULL;
 	}
 
-	return PyString_FromString(pDataType_->getFieldName(index).c_str());
+	return PyUnicode_FromString(pDataType_->getFieldName(index).c_str());
 }
 
 BW_END_NAMESPACE

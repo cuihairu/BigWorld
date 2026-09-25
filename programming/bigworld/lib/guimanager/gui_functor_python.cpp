@@ -63,7 +63,7 @@ bool PythonFunctor::text( const BW::string& textor, ItemPtr item, BW::string& re
 	if( obj.exists() )
 	{
 		char* str;
-		if( PyString_Check( obj.get() ) && ( str = PyString_AsString( obj.get() ) ) )
+		if( PyUnicode_Check( obj.get() ) && ( str = PyUnicode_AsUTF8( obj.get() ) ) )
 		{
 			result = str;
 			return true;
@@ -79,9 +79,9 @@ bool PythonFunctor::update( const BW::string& updater, ItemPtr item, unsigned in
 	PyObjectPtr obj( call( updater, item ), PyObjectPtr::STEAL_REFERENCE) ;
 	if( obj.exists() )
 	{
-		if (PyInt_Check( obj ) )
+		if (PyLong_Check( obj ) )
 		{
-			result = PyInt_AsLong( obj.get() );
+			result = PyLong_AsLong( obj.get() );
 			return true;
 		}
 	}
@@ -95,9 +95,9 @@ bool PythonFunctor::act( const BW::string& action, ItemPtr item, bool& result )
 	PyObjectPtr obj( call( action, item ), PyObjectPtr::STEAL_REFERENCE) ;
 	if( obj.exists() )
 	{
-		if (PyInt_Check( obj ) )
+		if (PyLong_Check( obj ) )
 		{
-			result = ( PyInt_AsLong( obj.get() ) != 0 );
+			result = ( PyLong_AsLong( obj.get() ) != 0 );
 			return true;
 		}
 	}

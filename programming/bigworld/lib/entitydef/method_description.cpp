@@ -1059,7 +1059,7 @@ void MethodDescription::addReturnValuesError( ScriptObject pFailure,
 		ERROR_MSG( "MethodDescription::addReturnValuesError: "
 					"Error has no args member.\n"
 					"Error contents: %s",
-				PyString_AsString( pFailureRepr.get() ) );
+				PyUnicode_AsUTF8( pFailureRepr.get() ) );
 		args = ScriptTuple::create( 0 );
 	}
 

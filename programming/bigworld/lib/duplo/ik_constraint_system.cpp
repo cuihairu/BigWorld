@@ -2950,7 +2950,7 @@ PyObject * IKConstraintSystem::py_getConstraints( PyObject *args )
 		itr != constraints_.end();
 		++itr)
 	{
-		PyObject * str = PyString_FromString( itr->first.c_str() );
+		PyObject * str = PyUnicode_FromString( itr->first.c_str() );
 		PyList_Append( result, str );
 		Py_XDECREF( str );
 	}
@@ -3050,7 +3050,7 @@ PyObject * IKConstraintSystem::py_getIKHandles( PyObject *args )
 		itr != ikHandles_.end();
 		++itr)
 	{
-		PyObject * str = PyString_FromString( itr->first.c_str() );
+		PyObject * str = PyUnicode_FromString( itr->first.c_str() );
 		PyList_Append( result, str );
 		Py_XDECREF(str);
 	}

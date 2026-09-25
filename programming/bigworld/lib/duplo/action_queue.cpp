@@ -1165,7 +1165,7 @@ PyObject * ActionQueue::queueState() const
 	for (uint i = ibegin; i < iend; i++)
 	{
 		const AQElement & aqe = actionState_[i];
-		PyTuple_SetItem( pTuple, i-ibegin, PyString_FromString(
+		PyTuple_SetItem( pTuple, i-ibegin, PyUnicode_FromString(
 			aqe.action_->pSource_->name_.c_str() ) );
 	}
 
@@ -1509,9 +1509,9 @@ PyObject * ActionQueuer::pyCall( PyObject * args, PyObject * kwargs )
 		PyObject * key, * value;
 		while (PyDict_Next( kwargs, &pos, &key, &value ))
 		{
-			if (!PyString_Check( key ))			{ good = false; break; }
+			if (!PyUnicode_Check( key ))			{ good = false; break; }
 			if (!PyCallable_Check( value ))		{ good = false; break; }
-			const char * cueStr = PyString_AsString( key );
+			const char * cueStr = PyUnicode_AsUTF8( key );
 			Moo::CueBasePtr cb = Moo::CueBase::find( 'c', cueStr );
 			if (!cb)
 			{

@@ -27,15 +27,15 @@ namespace ScaleformBW
 			PyObject* utf8 = PyUnicode_AsUTF8String(obj);
 			MF_ASSERT( utf8 != NULL );
 
-			value.SetString(PyString_AsString(utf8));
+			value.SetString(PyUnicode_AsUTF8(utf8));
 		}
-		else if (PyString_CheckExact(obj))
+		else if (PyUnicode_CheckExact(obj))
 		{
-			value.SetString(PyString_AsString(obj));
+			value.SetString(PyUnicode_AsUTF8(obj));
 		}
-		else if (PyInt_CheckExact(obj))
+		else if (PyLong_CheckExact(obj))
 		{
-			value.SetNumber(PyInt_AsLong(obj));
+			value.SetNumber(PyLong_AsLong(obj));
 		}
 		else if (PyLong_CheckExact(obj))
 		{
@@ -82,7 +82,7 @@ namespace ScaleformBW
 			break;
 
 		case GFx::Value::VT_String:
-			*obj = PyString_FromString(value.GetString());
+			*obj = PyUnicode_FromString(value.GetString());
 			break;
 
 		case GFx::Value::VT_StringW:

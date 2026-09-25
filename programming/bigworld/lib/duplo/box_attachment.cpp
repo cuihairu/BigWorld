@@ -250,7 +250,7 @@ const BW::string& BoxAttachment::name() const
 PyObject * BoxAttachment::pyGet_name()
 {
 	BW_GUARD;
-	return PyString_FromString( name().c_str() );
+	return PyUnicode_FromString( name().c_str() );
 }
 
 /*
@@ -259,8 +259,8 @@ PyObject * BoxAttachment::pyGet_name()
 int BoxAttachment::pySet_name( PyObject * pValue )
 {
 	BW_GUARD;
-	if (PyString_Check( pValue ))
-		name( PyString_AsString( pValue ) );
+	if (PyUnicode_Check( pValue ))
+		name( PyUnicode_AsUTF8( pValue ) );
 	else
 	{
 		PyErr_Format( PyExc_TypeError,

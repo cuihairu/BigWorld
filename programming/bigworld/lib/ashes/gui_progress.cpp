@@ -34,7 +34,7 @@ GUIProgressDisplay::GUIProgressDisplay( const BW::string& guiName,
 	BW_GUARD;
 	lastTime_ = -1.f;
 	PyObject* params = PyTuple_New(1);
-	PyTuple_SET_ITEM( params, 0, PyString_FromString(guiName.c_str()) );
+	PyTuple_SET_ITEM( params, 0, PyUnicode_FromString(guiName.c_str()) );
 	PyObject * gui = SimpleGUIComponent::py_load( params );
 
 	Py_DECREF(params);

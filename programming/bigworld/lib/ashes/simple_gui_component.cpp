@@ -1709,7 +1709,7 @@ bool SimpleGUIComponent::pySetAttribute( const ScriptString & attrObj,
 	// see if it's a component
 	if (PyWeakref_CheckProxy( pyValue ))
 	{
-		pyValue = (PyObject*) PyWeakref_GET_OBJECT( pyValue );
+		pyValue = (PyObject*) bwPyWeakrefGetObject( pyValue );
 	}
 	if (SimpleGUIComponent::Check( pyValue ) && attr[0])
 	{
@@ -1863,7 +1863,7 @@ PyObject * SimpleGUIComponent::pyGet_children()
 	{
 		PyObject * pTuple = PyTuple_New( 2 );
 
-		PyTuple_SetItem( pTuple, 0, PyString_FromString( it->first ) );
+		PyTuple_SetItem( pTuple, 0, PyUnicode_FromString( it->first ) );
 		PyObject * pChild = it->second.getObject();
 		Py_INCREF( pChild );
 		PyTuple_SetItem( pTuple, 1, pChild );
@@ -1888,7 +1888,7 @@ PyObject * SimpleGUIComponent::pyGet_shaders()
 	{
 		PyObject * pTuple = PyTuple_New( 2 );
 
-		PyTuple_SetItem( pTuple, 0, PyString_FromString( it->first ) );
+		PyTuple_SetItem( pTuple, 0, PyUnicode_FromString( it->first ) );
 		PyObject * pChild = it->second.getObject();
 		Py_INCREF( pChild );
 		PyTuple_SetItem( pTuple, 1, pChild );
@@ -2050,7 +2050,7 @@ PyObject * SimpleGUIComponent::py_addChild( PyObject * args )
 
 	if (PyWeakref_CheckProxy( pComponent))
 	{
-		pComponent = (PyObject*) PyWeakref_GET_OBJECT( pComponent );
+		pComponent = (PyObject*) bwPyWeakrefGetObject( pComponent );
 	}
 	if (!SimpleGUIComponent::Check( pComponent ))
 	{
@@ -2094,16 +2094,16 @@ PyObject * SimpleGUIComponent::py_delChild( PyObject * args )
 		PyObject * pItem = PyTuple_GetItem( args, 0 );
 		if (PyWeakref_CheckProxy( pItem))
 		{
-			pItem = (PyObject*) PyWeakref_GET_OBJECT( pItem );
+			pItem = (PyObject*) bwPyWeakrefGetObject( pItem );
 		}
 		if (SimpleGUIComponent::Check( pItem ))
 		{
 			this->removeChild( static_cast<SimpleGUIComponent*>( pItem ) );
 			Py_RETURN_NONE;
 		}
-		if (PyString_Check( pItem ))
+		if (PyUnicode_Check( pItem ))
 		{
-			this->removeChild( PyString_AsString( pItem ) );
+			this->removeChild( PyUnicode_AsUTF8( pItem ) );
 			Py_RETURN_NONE;
 		}
 	}
@@ -2234,9 +2234,9 @@ PyObject * SimpleGUIComponent::py_delShader( PyObject * args )
 			this->removeShader( static_cast<GUIShader*>( pItem ) );
 			Py_RETURN_NONE;
 		}
-		if (PyString_Check( pItem ))
+		if (PyUnicode_Check( pItem ))
 		{
-			this->removeShader( PyString_AsString( pItem ) );
+			this->removeShader( PyUnicode_AsUTF8( pItem ) );
 			Py_RETURN_NONE;
 		}
 	}
@@ -2273,9 +2273,9 @@ PyObject * SimpleGUIComponent::py_load( PyObject * args )
 	{
 		PyObject * pArg = PyTuple_GET_ITEM( args, 0 );
 
-		if (PyString_Check( pArg ))
+		if (PyUnicode_Check( pArg ))
 		{
-			char * res = PyString_AsString( pArg );
+			char * res = PyUnicode_AsUTF8( pArg );
 			pTop = BWResource::openSection( res );
 
 			if (!pTop || pTop->countChildren() == 0)
@@ -4816,10 +4816,10 @@ void SimpleGUIComponent::save( DataSectionPtr pSect, SaveBindings & bindn )
 			pScriptObject_.getObject(), "factoryString" );
 		PyErr_Clear();
 
-		if (pFactoryStr != NULL && PyString_Check( pFactoryStr ))
+		if (pFactoryStr != NULL && PyUnicode_Check( pFactoryStr ))
 		{
 			BW::string quotedFactoryStr = "\"";
-			quotedFactoryStr += PyString_AsString( pFactoryStr );
+			quotedFactoryStr += PyUnicode_AsUTF8( pFactoryStr );
 			quotedFactoryStr += "\"";
 
 			DataSectionPtr pScSect = pSect->newSection( "script" );

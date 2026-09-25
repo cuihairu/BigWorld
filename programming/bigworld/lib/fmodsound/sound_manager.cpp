@@ -2218,7 +2218,7 @@ static PyObject* py_getSoundBanks( PyObject *args )
 
 	for( BW::list< BW::string >::iterator it = soundbanks.begin(); it != soundbanks.end(); ++it )
 	{
-		PyObject* str = PyString_FromString((*it).c_str());
+		PyObject* str = PyUnicode_FromString((*it).c_str());
 		PyList_Append( result, str );
 		Py_XDECREF(str);
 	}

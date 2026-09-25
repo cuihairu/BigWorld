@@ -457,13 +457,13 @@ static PyObject * py_fetchModel( PyObject * args )
 	for (i = 0; i < sz; i++)
 	{
 		pItem = PyTuple_GetItem( args, i );	// borrowed
-		if (!PyString_Check( pItem ))
+		if (!PyUnicode_Check( pItem ))
 		{
 			PyErr_Format( PyExc_ValueError, "fetchModel(): "
 				"Argument %d is not a string", i );
 			return NULL;
 		}
-		modelNames[i] = PyString_AsString( pItem );
+		modelNames[i] = PyUnicode_AsUTF8( pItem );
 	}
 
 	PyObject * bgLoadCallback = PyTuple_GetItem( args, sz );
@@ -1631,7 +1631,7 @@ PyObject * PyModel::py_restoreActionQueue( PyObject * args )
 	}
 
 	DataSectionPtr state = static_cast<PyDataSection*>( pPyDS )->pSection();
-	return PyInt_FromLong( actionQueue_.restoreActionState( state, pSuperModel_, pOwnWorld_ ) );
+	return PyLong_FromLong( actionQueue_.restoreActionState( state, pSuperModel_, pOwnWorld_ ) );
 }
 
 /**
@@ -1647,8 +1647,8 @@ PyObject * PyModel::pyNew( PyObject * args )
 	for (i = 0; i < sz; i++)
 	{
 		PyObject * pItem = PyTuple_GetItem( args, i );	// borrowed
-		if (!PyString_Check( pItem )) break;
-		modelNames.push_back( PyString_AsString( pItem ) );
+		if (!PyUnicode_Check( pItem )) break;
+		modelNames.push_back( PyUnicode_AsUTF8( pItem ) );
 	}
 
 	if (!i || i < sz)

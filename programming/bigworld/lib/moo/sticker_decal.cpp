@@ -408,15 +408,16 @@ void PyStickerModel::setTextureData( PyObjectPtr data )
 {
     BW_GUARD;
     PyObject *pData = data.get();
-    if (pData == NULL || !PyString_Check(pData))
+    if (pData == NULL || !PyUnicode_Check(pData))
     {
         PyErr_Format(PyExc_RuntimeError, "PyStickerModel::setTextureData - invalid parameter type of data (must be string).");
         return;
     }
 
+    /* BIGWORLD(3.13 migration): texture contents are binary -> bytes. */
     char *buf = NULL;
     Py_ssize_t size = 0;
-    if (PyString_AsStringAndSize(pData, &buf, &size)
+    if (PyBytes_AsStringAndSize(pData, &buf, &size)
         || size == 0 || buf == NULL)
     {
         PyErr_Format(PyExc_RuntimeError, "PyStickerModel::setTextureData - failed to get texture contents (buffer size is %d).", size);

@@ -137,11 +137,11 @@ bool MethodArgs::checkValid( ScriptTuple args,
 	{
 		ScriptObject pExposed = args.getItem( 0 );
 
-		if (!PyInt_Check( pExposed.get() ) && (pExposed.get() != Py_None))
+		if (!PyLong_Check( pExposed.get() ) && (pExposed.get() != Py_None))
 		{
 			PyObject * peid = PyObject_GetAttrString( pExposed.get(), "id" );
 
-			if (peid == NULL || !PyInt_Check( peid ))
+			if (peid == NULL || !PyLong_Check( peid ))
 			{
 				Py_XDECREF( peid );
 				PyErr_Format( PyExc_TypeError,
@@ -178,7 +178,7 @@ bool MethodArgs::checkValid( ScriptTuple args,
 					name,
 					i+1,
 					pType->typeName().c_str(),
-					PyString_AsString( pStr.get() ) );
+					PyUnicode_AsUTF8( pStr.get() ) );
 			}
 			else
 			{

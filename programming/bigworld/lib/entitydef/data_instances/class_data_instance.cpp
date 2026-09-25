@@ -32,15 +32,18 @@ public:
 	{
 		ScriptObject pDict( PyDict_New(), ScriptObject::STEAL_REFERENCE );
 		MF_ASSERT_DEV( pDict );
-		ScriptObject pModuleName( PyString_FromString( "_BWp" ),
+		ScriptObject pModuleName( PyUnicode_FromString( "_BWp" ),
 								 ScriptObject::STEAL_REFERENCE );
 		MF_VERIFY( PyDict_SetItemString( pDict.get(), "__module__",
 										pModuleName.get() ) != -1 );
-		ScriptObject pClassName( PyString_FromString( EMPTY_CLASS_NAME ),
-								ScriptObject::STEAL_REFERENCE );
-		MF_ASSERT_DEV( pClassName );
+		/* BIGWORLD(3.13 migration): PyClass_New() created an old-style
+		 * class, gone in 3.x. Call the type callable instead - same shape:
+		 * no bases, the dict above, and the class name. */
+		ScriptObject pBases( PyTuple_New( 0 ), ScriptObject::STEAL_REFERENCE );
 		pEmptyClassObject_ = ScriptObject(
-			PyClass_New( NULL, pDict.get(), pClassName.get() ),
+			PyObject_CallFunction( (PyObject *)&PyType_Type,
+				const_cast<char*>( "sOO" ), EMPTY_CLASS_NAME,
+				pBases.get(), pDict.get() ),
 			ScriptObject::STEAL_REFERENCE );
 		MF_VERIFY( PyObject_SetAttrString( PyImport_AddModule( "_BWp" ),
 						const_cast<char*>(EMPTY_CLASS_NAME),
@@ -258,7 +261,7 @@ ScriptObject PyClassDataInstance::setOwnedProperty( int ref,
 ScriptObject PyClassDataInstance::getPyIndex( int index ) const
 {
 	return ScriptObject(
-			PyString_FromString( pDataType_->fields()[ index ].name_.c_str() ),
+			PyUnicode_FromString( pDataType_->fields()[ index ].name_.c_str() ),
 			ScriptObject::STEAL_REFERENCE );
 }
 
@@ -329,9 +332,12 @@ void PyClassDataInstance::pyAdditionalMembers( const ScriptList & pList ) const
 PyObject * PyClassDataInstance::pyPickleReduce()
 {
 	// Make an equivalent pickle-able Python class instance.
+	/* BIGWORLD(3.13 migration): was PyInstance_New(); old-style instances
+	 * are gone in 3.x, calling the class produces the same empty
+	 * attribute bag. */
 	const ClassDataType::Fields& fields = pDataType_->getFields();
 	PyObject* pClassInstance =
-		PyInstance_New( s_emptyClassObject_.get(), NULL, NULL );
+		PyObject_CallObject( s_emptyClassObject_.get(), NULL );
 	for ( ClassDataType::Fields::size_type i = 0; i < fields.size(); ++i )
 	{
 		PyObject_SetAttrString( pClassInstance,

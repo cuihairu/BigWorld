@@ -505,8 +505,8 @@ PyObject * PyModelObstacle::pyNew( PyObject * args )
 	for (i = 0; i < nargs; i++)
 	{
 		PyObject * ana = PyTuple_GetItem( args, i );
-		if (!PyString_Check( ana )) break;
-		modelNames.push_back( PyString_AsString( ana ) );
+		if (!PyUnicode_Check( ana )) break;
+		modelNames.push_back( PyUnicode_AsUTF8( ana ) );
 	}
 	bad |= modelNames.empty();
 

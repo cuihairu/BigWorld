@@ -263,9 +263,9 @@ PyObject * FlashTextGUIComponent::pyNew( PyObject * args )
 		if ( numChars != -1 )
 			wBuf[numChars] = L'\0';
 	}
-	else if (label && PyString_Check(label))
+	else if (label && PyUnicode_Check(label))
 	{
-		bw_snwprintf( wBuf, sizeof(wBuf)/sizeof(wchar_t), L"%S\0", PyString_AsString(label) );
+		bw_snwprintf( wBuf, sizeof(wBuf)/sizeof(wchar_t), L"%S\0", PyUnicode_AsUTF8(label) );
 	}
 	else
 	{
@@ -695,8 +695,8 @@ PyObject* FlashTextGUIComponent::stringDimensions( const BW::wstring& theString 
 	}
 	
 	PyObject* r = PyTuple_New(2);
-	PyTuple_SetItem( r, 0, PyInt_FromLong((uint)s.Width) );
-	PyTuple_SetItem( r, 1, PyInt_FromLong((uint)s.Height) );
+	PyTuple_SetItem( r, 0, PyLong_FromLong((uint)s.Width) );
+	PyTuple_SetItem( r, 1, PyLong_FromLong((uint)s.Height) );
 	return r;
 }
 

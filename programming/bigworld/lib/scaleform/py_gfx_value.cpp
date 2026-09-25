@@ -159,7 +159,7 @@ PyObject *PyGFxValue::convertValueToPython(GFx::Value &gfxValue, PyMovieView *py
 		break;
 
 	case GFx::Value::VT_String:
-		pyValue = PyString_FromString(gfxValue.GetString());
+		pyValue = PyUnicode_FromString(gfxValue.GetString());
 		break;
 
 	case GFx::Value::VT_StringW:
@@ -224,15 +224,15 @@ GFx::Value PyGFxValue::convertValueToGFx(PyObject *pyValue, PyMovieView *pyMovie
 	else if (PyUnicode_CheckExact(pyValue))
 	{
 		PyObject *utf8 = PyUnicode_AsUTF8String(pyValue);
-		gfxValue.SetString(PyString_AsString(utf8));
+		gfxValue.SetString(PyUnicode_AsUTF8(utf8));
 	}
-	else if (PyString_CheckExact(pyValue))
+	else if (PyUnicode_CheckExact(pyValue))
 	{
-		gfxValue.SetString(PyString_AsString(pyValue));
+		gfxValue.SetString(PyUnicode_AsUTF8(pyValue));
 	}
-	else if (PyInt_CheckExact(pyValue))
+	else if (PyLong_CheckExact(pyValue))
 	{
-		gfxValue.SetInt(PyInt_AsLong(pyValue));
+		gfxValue.SetInt(PyLong_AsLong(pyValue));
 	}
 	else if (PyLong_CheckExact(pyValue))
 	{
@@ -284,7 +284,7 @@ GFx::Value PyGFxValue::convertValueToGFx(PyObject *pyValue, PyMovieView *pyMovie
 			PyObject *pyKVKey = PyTuple_GetItem(pyKVPair, 0);
 			PyObject *pyKVValue = PyTuple_GetItem(pyKVPair, 1);
 			
-			const char *objKey = PyString_AsString(pyKVKey);
+			const char *objKey = PyUnicode_AsUTF8(pyKVKey);
 			GFx::Value objVal = convertValueToGFx(pyKVValue, pyMovieView);
 
 			gfxValue.SetMember(objKey, objVal);
@@ -474,7 +474,7 @@ void PyGFxValue::fromDict(PyObjectPtr dict)
 		PyObject *pyKVKey = PyTuple_GetItem(pyKVPair, 0);
 		PyObject *pyKVValue = PyTuple_GetItem(pyKVPair, 1);
 
-		const char *objKey = PyString_AsString(pyKVKey);
+		const char *objKey = PyUnicode_AsUTF8(pyKVKey);
 		GFx::Value objVal = convertValueToGFx(pyKVValue, pyMovieView_);
 
 		if (!gfxValue_.SetMember(objKey, objVal))
@@ -687,9 +687,9 @@ PyObject *PyGFxValue::pyRepr()
 	BW_GUARD;
 
 	if (isDisplayObject())
-		return PyString_FromString("DisplayObject");
+		return PyUnicode_FromString("DisplayObject");
 	else if (isObjectOrMethod())
-		return PyString_FromString("Object");
+		return PyUnicode_FromString("Object");
 
 	return PyObjectPlus::pyRepr();
 }

@@ -1650,7 +1650,7 @@ PyObject * SimpleGUI::py_addRoot( PyObject * args )
 
 	if (PyWeakref_CheckProxy( pComponent))
 	{
-		pComponent = (PyObject*) PyWeakref_GET_OBJECT( pComponent );
+		pComponent = (PyObject*) bwPyWeakrefGetObject( pComponent );
 	}
 	if (!SimpleGUIComponent::Check( pComponent ))
 	{
@@ -1689,7 +1689,7 @@ PyObject * SimpleGUI::py_delRoot( PyObject * args )
 
 	if (PyWeakref_CheckProxy( pComponent))
 	{
-		pComponent = (PyObject*) PyWeakref_GET_OBJECT( pComponent );
+		pComponent = (PyObject*) bwPyWeakrefGetObject( pComponent );
 	}
 	if (!SimpleGUIComponent::Check( pComponent ))
 	{

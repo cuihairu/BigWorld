@@ -22,7 +22,13 @@ WatcherPtr EntityMemberStats::pWatcher()
 	if (!watchMe)
 	{
 		watchMe = new DirectoryWatcher();
-		EntityMemberStats * pNull = NULL;
+		/* BIGWORLD(3.13 migration): the watchers registered below are bound
+		 * to member offsets only — MemberWatcher/DataWatcher add the real
+		 * instance base when the watcher is visited, so nothing is ever
+		 * dereferenced here. gcc 15 rejects member calls through a provably
+		 * null pointer (-Werror=nonnull), so the pointer is volatile
+		 * qualified to keep its value opaque to the optimiser. */
+		EntityMemberStats * volatile pNull = NULL;
 		pNull->sentToOwnClient_.addWatchers( watchMe, "sentToOwnClient" );
 		if (!s_limitForBaseApp_)
 		{

@@ -42,7 +42,7 @@ public:
 				if (pAsStr)
 				{
 					ERROR_MSG( "\tpValue = %s\n",
-							PyString_AsString( pAsStr ) );
+							PyUnicode_AsUTF8( pAsStr ) );
 					Py_DECREF( pAsStr );
 				}
 			}

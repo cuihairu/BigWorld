@@ -2233,7 +2233,7 @@ StringVector getAttributes( const BW::wstring & object )
 		if (n > 0) {
 			for (int i = 0; i < n; i++) {
 				PyObject * entry = PyList_GetItem( list, i );
-				attributes.push_back( bw_utf8tow( PyString_AS_STRING( entry ) ) );
+				attributes.push_back( bw_utf8tow( PyUnicode_AsUTF8( entry ) ) );
 			}
 		}
 	}

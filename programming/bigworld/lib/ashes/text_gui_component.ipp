@@ -88,8 +88,8 @@ INLINE PyObject* TextGUIComponent::stringDimensions(
 	}
 	
 	PyObject* r = PyTuple_New(2);
-	PyTuple_SetItem( r, 0, PyInt_FromLong(w) );
-	PyTuple_SetItem( r, 1, PyInt_FromLong(h) );
+	PyTuple_SetItem( r, 0, PyLong_FromLong(w) );
+	PyTuple_SetItem( r, 1, PyLong_FromLong(h) );
 	return r;
 }
 

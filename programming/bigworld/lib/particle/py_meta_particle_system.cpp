@@ -513,14 +513,14 @@ PyObject *PyMetaParticleSystem::py_system( PyObject *args )
 		ParticleSystemPtr pSys = NULL;
 
 		PyObject * pItem = PyTuple_GetItem( args, 0 );
-		if (PyString_Check( pItem ))
+		if (PyUnicode_Check( pItem ))
 		{
-			pSys = pSystem_->system(PyString_AsString(pItem));
+			pSys = pSystem_->system(PyUnicode_AsUTF8(pItem));
 		}
 
-		if (PyInt_Check( pItem ))
+		if (PyLong_Check( pItem ))
 		{
-			int val = PyInt_AsLong( pItem );
+			int val = PyLong_AsLong( pItem );
 			if (val >= 0 && val < int(pSystem_->nSystems()))
 				pSys = pSystem_->systemFromIndex(val);
 		}

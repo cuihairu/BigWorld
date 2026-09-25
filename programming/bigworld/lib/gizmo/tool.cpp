@@ -544,9 +544,9 @@ PyObject * Tool::py_delView( PyObject * args )
 			this->delView( static_cast<ToolView*>( pItem ) );
 			Py_RETURN_NONE;
 		}
-		if (PyString_Check( pItem ))
+		if (PyUnicode_Check( pItem ))
 		{
-			this->delView( PyString_AsString( pItem ) );
+			this->delView( PyUnicode_AsUTF8( pItem ) );
 			Py_RETURN_NONE;
 		}
 	}
