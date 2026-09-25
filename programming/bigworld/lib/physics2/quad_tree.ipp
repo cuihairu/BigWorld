@@ -924,7 +924,7 @@ inline void QuadTree<MEMBER_TYPE>::print( NodeRef nodeRef, int depth ) const
 	char prefix[128];
 	memset( prefix, ' ', 2 * depth );
 	prefix[ 2 * depth ] = '\0';
-	printQTNode( this->getNode(nodeRef), prefix );
+	printQTNode( this->nodes_[ nodeRef ], prefix );
 
 	for (int i = 0; i < 4; i++)
 	{

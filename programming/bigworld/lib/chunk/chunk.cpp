@@ -213,15 +213,14 @@ Chunk::Chunk( const BW::string & identifier, GeometryMapping * pMapping,
         transform_.postMultiply( pMapping->mapper() );
         transformInverse_.invert( transform_ );
 
-        Vector3 min = this->localBB_.minBounds();
-        Vector3 max = this->localBB_.maxBounds();
-        min.y = +std::numeric_limits<float>::max();
-        max.y = -std::numeric_limits<float>::max();
-
         boundingBox_.transformBy( pMapping->mapper() );
         centre_ = boundingBox_.centre();
 
 #ifndef MF_SERVER
+        Vector3 min = this->localBB_.minBounds();
+        Vector3 max = this->localBB_.maxBounds();
+        min.y = +std::numeric_limits<float>::max();
+        max.y = -std::numeric_limits<float>::max();
         this->visibilityBox_.setBounds(min, max);
 #endif // MF_SERVER
 

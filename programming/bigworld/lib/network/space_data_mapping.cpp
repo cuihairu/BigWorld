@@ -83,6 +83,28 @@ const SpaceDataMapping::DataValue SpaceDataMapping::dataRetrieveSpecific(
 
 
 /**
+ *	This method returns a pointer to the data value stored in this mapping,
+ *	or NULL if there is no such entry.
+ *
+ *	@param spaceEntryID 	The id of the entry.
+ *
+ *	@return A pointer to the internal DataValue or NULL if not found.
+ */
+const SpaceDataMapping::DataValue * SpaceDataMapping::dataRetrieveSpecificPtr(
+	const SpaceEntryID & spaceEntryID ) const
+{
+	BW_GUARD;
+	const_iterator it;
+	it = dataEntries_.find( spaceEntryID );
+	if (it == dataEntries_.end())
+	{
+		return NULL;
+	}
+	return &it->second;
+}
+
+
+/**
  *	Retrieve the first data entry for that key in this chunk space.
  */
 const BW::string * SpaceDataMapping::dataRetrieveFirst( uint16 key ) const

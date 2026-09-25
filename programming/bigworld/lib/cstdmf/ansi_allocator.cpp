@@ -43,7 +43,12 @@ void* AnsiAllocator::allocateAligned( size_t size, size_t alignment )
 #else
 #if !defined( __ANDROID__ )
 	void* ptr = 0;
-	::posix_memalign( &ptr, alignment, size );
+	/* BIGWORLD(3.13 migration): honour the result; on failure ptr stays
+	 * NULL, matching the old behaviour. */
+	if (::posix_memalign( &ptr, alignment, size ) != 0)
+	{
+		ptr = NULL;
+	}
 	return ptr;
 #else
 	return ::memalign( alignment, size );

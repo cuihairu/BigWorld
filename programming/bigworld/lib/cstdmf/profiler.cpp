@@ -67,6 +67,9 @@ bool SortByNumCalls( const Profiler::SortedEntry & a,
 /**
  * Sort by name pointer - fast but order is indeterminate
  */
+/* BIGWORLD(3.13 migration): currently unreferenced comparator; kept for
+ * symmetry with the other sorts. */
+BW_UNUSED_ATTRIBUTE
 bool SortByNamePtr( const Profiler::SortedEntry & a,
 					const Profiler::SortedEntry & b )
 {
@@ -2626,7 +2629,10 @@ void Profiler::getStatistics( BW::vector<ProfileLine> * profileOutput )
 	SimpleMutexHolder mutex( getStatsMutex_ );
 
 	BW_GUARD_PROFILER( getStatistics );
-	char tempBuffer[256];
+	/* BIGWORLD(3.13 migration): was 256; gcc can prove that a fully
+	 * populated tempBuffer2 plus the timing suffix can exceed that, so
+	 * size the line buffer for the worst case. */
+	char tempBuffer[512];
 	char tempBuffer2[256];
 
 	profileOutput->clear();
@@ -2653,21 +2659,25 @@ void Profiler::getStatistics( BW::vector<ProfileLine> * profileOutput )
 			while (e)
 			{
 #ifdef MF_SERVER
-				sprintf( tempBuffer2, "%c%*s%s(%i)%s",
+				bw_snprintf( tempBuffer2, sizeof( tempBuffer2 ),
+					"%c%*s%s(%i)%s",
 					currentHierEntry_ == e ? '*' : ' ',
 #else
-				sprintf( tempBuffer2, "%*s%s(%i)%s",
+				bw_snprintf( tempBuffer2, sizeof( tempBuffer2 ),
+					"%*s%s(%i)%s",
 #endif
-					GetDepth( e ), 
+					GetDepth( e ),
 					"", e->name_, e->numCalls_,
 					e->child_ ? "..." : "" );
 				if (e->numCalls_)
 				{
-					sprintf( tempBuffer, "%-40s %7.3fms\n", tempBuffer2, e->time_ );
+					bw_snprintf( tempBuffer, sizeof( tempBuffer ),
+						"%-40s %7.3fms\n", tempBuffer2, e->time_ );
 				}
 				else
 				{
-					sprintf( tempBuffer, "%-40s\n", tempBuffer2 );
+					bw_snprintf( tempBuffer, sizeof( tempBuffer ),
+						"%-40s\n", tempBuffer2 );
 				}
 
 				// We use a bitfield here and rely on the calling function in 

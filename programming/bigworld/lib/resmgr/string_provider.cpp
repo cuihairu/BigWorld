@@ -57,7 +57,7 @@ namespace
 					hash[ i ] = hash[ k ];
 					hash[ k ] = s;
 				}
-				inithash = false;
+			inithash = false;
 		}
 		return hash;
 	}

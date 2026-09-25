@@ -502,7 +502,14 @@ void ZipFileSystem::beginReadLocalFile( LocalFile& localFile )
 	if (localFile.entry_.localHeaderOffset >= 0)
 	{
 		MF_VERIFY( fseek( pFile_, localFile.entry_.localHeaderOffset, SEEK_SET ) == 0 );
-		fread( &localFile.header_, sizeof( LocalHeader ), 1, pFile_ );
+		/* BIGWORLD(3.13 migration): a short read leaves the header
+		 * unpopulated and the file will fail its signature check. */
+		if (fread( &localFile.header_, sizeof( LocalHeader ), 1, pFile_ ) != 1)
+		{
+			ERROR_MSG( "ZipFileSystem::beginReadLocalFile: "
+				"Failed to read local header (%s)\n",
+				localFile.filename_.c_str() );
+		}
 	}
 	localFile.loadedHeader_ = true;
 }

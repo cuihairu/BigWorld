@@ -34,15 +34,10 @@ static void NoOp() { }
 void (*pMainThreadIdleStartFunc)() = &NoOp;
 void (*pMainThreadIdleEndFunc)() = &NoOp;
 
-namespace
-{
-void assertHolder()
-{
-	// This is here because there's no really appropriate methods to
-	// put it in.
-	BW_STATIC_ASSERT( sizeof(bw_atomic32_t) == 4, bw_atomic32_t_bad_size );
-}
-}
+/* BIGWORLD(3.13 migration): the assertHolder() function that carried the
+ * old BW_STATIC_ASSERT was never called (gcc errors on that now); a plain
+ * static_assert keeps the same guarantee at file scope. */
+static_assert( sizeof(bw_atomic32_t) == 4, "bw_atomic32_t_bad_size" );
 
 
 #if defined(_WIN32)

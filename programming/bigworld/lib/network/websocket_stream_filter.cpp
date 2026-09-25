@@ -134,6 +134,9 @@ const char * closeStatusCodeToCString( uint16 statusCode )
  *
  *	@param opcode 	The opcode.
  */
+/* BIGWORLD(3.13 migration): debugging helper kept around, currently
+ * unreferenced; mark it so gcc does not error on it. */
+BW_UNUSED_ATTRIBUTE
 const char * opcodeToCString( uint8 opcode )
 {
 	switch (opcode)

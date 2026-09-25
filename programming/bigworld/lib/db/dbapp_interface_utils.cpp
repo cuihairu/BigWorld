@@ -180,7 +180,9 @@ namespace DBAppInterfaceUtils
 
 							PyObject* pCell = (cell.isNull()) ?
 									this->newPyNone() :
-									PyString_FromStringAndSize( cell.pData(),
+									/* BIGWORLD(3.13 migration): cell
+									 * payloads are binary blobs -> bytes. */
+									PyBytes_FromStringAndSize( cell.pData(),
 												cell.length() );
 							PyList_SET_ITEM( pRow, j, pCell );
 						}

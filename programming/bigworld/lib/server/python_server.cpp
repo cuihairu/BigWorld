@@ -14,12 +14,10 @@
 
 #include "script/script_output_hook.hpp"
 
-#include <node.h>
-#include <grammar.h>
-#include <parsetok.h>
-#include <errcode.h>
-
-extern grammar _PyParser_Grammar;
+/* BIGWORLD(3.13 migration): the #if 0 multiline helper here used the
+ * CPython 2.7 internal parser API (node.h/grammar.h/parsetok.h and
+ * _PyParser_Grammar), all removed by the PEG parser (PEP 617). The dead
+ * code is gone; multiline support would be built on codeop instead. */
 
 DECLARE_DEBUG_COMPONENT(0)
 
@@ -290,28 +288,6 @@ void PythonConnection::handleChar()
 	readBuffer_.pop_front();
 }
 
-#if 0
-/**
- * 	This method returns true if the command would fail because of an EOF
- * 	error. Could use this to implement multiline commands.. but later.
- */
-static bool CheckEOF(char *str)
-{
-	node *n;
-	perrdetail err;
-	n = PyParser_ParseString(str, &_PyParser_Grammar, Py_single_input, &err);
-
-	if (n == NULL && err.error == E_EOF )
-	{
-		printf("EOF\n");
-		return true;
-	}
-
-	printf("OK\n");
-	PyNode_Free(n);
-	return false;
-}
-#endif
 
 /**
  * 	This is a variant on PyRun_SimpleString. It does basically the
@@ -347,8 +323,6 @@ static int MyRun_SimpleString(char *command)
 		return -1;
 	}
 	Py_DECREF(v);
-	if (Py_FlushLine())
-		PyErr_Clear();
 	return 0;
 }
 

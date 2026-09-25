@@ -131,8 +131,8 @@ bool ArgParser::parse( int argc, char * argv[] )
 		++presenceIt;
 	}
 
-	ArgMap::iterator helpIt = args_.find( "help" );
-
+	/* BIGWORLD(3.13 migration): the helpIt lookup here was dead code and
+	 * is gone; presence of help is tested by isPresent() below. */
 	if (presenceIt != args_.end() || this->isPresent( "help" ))
 	{
 		return false;
@@ -172,7 +172,9 @@ void ArgParser::printUsage()
 		}
 	}
 
-	printf( usage.str().c_str() );
+	/* BIGWORLD(3.13 migration): never pass a runtime string as the
+	 * format. */
+	printf( "%s", usage.str().c_str() );
 	printf( "%s\n", options.str().c_str() );
 }
 

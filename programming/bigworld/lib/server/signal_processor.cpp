@@ -392,7 +392,9 @@ const char * SignalProcessor::signalNumberToString( int sigNum )
 	}
 
 	// Check sigNum is in valid signal range.
-	MF_ASSERT( sigNum <= SIGUNUSED && sigNum != 0 );
+	/* BIGWORLD(3.13 migration): SIGUNUSED is no longer defined by glibc;
+	 * it always aliased SIGSYS, which is what the array is sized against. */
+	MF_ASSERT( sigNum <= SIGSYS && sigNum != 0 );
 	return SIGNAL_NAMES[sigNum];
 }
 

@@ -381,7 +381,10 @@ int Endpoint::findIndicatedInterface( const char * spec, char * name )
 	else if (this->getInterfaceAddress( iftemp, addr ) == 0)
 	{
 		// specified name of interface
-		strncpy( name, iftemp, IFNAMSIZ );
+		/* BIGWORLD(3.13 migration): keep a NUL terminator within the
+		 * IFNAMSIZ-sized caller buffer. */
+		strncpy( name, iftemp, IFNAMSIZ - 1 );
+		name[IFNAMSIZ - 1] = '\0';
 	}
 	else if (Endpoint::convertAddress( spec, addr ) == 0)
 	{

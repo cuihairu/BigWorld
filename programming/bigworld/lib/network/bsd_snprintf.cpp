@@ -289,6 +289,7 @@ bool handleFormatString( const char *format, FormatStringHandler &handler )
 				break;
 			case 'X':
 				flags |= DP_F_UP;
+				/* fall through */
 			case 'x':
 				flags |= DP_F_UNSIGNED;
 				handler.onToken('x', cflags, min, max, flags, 16, vflags);
@@ -299,11 +300,13 @@ bool handleFormatString( const char *format, FormatStringHandler &handler )
 				break;
 			case 'E':
 				flags |= DP_F_UP;
+				/* fall through */
 			case 'e':
 				handler.onToken('e', cflags, min, max, flags, 0, vflags);
 				break;
 			case 'G':
 				flags |= DP_F_UP;
+				/* fall through */
 			case 'g':
 				handler.onToken('g', cflags, min, max, flags, 0, vflags);
 				break;

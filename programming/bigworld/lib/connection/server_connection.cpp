@@ -453,8 +453,11 @@ LogOnStatus ServerConnection::logOnComplete(
 		// BaseAppLoginHandler::handleMessage - this is just a sanity check.
 		if (result.serverAddr != this->addr())
 		{
+			/* BIGWORLD(3.13 migration): bound sizeof-1 + explicit NUL so
+			 * gcc can see the string is always terminated. */
 			char winningAddr[ 256 ];
-			strncpy( winningAddr, this->addr().c_str(), sizeof( winningAddr ) );
+			strncpy( winningAddr, this->addr().c_str(), sizeof( winningAddr ) - 1 );
+			winningAddr[ sizeof( winningAddr ) - 1 ] = '\0';
 
 			WARNING_MSG( "ServerConnection::logOnComplete: "
 				"BaseApp address on login reply (%s) differs from winning "

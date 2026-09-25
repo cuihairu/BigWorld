@@ -48,7 +48,10 @@ ProfileVal::~ProfileVal()
 {
 	if (pGroup_)
 	{
-		std::remove( pGroup_->begin(), pGroup_->end(), this );
+		/* BIGWORLD(3.13 migration): ProfileGroup has no erase(); the old
+		 * code only closes up the vacated tail and leaves the vector size
+		 * alone, so keep that and silence the nodiscard warning. */
+		(void)std::remove( pGroup_->begin(), pGroup_->end(), this );
 	}
 }
 

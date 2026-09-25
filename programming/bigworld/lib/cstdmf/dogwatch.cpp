@@ -6,6 +6,7 @@
 #include "debug.hpp"
 
 #include <string.h>
+#include <new>
 
 DECLARE_DEBUG_COMPONENT2( "CStdMF", 0 )
 
@@ -320,8 +321,10 @@ DogWatchManager::iterator::iterator( const Table * pTable ) :
 DogWatchManager::iterator & DogWatchManager::iterator::operator=(
 	const DogWatchManager::iterator & iter )
 {
-	// slightly illegal ... reference-wise
-	memcpy( this, &iter, sizeof( *this ) );
+	// BIGWORLD(3.13 migration): was a memcpy() over the te_ reference
+	// member ("slightly illegal ... reference-wise"). Reconstructing via
+	// the copy constructor rebinds the reference properly.
+	new (this) iterator( iter );
 	return *this;
 }
 

@@ -36,6 +36,17 @@ inline unsigned long OurThreadID();
  *
  *	It stores a reference count with the object.
  */
+
+/* BIGWORLD(3.13 migration): gcc 15 flags the decRef() delete-this pattern
+ * when inlined at a multiple-inheritance call site (e.g. Mercury::Channel,
+ * where ReferenceCount is the second base) as -Wfree-nonheap-object with a
+ * nonzero offset. The offset is just the base-class adjustment and the
+ * object is always heap allocated, so silence the false positive here. */
+#if defined( __GNUC__ ) && !defined( __clang__ )
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wfree-nonheap-object"
+#endif
+
 class ReferenceCount
 {
 #if ENABLE_REFERENCE_COUNT_THREADING_DEBUG
@@ -152,6 +163,10 @@ private:
 
 	mutable int32 count_;
 };
+
+#if defined( __GNUC__ ) && !defined( __clang__ )
+#pragma GCC diagnostic pop
+#endif
 
 
 /**

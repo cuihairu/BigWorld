@@ -22,15 +22,15 @@ PyObject * s_subscript( PyObject * self, PyObject * index )
 
 	BW::string serviceName;
 
-	if (!PyString_Check( index ))
+	if (!PyUnicode_Check( index ))
 	{
 		PyErr_SetString( PyExc_TypeError, 
 			"Invalid type for subscript index, expected string or unicode" );
 		return NULL;
 	}
 
-	serviceName.assign( PyString_AS_STRING( index ),
-		PyString_Size( index ) );
+	serviceName.assign( PyUnicode_AsUTF8( index ),
+		PyUnicode_GET_LENGTH( index ) );
 
 	EntityMailBoxRef mailBoxRef;
 	if (!pPyServicesMap->map().chooseFragment( serviceName, mailBoxRef ))
@@ -236,7 +236,8 @@ PyObject * PyServicesMap::py_keys( PyObject * args )
 	while (iServiceName != names.end())
 	{
 		PyList_SET_ITEM( pList, i, 
-			PyString_FromStringAndSize( 
+			/* BIGWORLD(3.13 migration): name payloads are UTF-8 text. */
+			PyUnicode_FromStringAndSize( 
 				iServiceName->data(),
 				iServiceName->size() ) );
 

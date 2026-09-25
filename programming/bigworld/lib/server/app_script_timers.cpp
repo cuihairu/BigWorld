@@ -137,7 +137,7 @@ PyObject * py_addTimer( PyObject * args )
 		return NULL;
 	}
 
-	return PyInt_FromLong( id );
+	return PyLong_FromLong( id );
 }
 /*~ function BigWorld.addTimer
  *	@components{ base, cell }

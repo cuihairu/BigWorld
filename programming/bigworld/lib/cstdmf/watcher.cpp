@@ -145,7 +145,7 @@ bool DirectoryWatcher::getAsString( const void * base,
 		if (pChild != NULL)
 		{
 			const void * addedBase = (const void*)(
-				((const uintptr)base) + ((const uintptr)pChild->base) );
+				((uintptr)base) + ((uintptr)pChild->base) );
 			return pChild->watcher->getAsString( addedBase, this->tail( path ),
 				result, desc, mode );
 		}
@@ -182,7 +182,7 @@ bool DirectoryWatcher::getAsStream( const void * base,
 		if (pChild != NULL)
 		{
 			const void * addedBase = (const void*)(
-				((const uintptr)base) + ((const uintptr)pChild->base) );
+				((uintptr)base) + ((uintptr)pChild->base) );
 			return pChild->watcher->getAsStream( addedBase, this->tail( path ),
 				pathRequest );
 		}
@@ -259,7 +259,7 @@ bool DirectoryWatcher::visitChildren( const void * base, const char * path,
 		while (iter != container_.end())
 		{
 			const void * addedBase = (const void*)(
-				((const uintptr)base) + ((const uintptr)(*iter).base) );
+				((uintptr)base) + ((uintptr)(*iter).base) );
 
 			if (!pathRequest.addWatcherPath( addedBase, NULL,
 									(*iter).label, *(*iter).watcher ))
@@ -279,7 +279,7 @@ bool DirectoryWatcher::visitChildren( const void * base, const char * path,
 		if (pChild != NULL)
 		{
 			const void * addedBase = (const void*)(
-				((const uintptr)base) + ((const uintptr)pChild->base) );
+				((uintptr)base) + ((uintptr)pChild->base) );
 
 			handled = pChild->watcher->visitChildren( addedBase,
 				this->tail( path ), pathRequest );

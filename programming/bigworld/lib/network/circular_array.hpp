@@ -20,9 +20,12 @@ template <class T> class CircularArray
 public:
 	typedef CircularArray<T> OurType;
 
-	CircularArray( uint size ) : data_( new T[size] ), mask_( size-1 ) 
-	{ 
-		memset( data_, 0, sizeof(T) * this->size() );
+	/* BIGWORLD(3.13 migration): was a memset() over the array. The
+	 * elements are default constructed by new T[size], which is the only
+	 * correct way to clear a (possibly non-trivial) type such as
+	 * SmartPointer. */
+	CircularArray( uint size ) : data_( new T[size]() ), mask_( size-1 )
+	{
 	}
 	~CircularArray()	{ bw_safe_delete_array(data_); }
 

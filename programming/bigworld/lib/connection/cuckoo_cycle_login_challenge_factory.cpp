@@ -172,7 +172,7 @@ int path(node_t *cuckoo, node_t u, node_t *us) {
   int nu;
   for (nu = 0; u; u = cuckoo[u]) {
     if (++nu >= MAXPATHLEN) {
-      while (nu-- && us[nu] != u) ;
+      while (nu-- && us[nu] != u) {} /* BIGWORLD(3.13 migration): empty loop body on the same line (gcc -Wmisleading-indentation) */
 #if !BW_CHANGES
       if (nu < 0)
         printf("maximum path length exceeded\n");

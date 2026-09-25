@@ -173,7 +173,7 @@ int SharedData::ass_subscript( PyObject* key, PyObject * value )
 
 	if (PyErr_Occurred())
 	{
-		BW::string keyRepr = PyString_AsString( 
+		BW::string keyRepr = PyUnicode_AsUTF8( 
 			PyObjectPtr( PyObject_Repr( key ), 
 				PyObjectPtr::STEAL_REFERENCE ).get() );
 
@@ -187,8 +187,11 @@ int SharedData::ass_subscript( PyObject* key, PyObject * value )
 
 	ScriptObject pUnpickledKey = this->unpickle( pickledKey );
 
+	/* BIGWORLD(3.13 migration): PyObject_Compare() was removed; this
+	 * guard only needs an equality answer. */
 	if (!pUnpickledKey ||
-			(PyObject_Compare( key, pUnpickledKey.get() ) != 0))
+			(PyObject_RichCompareBool( key, pUnpickledKey.get(),
+					Py_EQ ) != 1))
 	{
 		PyErr_SetString( PyExc_TypeError,
 				"Unpickled key is not equal to original key" );
@@ -214,7 +217,7 @@ int SharedData::ass_subscript( PyObject* key, PyObject * value )
 
 		if (PyErr_Occurred())
 		{
-			BW::string keyRepr = PyString_AsString( 
+			BW::string keyRepr = PyUnicode_AsUTF8( 
 				PyObjectPtr( PyObject_Repr( key ), 
 					PyObjectPtr::STEAL_REFERENCE ).get() );
 
@@ -228,7 +231,7 @@ int SharedData::ass_subscript( PyObject* key, PyObject * value )
 		if ((pickledKey.size() + pickledValue.size()) > 
 				ServerAppConfig::maxSharedDataValueSize())
 		{
-			BW::string keyRepr = PyString_AsString( 
+			BW::string keyRepr = PyUnicode_AsUTF8( 
 				PyObjectPtr( PyObject_Repr( key ), 
 					PyObjectPtr::STEAL_REFERENCE ).get() );
 
@@ -349,7 +352,7 @@ bool SharedData::setValue( const BW::string & key, const BW::string & value,
 	{
 		if (PyDict_SetItem( pMap_, pKey.get(), pValue.get() ) == -1)
 		{
-			BW::string keyRepr = PyString_AsString( PyObjectPtr( 
+			BW::string keyRepr = PyUnicode_AsUTF8( PyObjectPtr( 
 				PyObject_Repr( pKey.get() ), 
 					PyObjectPtr::STEAL_REFERENCE ).get() );
 
@@ -369,7 +372,7 @@ bool SharedData::setValue( const BW::string & key, const BW::string & value,
 
 		ScriptObject pKeyRepr( PyObject_Repr( pKey.get() ),
 				ScriptObject::STEAL_REFERENCE );
-		const char * keyRepr = PyString_AsString( pKeyRepr.get() );
+		const char * keyRepr = PyUnicode_AsUTF8( pKeyRepr.get() );
 		const char * dataTypeString = this->sharedDataTypeAsString();
 
 		if (isAck)
@@ -430,7 +433,7 @@ bool SharedData::delValue( const BW::string & key, bool isAck )
 
 		ScriptObject pKeyRepr( PyObject_Repr( pKey.get() ),
 				ScriptObject::STEAL_REFERENCE );
-		const char * keyRepr = PyString_AsString( pKeyRepr.get() );
+		const char * keyRepr = PyUnicode_AsUTF8( pKeyRepr.get() );
 		const char * dataTypeString = this->sharedDataTypeAsString();
 
 		if (isAck)

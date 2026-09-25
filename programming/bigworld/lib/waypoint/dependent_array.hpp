@@ -164,8 +164,14 @@ public:
 private:
 	value_type * data_;
 
-	uint16 _size() const	{ return *(uint16*)(this+1); }
-	uint16 & _size()		{ return *(uint16*)(this+1); }
+	/* BIGWORLD(3.13 migration): the size uint16 lives immediately after
+	 * this object (see ChunkWaypoint::edgeCount_). The pointer is laundered
+	 * through an integer so gcc does not flag the deliberate off-object
+	 * access with -Warray-bounds. */
+	uint16 _size() const
+		{ return *(uint16*)( uintptr_t( this ) + sizeof( *this ) ); }
+	uint16 & _size()
+		{ return *(uint16*)( uintptr_t( this ) + sizeof( *this ) ); }
 };
 
 BW_END_NAMESPACE

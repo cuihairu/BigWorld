@@ -131,7 +131,13 @@ bool Updater::update()
 
 	char aline[ 256 ];
 	// Skip the header
-	fgets( aline, sizeof( aline ), f );
+	/* BIGWORLD(3.13 migration): check the result; a short read here just
+	 * falls through to the second fgets failing below. */
+	if (fgets( aline, sizeof( aline ), f ) == NULL)
+	{
+		fclose( f );
+		return false;
+	}
 
 	// Use the first line to get the offsets
 	if (fgets( aline, sizeof( aline ), f ) == NULL)

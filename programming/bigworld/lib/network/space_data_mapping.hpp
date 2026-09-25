@@ -51,6 +51,11 @@ public:
 	// Section: Data retrieval
 	const BW::string * dataRetrieveFirst( uint16 key ) const;
 	const DataValue dataRetrieveSpecific( const SpaceEntryID & spaceEntryID ) const;
+	/* BIGWORLD(3.13 migration): pointer form; the by-value overload cannot
+	 * be used when the caller wants to keep a reference to the data
+	 * (the value copy dies at the end of the statement). */
+	const DataValue * dataRetrieveSpecificPtr(
+			const SpaceEntryID & spaceEntryID ) const;
 
 	// Section: iterativeness
 	DataEntryMap::const_iterator begin() const { return dataEntries_.begin(); }

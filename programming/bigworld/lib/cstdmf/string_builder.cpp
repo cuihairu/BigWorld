@@ -113,10 +113,15 @@ void StringBuilder::append( const StringRef& str )
 void StringBuilder::append( int c )
 {
 	char buf[64] = { 0 };
-	size_t len = bw_snprintf( buf, 63, "%d", c );
+	size_t len = bw_snprintf( buf, sizeof( buf ), "%d", c );
 	size_t free_space = this->numFree();
 	len = (len < free_space) ? len : free_space;
-	strncpy( &str_[pos_], buf, len );
+	/* BIGWORLD(3.13 migration): was strncpy(); we want its raw bounded
+	 * copy behaviour without the flagged NUL handling. */
+	if (len > 0)
+	{
+		memcpy( &str_[pos_], buf, len );
+	}
 	pos_ += len;
 }
 

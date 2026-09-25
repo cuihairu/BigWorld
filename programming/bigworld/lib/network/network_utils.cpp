@@ -113,7 +113,13 @@ int getMaxBufferSize( bool isReadBuffer )
 	}
 	else
 	{
-		fscanf( file, "%d", &bufSize );
+		/* BIGWORLD(3.13 migration): keep the buffer default when the
+		 * procfs entry could not be parsed. */
+		if (fscanf( file, "%d", &bufSize ) != 1)
+		{
+			bufSize = isReadBuffer ?
+				MIN_RCV_SKT_BUF_SIZE : MIN_SND_SKT_BUF_SIZE;
+		}
 		fclose( file );
 	}
 #endif

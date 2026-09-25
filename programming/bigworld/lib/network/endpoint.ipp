@@ -606,7 +606,9 @@ INLINE int Endpoint::getInterfaceFlags( char * name, int & flags )
 	BW_GUARD;
 	struct ifreq	request;
 
-	strncpy( request.ifr_name, name, IFNAMSIZ );
+	/* BIGWORLD(3.13 migration): keep a NUL terminator within ifr_name. */
+	strncpy( request.ifr_name, name, IFNAMSIZ - 1 );
+	request.ifr_name[IFNAMSIZ - 1] = '\0';
 #if !defined( EMSCRIPTEN )
 	if (ioctl( socket_, SIOCGIFFLAGS, &request ) != 0)
 #endif
@@ -632,7 +634,9 @@ INLINE int Endpoint::getInterfaceAddress( const char * name, u_int32_t & address
 	BW_GUARD;
 	struct ifreq	request;
 
-	strncpy( request.ifr_name, name, IFNAMSIZ );
+	/* BIGWORLD(3.13 migration): keep a NUL terminator within ifr_name. */
+	strncpy( request.ifr_name, name, IFNAMSIZ - 1 );
+	request.ifr_name[IFNAMSIZ - 1] = '\0';
 #if !defined( EMSCRIPTEN )
 	if (ioctl( socket_, SIOCGIFADDR, &request ) != 0)
 #endif

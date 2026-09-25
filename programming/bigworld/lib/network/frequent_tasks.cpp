@@ -71,6 +71,17 @@ bool FrequentTasks::cancel( FrequentTask * pTask )
 }
 
 
+/* BIGWORLD(3.13 migration): the gotDestroyed flag below deliberately
+ * escapes its scope via pGotDestroyed_ so a task that destroys this
+ * FrequentTasks can signal back before we touch any member state again.
+ * gcc 15 cannot prove the lifetime is handled and raises
+ * -Wdangling-pointer; the access is guarded and the flag is only read
+ * right after doTask() returns. */
+#if defined( __GNUC__ ) && !defined( __clang__ )
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdangling-pointer"
+#endif
+
 /**
  * 	Process all frequent tasks now.
  */
@@ -135,6 +146,10 @@ void FrequentTasks::process()
 		pGotDestroyed_ = NULL;
 	}
 }
+
+#if defined( __GNUC__ ) && !defined( __clang__ )
+#pragma GCC diagnostic pop
+#endif
 
 
 } // namespace Mercury

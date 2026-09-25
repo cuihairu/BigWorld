@@ -301,8 +301,8 @@ UserDataObjectLinkDataType::UserDataObjectLinkDataType( MetaDataType * pMeta ) :
 		return "( , )";
 
 	return BW::string( "( " ) +
-		PyString_AsString( PyTuple_GetItem( pValue, 0 ) ) + ", " +
-		PyString_AsString( PyTuple_GetItem( pValue, 1 ) ) + " )";
+		PyUnicode_AsUTF8( PyTuple_GetItem( pValue, 0 ) ) + ", " +
+		PyUnicode_AsUTF8( PyTuple_GetItem( pValue, 1 ) ) + " )";
 }
 
 
