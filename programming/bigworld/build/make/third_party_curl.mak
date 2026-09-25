@@ -31,6 +31,11 @@ curlConfigureOpts := \
 	--enable-silent-rules \
 	--with-ssl=$(abspath $(OPENSSL_BUILD_DIR))
 
+# BIGWORLD(3.13 migration): the bundled curl's configure run-time libs
+# check compiles a conftest with an implicit-int main(), which newer gcc
+# treats as an error and misreports as a missing run-time library.
+configureEnv := CFLAGS="-std=gnu11 -Wno-error=implicit-int -Wno-implicit-int"
+
 ifeq ($(BW_IS_QUIET_BUILD),1)
 curlConfigureOpts += --silent
 endif
@@ -71,6 +76,7 @@ $(CURL_BUILD_DIR)/lib/Makefile: configureName := $(sourceCurlFile)
 $(CURL_BUILD_DIR)/lib/Makefile: cdDirectory := $(CURL_BUILD_DIR)
 $(CURL_BUILD_DIR)/lib/Makefile: configureCmd := $(CURL_DIR)/configure
 $(CURL_BUILD_DIR)/lib/Makefile: configureOpts := $(curlConfigureOpts)
+$(CURL_BUILD_DIR)/lib/Makefile: configureEnv := $(configureEnv)
 $(CURL_BUILD_DIR)/lib/Makefile: | $(CURL_BUILD_DIR) $(BW_SSL_LIB) $(BW_CRYPTO_LIB)
 	$(bwCommand_configure)
 

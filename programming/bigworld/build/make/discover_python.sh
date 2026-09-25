@@ -27,7 +27,9 @@ find_config_program() {
 
 PY_CONFIG=`find_config_program`
 ret=$?
-if [ $ret == 0 ]; then
+# BIGWORLD(3.13 migration): POSIX '=' -- '==' is a bashism; /bin/sh is
+# dash on modern hosts and the failure silently poisoned the link line.
+if [ $ret = 0 ]; then
 	$PY_CONFIG $1
 else
 	echo "ERROR: Unable to locate 'python3-config' in PATH=$PATH"

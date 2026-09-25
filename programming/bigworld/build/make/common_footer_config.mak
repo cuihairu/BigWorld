@@ -414,17 +414,11 @@ endif
 #
 ifeq ($(call isBinaryOrUnitTest,$(type)),1)
 
-#special treatment for Havok
-ifeq ($(useHavok),1)
-ldLibs_$(bwConfBinName) += -Wl,--start-group
-endif
-
-ldLibs_$(bwConfBinName) += $(addprefix -l, $(bwLibraryDepsAsName))
-
-#special treatment for Havok
-ifeq ($(useHavok),1)
-ldLibs_$(bwConfBinName) += -Wl,--end-group
-endif
+# BIGWORLD(3.13 migration): group the BW libraries (previously only done
+# for Havok) so the single-pass linker resolves inter-library references
+# regardless of listing order (e.g. libchunk.a needs vtables from
+# libentitydef.a which appears earlier on the link line).
+ldLibs_$(bwConfBinName) += -Wl,--start-group $(addprefix -l, $(bwLibraryDepsAsName)) -Wl,--end-group
 
 $(destFile): bwConfig   := $(BW_CONFIG)
 $(destFile): cxxFlags   := $(bwConf_CxxFlags) $(CXXFLAGS)
@@ -494,17 +488,8 @@ $(destFile): $(componentObjects) | $(BW_LIBDIR) $(objectDirectories)
 #
 else ifeq ($(call isSharedLibrary,$(type)),1)
 
-#special treatment for Havok
-ifeq ($(linkHavok),1)
-ldLibs_$(bwConfBinName) += -Wl,--start-group
-endif
-
-ldLibs_$(bwConfBinName) += $(addprefix -l, $(bwLibraryDepsAsName))
-
-#special treatment for Havok
-ifeq ($(linkHavok),1)
-ldLibs_$(bwConfBinName) += -Wl,--end-group
-endif
+# BIGWORLD(3.13 migration): group BW libraries, see the binary case above.
+ldLibs_$(bwConfBinName) += -Wl,--start-group $(addprefix -l, $(bwLibraryDepsAsName)) -Wl,--end-group
 
 $(destFile): bwConfig := $(BW_CONFIG)
 $(destFile): cxxFlags := $(bwConf_CxxFlags) $(CXXFLAGS)

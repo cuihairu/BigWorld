@@ -33,6 +33,10 @@
 
 #if defined(__TURBOC__) || defined(_MSC_VER) || defined(_WIN32)
 #  include <io.h>
+#else
+/* BIGWORLD(3.13 migration): POSIX unistd.h was never pulled in; newer gcc
+ * defaults to C23 where implicit declarations are errors. */
+#  include <unistd.h>
 #endif
 
 #ifdef WINAPI_FAMILY

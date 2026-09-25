@@ -161,7 +161,7 @@ endef
 # ./configure
 #
 define actual_configure
-	cd $(cdDirectory) && $(configureCmd) $(configureOpts)
+	cd $(cdDirectory) && $(configureEnv) $(configureCmd) $(configureOpts)
 endef
 
 define quiet_configure

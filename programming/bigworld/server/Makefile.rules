@@ -2,10 +2,15 @@ ifneq ($(wildcard $(BW_ABS_SRC_SERVER)/cellappmgr/Makefile),$(BW_ABS_SRC_SERVER)
 	LICENSE_SERVER = 1
 endif
 
+# BIGWORLD(3.13 migration): cellappmgr must be included before tools/ --
+# message_logger sets the global `useMongoDB := 1`, which the shared
+# component footer would otherwise leak into cellappmgr's link line
+# (pulling in -lmongoclient/-lboost-*-mt, none of which cellappmgr uses).
 subdirs =					\
 	baseapp					\
 	baseapp_extensions		\
 	baseappmgr				\
+	cellappmgr				\
 	cellapp					\
 	cellapp_extensions		\
 	dbapp					\
@@ -15,8 +20,8 @@ subdirs =					\
 	reviver					\
 	tools
 
-ifneq ($(LICENSE_SERVER),1)
-subdirs += cellappmgr
+ifeq ($(LICENSE_SERVER),1)
+subdirs := $(filter-out cellappmgr,$(subdirs))
 endif
 
 $(call includeMakefilesFrom,$(subdirs))

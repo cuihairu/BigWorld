@@ -117,7 +117,9 @@
 #undef  SGTTY
 #endif
 
-#if defined(linux) && !defined(TERMIO)
+/* BIGWORLD(3.13 migration): modern glibc has no <termio.h>; prefer
+ * TERMIOS when the build provides it (as newer upstream does). */
+#if defined(linux) && !defined(TERMIO) && !defined(TERMIOS)
 #undef  TERMIOS
 #define TERMIO
 #undef  SGTTY

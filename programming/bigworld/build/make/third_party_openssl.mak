@@ -42,7 +42,10 @@ $(error Platform must define OPENSSL_CONFIG_TARGET for OpenSSL Configure target)
 endif
 
 # Configure line
-OPENSSL_CONFIGURE := CC="$(CC)" ./Configure $(OPENSSL_CONFIG_OPTIONS) \
+# BIGWORLD(3.13 migration): gcc 15 defaults to gnu23 where bool/true/false
+# are keywords, which breaks the OpenSSL 0.9.8 sources (e.g. parameter
+# names). Pin the C dialect for this vendored copy.
+OPENSSL_CONFIGURE := CC="$(CC) -std=gnu89" ./Configure $(OPENSSL_CONFIG_OPTIONS) \
 	$(OPENSSL_CONFIG_TARGET) $(OPENSSL_CONFIG_FLAGS)
 
 
@@ -64,10 +67,18 @@ $(sslConfigureFilePath): | $(OPENSSL_BUILD_DIR)
 # Makefile
 $(sslMakefileFilePath): $(sslConfigureFilePath)
 	(cd $(OPENSSL_BUILD_DIR) && $(OPENSSL_CONFIGURE))
+	# BIGWORLD(3.13 migration): the linux-x86_64 target hardcodes -DTERMIO,
+	# but modern glibc dropped <termio.h>. Use TERMIOS instead.
+	sed -i 's/-DTERMIO\b/-DTERMIOS/g' $(sslMakefileFilePath)
 
 # Regenerate the build config header by rebuilding the entire library (using
 # intermediate as a multi-target recipe that is safe for jobserver builds).
-.INTERMEDIATE: $(sslBuildConfPlatformPath).intermediate
+# BIGWORLD(3.13 migration): this used to be declared .INTERMEDIATE, which
+# deletes the stamp after every make invocation -- so each binary build
+# re-ran the full `make clean build_ssl build_crypto` (several minutes) and
+# concurrent builds stomped on each other's libcrypto.a. A normal rule
+# keeps the stamp: the full rebuild now happens only when the Makefile
+# (i.e. the Configure output) changes.
 $(sslBuildConfPlatformPath).intermediate: $(sslMakefileFilePath)
 	rm -f $(BW_SSL_LIB_SOURCE) $(BW_CRYPTO_LIB_SOURCE)
 	$(MAKE_WITHOUT_JOBSERVER) -C $(OPENSSL_BUILD_DIR) clean build_ssl build_crypto
