@@ -127,14 +127,14 @@ PyBases::PyBases( const Bases & bases, PyTypeObject * pType ) :
  */
 PyObject * PyBases::subscript( PyObject* entityID )
 {
-	long id = PyInt_AsLong( entityID );
+	long id = PyLong_AsLong( entityID );
 
 	if (PyErr_Occurred())
 	{
-		if (PyString_Check( entityID ))
+		if (PyUnicode_Check( entityID ))
 		{
 			PyErr_Clear();
-			return this->findInstanceWithType( PyString_AsString( entityID ) );
+			return this->findInstanceWithType( PyUnicode_AsUTF8( entityID ) );
 		}
 
 		return NULL;
@@ -194,7 +194,7 @@ PyObject * PyBases::py_has_key( PyObject* args )
 	if (!PyArg_ParseTuple( args, "i", &id ))
 		return NULL;
 
-	return PyInt_FromLong( bases_.findEntity( id ) != NULL );
+	return PyLong_FromLong( bases_.findEntity( id ) != NULL );
 }
 
 
@@ -212,7 +212,7 @@ PyObject* PyBases::py_keys(PyObject* /*args*/)
 	while (iter != bases_.end())
 	{
 		// This steals a reference.
-		PyList_SetItem( pList, i, PyInt_FromLong( iter->first ) );
+		PyList_SetItem( pList, i, PyLong_FromLong( iter->first ) );
 
 		i++;
 		iter++;
@@ -265,7 +265,7 @@ PyObject* PyBases::py_items( PyObject* /*args*/ )
 		PyObject * pValue = iter->second;
 		Py_INCREF( pValue );
 
-		PyTuple_SetItem( pTuple, 0, PyInt_FromLong( iter->first ) );
+		PyTuple_SetItem( pTuple, 0, PyLong_FromLong( iter->first ) );
 		PyTuple_SetItem( pTuple, 1, pValue );
 
 		// This steals a reference.

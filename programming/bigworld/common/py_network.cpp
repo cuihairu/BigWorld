@@ -146,7 +146,7 @@ bool extractFileDescriptor( PyObject * pFileOrSocket, int & fd )
 		pFileDescriptor = pFileOrSocket;
 	}
 
-	fd = int( PyInt_AsLong( pFileDescriptor ) );
+	fd = int( PyLong_AsLong( pFileDescriptor ) );
 
 	if ((fd == -1) && PyErr_Occurred())
 	{
@@ -461,8 +461,8 @@ static PyObject * getNetworkInterfaces( const BW::string & netmask )
         }
 
         PyObject * interfaceTuple = PyTuple_Pack( 2,
-            PyString_FromString( ipAddr ), 
-            PyString_FromString( it->second.c_str() ) 
+            PyUnicode_FromString( ipAddr ), 
+            PyUnicode_FromString( it->second.c_str() ) 
         );
 
         PyTuple_SetItem( tupleOfinterfaceTuples, interfaceIndex++, interfaceTuple );

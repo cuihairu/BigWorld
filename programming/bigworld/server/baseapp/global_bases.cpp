@@ -308,7 +308,10 @@ bool GlobalBases::registerRequest( Base * pBase, PyObject * pKey,
 		return false;
 	}
 
-	if (PyObject_Compare( pKey, pKey2.get() ) != 0)
+	/* BIGWORLD(3.13 migration): PyObject_Compare was removed; an EQ
+	 * comparison that does not return 1 (including an error, -1) means the
+	 * key does not round-trip. */
+	if (PyObject_RichCompareBool( pKey, pKey2.get(), Py_EQ ) != 1)
 	{
 		if (!PyErr_Occurred())
 		{
@@ -341,10 +344,10 @@ bool GlobalBases::removeKeyFromDict( PyObject * pKey )
 		PyErr_Clear();
 
 		PyObject * pReprString = PyObject_Repr( pKey );
-		if (PyString_Check( pReprString ))
+		if (PyUnicode_Check( pReprString ))
 		{
 			ERROR_MSG( "GlobalBases::removeKeyFromDict: "
-				"Failed to remove %s\n", PyString_AsString( pReprString ) );
+				"Failed to remove %s\n", PyUnicode_AsUTF8( pReprString ) );
 		}
 		Py_XDECREF( pReprString );
 

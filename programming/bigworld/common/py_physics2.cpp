@@ -49,7 +49,7 @@ PyObject* getMaterialKinds()
 	{
 		PyObject * pTuple = PyTuple_New( 2 );
 
-		PyTuple_SetItem( pTuple, 0, PyInt_FromLong( iter->first ) );
+		PyTuple_SetItem( pTuple, 0, PyLong_FromLong( iter->first ) );
 		PyTuple_SetItem( pTuple, 1, new PyDataSection( iter->second ) );
 
 		PyList_SetItem( pList, i, pTuple );

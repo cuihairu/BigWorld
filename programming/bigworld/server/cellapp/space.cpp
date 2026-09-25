@@ -600,11 +600,15 @@ const BW::string * Space::dataBySeq( int32 seq,
 	key = rde.key;
 	if (key != uint16(-1))
 	{
-		const SpaceDataMapping::DataValue & data =
-				spaceDataMapping_.dataRetrieveSpecific( entryID );
-		if (data.valid())
+		/* BIGWORLD(3.13 migration): this used dataRetrieveSpecific() by
+		 * value and returned a pointer into the temporary's string member
+		 * (a dangling pointer once the temporary died). Use the pointer
+		 * form so we hand back the mapping's own storage. */
+		const SpaceDataMapping::DataValue * pData =
+				spaceDataMapping_.dataRetrieveSpecificPtr( entryID );
+		if ((pData != NULL) && pData->valid())
 		{
-			return &data.data();
+			return &pData->data();
 		}
 		return NULL;
 	}

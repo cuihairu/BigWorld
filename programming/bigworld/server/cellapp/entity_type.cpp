@@ -402,8 +402,12 @@ void EntityType::migrate( bool isFullReload )
 		PyDict_Clear( pModules );
 		PyDict_Update( pModules, s_pNewModules_ );
 
-		PyThreadState_Get()->interp->builtins =
-			PyModule_GetDict( PyDict_GetItemString( pModules, "__builtin__" ) );
+		/* BIGWORLD(3.13 migration): PyInterpreterState is opaque in 3.x, so
+		 * interp->builtins can no longer be reassigned here (it used to be
+		 * pointed at the __builtin__ module's dict). Nothing else needs it:
+		 * executed code picks builtins up from its globals, and the
+		 * builtins module itself has just been restored into sys.modules by
+		 * the update above. */
 
 		PyObject * pBigWorld = PyDict_GetItemString( pModules, "BigWorld" );
 		Py_INCREF( pBigWorld ); // AddObject steals a reference
@@ -636,7 +640,11 @@ WatcherPtr EntityType::Stats::pWatcher()
 	{
 		pWatcher = new DirectoryWatcher();
 
-		Stats * pNull = NULL;
+		/* BIGWORLD(3.13 migration): as in EntityMemberStats::pWatcher(),
+		 * these watchers are bound to member offsets only and the real
+		 * base is added at visit time; the volatile keeps the pointer
+		 * opaque so gcc does not flag the member calls. */
+		Stats * volatile pNull = NULL;
 		WatcherPtr totals = new DirectoryWatcher();
 		pWatcher->addChild( "all", totals );
 		pNull->sentToOwnClient_.

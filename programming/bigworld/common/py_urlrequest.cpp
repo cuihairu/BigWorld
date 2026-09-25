@@ -221,7 +221,7 @@ PyObject * py_fetchURL( PyObject * args, PyObject * kwargs )
 
 			PyObject * pStr = PyObject_Str( pItem );
 
-			headers.push_back( PyString_AsString( pStr ) );
+			headers.push_back( PyUnicode_AsUTF8( pStr ) );
 
 			Py_DECREF( pStr );
 			Py_DECREF( pItem );
@@ -235,10 +235,10 @@ PyObject * py_fetchURL( PyObject * args, PyObject * kwargs )
 	{
 		pPostData = &postData;
 
-		if (PyString_Check( pPyPostData ))
+		if (PyUnicode_Check( pPyPostData ))
 		{
 			postData.encodingType = URL::ENCODING_RAW; 
-			postData.rawData = PyString_AsString( pPyPostData );
+			postData.rawData = PyUnicode_AsUTF8( pPyPostData );
 		}
 
 		else if (PyMapping_Check( pPyPostData ))
@@ -255,8 +255,10 @@ PyObject * py_fetchURL( PyObject * args, PyObject * kwargs )
 				PyObject * pPyStrKey = PyObject_Str( pPyKey );
 				PyObject * pPyStrValue = PyObject_Str( pPyValue );
 					
-				char * key = PyString_AsString( pPyStrKey );
-				char * value = PyString_AsString( pPyStrValue );
+				/* BIGWORLD(3.13 migration): PyUnicode_AsUTF8() returns a
+				 * const char *. */
+				const char * key = PyUnicode_AsUTF8( pPyStrKey );
+				const char * value = PyUnicode_AsUTF8( pPyStrValue );
 				postData.formData[ key ] = value;
 
 				Py_DECREF( pPyStrValue );

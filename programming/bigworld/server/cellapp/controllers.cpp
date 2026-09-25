@@ -544,17 +544,20 @@ PyObject * Controllers::py_cancel( PyObject * args, Entity * pEntity )
 
 	if (!arg.convertTo( controllerID, ScriptErrorClear() ))
 	{
-		if (PyString_Check( arg.get() ))
+		if (PyUnicode_Check( arg.get() ))
 		{
 			deleteByID = false;
+			/* BIGWORLD(3.13 migration): PyUnicode_AsUTF8() returns a
+			 * const char *. */
+			const char * categoryName = PyUnicode_AsUTF8( arg.get() );
 			controllerID =
 				Controller::getExclusiveID(
-						PyString_AsString( arg.get() ), /*createIfNecessary:*/ false );
+						categoryName, /*createIfNecessary:*/ false );
 			if (controllerID == 0)
 			{
 				PyErr_Format( PyExc_TypeError,
 						"invalid exclusive controller category '%s'",
-						PyString_AsString( arg.get() ) );
+						categoryName );
 				return NULL;
 			}
 		}

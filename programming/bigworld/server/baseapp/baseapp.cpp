@@ -1765,8 +1765,8 @@ void BaseApp::logOnAttempt( const Mercury::Address & srcAddr,
 		}
 
 		tookControl = !!PyObject_IsTrue( pResult );
-		bool isDestroy = PyInt_Check( pResult ) &&
-			(PyInt_AsLong( pResult ) == LOG_ON_WAIT_FOR_DESTROY);
+		bool isDestroy = PyLong_Check( pResult ) &&
+			(PyLong_AsLong( pResult ) == LOG_ON_WAIT_FOR_DESTROY);
 		Py_DECREF( pResult );
 
 		if (pBase->isDestroyed() || isDestroy)

@@ -209,7 +209,7 @@ PyObject * RemoteClientMethod::pyCall( PyObject * args )
  */
 PyObject * RemoteClientMethod::pyRepr() const
 {
-	return PyString_FromFormat( "Remote method: %s(%d).ownClient%s.%s",
+	return PyUnicode_FromFormat( "Remote method: %s(%d).ownClient%s.%s",
 		entityTypeName_.c_str(),
 		pMailBox_->id(),
 		(pRecordingEntityChannel_ ? 

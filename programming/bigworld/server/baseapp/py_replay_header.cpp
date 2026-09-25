@@ -81,7 +81,7 @@ PyReplayHeader::PyReplayHeader( const ReplayHeader & header,
  */
 PyObject * PyReplayHeader::pyRepr() const
 {
-	return PyString_FromFormat( "<ReplayHeader v%s; digest=%s>",
+	return PyUnicode_FromFormat( "<ReplayHeader v%s; digest=%s>",
 		header_.version().c_str(), header_.digest().quote().c_str() );
 }
 

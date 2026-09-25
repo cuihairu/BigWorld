@@ -105,14 +105,14 @@ PyEntities::PyEntities( PyTypeObject * pType ) :
  */
 PyObject * PyEntities::subscript( PyObject* entityID )
 {
-	long id = PyInt_AsLong( entityID );
+	long id = PyLong_AsLong( entityID );
 
 	if (PyErr_Occurred())
 	{
-		if (PyString_Check( entityID ))
+		if (PyUnicode_Check( entityID ))
 		{
 			PyErr_Clear();
-			return this->findInstanceWithType( PyString_AsString( entityID ) );
+			return this->findInstanceWithType( PyUnicode_AsUTF8( entityID ) );
 		}
 
 		return NULL;

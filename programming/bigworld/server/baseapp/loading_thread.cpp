@@ -615,10 +615,10 @@ PyObject * py_fetchFromChunks( PyObject * args )
 
 	FetchFromChunksJob::Filter * pFilter = NULL;
 
-	if (PyString_Check( pMatches ))
+	if (PyUnicode_Check( pMatches ))
 	{
 		pFilter = new FetchFromChunksJob::SimpleFilter(
-						PyString_AS_STRING( pMatches ) );
+						PyUnicode_AsUTF8( pMatches ) );
 	}
 	else if (PySequence_Check( pMatches ))
 	{
@@ -631,9 +631,9 @@ PyObject * py_fetchFromChunks( PyObject * args )
 			PyObjectPtr pItem( PySequence_GetItem( pMatches, i ),
 					PyObjectPtr::STEAL_REFERENCE );
 
-			if (PyString_Check( pItem.get() ))
+			if (PyUnicode_Check( pItem.get() ))
 			{
-				pSetFilter->addMatch( PyString_AS_STRING( pItem.get() ) );
+				pSetFilter->addMatch( PyUnicode_AsUTF8( pItem.get() ) );
 			}
 			else
 			{

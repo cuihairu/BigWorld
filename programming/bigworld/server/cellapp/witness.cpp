@@ -2917,9 +2917,9 @@ Entity * Witness::findEntityFromPyArg( PyObject * pEntityOrID )
 	{
 		pEntity = static_cast< Entity * >( pEntityOrID );
 	}
-	else if (PyInt_Check( pEntityOrID ))
+	else if (PyLong_Check( pEntityOrID ))
 	{
-		long entityID = PyInt_AsLong( pEntityOrID );
+		long entityID = PyLong_AsLong( pEntityOrID );
 		pEntity = CellApp::instance().findEntity( entityID );
 
 		if (pEntity == NULL)

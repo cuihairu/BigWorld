@@ -101,7 +101,7 @@ PyObject * ClientEntityMailBoxWrapper::pyRepr() const
 	const bool shouldRecordOnly =
 		(recordingOption_ == RECORDING_OPTION_RECORD_ONLY);
 
-	return PyString_FromFormat( "Client MailBox %s(%d).ownClient%s",
+	return PyUnicode_FromFormat( "Client MailBox %s(%d).ownClient%s",
 		entityDescription.name().c_str(),
 		pMailBox_->id(),
 		shouldRecord ? 

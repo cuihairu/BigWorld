@@ -2220,7 +2220,7 @@ void CellApp::entityKeys( PyObject * pList ) const
 	{
 		if (!iter->second->isDestroyed())
 		{
-			PyObject * pInt = PyInt_FromLong( iter->first );
+			PyObject * pInt = PyLong_FromLong( iter->first );
 			PyList_Append( pList, pInt );
 			Py_DECREF( pInt );
 		}
@@ -2261,7 +2261,7 @@ void CellApp::entityItems( PyObject * pList ) const
 		if (!iter->second->isDestroyed())
 		{
 			PyObject * pTuple = PyTuple_New( 2 );
-			PyTuple_SetItem( pTuple, 0, PyInt_FromLong( iter->first ) );
+			PyTuple_SetItem( pTuple, 0, PyLong_FromLong( iter->first ) );
 			Py_INCREF( iter->second );
 			PyTuple_SetItem( pTuple, 1, iter->second );
 			PyList_Append( pList, pTuple );
@@ -3556,20 +3556,45 @@ ScriptObject CellApp::unpickle( const BW::string & str )
 PyObject * CellApp::newClassInstance( PyObject * pyClass,
 		PyObject * pDictionary )
 {
-	// This code was inspired by new_instance function in Modules/newmodule.c in
-	// the Python source code.
+	/* BIGWORLD(3.13 migration): this allocated a PyInstanceObject directly
+	 * (old-style classes are gone in 3.x). Allocate through the class'
+	 * tp_new, which skips __init__, and copy the attributes across. */
+	if (!PyType_Check( pyClass ))
+	{
+		PyErr_SetString( PyExc_TypeError,
+			"CellApp::newClassInstance: not a class" );
+		return NULL;
+	}
 
-	PyInstanceObject * pNewObject =
-		PyObject_New( PyInstanceObject, &PyInstance_Type );
+	PyTypeObject * pType = (PyTypeObject *)pyClass;
 
-	Py_INCREF( pyClass );
-	Py_INCREF( pDictionary );
-	pNewObject->in_class = (PyClassObject *)pyClass;
-	pNewObject->in_dict = pDictionary;
+	ScriptObject pEmptyArgs( PyTuple_New( 0 ),
+		ScriptObject::STEAL_REFERENCE );
+	if (!pEmptyArgs)
+	{
+		return NULL;
+	}
 
-	PyObject_GC_Init( pNewObject );
+	PyObject * pNewObject = pType->tp_new( pType, pEmptyArgs.get(), NULL );
+	if (pNewObject == NULL)
+	{
+		return NULL;
+	}
 
-	return (PyObject *)pNewObject;
+	PyObject * pKey = NULL;
+	PyObject * pValue = NULL;
+	Py_ssize_t pos = 0;
+
+	while (PyDict_Next( pDictionary, &pos, &pKey, &pValue ))
+	{
+		if (PyObject_SetAttr( pNewObject, pKey, pValue ) != 0)
+		{
+			Py_DECREF( pNewObject );
+			return NULL;
+		}
+	}
+
+	return pNewObject;
 }
 
 /**
@@ -3578,25 +3603,9 @@ PyObject * CellApp::newClassInstance( PyObject * pyClass,
  */
 void CellApp::checkPython()
 {
-#ifdef Py_DEBUG
-	PyObject* head = PyInt_FromLong(1000000);
-	PyObject* p = head;
-
-	SCRIPT_INFO_MSG( "Checking python objects..." );
-
-	while (p && p->_ob_next != head)
-	{
-		if ((p->_ob_prev->_ob_next != p) || (p->_ob_next->_ob_prev != p))
-		{
-			SCRIPT_CRITICAL_MSG( "Python object %0.8X is screwed\n", p );
-		}
-
-		p = p->_ob_next;
-	}
-
-	Py_DECREF(head);
-	SCRIPT_INFO_MSG( "Python objects are Ok.\n" );
-#endif
+	/* BIGWORLD(3.13 migration): this walked the 2.7 _ob_prev/_ob_next
+	 * doubly-linked list of all objects, which no longer exists in 3.x and
+	 * has no public equivalent. The Py_DEBUG-only check is a no-op now. */
 }
 
 

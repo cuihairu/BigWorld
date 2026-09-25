@@ -6643,7 +6643,7 @@ PyObject * Entity::pyPickleReduce()
 
 	PyObject * pConsArgs = PyTuple_New( 1 );
 	PyTuple_SET_ITEM( pConsArgs, 0,
-		PyString_FromStringAndSize( (char*)&embr, sizeof(embr) ) );
+		PyBytes_FromStringAndSize( (char*)&embr, sizeof(embr) ) );
 
 	return pConsArgs;
 }
@@ -6813,9 +6813,11 @@ bool Entity::getEntitiesInRange( EntityVisitor & visitor,
 	EntityTypePtr pType = NULL;
 	if (pClass)
 	{
-		if (PyString_Check( pClass.get() ))
+		if (PyUnicode_Check( pClass.get() ))
 		{
-			char * pTypeStr = PyString_AsString( pClass.get() );
+			/* BIGWORLD(3.13 migration): PyUnicode_AsUTF8() returns a
+			 * const char *. */
+			const char * pTypeStr = PyUnicode_AsUTF8( pClass.get() );
 			pType = EntityType::getType( pTypeStr );
 
 			if (pType == NULL)

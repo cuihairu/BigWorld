@@ -216,7 +216,7 @@ PyObject * ClientCaller::pyRepr() const
 {
 	if (entity_.id() != destID_)
 	{
-		return PyString_FromFormat( 
+		return PyUnicode_FromFormat( 
 			"Remote method: Client %s(%d): %s(%d).%s( %s ).%s",
 			entity_.pType()->name(), 
 			entity_.id(), 
@@ -233,7 +233,7 @@ PyObject * ClientCaller::pyRepr() const
 	}
 	else
 	{
-		return PyString_FromFormat( 
+		return PyUnicode_FromFormat( 
 			"Remote method: %s(%d).%s( %s ).%s",
 			entity_.pType()->name(), 
 			entity_.id(), 
@@ -451,14 +451,14 @@ PyObject * PyClient::pyRepr() const
 {
 	if (destEntity_.id() != clientEntity_.id())
 	{
-		return PyString_FromFormat( 
+		return PyUnicode_FromFormat( 
 			"Client MailBox: %s(%d).clientEntity( %s %d )",
 			clientEntity_.pType()->name(), clientEntity_.id(),
 			destEntity_.pType()->name(), destEntity_.id() );
 	}
 	else if (recordingOption_ == RECORDING_OPTION_METHOD_DEFAULT)
 	{
-		return PyString_FromFormat( "Client MailBox: %s(%d).%s",
+		return PyUnicode_FromFormat( "Client MailBox: %s(%d).%s",
 			clientEntity_.pType()->name(), clientEntity_.id(),
 			((isForOwn_ && isForOthers_) ? 
 				"allClients" : 
@@ -470,7 +470,7 @@ PyObject * PyClient::pyRepr() const
 		bool shouldRecordOnly = (recordingOption_ == 
 			RECORDING_OPTION_RECORD_ONLY);
 
-		return PyString_FromFormat( "Client MailBox: %s(%d).%s( %s )",
+		return PyUnicode_FromFormat( "Client MailBox: %s(%d).%s( %s )",
 			clientEntity_.pType()->name(), clientEntity_.id(),
 			((isForOwn_ && isForOthers_) ? 
 				"allClients" : 

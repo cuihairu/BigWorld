@@ -483,7 +483,7 @@ PyObject * PyReplayDataFileReader::pyRepr() const
 		pHeader.str( ScriptErrorPrint() ).getString( headerString );
 	}
 
-	return PyString_FromFormat( "<ReplayDataFileReader header: %s; "
+	return PyUnicode_FromFormat( "<ReplayDataFileReader header: %s; "
 			"read/added: %zu / %zu>", 
 		headerString.c_str(), 
 		reader_.numBytesRead(),

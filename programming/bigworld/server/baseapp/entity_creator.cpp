@@ -246,7 +246,7 @@ PyObject * EntityCreator::createBaseLocally( PyObject * args, PyObject * kwargs 
 
 		while (PyDict_Next( pBaseArgs.get(), &pos, &pKey, NULL ))
 		{
-			const char * key = PyString_AsString( pKey );
+			const char * key = PyUnicode_AsUTF8( pKey );
 			if (!pType->description().findCompoundProperty( key ))
 			{
 				WARNING_MSG( "EntityCreator::createBaseLocally: "
@@ -634,14 +634,14 @@ EntityTypePtr EntityCreator::consolidateCreateBaseArgs(
 
 	PyObject * pPyTypeName = PyTuple_GET_ITEM( args, 0 );
 
-	if (!PyString_Check( pPyTypeName ))
+	if (!PyUnicode_Check( pPyTypeName ))
 	{
 		PyErr_SetString( PyExc_TypeError,
 				"Expected a string as first argument" );
 		return NULL;
 	}
 
-	char * typeName = PyString_AS_STRING( pPyTypeName );
+	const char * typeName = PyUnicode_AsUTF8( pPyTypeName );
 	EntityTypePtr pType = EntityType::getType( typeName );
 
 	if (!pType || !pType->canBeOnBase() || pType->isService())

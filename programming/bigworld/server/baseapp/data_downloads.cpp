@@ -363,11 +363,11 @@ bool DataDownloadFactory::checkDescription( PyObjectPtr &rpDesc )
 {
 	if (rpDesc == NULL)
 	{
-		rpDesc = PyObjectPtr( PyString_FromString( "" ),
+		rpDesc = PyObjectPtr( PyUnicode_FromString( "" ),
 			PyObjectPtr::STEAL_REFERENCE );
 	}
 
-	if (!rpDesc || !PyString_Check( rpDesc.get() ))
+	if (!rpDesc || !PyUnicode_Check( rpDesc.get() ))
 	{
 		PyErr_SetString( PyExc_TypeError,
 			"Description must be a string" );
@@ -375,7 +375,7 @@ bool DataDownloadFactory::checkDescription( PyObjectPtr &rpDesc )
 	}
 
 	// We don't support descriptions longer than 254 bytes
-	if (PyString_Size( rpDesc.get() ) >= 255)
+	if (PyUnicode_GET_LENGTH( rpDesc.get() ) >= 255)
 	{
 		PyErr_SetString( PyExc_ValueError,
 			"Description must be 254 chars or less" );
@@ -429,12 +429,12 @@ int DataDownload::addToBundle( Mercury::Bundle & bundle, int & remaining )
 		// Make sure there's enough room. Magic +1 is for string length
 		// prefix on the stream
 		const uint32 size = ClientInterface::resourceHeader.headerSize() +
-			sizeof( uint16 ) + 1 + PyString_Size( pDesc_.get() );
+			sizeof( uint16 ) + 1 + PyUnicode_GET_LENGTH( pDesc_.get() );
 
 		bundle.startMessage( ClientInterface::resourceHeader );
 		bundle << id_;
-		bundle.appendString( PyString_AsString( pDesc_.get() ),
-			PyString_Size( pDesc_.get() ) );
+		bundle.appendString( PyUnicode_AsUTF8( pDesc_.get() ),
+			PyUnicode_GET_LENGTH( pDesc_.get() ) );
 
 		// Throw away the description to avoid sending this header again
 		pDesc_ = NULL;
@@ -534,7 +534,7 @@ StringDataDownload::StringDataDownload(
 	PyObjectPtr pData, PyObjectPtr pDesc, uint16 id, DataDownloads &dls ) :
 	DataDownload( pDesc, id, dls ),
 	pData_( pData ),
-	stream_( PyString_AsString( pData.get() ), PyString_Size( pData.get() ) )
+	stream_( PyUnicode_AsUTF8( pData.get() ), PyUnicode_GET_LENGTH( pData.get() ) )
 {}
 
 
@@ -554,7 +554,7 @@ void StringDataDownload::read( BinaryOStream &os, int nBytes )
 DataDownload * StringDataDownloadFactory::onCreate( PyObjectPtr pDesc,
 		uint16 id, DataDownloads &dls )
 {
-	if (!PyString_Check( pData_.get() ))
+	if (!PyUnicode_Check( pData_.get() ))
 	{
 		PyErr_SetString( PyExc_TypeError,
 				"Data argument must be a string." );

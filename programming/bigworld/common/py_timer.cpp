@@ -92,7 +92,7 @@ PyObject * PyTimer::addTimer( PyObject * args )
 		return NULL;
 	}
 
-	return PyInt_FromLong( id );
+	return PyLong_FromLong( id );
 }
 
 

@@ -391,8 +391,9 @@ void EntityType::migrate( bool isFullReload )
 		PyDict_Clear( pModules );
 		PyDict_Update( pModules, s_pNewModules_ );
 
-		PyThreadState_Get()->interp->builtins =
-			PyModule_GetDict( PyDict_GetItemString( pModules, "__builtin__" ) );
+		/* BIGWORLD(3.13 migration): PyInterpreterState is opaque in Python 3;
+		 * updating sys.modules above is enough to publish the new module set.
+		 * (The removed line also referenced "__builtin__", now "builtins".) */
 
 		PyObject * pBigWorld = PyDict_GetItemString( pModules, "BigWorld" );
 		Py_INCREF( pBigWorld ); // AddObject steals a reference

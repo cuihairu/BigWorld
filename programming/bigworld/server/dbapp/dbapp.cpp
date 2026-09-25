@@ -105,16 +105,8 @@ const char * UNSPECIFIED_ERROR_STR = "Unspecified error";
 // Section: Functions
 // -----------------------------------------------------------------------------
 
-bool commandShutDown( BW::string & output, BW::string & value )
-{
-    DBApp * pDBApp = DBApp::pInstance();
-    if (pDBApp != NULL)
-    {
-        pDBApp->shutDown();
-    }
-
-    return true;
-}
+/* BIGWORLD(3.13 migration): removed unused commandShutDown() -- it was
+ * dead code even in the original tree (never registered anywhere). */
 
 } // end anonymous namespace
 

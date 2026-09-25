@@ -2457,7 +2457,7 @@ void Base::backUpNonDefAttributes( BinaryOStream & stream )
 
 			while (PyDict_Next( pDict, &pos, &pKey, &pValue ))
 			{
-				char * key = PyString_AsString( pKey );
+				const char * key = PyUnicode_AsUTF8( pKey );
 				DataDescription * pDD = entityDesc.findProperty( key );
 
 				if (((pDD == NULL) || !pDD->isBaseData()) &&
@@ -4240,7 +4240,7 @@ PyObject * Base::py_registerGlobally( PyObject * args )
 	PyObject * pStringObj = PyObject_Str( pKey );
 	if (pStringObj)
 	{
-		const char * pString = PyString_AsString( pStringObj );
+		const char * pString = PyUnicode_AsUTF8( pStringObj );
 		if (pString == NULL)
 		{
 			NOTICE_MSG( "Base::py_registerGlobally: Unable to convert key to "
@@ -4288,7 +4288,7 @@ PyObject * Base::py_deregisterGlobally( PyObject * args )
 	PyObject * pStringObj = PyObject_Str( pKey );
 	if (pStringObj)
 	{
-		const char * pString = PyString_AsString( pStringObj );
+		const char * pString = PyUnicode_AsUTF8( pStringObj );
 		if (pString == NULL)
 		{
 			PyErr_Clear();
@@ -4328,7 +4328,7 @@ PyObject * Base::pyPickleReduce()
 
 	PyObject * pConsArgs = PyTuple_New( 1 );
 	PyTuple_SET_ITEM( pConsArgs, 0,
-		PyString_FromStringAndSize( (char*)&embr, sizeof(embr) ) );
+		PyBytes_FromStringAndSize( (char*)&embr, sizeof(embr) ) );
 
 	return pConsArgs;
 }

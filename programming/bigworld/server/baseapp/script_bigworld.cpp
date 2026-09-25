@@ -1407,7 +1407,7 @@ PyObject * py_lookUpBasesByIndex( PyObject * args, PyObject * kwargs )
 		PyObjectPtr pValueString( PyObject_Str( value ),
 			PyObjectPtr::STEAL_REFERENCE );
 
-		const char * propertyName = PyString_AsString( key );
+		const char * propertyName = PyUnicode_AsUTF8( key );
 		DataDescription * pDataDesc = 
 			entityDesc.findCompoundProperty( propertyName );
 		if (pDataDesc == NULL)
@@ -1427,7 +1427,7 @@ PyObject * py_lookUpBasesByIndex( PyObject * args, PyObject * kwargs )
 		}
 
 		criteria.addPropertyQuery( propertyName,
-			PyString_AsString( pValueString.get() ) );
+			PyUnicode_AsUTF8( pValueString.get() ) );
 	}
 
 
@@ -1974,7 +1974,7 @@ PyObject * py_createReplayDataFileWriter( PyObject * args, PyObject * kwargs )
 		PyDict_Next( kwargs, &i, &key, NULL );
 
 		PyErr_Format( PyExc_TypeError, "Invalid keyword argument: \"%s\"",
-			PyString_AsString( key ) );
+			PyUnicode_AsUTF8( key ) );
 		return NULL;
 	}
 
