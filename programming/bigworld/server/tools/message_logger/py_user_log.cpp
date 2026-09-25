@@ -21,13 +21,13 @@ PyObject * PyUserLog_getSegments( PyObject * self, PyObject * args );
  */
 static PyMethodDef PyUserLog_methods[] =
 {
-	{ "fetch", (PyCFunction)PyUserLog_fetch, METH_KEYWORDS,
+	{ "fetch", (PyCFunction)(void (*)(void))PyUserLog_fetch, METH_KEYWORDS,
 			"Performs a query on the log" },
-	{ "getComponents", (PyCFunction)PyUserLog_getComponents, METH_VARARGS,
+	{ "getComponents", (PyCFunction)(void (*)(void))PyUserLog_getComponents, METH_VARARGS,
 			"Returns the list of component names" },
-	{ "getEntry", (PyCFunction)PyUserLog_getEntry, METH_VARARGS,
+	{ "getEntry", (PyCFunction)(void (*)(void))PyUserLog_getEntry, METH_VARARGS,
 			"Returns a specific log entry" },
-	{ "getSegments", (PyCFunction)PyUserLog_getSegments, METH_VARARGS,
+	{ "getSegments", (PyCFunction)(void (*)(void))PyUserLog_getSegments, METH_VARARGS,
 			"Returns a list of entries corresponding to this log's segments" },
 	{ NULL, NULL, 0, NULL }
 };
@@ -38,16 +38,18 @@ static PyMethodDef PyUserLog_methods[] =
  */
 PyTypeObject PyUserLog::s_type_ =
 {
-	PyObject_HEAD_INIT( &PyType_Type )
-	0,										/* ob_size */
+	/* BIGWORLD(3.13 migration): 3.x slot order -- tp_print became
+	 * tp_vectorcall_offset, tp_compare became tp_as_async, and the tail
+	 * gained tp_finalize/tp_vectorcall/tp_watched/tp_versions_used. */
+	PyVarObject_HEAD_INIT( NULL, 0 )
 	const_cast< char * >( "PyUserLog" ),	/* tp_name */
 	sizeof( PyUserLog ),					/* tp_basicsize */
 	0,										/* tp_itemsize */
 	PyUserLog::_tp_dealloc,					/* tp_dealloc */
-	0,										/* tp_print */
+	0,										/* tp_vectorcall_offset */
 	0,										/* tp_getattr */
 	0,										/* tp_setattr */
-	0,										/* tp_compare */
+	0,										/* tp_as_async */
 	PyUserLog::_tp_repr,					/* tp_repr */
 	0,										/* tp_as_number */
 	0,										/* tp_as_sequence */
@@ -85,9 +87,11 @@ PyTypeObject PyUserLog::s_type_ =
 	0,										/* tp_subclasses */
 	0,										/* tp_weaklist */
 	0,										/* tp_del */
-#if ( PY_MAJOR_VERSION > 2 || ( PY_MAJOR_VERSION == 2 && PY_MINOR_VERSION >=6 ) )
 	0,										/* tp_version_tag */
-#endif
+	0,										/* tp_finalize */
+	0,										/* tp_vectorcall */
+	0,										/* tp_watched */
+	0,										/* tp_versions_used */
 };
 
 
@@ -276,7 +280,7 @@ PyObject * PyUserLog::pyGetAttribute( const char * attr )
 		return this->pyGet_username();
 	}
 
-	PyObject * pName = PyString_InternFromString( attr );
+	PyObject * pName = PyUnicode_InternFromString( attr );
 	PyObject * pResult = PyObject_GenericGetAttr( this, pName );
 	Py_DECREF( pName );
 
@@ -459,7 +463,7 @@ PyObject * PyUserLog::pyGet_username()
 {
 	BW::string username = this->getUsername();
 
-	return PyString_FromStringAndSize(
+	return PyUnicode_FromStringAndSize(
 			const_cast< char * >( username.data() ), username.size() );
 }
 
@@ -469,7 +473,7 @@ PyObject * PyUserLog::pyGet_username()
  */
 PyObject * PyUserLog::pyGet_uid()
 {
-	return PyInt_FromLong( this->getUID() );
+	return PyLong_FromLong( this->getUID() );
 }
 
 
@@ -491,7 +495,7 @@ PyObject * PyUserLog::_tp_repr( PyObject * pObj )
 	char	str[512];
 	bw_snprintf( str, sizeof(str), "PyUserLog at %p", pThis );
 
-	return PyString_InternFromString( str );
+	return PyUnicode_InternFromString( str );
 }
 
 
@@ -501,7 +505,7 @@ PyObject * PyUserLog::_tp_repr( PyObject * pObj )
 PyObject * PyUserLog::_tp_getattro( PyObject * pObj, PyObject * name )
 {
 	return static_cast< PyUserLog * >( pObj )->pyGetAttribute(
-			PyString_AS_STRING( name ) );
+			PyUnicode_AsUTF8( name ) );
 }
 
 

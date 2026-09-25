@@ -69,7 +69,7 @@ PyBots::PyBots( PyTypeObject * pType ) :
  */
 PyObject * PyBots::subscript( PyObject* entityID )
 {
-	long id = PyInt_AsLong( entityID );
+	long id = PyLong_AsLong( entityID );
 
 	if (PyErr_Occurred())
 		return NULL;
@@ -118,9 +118,9 @@ PyObject * PyBots::py_has_key( PyObject* args )
 		return NULL;
 
 	if (MainApp::instance().findApp( id ))
-		return PyInt_FromLong( 1 );
+		return PyLong_FromLong( 1 );
 	else
-		return PyInt_FromLong( 0 );
+		return PyLong_FromLong( 0 );
 }
 
 

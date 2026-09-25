@@ -476,8 +476,8 @@ void MainApp::addBotsWithName( PyObjectPtr pCredentialSequence )
 
 		Py_DECREF( pCredentials );
 
-		if (!PyString_Check( pClientName ) ||
-			!PyString_Check( pClientPassword ))
+		if (!PyUnicode_Check( pClientName ) ||
+			!PyUnicode_Check( pClientPassword ))
 		{
 			PyErr_Format( PyExc_TypeError, "Bots::addBotsWithName: "
 				"Invalid credentials for element %" PRIzd ". Expecting a tuple "
@@ -489,8 +489,8 @@ void MainApp::addBotsWithName( PyObjectPtr pCredentialSequence )
 			return;
 		}
 
-		this->addBotWithName( BW::string( PyString_AsString( pClientName ) ),
-			BW::string( PyString_AsString( pClientPassword ) ) );
+		this->addBotWithName( BW::string( PyUnicode_AsUTF8( pClientName ) ),
+			BW::string( PyUnicode_AsUTF8( pClientPassword ) ) );
 
 		Py_DECREF( pClientName );
 		Py_DECREF( pClientPassword );
@@ -866,7 +866,7 @@ void MainApp::appsKeys( PyObject * pList ) const
 	{
 		if ((*iter)->id() != NULL_ENTITY_ID)
 		{
-			PyObject * pInt = PyInt_FromLong( (*iter)->id() );
+			PyObject * pInt = PyLong_FromLong( (*iter)->id() );
 			PyList_Append( pList, pInt );
 			Py_DECREF( pInt );
 		}
@@ -908,7 +908,7 @@ void MainApp::appsItems( PyObject * pList ) const
 		if ((*iter)->id() != NULL_ENTITY_ID)
 		{
 			PyObject * pTuple = PyTuple_New( 2 );
-			PyTuple_SetItem( pTuple, 0, PyInt_FromLong( (*iter)->id() ) );
+			PyTuple_SetItem( pTuple, 0, PyLong_FromLong( (*iter)->id() ) );
 			Py_INCREF( (*iter).get() );
 			PyTuple_SetItem( pTuple, 1, 
 				const_cast< ClientApp* >( iter->get() ) );

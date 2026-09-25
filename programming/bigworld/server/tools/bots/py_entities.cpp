@@ -124,7 +124,7 @@ PY_END_ATTRIBUTES()
  */
 PyObject * PyEntities::subscript( PyObject* entityID )
 {
-	EntityID id = PyInt_AsLong( entityID );
+	EntityID id = PyLong_AsLong( entityID );
 
 	if (PyErr_Occurred())
 		return NULL;
@@ -170,7 +170,7 @@ PyObject * PyEntities::py_has_key( PyObject* args )
 
 	const bool hasKey = (entities_.find( id ) != NULL);
 
-	return PyInt_FromLong( hasKey );
+	return PyLong_FromLong( hasKey );
 }
 
 
@@ -181,7 +181,7 @@ namespace {
  */
 static PyObject * getEntityID( const BWEntities::const_iterator & iEntity )
 {
-	return PyInt_FromLong( iEntity->first );
+	return PyLong_FromLong( iEntity->first );
 }
 
 

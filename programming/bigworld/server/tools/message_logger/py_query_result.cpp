@@ -35,16 +35,18 @@ static PyMethodDef PyQueryResult_methods[] =
  */
 PyTypeObject PyQueryResult::s_type_ =
 {
-	PyObject_HEAD_INIT( &PyType_Type )
-	0,										/* ob_size */
+	/* BIGWORLD(3.13 migration): 3.x slot order -- tp_print became
+	 * tp_vectorcall_offset, tp_compare became tp_as_async, and the tail
+	 * gained tp_finalize/tp_vectorcall/tp_watched/tp_versions_used. */
+	PyVarObject_HEAD_INIT( NULL, 0 )
 	const_cast< char * >( "PyQueryResult" ),	/* tp_name */
 	sizeof( PyQueryResult ),				/* tp_basicsize */
 	0,										/* tp_itemsize */
 	PyQueryResult::_tp_dealloc,				/* tp_dealloc */
-	0,										/* tp_print */
+	0,										/* tp_vectorcall_offset */
 	0,										/* tp_getattr */
 	0,										/* tp_setattr */
-	0,										/* tp_compare */
+	0,										/* tp_as_async */
 	PyQueryResult::_tp_repr,				/* tp_repr */
 	0,										/* tp_as_number */
 	0,										/* tp_as_sequence */
@@ -82,9 +84,11 @@ PyTypeObject PyQueryResult::s_type_ =
 	0,										/* tp_subclasses */
 	0,										/* tp_weaklist */
 	0,										/* tp_del */
-#if ( PY_MAJOR_VERSION > 2 || ( PY_MAJOR_VERSION == 2 && PY_MINOR_VERSION >=6 ) )
 	0,										/* tp_version_tag */
-#endif
+	0,										/* tp_finalize */
+	0,										/* tp_vectorcall */
+	0,										/* tp_watched */
+	0,										/* tp_versions_used */
 };
 
 
@@ -145,7 +149,7 @@ PyObject * PyQueryResult::pyGetAttribute( const char * attr )
 		return this->pyGet_stringOffset();
 	}
 
-	PyObject * pName = PyString_InternFromString( attr );
+	PyObject * pName = PyUnicode_InternFromString( attr );
 	PyObject * pResult = PyObject_GenericGetAttr( this, pName );
 	Py_DECREF( pName );
 
@@ -158,7 +162,7 @@ PyObject * PyQueryResult::pyGetAttribute( const char * attr )
  */
 int PyQueryResult::pySetAttribute( const char * attr, PyObject * value )
 {
-	PyObject * pName = PyString_InternFromString( attr );
+	PyObject * pName = PyUnicode_InternFromString( attr );
 	int result = PyObject_GenericSetAttr( this, pName, value );
 	Py_DECREF( pName );
 
@@ -196,7 +200,7 @@ PyObject * PyQueryResult::py_format( PyObject * args )
 	int len;
 
 	const char *line = pQueryResult_->format( flags, &len );
- 	return PyString_FromStringAndSize( line, len );
+ 	return PyUnicode_FromStringAndSize( line, len );
 }
 
 
@@ -216,7 +220,7 @@ PyObject * PyQueryResult::py_metadata()
 {
 	const BW::string & metadata = pQueryResult_->metadata();
 
-	return PyString_FromStringAndSize( metadata.c_str(), metadata.length() );
+	return PyUnicode_FromStringAndSize( metadata.c_str(), metadata.length() );
 }
 
 
@@ -247,7 +251,7 @@ PyObject * PyQueryResult::_tp_repr( PyObject * pObj )
 	char str[ 512 ];
 	bw_snprintf( str, sizeof( str ), "PyQueryResult at %p", pThis );
 
-	return PyString_InternFromString( str );
+	return PyUnicode_InternFromString( str );
 }
 
 
@@ -257,7 +261,7 @@ PyObject * PyQueryResult::_tp_repr( PyObject * pObj )
 PyObject * PyQueryResult::_tp_getattro( PyObject * pObj, PyObject * name )
 {
 	return static_cast< PyQueryResult * >( pObj )->pyGetAttribute(
-			PyString_AS_STRING( name ) );
+			PyUnicode_AsUTF8( name ) );
 }
 
 
@@ -321,7 +325,7 @@ PyObject * PyQueryResult::pyGet_message()
 {
 	const BW::string message = this->getMessage();
 
-	return PyString_FromStringAndSize(
+	return PyUnicode_FromStringAndSize(
 			const_cast< char * >( message.data() ), message.size() );
 }
 
@@ -340,7 +344,7 @@ BW::string PyQueryResult::getMessage() const
  */
 PyObject * PyQueryResult::pyGet_stringOffset()
 {
-	return PyInt_FromLong( this->getStringOffset() );
+	return PyLong_FromLong( this->getStringOffset() );
 }
 
 
@@ -367,7 +371,7 @@ double PyQueryResult::getTime() const
  */
 PyObject * PyQueryResult::pyGet_host()
 {
-	return PyString_InternFromString( const_cast< char * >( this->getHost() ) );
+	return PyUnicode_InternFromString( const_cast< char * >( this->getHost() ) );
 }
 
 
@@ -385,7 +389,7 @@ const char * PyQueryResult::getHost() const
  */
 PyObject * PyQueryResult::pyGet_pid()
 {
-	return PyInt_FromLong( this->getPID() );
+	return PyLong_FromLong( this->getPID() );
 }
 
 
@@ -403,7 +407,7 @@ int PyQueryResult::getPID() const
  */
 PyObject * PyQueryResult::pyGet_appid()
 {
-	return PyInt_FromLong( this->getAppInstanceID() );
+	return PyLong_FromLong( this->getAppInstanceID() );
 }
 
 
@@ -421,7 +425,7 @@ int PyQueryResult::getAppInstanceID() const
  */
 PyObject * PyQueryResult::pyGet_username()
 {
-	return PyString_InternFromString(
+	return PyUnicode_InternFromString(
 			const_cast< char * >( this->getUsername() ) );
 }
 
@@ -440,7 +444,7 @@ const char * PyQueryResult::getUsername() const
  */
 PyObject * PyQueryResult::pyGet_component()
 {
-	return PyString_InternFromString( const_cast< char * >(
+	return PyUnicode_InternFromString( const_cast< char * >(
 				this->getComponent() ) );
 }
 
@@ -459,7 +463,7 @@ const char * PyQueryResult::getComponent() const
  */
 PyObject * PyQueryResult::pyGet_severity()
 {
-	return PyInt_FromLong( this->getSeverity() );
+	return PyLong_FromLong( this->getSeverity() );
 }
 
 

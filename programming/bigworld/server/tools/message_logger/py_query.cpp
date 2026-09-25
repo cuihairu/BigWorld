@@ -97,16 +97,18 @@ static PyMethodDef PyQuery_methods[] =
  */
 PyTypeObject PyQuery::s_type_ =
 {
-	PyObject_HEAD_INIT( &PyType_Type )
-	0,										/* ob_size */
+	/* BIGWORLD(3.13 migration): 3.x slot order -- tp_print became
+	 * tp_vectorcall_offset, tp_compare became tp_as_async, and the tail
+	 * gained tp_finalize/tp_vectorcall/tp_watched/tp_versions_used. */
+	PyVarObject_HEAD_INIT( NULL, 0 )
 	const_cast< char * >( "PyQuery" ),		/* tp_name */
 	sizeof( PyQuery ),						/* tp_basicsize */
 	0,										/* tp_itemsize */
 	PyQuery::_tp_dealloc,					/* tp_dealloc */
-	0,										/* tp_print */
+	0,										/* tp_vectorcall_offset */
 	0,										/* tp_getattr */
 	0,										/* tp_setattr */
-	0,										/* tp_compare */
+	0,										/* tp_as_async */
 	PyQuery::_tp_repr,						/* tp_repr */
 	0,										/* tp_as_number */
 	0,										/* tp_as_sequence */
@@ -144,9 +146,11 @@ PyTypeObject PyQuery::s_type_ =
 	0,										/* tp_subclasses */
 	0,										/* tp_weaklist */
 	0,										/* tp_del */
-#if ( PY_MAJOR_VERSION > 2 || ( PY_MAJOR_VERSION == 2 && PY_MINOR_VERSION >=6 ) )
 	0,										/* tp_version_tag */
-#endif
+	0,										/* tp_finalize */
+	0,										/* tp_vectorcall */
+	0,										/* tp_watched */
+	0,										/* tp_versions_used */
 };
 
 
@@ -161,7 +165,7 @@ PyTypeObject PyQuery::s_type_ =
  */
 PyObject * PyQuery::pyGetAttribute( const char *attr )
 {
-	PyObject * pName = PyString_InternFromString( attr );
+	PyObject * pName = PyUnicode_InternFromString( attr );
 	PyObject * pResult = PyObject_GenericGetAttr( this, pName );
 	Py_DECREF( pName );
 
@@ -472,7 +476,7 @@ PyObject * PyQuery::_tp_repr( PyObject * pObj )
 	char str[ 512 ];
 	bw_snprintf( str, sizeof( str ), "PyQuery at %p", pThis );
 
-	return PyString_InternFromString( str );
+	return PyUnicode_InternFromString( str );
 }
 
 
@@ -482,7 +486,7 @@ PyObject * PyQuery::_tp_repr( PyObject * pObj )
 PyObject * PyQuery::_tp_getattro( PyObject * pObj, PyObject * name )
 {
 	return static_cast< PyQuery * >( pObj )->pyGetAttribute(
-			PyString_AS_STRING( name ) );
+			PyUnicode_AsUTF8( name ) );
 }
 
 

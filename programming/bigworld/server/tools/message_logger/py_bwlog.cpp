@@ -33,21 +33,21 @@ PyObject * PyBWLog_refreshLogFiles( PyObject * self, PyObject * args );
  */
 static PyMethodDef PyBWLog_methods[] =
 {
-	{ "fetch", (PyCFunction)PyBWLog_fetch, METH_KEYWORDS | METH_VARARGS,
+	{ "fetch", (PyCFunction)(void (*)(void))PyBWLog_fetch, METH_KEYWORDS | METH_VARARGS,
 			"Performs a query on the user log" },
-	{ "getCategoryNames", (PyCFunction)PyBWLog_getCategoryNames, METH_VARARGS,
+	{ "getCategoryNames", (PyCFunction)(void (*)(void))PyBWLog_getCategoryNames, METH_VARARGS,
 			"Returns the category names" },
-	{ "getComponentNames", (PyCFunction)PyBWLog_getComponentNames, METH_VARARGS,
+	{ "getComponentNames", (PyCFunction)(void (*)(void))PyBWLog_getComponentNames, METH_VARARGS,
 			"Returns the list of component names" },
-	{ "getFormatStrings", (PyCFunction)PyBWLog_getFormatStrings, METH_VARARGS,
+	{ "getFormatStrings", (PyCFunction)(void (*)(void))PyBWLog_getFormatStrings, METH_VARARGS,
 			"Returns the list of format strings" },
-	{ "getHostnames", (PyCFunction)PyBWLog_getHostnames, METH_VARARGS,
+	{ "getHostnames", (PyCFunction)(void (*)(void))PyBWLog_getHostnames, METH_VARARGS,
 			"Returns the dict of hostnames" },
-	{ "getUsers", (PyCFunction)PyBWLog_getUsers, METH_VARARGS,
+	{ "getUsers", (PyCFunction)(void (*)(void))PyBWLog_getUsers, METH_VARARGS,
 			"Returns the dict of users" },
-	{ "getUserLog", (PyCFunction)PyBWLog_getUserLog, METH_VARARGS,
+	{ "getUserLog", (PyCFunction)(void (*)(void))PyBWLog_getUserLog, METH_VARARGS,
 			"Returns the user log" },
-	{ "refreshLogFiles", (PyCFunction)PyBWLog_refreshLogFiles, METH_NOARGS,
+	{ "refreshLogFiles", (PyCFunction)(void (*)(void))PyBWLog_refreshLogFiles, METH_NOARGS,
 			"Refreshes log file mappings" },
 	{ NULL, NULL, 0, NULL }
 };
@@ -58,16 +58,18 @@ static PyMethodDef PyBWLog_methods[] =
  */
 PyTypeObject PyBWLog::s_type_ =
 {
-	PyObject_HEAD_INIT( &PyType_Type )
-	0,										/* ob_size */
+	/* BIGWORLD(3.13 migration): 3.x slot order -- tp_print became
+	 * tp_vectorcall_offset, tp_compare became tp_as_async, and the tail
+	 * gained tp_finalize/tp_vectorcall/tp_watched/tp_versions_used. */
+	PyVarObject_HEAD_INIT( NULL, 0 )
 	const_cast< char * >( "PyBWLog" ),		/* tp_name */
 	sizeof( PyBWLog ),						/* tp_basicsize */
 	0,										/* tp_itemsize */
 	PyBWLog::_tp_dealloc,					/* tp_dealloc */
-	0,										/* tp_print */
+	0,										/* tp_vectorcall_offset */
 	0,										/* tp_getattr */
 	0,										/* tp_setattr */
-	0,										/* tp_compare */
+	0,										/* tp_as_async */
 	PyBWLog::_tp_repr,						/* tp_repr */
 	0,										/* tp_as_number */
 	0,										/* tp_as_sequence */
@@ -105,9 +107,11 @@ PyTypeObject PyBWLog::s_type_ =
 	0,										/* tp_subclasses */
 	0,										/* tp_weaklist */
 	0,										/* tp_del */
-#if PY_MAJOR_VERSION > 2 || ( PY_MAJOR_VERSION == 2 && PY_MINOR_VERSION >=6 )
 	0,										/* tp_version_tag */
-#endif
+	0,										/* tp_finalize */
+	0,										/* tp_vectorcall */
+	0,										/* tp_watched */
+	0,										/* tp_versions_used */
 };
 
 
@@ -172,7 +176,7 @@ bool HostnamePopulator::onHost( MessageLogger::IPAddress ipAddress,
 	}
 
 	char *hostAddr = inet_ntoa( (in_addr&)ipAddress );
-	PyObjectPtr pyHostname( PyString_InternFromString( hostname.c_str() ),
+	PyObjectPtr pyHostname( PyUnicode_InternFromString( hostname.c_str() ),
 		PyObjectPtr::STEAL_REFERENCE );
 
 	if (pyHostname == NULL)
@@ -250,7 +254,7 @@ bool LogCategoriesPopulator::onCategory( const BW::string & categoryName )
 		return false;
 	}
 
-	PyObjectPtr pyString( PyString_InternFromString( categoryName.c_str() ),
+	PyObjectPtr pyString( PyUnicode_InternFromString( categoryName.c_str() ),
 		PyObjectPtr::STEAL_REFERENCE );
 
 	if (pyString == NULL)
@@ -332,7 +336,7 @@ bool LogComponentsPopulator::onComponent( const BW::string &componentName )
 		return false;
 	}
 
-	PyObjectPtr pyString( PyString_InternFromString( componentName.c_str() ),
+	PyObjectPtr pyString( PyUnicode_InternFromString( componentName.c_str() ),
 		PyObjectPtr::STEAL_REFERENCE );
 
 	if (pyString == NULL)
@@ -405,7 +409,7 @@ PyObject * PyBWLog::pyGetAttribute( const char * attr )
 		return this->pyGet_logDirectory();
 	}
 
-	PyObject * pName = PyString_InternFromString( attr );
+	PyObject * pName = PyUnicode_InternFromString( attr );
 	PyObject * pResult = PyObject_GenericGetAttr( this, pName );
 	Py_DECREF( pName );
 
@@ -516,7 +520,7 @@ PyObject * PyBWLog::py_getFormatStrings( PyObject * args )
 	FormatStringList::iterator it = formatStrings.begin();
 	while (it != formatStrings.end())
 	{
-		PyObject *pyFormatString = PyString_InternFromString( it->c_str() );
+		PyObject *pyFormatString = PyUnicode_InternFromString( it->c_str() );
 		PyList_SET_ITEM( pList, i, pyFormatString );
 		++it;
 		++i;
@@ -571,7 +575,7 @@ PyObject * PyBWLog::py_getUsers( PyObject * args )
 	UsernamesMap::const_iterator it = usernames.begin();
 	while (it != usernames.end())
 	{
-		PyObject *pyUid = PyInt_FromLong( it->first );
+		PyObject *pyUid = PyLong_FromLong( it->first );
 		const char *username = it->second.c_str();
 
 		PyDict_SetItemString( pDict, username, pyUid );
@@ -635,7 +639,7 @@ PyObject * PyBWLog::_tp_repr( PyObject * pObj )
 	char	str[512];
 	bw_snprintf( str, sizeof(str), "PyBWLog at %p", pThis );
 
-	return PyString_InternFromString( str );
+	return PyUnicode_InternFromString( str );
 }
 
 
@@ -644,8 +648,9 @@ PyObject * PyBWLog::_tp_repr( PyObject * pObj )
  */
 PyObject * PyBWLog::_tp_getattro( PyObject * pObj, PyObject * name )
 {
+	/* BIGWORLD(3.13 migration): PyStringObject::ob_sval is gone. */
 	return static_cast< PyBWLog * >( pObj )->pyGetAttribute(
-			(((PyStringObject *)(name))->ob_sval) );
+			PyUnicode_AsUTF8( name ) );
 }
 
 
@@ -744,7 +749,7 @@ PyObject * PyBWLog::fetch( PyUserLogPtr pUserLog, QueryParamsPtr pParams )
  */
 PyObject * PyBWLog::pyGet_logDirectory()
 {
-	return PyString_InternFromString( this->getLogDirectory() );
+	return PyUnicode_InternFromString( this->getLogDirectory() );
 }
 
 

@@ -11,11 +11,12 @@ def loadRevisionInfo():
 		pipe = subprocess.Popen( cmd,
 				stdout = subprocess.PIPE, stderr = subprocess.STDOUT )
 	except OSError:
-		print "Failed to execute '%s'" % " ".join( cmd )
+		print( "Failed to execute '%s'" % " ".join( cmd ) )
 		return 0
 
 	try:
-		revision = pipe.stdout.read()
+		# BIGWORLD(3.13 migration): stdout is bytes in Python 3.
+		revision = pipe.stdout.read().decode( "utf8", "replace" )
 		if revision == "Unversioned directory":
 			return 0
 	except:

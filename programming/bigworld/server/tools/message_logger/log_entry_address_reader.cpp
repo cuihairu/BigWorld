@@ -28,17 +28,17 @@ bool LogEntryAddressReader::fromPyTuple( PyObject *tuple )
 	PyObject *pySuffix = PyTuple_GetItem( tuple, 0 );
 	PyObject *pyIndex = PyTuple_GetItem( tuple, 1 );
 
-	const char *suffixStr = PyString_AsString( pySuffix );
+	const char *suffixStr = PyUnicode_AsUTF8( pySuffix );
 	if (suffixStr == NULL)
 	{
-		// PyString_AsString will raise TypeError in this case.
+		// PyUnicode_AsUTF8 will raise TypeError in this case.
 		return false;
 	}
 
-	long tmpLong = PyInt_AsLong( pyIndex );
+	long tmpLong = PyLong_AsLong( pyIndex );
 	if ((tmpLong == -1) && (PyErr_Occurred()))
 	{
-		// PyInt_AsLong will raise an error
+		// PyLong_AsLong will raise an error
 		return false;
 	}
 

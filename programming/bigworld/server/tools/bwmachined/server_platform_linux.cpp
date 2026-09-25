@@ -257,7 +257,10 @@ void ServerPlatformLinux::initKernelVersion()
 	char line[ 512 ];
 	uint major, minor;
 
-	fgets( line, sizeof( line ), fp );
+	if (fgets( line, sizeof( line ), fp ) == NULL)
+	{
+		line[ 0 ] = '\0';
+	}
 	if (sscanf( line, "%d.%d", &major, &minor) != 2)
 	{
 		syslog( LOG_ERR, "Invalid line in %s: '%s'",
@@ -408,7 +411,10 @@ bool ServerPlatformLinux::updateSystemInfo( SystemInfo & systemInfo,
 	}
 
 	// Line CPU load summary line
-	fgets( line, sizeof( line ), fp );
+	if (fgets( line, sizeof( line ), fp ) == NULL)
+	{
+		line[ 0 ] = '\0';
+	}
 
 	// Read each CPU load individually
 	uint64 totalWork, totalIdle;
@@ -416,7 +422,10 @@ bool ServerPlatformLinux::updateSystemInfo( SystemInfo & systemInfo,
 	uint64 systemTotalWork = 0;
 	for (uint i=0; i < systemInfo.nCpus; i++)
 	{
-		fgets( line, sizeof( line ), fp );
+		if (fgets( line, sizeof( line ), fp ) == NULL)
+	{
+		line[ 0 ] = '\0';
+	}
 
 		// If we can read in extended stats (as of kernel 2.6) do it
 		if (hasExtendedStats_)
@@ -484,7 +493,10 @@ bool ServerPlatformLinux::updateSystemInfo( SystemInfo & systemInfo,
 
 	// skip the IP header line
 	// format string sizes are determined in Linux source (net/ipv4/proc.c)
-	fgets( line, sizeof( line ), fp );
+	if (fgets( line, sizeof( line ), fp ) == NULL)
+	{
+		line[ 0 ] = '\0';
+	}
 	if (fscanf( fp,"%*s %*d %*d %*d %*d %*d %*d %*d "
 					"%" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64,
 		&systemInfo.packDropIn.next(), &systemInfo.packTotIn.next(),
@@ -503,8 +515,14 @@ bool ServerPlatformLinux::updateSystemInfo( SystemInfo & systemInfo,
 	}
 
 	// Skip header lines
-	fgets( line, sizeof( line ), fp );
-	fgets( line, sizeof( line ), fp );
+	if (fgets( line, sizeof( line ), fp ) == NULL)
+	{
+		line[ 0 ] = '\0';
+	}
+	if (fgets( line, sizeof( line ), fp ) == NULL)
+	{
+		line[ 0 ] = '\0';
+	}
 
 	for (unsigned int i=0; fgets( line, sizeof( line ), fp ) != NULL; )
 	{
@@ -782,7 +800,13 @@ bool ServerPlatformLinux::visitBinaryPaths(
 	}
 
 	// Now return to the original directory
-	chdir( cwd );
+	/* BIGWORLD(3.13 migration): consume the result -- the caller only
+	 * inspects paths relative to cwd on success anyway. */
+	if (chdir( cwd ) == -1)
+	{
+		syslog( LOG_ERR, "Failed to return to directory %s: %s",
+			cwd, strerror( errno ) );
+	}
 
 	return true;
 }

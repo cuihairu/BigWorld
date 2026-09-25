@@ -1067,7 +1067,7 @@ int ClientApp::addTimer( float interval, PyObjectPtr pFunc, bool repeat )
     {
         PyObjectPtr pFuncPyStr( PyObject_Str( pFunc.get() ),
             PyObjectPtr::STEAL_REFERENCE );
-        char *pFuncStr = PyString_AsString( pFuncPyStr.get() );
+        const char *pFuncStr = PyUnicode_AsUTF8( pFuncPyStr.get() );
 
         ERROR_MSG( "ClientApp::addTimer(): %s is not callable; "
             "timer not added\n", pFuncStr );

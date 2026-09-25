@@ -154,7 +154,7 @@ bool QueryParams::initCategories( PyObject * pCategories,
 	{
 		PyObject * pCategoryString = PySequence_GetItem( pCategories, i );
 
-		if (!PyString_Check( pCategoryString ))
+		if (!PyUnicode_Check( pCategoryString ))
 		{
 			PyErr_Format( PyExc_LookupError,
 				"Category at element %d was not a string.\n", i );
@@ -162,7 +162,7 @@ bool QueryParams::initCategories( PyObject * pCategories,
 			return false;
 		}
 
-		BW::string categoryName = PyString_AsString( pCategoryString );
+		BW::string categoryName = PyUnicode_AsUTF8( pCategoryString );
 
 		Py_DECREF( pCategoryString );
 

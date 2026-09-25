@@ -100,10 +100,10 @@ def runConnectedP4Command( command ):
 			"Perforce password \(P4PASSWD\) invalid or unset.", err )
 
 		if sessionExpired or notLoggedIn:
-			raise AuthenticationException, errMessage
+			raise AuthenticationException( errMessage )
 
 		# Any other unknown type of error
-		raise RuntimeError, errMessage
+		raise RuntimeError( errMessage )
 
 	return out
 # runConnectedCommand

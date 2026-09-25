@@ -59,7 +59,12 @@ void initProcessState( bool isDaemon )
 {
 	if (isDaemon)
 	{
-		daemon( 0, 0 );
+		/* BIGWORLD(3.13 migration): glibc marks daemon() warn_unused_result;
+		 * a failure just means we stay in the foreground. */
+		if (daemon( 0, 0 ) == -1)
+		{
+			syslog( LOG_ERR, "daemon() failed; staying in the foreground" );
+		}
 	}
 	else
 	{
@@ -361,7 +366,9 @@ bool startProcess( const char * bwBinaryDir,
 				"Failed to set status pipe to close-on-exec: %s, aborting "
 				"exec for %s",
 				strerror( errno ), binaryName );
-			write( statusPipe[ 1 ], &errno, sizeof( errno ) );
+			/* BIGWORLD(3.13 migration): consume the result -- failure just
+			 * means the parent sees the pipe close early. */
+			if (write( statusPipe[ 1 ], &errno, sizeof( errno ) ) < 0) {}
 			exit( EXIT_FAILURE );
 		}
 
@@ -376,7 +383,7 @@ bool startProcess( const char * bwBinaryDir,
 		{
 			syslog( LOG_ERR, "Failed to setuid to %d, aborting exec for %s\n",
 				uid, binaryName );
-			write( statusPipe[ 1 ], &errno, sizeof( errno ) );
+			if (write( statusPipe[ 1 ], &errno, sizeof( errno ) ) < 0) {}
 			exit( EXIT_FAILURE );
 		}
 
@@ -389,7 +396,12 @@ bool startProcess( const char * bwBinaryDir,
 		strcat( path, "/" );
 
 		// change to it
-		chdir( path );
+		/* BIGWORLD(3.13 migration): warn_unused_result -- the exec below
+		 * reports its own error through the status pipe. */
+		if (chdir( path ) == -1)
+		{
+			syslog( LOG_ERR, "Failed to chdir() to %s\n", path );
+		}
 
 		// now add the exe name
 		strncat( path, binaryName, 32 );
@@ -445,7 +457,7 @@ bool startProcess( const char * bwBinaryDir,
 				path, strerror( errno ) );
 		}
 
-		write( statusPipe[ 1 ], &errno, sizeof( errno ) );
+		if (write( statusPipe[ 1 ], &errno, sizeof( errno ) ) < 0) {}
 		exit( EXIT_FAILURE );
 	}
 	else if (childpid == -1)
@@ -547,7 +559,12 @@ bool raiseFileDescriptorHardLimit( unsigned long desiredLimit )
 	{
 		unsigned long nr_open;
 		char line[ 512 ];
-		fgets( line, sizeof( line ), fp );
+		/* BIGWORLD(3.13 migration): check fgets; an empty file leaves line
+		 * empty and the sscanf below reports the failure. */
+		if (fgets( line, sizeof( line ), fp ) == NULL)
+		{
+			line[ 0 ] = '\0';
+		}
 
 		int numLinesRead = sscanf( line, "%lu", &nr_open );
 		fclose( fp );

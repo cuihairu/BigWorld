@@ -31,28 +31,28 @@ static PyObject * _bw_profile_getJsonOutputFilePath( PyObject *self, PyObject *a
 
 static PyMethodDef _bw_profile_methods[] =
 {
-	{ "__onThreadStart", (PyCFunction)_bw_profile___onThreadStart, METH_VARARGS,
+	{ "__onThreadStart", (PyCFunction)(void (*)(void))_bw_profile___onThreadStart, METH_VARARGS,
 			"Thread start hook; begins profiling a thread" },
-	{ "__onThreadEnd", (PyCFunction)_bw_profile___onThreadEnd, METH_NOARGS,
+	{ "__onThreadEnd", (PyCFunction)(void (*)(void))_bw_profile___onThreadEnd, METH_NOARGS,
 			"Thread end hook; finishes profiling a thread" },
-	{ "enable", (PyCFunction)_bw_profile_enable, METH_VARARGS,
+	{ "enable", (PyCFunction)(void (*)(void))_bw_profile_enable, METH_VARARGS,
 			"Enable or disable performance profiling" },
-	{ "isEnabled", (PyCFunction)_bw_profile_isEnabled, METH_VARARGS,
+	{ "isEnabled", (PyCFunction)(void (*)(void))_bw_profile_isEnabled, METH_VARARGS,
 			"Returns whether performance profiling currently running" },
-	{ "tick", (PyCFunction)_bw_profile_tick, METH_NOARGS,
+	{ "tick", (PyCFunction)(void (*)(void))_bw_profile_tick, METH_NOARGS,
 			"Profiler Tick event" },
-	{ "startJsonDump", (PyCFunction)_bw_profile_startJsonDump, METH_NOARGS,
+	{ "startJsonDump", (PyCFunction)(void (*)(void))_bw_profile_startJsonDump, METH_NOARGS,
 			"Create a json dump file" },
-	{ "setJsonDumpCount", (PyCFunction)_bw_profile_setJsonDumpCount,
+	{ "setJsonDumpCount", (PyCFunction)(void (*)(void))_bw_profile_setJsonDumpCount,
 			METH_VARARGS, "Set the Json Dump Count " },
-	{ "setJsonDumpDir", (PyCFunction)_bw_profile_setJsonDumpDir,
+	{ "setJsonDumpDir", (PyCFunction)(void (*)(void))_bw_profile_setJsonDumpDir,
 			METH_VARARGS, "Set the Json Dump Dir " },
-	{ "getJsonDumpState", (PyCFunction)_bw_profile_getJsonDumpState,
+	{ "getJsonDumpState", (PyCFunction)(void (*)(void))_bw_profile_getJsonDumpState,
 			METH_NOARGS, "Get the Json Dump State" },
-	{ "getJsonDumpStateValue", (PyCFunction)_bw_profile_getJsonDumpStateValue,
+	{ "getJsonDumpStateValue", (PyCFunction)(void (*)(void))_bw_profile_getJsonDumpStateValue,
 			METH_VARARGS, "Get the equivalent dump state enum value of the "
 				"argument string" },
-	{ "getJsonOutputFilePath", (PyCFunction)_bw_profile_getJsonOutputFilePath,
+	{ "getJsonOutputFilePath", (PyCFunction)(void (*)(void))_bw_profile_getJsonOutputFilePath,
 			METH_VARARGS, "Get the latest json output file path " },
 	{ NULL, NULL, 0, NULL }
 };
@@ -61,15 +61,24 @@ static PyMethodDef _bw_profile_methods[] =
 int profileFunc( PyObject * /*pObject*/, PyFrameObject * pFrame, 
 	int action, PyObject * pArg )
 {
+	/* BIGWORLD(3.13 migration): PyFrameObject is opaque; use
+	 * PyFrame_GetCode() and read co_name through the object protocol. */
 	switch (action)
 	{
 	case PyTrace_CALL:
-		g_profiler.addEntry( PyString_AsString( pFrame->f_code->co_name ),
-			Profiler::EVENT_START, 0, Profiler::CATEGORY_PYTHON );
-		break;
 	case PyTrace_RETURN:
-		g_profiler.addEntry( PyString_AsString( pFrame->f_code->co_name ),
-			Profiler::EVENT_END, 0, Profiler::CATEGORY_PYTHON );
+	{
+		PyCodeObject * pCode = PyFrame_GetCode( pFrame );
+		PyObject * pName = PyObject_GetAttrString( (PyObject *)pCode,
+				"co_name" );
+		const char * name = (pName != NULL) ? PyUnicode_AsUTF8( pName ) :
+				"<unknown>";
+		g_profiler.addEntry( name,
+			(action == PyTrace_CALL) ? Profiler::EVENT_START :
+					Profiler::EVENT_END,
+			0, Profiler::CATEGORY_PYTHON );
+		Py_XDECREF( pName );
+	}
 		break;
 	case PyTrace_C_CALL:
 		if (pArg && PyCFunction_Check( pArg ))
@@ -288,8 +297,19 @@ static PyObject * _bw_profile_getJsonOutputFilePath( PyObject *self, PyObject *a
 }; // anonymous namespace
 
 
+/* BIGWORLD(3.13 migration): Py2 single-phase init removed; use
+ * PyModuleDef + PyInit__bw_profile. */
+static struct PyModuleDef s_bwProfileModule = {
+	PyModuleDef_HEAD_INIT,
+	"_bw_profile",					/* m_name */
+	"BigWorld bw_profile module",	/* m_doc */
+	-1,								/* m_size */
+	_bw_profile_methods,			/* m_methods */
+	NULL, NULL, NULL, NULL			/* m_slots, m_traverse, m_clear, m_free */
+};
+
 PyMODINIT_FUNC
-init_bw_profile()
+PyInit__bw_profile()
 {
 	// While we are not in main, our init method should do for marking as main
 	BW_SYSTEMSTAGE_MAIN();
@@ -298,16 +318,16 @@ init_bw_profile()
 	const int MAX_PROFILER_MEMORY_BYTES = 128 * 1024 * 1024;
 	g_profiler.init( MAX_PROFILER_MEMORY_BYTES );
 
-	const char *MODULE_NAME = "_bw_profile";
-	PyObject *pModuleObj = Py_InitModule3( (char *)MODULE_NAME, _bw_profile_methods,
-									"BigWorld bw_profile module");
+	PyObject *pModuleObj = PyModule_Create( &s_bwProfileModule );
 
 	if (pModuleObj == NULL)
 	{
-		return;
+		return NULL;
 	}
 
 	PyEval_SetProfile( &profileFunc, NULL );
+
+	return pModuleObj;
 }
 
 BW_END_NAMESPACE

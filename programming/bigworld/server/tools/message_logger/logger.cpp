@@ -547,7 +547,12 @@ bool Logger::init( int argc, char * argv[] )
 
 	if (pFile != NULL)
 	{
-		fscanf( pFile, "%d", &recvbuf );
+		/* BIGWORLD(3.13 migration): check the read; keep the previous
+		 * default when /proc layout changes. */
+		if (fscanf( pFile, "%d", &recvbuf ) != 1)
+		{
+			recvbuf = 212992; // keep the pre-read default
+		}
 		fclose( pFile );
 	}
 
@@ -592,7 +597,13 @@ bool Logger::init( int argc, char * argv[] )
 #ifndef _WIN32
 	if (daemonMode_)
 	{
-		daemon( 0, int( DebugFilter::shouldWriteToConsole() ) );
+		/* BIGWORLD(3.13 migration): glibc marks daemon() warn_unused_result;
+		 * a failure here only means we stay in the foreground. */
+		if (daemon( 0, int( DebugFilter::shouldWriteToConsole() ) ) == -1)
+		{
+			ERROR_MSG( "Logger::init: daemon() failed; staying in the "
+					"foreground\n" );
+		}
 	}
 #endif
 

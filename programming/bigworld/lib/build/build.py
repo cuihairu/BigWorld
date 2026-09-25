@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 # This file is used by the build system to determine the build revision
 
@@ -13,7 +13,7 @@ def main():
 	args = sys.argv
 
 	if len( args ) < 3:
-		print "usage: %s input_file output_file" % sys.argv[0]
+		print( "usage: %s input_file output_file" % sys.argv[0] )
 		return 1
 
 	input_file = args[1]
@@ -47,7 +47,7 @@ def main():
 		f.close()
 		w.close()
 	except IOError:
-		print "IOError: fail to write the output file %s" % output_file
+		print( "IOError: fail to write the output file %s" % output_file )
 		return 1
 
 	return 0
