@@ -70,7 +70,7 @@ BW::string PythonInputSubstituter::substitute( const BW::string & line,
 	else
 	{
 		// BIGWORLD_BEGIN(3.13 migration)
-		// Was PyString_AsString.
+		// Was PyUnicode_AsUTF8.
 		return BW::string( PyUnicode_AsUTF8( pExpansion.getObject() ) );
 		// BIGWORLD_END
 	}

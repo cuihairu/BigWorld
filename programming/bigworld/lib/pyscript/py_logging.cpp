@@ -36,7 +36,7 @@ PyObject * py_logCommon( PyObject * args, DebugMessagePriority priority,
 	PyObject * objLogMetaData = PyTuple_GET_ITEM( args, 2 );
 
 	// BIGWORLD_BEGIN(3.13 migration)
-	// Was PyString_Check; str is unicode now.
+	// Was PyUnicode_Check; str is unicode now.
 	if (!PyUnicode_Check( objCategoryString ) ||
 		!PyUnicode_Check( objMessageString ) ||
 		(!PyUnicode_Check( objLogMetaData ) && (objLogMetaData != Py_None)))
@@ -48,7 +48,7 @@ PyObject * py_logCommon( PyObject * args, DebugMessagePriority priority,
 	}
 
 	// BIGWORLD_BEGIN(3.13 migration)
-	// Was PyString_AsString.
+	// Was PyUnicode_AsUTF8.
 	const char * pCategoryString = PyUnicode_AsUTF8( objCategoryString );
 	const char * pMessageString = PyUnicode_AsUTF8( objMessageString );
 	// BIGWORLD_END
@@ -61,7 +61,7 @@ PyObject * py_logCommon( PyObject * args, DebugMessagePriority priority,
 	}
 
 	// BIGWORLD_BEGIN(3.13 migration)
-	// Was PyString_Size/PyString_AsString.
+	// Was PyUnicode_GET_LENGTH/PyUnicode_AsUTF8.
 	if ((objLogMetaData != Py_None) &&
 			(PyUnicode_GET_LENGTH( objLogMetaData ) > 0))
 	{

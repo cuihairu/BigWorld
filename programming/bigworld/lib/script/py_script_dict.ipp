@@ -58,10 +58,10 @@ inline ScriptObject ScriptDict::getItem( const char * key,
 	const ERROR_HANDLER & errorHandler ) const
 {
 	// Note: PyDict_GetItem does not set an error if it fails, however
-	// PyString_FromString does set an error, so we break the two apart
+	// PyUnicode_FromString does set an error, so we break the two apart
 	// rather then using PyDict_GetItemString as we do not know what caused
 	// the error.
-	// BIGWORLD_BEGIN(3.13 migration): was PyString_FromString.
+	// BIGWORLD_BEGIN(3.13 migration): was PyUnicode_FromString.
 	PyObject * pKey = PyUnicode_FromString( key );
 	// BIGWORLD_END
 

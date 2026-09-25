@@ -301,7 +301,7 @@ bool PyObjectWatcher::addChild( const char * /*path*/, WatcherPtr /*pChild*/,
 Watcher * PyObjectWatcher::getSpecialWatcher( PyObject * pObject )
 {
 	// BIGWORLD_BEGIN(3.13 migration)
-	// Was PyString_Check || PyUnicode_Check; the bytes/str split replaces
+	// Was PyUnicode_Check || PyUnicode_Check; the bytes/str split replaces
 	// the 2.7 str/unicode pair.
 	if (PyBytes_Check( pObject ) || PyUnicode_Check( pObject ))
 	{
@@ -373,7 +373,7 @@ static PyObject * py_setWatcher( PyObject * args )
 	if (pStr)
 	{
 		// BIGWORLD_BEGIN(3.13 migration)
-		// Was PyString_AsString; str results are unicode now and need an
+		// Was PyUnicode_AsUTF8; str results are unicode now and need an
 		// explicit UTF-8 decode.
 		const char * pCStr = PyUnicode_AsUTF8( pStr );
 
@@ -459,7 +459,7 @@ static PyObject * py_getWatcher( PyObject * args )
 	}
 
 	// BIGWORLD_BEGIN(3.13 migration)
-	// Was PyString_FromString.
+	// Was PyUnicode_FromString.
 	return PyUnicode_FromString( result.c_str() );
 	// BIGWORLD_END
 }
@@ -747,7 +747,7 @@ void getPyObjectWatcherData( PyObject * pyObj,
 		size = sizeof(bool);
 	}
 	// BIGWORLD_BEGIN(3.13 migration)
-	// Was PyInt_Check || PyLong_Check; PyInt has been folded into PyLong.
+	// Was PyLong_Check || PyLong_Check; PyInt has been folded into PyLong.
 	else if (PyLong_Check( pyObj ))
 	{
 		type = WATCHER_TYPE_INT;
@@ -766,7 +766,7 @@ void getPyObjectWatcherData( PyObject * pyObj,
 		PyObject * pUTF8String = PyUnicode_AsUTF8String( pyObj );
 		MF_ASSERT( pUTF8String != NULL );
 		// BIGWORLD_BEGIN(3.13 migration)
-		// Was PyString_GET_SIZE; PyUnicode_AsUTF8String yields bytes.
+		// Was PyUnicode_GET_LENGTH; PyUnicode_AsUTF8String yields bytes.
 		Py_ssize_t fullSize = PyBytes_GET_SIZE( pUTF8String );
 		// BIGWORLD_END
 		Py_DECREF( pUTF8String );
@@ -774,7 +774,7 @@ void getPyObjectWatcherData( PyObject * pyObj,
 		size = ( int32 ) fullSize;
 	}
 	// BIGWORLD_BEGIN(3.13 migration)
-	// Was PyString_Check/PyString_Size on the 2.7 str type.
+	// Was PyUnicode_Check/PyUnicode_GET_LENGTH on the 2.7 str type.
 	else if (PyBytes_Check( pyObj ))
 	{
 		type = WATCHER_TYPE_STRING;
@@ -865,7 +865,7 @@ protected:
 				if (pValStr)
 				{
 					// BIGWORLD_BEGIN(3.13 migration)
-					// Was PyString_AsString.
+					// Was PyUnicode_AsUTF8.
 					const char * pValCStr = PyUnicode_AsUTF8( pValStr );
 					if (pValCStr == NULL)
 					{
@@ -930,7 +930,7 @@ protected:
 				if (pValStr)
 				{
 					// BIGWORLD_BEGIN(3.13 migration)
-					// Was PyString_AsString.
+					// Was PyUnicode_AsUTF8.
 					const char * pValCStr = PyUnicode_AsUTF8( pValStr );
 					if (pValCStr == NULL)
 					{
@@ -1140,7 +1140,7 @@ public:
 			// tuple, set an error then bail out.
 			PyObject *pyStr = PyObject_Str( pArgType );
 			// BIGWORLD_BEGIN(3.13 migration)
-			// Was PyString_AsString.
+			// Was PyUnicode_AsUTF8.
 			const char *typeStr = (pyStr != NULL) ?
 					PyUnicode_AsUTF8( pyStr ) : "(unknown)";
 			// BIGWORLD_END
@@ -1207,7 +1207,7 @@ public:
 				}
 
 				// BIGWORLD_BEGIN(3.13 migration)
-				// Was PyString_Check.
+				// Was PyUnicode_Check.
 				if (!PyUnicode_Check( pName ) || !PyType_Check( pType ))
 				{
 					PyErr_Format( PyExc_ValueError,
@@ -1709,7 +1709,7 @@ bool SimplePythonWatcher::getAsString( const void * base, const char * path,
 	if (isEmptyPath( path ))
 	{
 		// BIGWORLD_BEGIN(3.13 migration)
-		// The 2.7 str branch becomes bytes, and PyString_AsString becomes
+		// The 2.7 str branch becomes bytes, and PyUnicode_AsUTF8 becomes
 		// PyBytes_AsString / PyUnicode_AsUTF8 respectively.
 		if ( PyBytes_Check( pPyObject ) )
 		{
@@ -1747,7 +1747,7 @@ bool SimplePythonWatcher::getAsString( const void * base, const char * path,
 		{
 			PyObject *pPyString = PyObject_Str( pPyObject );
 			// BIGWORLD_BEGIN(3.13 migration)
-			// Was PyString_Check/PyString_AsString.
+			// Was PyUnicode_Check/PyUnicode_AsUTF8.
 			if (PyUnicode_Check( pPyString ))
 			{
 				const char * pCStr = PyUnicode_AsUTF8( pPyString );
@@ -1810,7 +1810,7 @@ bool SimplePythonWatcher::getAsStream( const void * base, const char * path,
 	if (isEmptyPath( path ))
 	{
 		// BIGWORLD_BEGIN(3.13 migration)
-		// The 2.7 str branch becomes bytes, and PyString_AsString becomes
+		// The 2.7 str branch becomes bytes, and PyUnicode_AsUTF8 becomes
 		// PyBytes_AsString / PyUnicode_AsUTF8 respectively.
 		if ( PyBytes_Check( pPyObject ) )
 		{
@@ -1849,7 +1849,7 @@ bool SimplePythonWatcher::getAsStream( const void * base, const char * path,
 		{
 			PyObject *pPyString = PyObject_Str( pPyObject );
 			// BIGWORLD_BEGIN(3.13 migration)
-			// Was PyString_Check/PyString_AsString.
+			// Was PyUnicode_Check/PyUnicode_AsUTF8.
 			if (PyUnicode_Check( pPyString ))
 			{
 				const char * pCStr = PyUnicode_AsUTF8( pPyString );
@@ -1952,7 +1952,7 @@ bool SimplePythonWatcher::visitChildren( const void * base, const char * path,
 				PyObject * pKey =
 					PyObject_Str(PySequence_Fast_GET_ITEM( pKeys, iter ));
 				// BIGWORLD_BEGIN(3.13 migration)
-				// Was PyString_AsString.
+				// Was PyUnicode_AsUTF8.
 				const char * pKeyCStr = (pKey != NULL) ?
 					PyUnicode_AsUTF8( pKey ) : NULL;
 				label = (pKeyCStr != NULL) ? pKeyCStr : "";

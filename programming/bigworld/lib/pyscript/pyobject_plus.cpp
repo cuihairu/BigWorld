@@ -128,7 +128,7 @@ PyObject * PyObjectPlus::pyRepr()
 			this->typeName(), this );
 
 	// BIGWORLD_BEGIN(3.13 migration)
-	// Was PyString_FromString.
+	// Was PyUnicode_FromString.
 	return PyUnicode_FromString( str );
 	// BIGWORLD_END
 }

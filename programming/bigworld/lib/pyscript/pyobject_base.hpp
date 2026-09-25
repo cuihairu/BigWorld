@@ -42,8 +42,10 @@ PyTypeObject THIS_CLASS::s_type_ =									\
 	.tp_basicsize = sizeof(THIS_CLASS),								\
 	.tp_itemsize = 0,													\
 	.tp_dealloc = THIS_CLASS##_tp_dealloc,							\
+	.tp_vectorcall_offset = 0,										\
 	.tp_getattr = 0,													\
 	.tp_setattr = 0,													\
+	.tp_as_async = 0,										\
 	.tp_repr = _tp_repr,												\
 	.tp_as_number = 0,													\
 	.tp_as_sequence = 0,												\
@@ -78,10 +80,15 @@ PyTypeObject THIS_CLASS::s_type_ =									\
 	.tp_is_gc = 0,														\
 	.tp_bases = 0,														\
 	.tp_mro = 0,														\
+	.tp_cache = 0,										\
 	.tp_subclasses = 0,													\
 	.tp_weaklist = 0,													\
 	.tp_del = 0,														\
 	.tp_version_tag = 0,												\
+	.tp_finalize = 0,										\
+	.tp_vectorcall = 0,										\
+	.tp_watched = 0,										\
+	.tp_versions_used = 0,									\
 	/* BIGWORLD_END */													\
 };																		\
 

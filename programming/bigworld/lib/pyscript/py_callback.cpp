@@ -280,7 +280,7 @@ static PyObject * py_callback( PyObject * args )
 	}
 
 	// BIGWORLD_BEGIN(3.13 migration)
-	// Was PyInt_FromLong.
+	// Was PyLong_FromLong.
 	PyObject * pyId = PyLong_FromLong( handle );
 	// BIGWORLD_END
 	return pyId;

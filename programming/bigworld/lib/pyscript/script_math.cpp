@@ -733,7 +733,7 @@ PyObject * PyMatrix::py___setstate__( PyObject * args )
 	}
 	PyObject * pyStr = PyTuple_GET_ITEM( args, 0 );
 	// BIGWORLD_BEGIN(3.13 migration)
-	// Was PyString_Check/PyString_Size; a raw matrix blob is bytes now.
+	// Was PyUnicode_Check/PyUnicode_GET_LENGTH; a raw matrix blob is bytes now.
 	if (!PyBytes_Check( pyStr ) || PyBytes_Size( pyStr ) != sizeof(Matrix))
 	// BIGWORLD_END
 	{
@@ -1343,7 +1343,7 @@ PyObject * PyVector<V>::pyStr()
 	ostr << ')';
 
 	// BIGWORLD_BEGIN(3.13 migration)
-	// Was PyString_FromString.
+	// Was PyUnicode_FromString.
 	return PyUnicode_FromString( ostr.str().c_str() );
 	// BIGWORLD_END
 }
@@ -2152,7 +2152,7 @@ PyObject * PyVector<V>::py___setstate__( PyObject * args )
 		PyObject * pStr = PyTuple_GET_ITEM( args, 0 );
 
 		// BIGWORLD_BEGIN(3.13 migration)
-		// Was PyString_Check/PyString_Size; a raw value blob is bytes now.
+		// Was PyUnicode_Check/PyUnicode_GET_LENGTH; a raw value blob is bytes now.
 		if (PyBytes_Check( pStr ) &&
 			(PyBytes_Size( pStr ) == sizeof( V )))
 		// BIGWORLD_END

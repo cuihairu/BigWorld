@@ -186,7 +186,7 @@ std::ostream& operator<<( std::ostream &o, const PyObjectPtrRef & rpObject )
 			else
 			{
 				// BIGWORLD_BEGIN(3.13 migration)
-				// Was PyString_AsString.
+				// Was PyUnicode_AsUTF8.
 				const char * pCStr = PyUnicode_AsUTF8( pString );
 				o << ((pCStr != NULL) ? pCStr : "");
 				// BIGWORLD_END
@@ -217,7 +217,7 @@ std::istream& operator>>( std::istream &i, PyObjectPtrRef & rpObject )
 	{
 		PyObject * pErr = PyErr_Occurred();
 		// BIGWORLD_BEGIN(3.13 migration)
-		// Was PyString_AsString( PyObject_Str( pErr ) ), which leaked the
+		// Was PyUnicode_AsUTF8( PyObject_Str( pErr ) ), which leaked the
 		// stringified exception; hold and release it explicitly now.
 		PyObject * pErrStr = (pErr != NULL) ? PyObject_Str( pErr ) : NULL;
 		ERROR_MSG( "operator >>: Script execution returned the error '%s'\n",

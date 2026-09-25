@@ -1109,7 +1109,7 @@ public:
 	 */
 	static bool check( const ScriptObject & object )
 	{
-		// BIGWORLD_BEGIN(3.13 migration): was PyInt_Check.
+		// BIGWORLD_BEGIN(3.13 migration): was PyLong_Check.
 		return PyLong_Check( object.get() );
 		// BIGWORLD_END
 	}
@@ -1142,7 +1142,7 @@ public:
 	static ScriptInt createFromString( const char * str, int base,
 		const ERROR_HANDLER & errorHandler )
 	{
-		// BIGWORLD_BEGIN(3.13 migration): was PyInt_FromString.
+		// BIGWORLD_BEGIN(3.13 migration): was PyLong_FromString.
 		PyObject * pInt = PyLong_FromString( str, NULL, base );
 		// BIGWORLD_END
 		// Note: If overflow warnings supression may affect this
@@ -1164,7 +1164,7 @@ public:
 		// actually just get back a reference to the existing object. So it 
 		// should be possible to change the value of 1. I suspect the behaviour 
 		// of Python in this case is undefined. :-)
-		// BIGWORLD_BEGIN(3.13 migration): was PyInt_FromLong.
+		// BIGWORLD_BEGIN(3.13 migration): was PyLong_FromLong.
 		PyObject * pInt = PyLong_FromLong( value );
 		// BIGWORLD_END
 		MF_ASSERT( pInt );
@@ -1320,7 +1320,7 @@ public:
 	static bool check( const ScriptObject & object )
 	{
 		// BIGWORLD_BEGIN(3.13 migration)
-		// Was PyString_Check. ScriptString maps to 3.x str; BW::string
+		// Was PyUnicode_Check. ScriptString maps to 3.x str; BW::string
 		// payloads cross the boundary as UTF-8.
 		return PyUnicode_Check( object.get() );
 		// BIGWORLD_END
@@ -1334,7 +1334,7 @@ public:
 	 */
 	static ScriptString create( const char * str )
 	{
-		// BIGWORLD_BEGIN(3.13 migration): was PyString_FromString.
+		// BIGWORLD_BEGIN(3.13 migration): was PyUnicode_FromString.
 		PyObject * pStr = PyUnicode_FromString( str );
 		// BIGWORLD_END
 		MF_ASSERT( pStr );
@@ -1675,7 +1675,7 @@ public:
 	{
 		// Note: This item return Py_None if the referent no longer exists
 		// BIGWORLD_BEGIN(3.13 migration)
-		// Was PyWeakref_GET_OBJECT, which is deprecated; bwPyWeakrefGetObject
+		// Was bwPyWeakrefGetObject, which is deprecated; bwPyWeakrefGetObject
 		// keeps the borrowed-reference contract.
 		PyObject * pRefedObject =
 			bwPyWeakrefGetObject( this->get() );

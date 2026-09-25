@@ -141,7 +141,7 @@ BW::string Pickler::pickle( ScriptObject object )
 			BW::string str;
 
 			// BIGWORLD_BEGIN(3.13 migration)
-			// Was PyString_AsString/PyString_Size; the pickle protocol
+			// Was PyUnicode_AsUTF8/PyUnicode_GET_LENGTH; the pickle protocol
 			// output is bytes now.
 			str.assign( PyBytes_AsString( pResult ),
 				PyBytes_Size( pResult ) );

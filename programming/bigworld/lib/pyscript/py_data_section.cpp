@@ -498,7 +498,7 @@ bool PyDataSection::pySetAttribute( const ScriptString & attrObj,
 PyObject * PyDataSection::subscript( PyObject* pathArg )
 {
 	// BIGWORLD_BEGIN(3.13 migration)
-	// Was PyString_AsString; str is unicode now and PyUnicode_AsUTF8 sets
+	// Was PyUnicode_AsUTF8; str is unicode now and PyUnicode_AsUTF8 sets
 	// an error on failure, which the check below consumes.
 	const char * path = PyUnicode_AsUTF8( pathArg );
 	// BIGWORLD_END
@@ -556,7 +556,7 @@ PyObject* PyDataSection::py_has_key( PyObject* args )
 	if (pSection_->openSection( sectionName ))
 	{
 		// BIGWORLD_BEGIN(3.13 migration)
-		// Was PyInt_FromLong(1)/PyInt_FromLong(0).
+		// Was PyLong_FromLong(1)/PyLong_FromLong(0).
 		return PyBool_FromLong(1);
 		// BIGWORLD_END
 	}
@@ -588,7 +588,7 @@ PyObject* PyDataSection::py_keys( PyObject* /*args*/ )
 	{
 		PyList_SetItem( pList, i,
 			// BIGWORLD_BEGIN(3.13 migration)
-			// Was PyString_FromString.
+			// Was PyUnicode_FromString.
 			PyUnicode_FromString(
 				pSection_->childSectionName( i ).c_str() ) );
 			// BIGWORLD_END
@@ -657,7 +657,7 @@ PyObject* PyDataSection::py_items( PyObject* /*args*/ )
 
 		PyTuple_SetItem( pTuple, 0,
 			// BIGWORLD_BEGIN(3.13 migration)
-			// Was PyString_FromString.
+			// Was PyUnicode_FromString.
 			PyUnicode_FromString( pChild->sectionName().c_str() ) );
 			// BIGWORLD_END
 		PyTuple_SetItem( pTuple, 1, new PyDataSection( pChild ) );
@@ -700,7 +700,7 @@ void PyDataSection::asBinary( const BW::string & v ) const
  *	This is a simple helper function used by the read functions.
  */
 // BIGWORLD_BEGIN(3.13 migration)
-// Was char * + PyString_Check/PyString_AsString; str is unicode now.
+// Was char * + PyUnicode_Check/PyUnicode_AsUTF8; str is unicode now.
 inline const char * getStringArg( PyObject * args )
 {
 	if (PyTuple_Size( args ) == 1 &&
@@ -1550,7 +1550,7 @@ PyObject * PyDataSection::py_write( PyObject * args )
 	}
 
 	// BIGWORLD_BEGIN(3.13 migration)
-	// Was PyInt_Check; PyInt has been folded into PyLong and out-of-range
+	// Was PyLong_Check; PyInt has been folded into PyLong and out-of-range
 	// values now raise OverflowError inside py_writeInt (call py_writeInt64
 	// explicitly for 64-bit values). The 2.7 str branch routed bytes to
 	// py_writeString and unicode to py_writeWideString; with the 3.x text
@@ -1566,7 +1566,7 @@ PyObject * PyDataSection::py_write( PyObject * args )
 		return this->py_writeFloat( args );
 	}
 	// BIGWORLD_BEGIN(3.13 migration)
-	// Was PyString_Check; see the note above.
+	// Was PyUnicode_Check; see the note above.
 	else if (PyUnicode_Check( pValueObject ))
 	{
 		return this->py_writeString( args );
@@ -1837,7 +1837,7 @@ PyObject * PyDataSection::py_deleteSection( PyObject * args )
 
 	PyObject * pItem = PyTuple_GetItem( args, 0 );
 	// BIGWORLD_BEGIN(3.13 migration)
-	// Was PyString_Check/PyString_AsString.
+	// Was PyUnicode_Check/PyUnicode_AsUTF8.
 	if (PyUnicode_Check( pItem ))
 	{
 		path = PyUnicode_AsUTF8( pItem );

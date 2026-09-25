@@ -1011,9 +1011,9 @@ struct LegacyCompareAdapter
 				"expects a single string argument of correct length" );		\
 		}																	\
 		/* not sure how to use getData here... */							\
-		/* *this = (POD_TYPE*)PyString_AsString( soleArg ); */				\
+		/* *this = (POD_TYPE*)PyUnicode_AsUTF8( soleArg ); */				\
 		PyObject * goodValue = Script::getData(								\
-			/* BIGWORLD_BEGIN(3.13 migration) Was PyString_AsString */		\
+			/* BIGWORLD_BEGIN(3.13 migration) Was PyUnicode_AsUTF8 */		\
 			(POD_TYPE*)PyBytes_AsString( soleArg ) );						\
 			/* BIGWORLD_END */												\
 		this->copy( *goodValue );	/* hmmm */								\

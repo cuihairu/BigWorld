@@ -119,8 +119,8 @@ PyObject * PyOutputStream::py_write( PyObject * args )
 				PyTuple_GET_ITEM( args, 0 ) ),
 			ScriptObject::FROM_NEW_REFERENCE );
 
-		pOwner_->handleWrite( BW::string( PyString_AsString( repr.get() ),
-			PyString_GET_SIZE( repr.get() ) ), isStderr_ );
+		pOwner_->handleWrite( BW::string( PyUnicode_AsUTF8( repr.get() ),
+			PyUnicode_GET_LENGTH( repr.get() ) ), isStderr_ );
 
 		Py_RETURN_NONE;
 	}
