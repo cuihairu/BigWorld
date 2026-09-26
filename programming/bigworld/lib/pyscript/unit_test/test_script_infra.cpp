@@ -3,10 +3,23 @@
 
 #include "pyscript/keyword_parser.hpp"
 #include "pyscript/pickler.hpp"
+#include "pyscript/personality.hpp"
+#include "pyscript/py_debug_message_file_logger.hpp"
+#include "pyscript/py_factory_method_link.hpp"
 #include "pyscript/script.hpp"
+#include "resmgr/bwresource.hpp"
 
 
 BW_BEGIN_NAMESPACE
+
+#if !defined( BW_BLOB_CONFIG )
+// The ResMgr module functions are registered by res_mgr_script.o, but no
+// test here references its C++ symbols - the archive member would never be
+// pulled into the link and the Python module would not exist. Its token is
+// the only non-static symbol in that file, so force the link with it.
+extern int ResMgr_token;
+volatile int g_p7ForceResMgrLink = ResMgr_token;
+#endif // !defined( BW_BLOB_CONFIG )
 
 namespace // (anonymous)
 {
@@ -638,6 +651,559 @@ TEST_F( PyScriptUnitTestHarness, Pickler_finaliseReinit )
 	BW::string pickled = Pickler::pickle( pOriginal );
 	CHECK( pickled.size() > 2 );
 	CHECK( pythonEqual( pOriginal.get(), Pickler::unpickle( pickled ).get() ) );
+	CHECK( !PyErr_Occurred() );
+}
+
+
+// -----------------------------------------------------------------------------
+// Section: ResMgr module (res_mgr_script.cpp)
+// -----------------------------------------------------------------------------
+
+namespace // (anonymous)
+{
+
+/**
+ *	Evaluates an expression against the ResMgr module and reports the
+ *	exception ("TypeName: message") instead of letting it escape, or "" when
+ *	the expression succeeded.
+ */
+BW::string raisedError( const char * expr )
+{
+	BW::string code( "p7_exc = None\ntry:\n\t" );
+	code += expr;
+	code += "\nexcept Exception as e:\n"
+			"\tp7_exc = type( e ).__name__ + ': ' + str( e )\n";
+	PyRun_SimpleString( code.c_str() );
+	PyErr_Clear();
+
+	ScriptObject pMessage = evalObject( "p7_exc" );
+	if ((pMessage.get() == NULL) || !PyUnicode_Check( pMessage.get() ))
+	{
+		PyErr_Clear();
+		// Either the eval failed or the expression did not raise.
+		return BW::string();
+	}
+	BW::string result( PyUnicode_AsUTF8( pMessage.get() ) );
+	return result;
+}
+
+
+/**
+ *	Reads a str attribute off an object into a BW::string ("" when missing
+ *	or not a string; the caller's CHECK reports the mismatch).
+ */
+BW::string attributeString( PyObject * pObj, const char * name )
+{
+	PyObject * pValue = PyObject_GetAttrString( pObj, name );
+	if ((pValue == NULL) || !PyUnicode_Check( pValue ))
+	{
+		Py_XDECREF( pValue );
+		PyErr_Clear();
+		return BW::string();
+	}
+	BW::string result( PyUnicode_AsUTF8( pValue ) );
+	Py_DECREF( pValue );
+	return result;
+}
+
+} // end namespace (anonymous)
+
+
+// The path predicates route straight into the resource system: a known
+// fixture file is a file and not a directory, anything else is neither.
+TEST_F( PyScriptUnitTestHarness, ResMgr_fileQueries )
+{
+	ScriptObject pIsFile( evalObject(
+		"__import__('ResMgr').isFile( 'test_py_data_section.xml' )" ) );
+	CHECK( pIsFile.get() != NULL );
+	CHECK_EQUAL( 1, PyObject_IsTrue( pIsFile.get() ) );
+
+	ScriptObject pNotFile( evalObject(
+		"__import__('ResMgr').isFile( 'no_such_p7.bin' )" ) );
+	CHECK( pNotFile.get() != NULL );
+	CHECK_EQUAL( 0, PyObject_IsTrue( pNotFile.get() ) );
+
+	ScriptObject pNotDir( evalObject(
+		"__import__('ResMgr').isDir( 'test_py_data_section.xml' )" ) );
+	CHECK( pNotDir.get() != NULL );
+	CHECK_EQUAL( 0, PyObject_IsTrue( pNotDir.get() ) );
+
+	ScriptObject pNoDir( evalObject(
+		"__import__('ResMgr').isDir( 'no_such_p7.bin' )" ) );
+	CHECK( pNoDir.get() != NULL );
+	CHECK_EQUAL( 0, PyObject_IsTrue( pNoDir.get() ) );
+
+	CHECK( !PyErr_Occurred() );
+}
+
+
+// openSection resolves an existing resource into a PyDataSection (its type
+// was published by PyFactoryMethodLink as "ResMgr.DataSection"), purge
+// forgets it from the cache (recursive or not) and it can be reopened.
+TEST_F( PyScriptUnitTestHarness, ResMgr_openSectionFoundPurgeReopen )
+{
+	ScriptObject pSection( evalObject(
+		"__import__('ResMgr').openSection( 'test_py_data_section.xml' )" ) );
+	CHECK( pSection.get() != NULL );
+	CHECK( strstr( pSection.get()->ob_type->tp_name, "DataSection" ) !=
+		NULL );
+
+	PyObject * pPurge = Script::runString(
+		"__import__('ResMgr').purge( 'test_py_data_section.xml' )", false );
+	CHECK( pPurge != NULL );
+	Py_XDECREF( pPurge );
+
+	PyObject * pPurgeAll = Script::runString(
+		"__import__('ResMgr').purge( 'test_py_data_section.xml', True )",
+		false );
+	CHECK( pPurgeAll != NULL );
+	Py_XDECREF( pPurgeAll );
+
+	ScriptObject pReopened( evalObject(
+		"__import__('ResMgr').openSection( 'test_py_data_section.xml' )" ) );
+	CHECK( pReopened.get() != NULL );
+	CHECK( strstr( pReopened.get()->ob_type->tp_name, "DataSection" ) !=
+		NULL );
+
+	// The module attribute 'root' hands out the root data section.
+	ScriptObject pRoot( evalObject( "__import__('ResMgr').root" ) );
+	CHECK( pRoot.get() != NULL );
+	CHECK( strstr( pRoot.get()->ob_type->tp_name, "DataSection" ) != NULL );
+
+	CHECK( !PyErr_Occurred() );
+}
+
+
+// A missing resource opens as None. With makeNewSection a missing
+// intermediate directory is materialised and a fresh section handed out,
+// while a path under an existing FILE yields a virtual child section; the
+// directory created here is erased again so the res tree stays clean.
+TEST_F( PyScriptUnitTestHarness, ResMgr_openSectionMissingAndCreateFailure )
+{
+	ScriptObject pMissing( evalObject(
+		"__import__('ResMgr').openSection( 'no_such_p7_dir/child.xml' )" ) );
+	CHECK( pMissing.get() == Py_None );
+
+	ScriptObject pCreated( evalObject(
+		"__import__('ResMgr').openSection( 'no_such_p7_dir/child.xml', True )"
+		) );
+	CHECK( pCreated.get() != NULL );
+	CHECK( strstr( pCreated.get()->ob_type->tp_name, "DataSection" ) !=
+		NULL );
+
+	// makeNewSection under an existing FILE creates a virtual child section
+	// of that file's DataSection - no exception, and nothing touches disk.
+	ScriptObject pNested( evalObject(
+		"__import__('ResMgr').openSection( "
+		"'test_py_data_section.xml/sub/child.xml', True )" ) );
+	CHECK( pNested.get() != NULL );
+	CHECK( strstr( pNested.get()->ob_type->tp_name, "DataSection" ) !=
+		NULL );
+
+	// Clean up the directory the successful creation left behind.
+	BW::string createdDir = BWResource::getPath( 0 ) + "/no_such_p7_dir";
+	CHECK( remove( createdDir.c_str() ) == 0 );
+
+	CHECK( !PyErr_Occurred() );
+}
+
+
+// save() of a resource that is not in memory reports an IO error through
+// the RETOK wrapper, which turns the false return into a raised exception.
+TEST_F( PyScriptUnitTestHarness, ResMgr_saveUnknownResource )
+{
+	BW::string error = raisedError(
+		"__import__('ResMgr').save( 'no_such_p7.xml' )" );
+	// IOError is spelled OSError since Python 3.3.
+	CHECK_EQUAL( BW::string( "OSError: Save of no_such_p7.xml failed" ),
+		error );
+
+	CHECK( !PyErr_Occurred() );
+}
+
+
+// resolveToAbsolutePath returns an absolute path for resources that exist,
+// and falls back to the first res path (or the input itself when already
+// absolute) for ones that do not.
+TEST_F( PyScriptUnitTestHarness, ResMgr_resolveToAbsolutePath )
+{
+	ScriptObject pExisting( evalObject(
+		"__import__('ResMgr').resolveToAbsolutePath( "
+		"'test_py_data_section.xml' )" ) );
+	CHECK( pExisting.get() != NULL );
+	CHECK( PyUnicode_Check( pExisting.get() ) );
+	BW::string existing( PyUnicode_AsUTF8( pExisting.get() ) );
+	CHECK( existing.find( "test_py_data_section.xml" ) !=
+		BW::string::npos );
+	CHECK( !existing.empty() && existing[ 0 ] == '/' );
+
+	ScriptObject pFallback( evalObject(
+		"__import__('ResMgr').resolveToAbsolutePath( 'no_such_p7.bin' )" ) );
+	CHECK( pFallback.get() != NULL );
+	BW::string fallback( PyUnicode_AsUTF8( pFallback.get() ) );
+	CHECK( fallback.find( "no_such_p7.bin" ) != BW::string::npos );
+	CHECK( !fallback.empty() && fallback[ 0 ] == '/' );
+
+	ScriptObject pAbsolute( evalObject(
+		"__import__('ResMgr').resolveToAbsolutePath( "
+		"'/tmp/no_such_p7.bin' )" ) );
+	CHECK( pAbsolute.get() != NULL );
+	CHECK( strcmp( PyUnicode_AsUTF8( pAbsolute.get() ),
+		"/tmp/no_such_p7.bin" ) == 0 );
+
+	CHECK( !PyErr_Occurred() );
+}
+
+
+// localise hands unknown keys straight back (RETURN_PARAM_IF_NOT_EXISTING)
+// and rejects non-string arguments with a TypeError.
+TEST_F( PyScriptUnitTestHarness, ResMgr_localise )
+{
+	ScriptObject pUnknown( evalObject(
+		"__import__('ResMgr').localise( 'p7 no such key' )" ) );
+	CHECK( pUnknown.get() != NULL );
+	CHECK( PyUnicode_Check( pUnknown.get() ) );
+	CHECK( strcmp( PyUnicode_AsUTF8( pUnknown.get() ),
+		"p7 no such key" ) == 0 );
+
+	ScriptObject pEmpty( evalObject( "__import__('ResMgr').localise( '' )" ) );
+	CHECK( pEmpty.get() != NULL );
+	CHECK( strcmp( PyUnicode_AsUTF8( pEmpty.get() ), "" ) == 0 );
+
+	BW::string error = raisedError(
+		"__import__('ResMgr').localise( 42 )" );
+	CHECK( error.find( "TypeError" ) == 0 );
+
+	CHECK( !PyErr_Occurred() );
+}
+
+
+// -----------------------------------------------------------------------------
+// Section: Personality (personality.cpp)
+// -----------------------------------------------------------------------------
+
+// A failed import leaves no personality instance behind, consumes the import
+// error, and getMember degrades to a null ScriptObject in that state.
+TEST_F( PyScriptUnitTestHarness, Personality_importMissingLeavesStateEmpty )
+{
+	// Nothing else in this binary imports a personality module before us.
+	CHECK( Personality::instance().get() == NULL );
+
+	ScriptModule imported = Personality::import( "p7_no_such_module_zz" );
+	CHECK( imported.get() == NULL );
+	CHECK( !PyErr_Occurred() );
+
+	CHECK( Personality::instance().get() == NULL );
+
+	ScriptObject pMember = Personality::getMember( "anything" );
+	CHECK( pMember.get() == NULL );
+
+	ScriptObject pTwoName = Personality::getMember( "a", "b" );
+	CHECK( pTwoName.get() == NULL );
+
+	CHECK( !PyErr_Occurred() );
+}
+
+
+// A real personality module is imported once (re-imports return the same
+// instance), its members are reachable with the deprecated-name fallback,
+// and callOnInit forwards isReload to onInit.
+TEST_F( PyScriptUnitTestHarness, Personality_importMembersAndOnInit )
+{
+	CHECK( !runAndClear(
+		"import sys, types\n"
+		"_p7mod = types.ModuleType( 'p7_personality_mod' )\n"
+		"_p7mod.onInitCalls = []\n"
+		"def _p7onInit( isReload ):\n"
+		"\t_p7mod.onInitCalls.append( isReload )\n"
+		"_p7mod.onInit = _p7onInit\n"
+		"_p7mod.onFiniCalls = []\n"
+		"def _p7onFini():\n"
+		"\t_p7mod.onFiniCalls.append( 1 )\n"
+		"_p7mod.onFini = _p7onFini\n"
+		"_p7mod.greeting = 'hello'\n"
+		"_p7mod.nickname = 'old nick'\n"
+		"sys.modules['p7_personality_mod'] = _p7mod\n" ) );
+	CHECK( !PyErr_Occurred() );
+
+	ScriptModule imported = Personality::import( "p7_personality_mod" );
+	CHECK( imported.get() != NULL );
+	CHECK( Personality::instance().get() == imported.get() );
+
+	// The second import warns and hands back the stored instance.
+	ScriptModule again = Personality::import( "p7_personality_mod" );
+	CHECK( again.get() == imported.get() );
+
+	ScriptObject pGreeting = Personality::getMember( "greeting" );
+	CHECK( pGreeting.get() != NULL );
+	CHECK( PyUnicode_Check( pGreeting.get() ) );
+	CHECK( strcmp( PyUnicode_AsUTF8( pGreeting.get() ), "hello" ) == 0 );
+
+	// The current name is missing, so the deprecated one is used instead.
+	ScriptObject pFallback = Personality::getMember( "absent", "nickname" );
+	CHECK( pFallback.get() != NULL );
+	CHECK( strcmp( PyUnicode_AsUTF8( pFallback.get() ), "old nick" ) == 0 );
+
+	ScriptObject pNothing = Personality::getMember( "absent", "alsoAbsent" );
+	CHECK( pNothing.get() == NULL );
+
+	CHECK( Personality::callOnInit( /* isReload */ false ) );
+	CHECK( Personality::callOnInit( /* isReload */ true ) );
+
+	ScriptObject pCalls( evalObject( "_p7mod.onInitCalls" ) );
+	CHECK( pCalls.get() != NULL );
+	if (pCalls.get() != NULL)
+	{
+		CHECK_EQUAL( Py_ssize_t( 2 ), PyList_Size( pCalls.get() ) );
+		CHECK_EQUAL( 0, PyObject_IsTrue( PyList_GetItem( pCalls.get(), 0 ) ) );
+		CHECK_EQUAL( 1, PyObject_IsTrue( PyList_GetItem( pCalls.get(), 1 ) ) );
+	}
+
+	CHECK( !PyErr_Occurred() );
+}
+
+
+// -----------------------------------------------------------------------------
+// Section: PyDebugMessageFileLogger (py_debug_message_file_logger.cpp)
+// -----------------------------------------------------------------------------
+
+// BigWorld.FileLogger applies its defaults: the given file name, append
+// mode, empty category, disabled logging - and 'enable' is writable.
+TEST_F( PyScriptUnitTestHarness, FileLogger_factoryDefaultsAndEnable )
+{
+	ScriptObject pLogger( evalObject(
+		"__import__('BigWorld').FileLogger( '/tmp/p7.log' )" ) );
+	CHECK( pLogger.get() != NULL );
+	if (pLogger.get() == NULL)
+	{
+		PyErr_Clear();
+		return;
+	}
+
+	CHECK_EQUAL( "/tmp/p7.log",
+		attributeString( pLogger.get(), "fileName" ) );
+	CHECK_EQUAL( "a", attributeString( pLogger.get(), "openMode" ) );
+	CHECK_EQUAL( "", attributeString( pLogger.get(), "category" ) );
+
+	// enable defaults to False and round-trips through the RW accessor.
+	PyObject * pEnabled = PyObject_GetAttrString( pLogger.get(), "enable" );
+	CHECK( pEnabled != NULL );
+	CHECK_EQUAL( 0, PyObject_IsTrue( pEnabled ) );
+	Py_DECREF( pEnabled );
+
+	CHECK_EQUAL( 0, PyObject_SetAttrString( pLogger.get(), "enable",
+		Py_True ) );
+	pEnabled = PyObject_GetAttrString( pLogger.get(), "enable" );
+	CHECK( pEnabled != NULL );
+	CHECK_EQUAL( 1, PyObject_IsTrue( pEnabled ) );
+	Py_DECREF( pEnabled );
+
+	CHECK( !PyErr_Occurred() );
+}
+
+
+// Explicit severities/sources/category/openMode are converted from their
+// Python spellings into masks and rendered back as ';'-joined names.
+TEST_F( PyScriptUnitTestHarness, FileLogger_explicitSeveritiesSources )
+{
+	ScriptObject pLogger( evalObject(
+		"__import__('BigWorld').FileLogger( '/tmp/p7.log', "
+		"severities = ( 'WARNING', 'ERROR' ), "
+		"category = 'P7Cat', "
+		"sources = 'SCRIPT', "
+		"openMode = 'w' )" ) );
+	CHECK( pLogger.get() != NULL );
+	if (pLogger.get() == NULL)
+	{
+		PyErr_Clear();
+		return;
+	}
+
+	BW::string severities = attributeString( pLogger.get(), "severities" );
+	CHECK( severities.find( "WARNING" ) != BW::string::npos );
+	CHECK( severities.find( "ERROR" ) != BW::string::npos );
+	CHECK( severities.find( "TRACE" ) == BW::string::npos );
+
+	BW::string sources = attributeString( pLogger.get(), "sources" );
+	CHECK( sources.find( "SCRIPT" ) != BW::string::npos );
+	CHECK( sources.find( "CPP" ) == BW::string::npos );
+
+	// DebugMessageFileLogger::config() case-folds the category so log
+	// filtering is case-insensitive.
+	CHECK_EQUAL( BW::string( "p7cat" ),
+		attributeString( pLogger.get(), "category" ) );
+	CHECK_EQUAL( BW::string( "w" ),
+		attributeString( pLogger.get(), "openMode" ) );
+
+	// A None severities/sources argument means "leave at ALL" rather than
+	// "no severities", and openMode accepts append as well as overwrite.
+	ScriptObject pNoneArgs( evalObject(
+		"__import__('BigWorld').FileLogger( '/tmp/p7.log', "
+		"severities = None, sources = None, openMode = 'a' )" ) );
+	CHECK( pNoneArgs.get() != NULL );
+	CHECK( attributeString( pNoneArgs.get(), "severities" ).find(
+		"TRACE" ) != BW::string::npos );
+	CHECK( attributeString( pNoneArgs.get(), "sources" ).find(
+		"CPP" ) != BW::string::npos );
+
+	CHECK( !PyErr_Occurred() );
+}
+
+
+// Bad argument types raise TypeError, unknown names and modes raise
+// ValueError, and the required fileName cannot be omitted.
+TEST_F( PyScriptUnitTestHarness, FileLogger_invalidArguments )
+{
+	BW::string error;
+
+	error = raisedError( "__import__('BigWorld').FileLogger()" );
+	CHECK( error.find( "TypeError" ) == 0 );
+
+	error = raisedError(
+		"__import__('BigWorld').FileLogger( '/tmp/p7.log', severities = 42 )" );
+	CHECK( error.find( "TypeError" ) == 0 );
+	CHECK( error.find( "severities" ) != BW::string::npos );
+
+	error = raisedError(
+		"__import__('BigWorld').FileLogger( '/tmp/p7.log', "
+		"severities = ( 'BOGUS', ) )" );
+	CHECK( error.find( "ValueError" ) == 0 );
+
+	error = raisedError(
+		"__import__('BigWorld').FileLogger( '/tmp/p7.log', sources = 42 )" );
+	CHECK( error.find( "TypeError" ) == 0 );
+	CHECK( error.find( "sources" ) != BW::string::npos );
+
+	error = raisedError(
+		"__import__('BigWorld').FileLogger( '/tmp/p7.log', "
+		"sources = ( 'NOPE', ) )" );
+	CHECK( error.find( "ValueError" ) == 0 );
+
+	error = raisedError(
+		"__import__('BigWorld').FileLogger( '/tmp/p7.log', openMode = 'x' )" );
+	CHECK( error.find( "ValueError" ) == 0 );
+
+	CHECK( !PyErr_Occurred() );
+}
+
+
+// No config file was applied in the test binary, so defaultLoggers hands
+// back an empty list.
+TEST_F( PyScriptUnitTestHarness, FileLogger_defaultLoggersEmpty )
+{
+	ScriptObject pLoggers( evalObject(
+		"__import__('BigWorld').defaultLoggers()" ) );
+	CHECK( pLoggers.get() != NULL );
+	CHECK( PyList_Check( pLoggers.get() ) );
+	CHECK_EQUAL( Py_ssize_t( 0 ), PyList_Size( pLoggers.get() ) );
+
+	CHECK( !PyErr_Occurred() );
+}
+
+
+// The C++ registry caps the config-created loggers at MAX_FILE_LOGGERS,
+// indexes below the size return what was added, and anything past the end
+// is a null pointer.
+TEST_F( PyScriptUnitTestHarness, FileLoggers_registryLimit )
+{
+	// The class constant is only declared in-class, so copy it into a local
+	// before passing it anywhere - taking its address directly would need an
+	// out-of-line definition.
+	const size_t MAX_LOGGERS = ConfigCreatedFileLoggers::MAX_FILE_LOGGERS;
+
+	ConfigCreatedFileLoggers registry;
+
+	PyDebugMessageFileLoggerPtr pFirst(
+		new PyDebugMessageFileLogger(),
+		PyDebugMessageFileLoggerPtr::FROM_NEW_REFERENCE );
+	CHECK( registry.addFileLogger( pFirst ) );
+
+	for (size_t i = 1; i < MAX_LOGGERS; ++i)
+	{
+		PyDebugMessageFileLoggerPtr pLogger(
+			new PyDebugMessageFileLogger(),
+			PyDebugMessageFileLoggerPtr::FROM_NEW_REFERENCE );
+		CHECK( registry.addFileLogger( pLogger ) );
+	}
+	CHECK_EQUAL( MAX_LOGGERS, registry.len() );
+
+	// Full house: the next add is refused.
+	PyDebugMessageFileLoggerPtr pOverflow(
+		new PyDebugMessageFileLogger(),
+		PyDebugMessageFileLoggerPtr::FROM_NEW_REFERENCE );
+	CHECK( !registry.addFileLogger( pOverflow ) );
+	CHECK_EQUAL( MAX_LOGGERS, registry.len() );
+
+	CHECK( registry[ 0 ].get() == pFirst.get() );
+	CHECK( registry[ MAX_LOGGERS ].get() == NULL );
+	CHECK( registry[ MAX_LOGGERS + 1 ].get() == NULL );
+
+	CHECK( !PyErr_Occurred() );
+}
+
+
+// -----------------------------------------------------------------------------
+// Section: PyFactoryMethodLink (py_factory_method_link.cpp)
+// -----------------------------------------------------------------------------
+
+namespace // (anonymous)
+{
+
+// A bare type object the link can rename and publish; nothing else in the
+// process references it, so mutating tp_name is safe. The initialiser
+// struct fills in the fields PyType_Ready needs (mimicking
+// PyVarObject_HEAD_INIT: one reference so the module's reference never
+// drops the static object to zero, and the metatype itself) - it must be
+// ready before Script::init runs the link's init() job, which is long
+// before any test body executes.
+static PyTypeObject g_p7LinkType;
+
+struct P7LinkTypeInitialiser
+{
+	P7LinkTypeInitialiser()
+	{
+		Py_SET_REFCNT( &g_p7LinkType, 1 );
+		Py_SET_TYPE( &g_p7LinkType, &PyType_Type );
+		g_p7LinkType.tp_name = const_cast<char *>( "p7.RawLink" );
+		g_p7LinkType.tp_basicsize = sizeof( PyObject );
+		g_p7LinkType.tp_flags = Py_TPFLAGS_DEFAULT;
+	}
+};
+static P7LinkTypeInitialiser g_p7LinkTypeInitialiser;
+
+// Constructed at static-init time exactly like the engine's own links -
+// the InitTimeJob base refuses construction once Script::init has run.
+static PyFactoryMethodLink g_p7Link( "p7linkmod", "P7LinkedType",
+	&g_p7LinkType );
+
+} // end namespace (anonymous)
+
+
+// Script::init ran the link's job: the type was readied, renamed to
+// module.method and published on the module. fini() restores the original
+// name, and a repeated fini is a no-op.
+TEST_F( PyScriptUnitTestHarness, FactoryMethodLink_initAndFini )
+{
+	PyTypeObject * pType = &g_p7LinkType;
+
+	// The type was published under the method name.
+	PyObject * pModule = PyImport_AddModule( "p7linkmod" );
+	CHECK( pModule != NULL );
+	PyObject * pPublished = PyObject_GetAttrString( pModule,
+		"P7LinkedType" );
+	CHECK( pPublished == (PyObject *)pType );
+	Py_XDECREF( pPublished );
+
+	// tp_name now carries the qualified name.
+	CHECK( strcmp( pType->tp_name, "p7linkmod.P7LinkedType" ) == 0 );
+
+	g_p7Link.fini();
+	CHECK( strcmp( pType->tp_name, "p7.RawLink" ) == 0 );
+
+	// A second fini has nothing left to restore.
+	g_p7Link.fini();
+	CHECK( strcmp( pType->tp_name, "p7.RawLink" ) == 0 );
+
 	CHECK( !PyErr_Occurred() );
 }
 

@@ -243,3 +243,25 @@ pyscript_test 新增 7 个用例（94→101；全量 21 模块 955→962），�
 3. 测试里产生待决异常后必须消费式取错或紧跟 `PyErr_Clear`，否则会毒化下一用例的 `PyRun_String`（本批 7 例反复踩到）。
 
 分工记录：本批与批次 6（§7.6）由两个并行会话在同一工作树上分头进行——批次 6 认领 pickler + keyword_parser，本批只认领 `py_traceback`，互不触碰对方文件；`test_pickler.cpp` 依批次 6 的决定保持 untracked 不入库。提交前以 `git status` 逐文件核对，本批只含 `test_py_traceback.cpp`、`res/test_py_traceback_mod.py`、`Makefile.rules`、`py_traceback.cpp`、本文档。
+
+### 7.8 覆盖率补强批次 8：lib/pyscript 四个零覆盖文件（2026-09-26）
+
+pyscript_test 新增 14 个用例（101→115；全量 21 模块 962→976），全部追加进批次 6 建立的 `test_script_infra.cpp`，覆盖此前完全零测试的四个编译产物：`res_mgr_script.cpp`、`personality.cpp`、`py_debug_message_file_logger.cpp`、`py_factory_method_link.cpp`。另有两文件确认根本不在 Linux 构建里：`py_memory_log.cpp`（`log_malloc` 声明 `size_t`/定义 `unsigned int` 在 x86_64 上是重声明冲突，未入构建）与 `automation.cpp`（`LPCTSTR`/`bw_wtoutf8` Windows 专用），无法也无需测试。
+
+**ResMgr 模块（6 例）**：`isFile`/`isDir` 直查资源系统；`openSection` 命中返回 DataSection、缺资源返回 None；`purge`（含递归）后可重开；`ResMgr.root` 属性。三个曾判错的行为：① `openSection(id, True)` 在中间目录缺失时会**真的在第一个 res 路径（即源码 unit_test/res）里建出目录**并返回新 section——用例结尾用 `remove()` 清理，防止污染源码树；② makeNew 挂在**已有文件**路径下（`xxx.xml/sub/child.xml`）则成功返回文件 DataSection 的虚拟子节点、不落盘——"Could not make new section" ValueError 只在父节点不可建时出现；③ `save()` 未缓存资源抛 `OSError: Save of %s failed`（RETOK 的 false 转 raise；Py3 的 IOError 已是 OSError 别名，`type(e).__name__` 拼出的是 "OSError"）。`resolveToAbsolutePath` 命中→绝对路径、缺失相对→挂第一个 res 路径、缺失绝对→原样返回；`localise` 对未知 key 按 `RETURN_PARAM_IF_NOT_EXISTING` 原样回串，非字符串参数 TypeError。
+
+**Personality（2 例）**：import 失败留下空实例且异常被 `ScriptErrorPrint` 消费；import 成功后二次 import 走 WARNING 并返回同一实例；`getMember` 单名/双名（弃用名回退）；`callOnInit` 把 isReload 传给 `onInit` 并注册 FiniTimeJob（进程退出时才会触发 `onFini`，fixture 模块须存活到那时——留在 `sys.modules` 即可）。
+
+**PyDebugMessageFileLogger（5 例）**：`BigWorld.FileLogger(...)` 工厂的默认值（append、空 category、enable False 可读写）与显式配置（severities 元组/单串两形态、sources、openMode）；非法参数矩阵（缺 fileName→TypeError、severities/sources 非元组非串→TypeError、未知名→ValueError、openMode 非 a/w→ValueError；`None` 表示保留 ALL）；`defaultLoggers()` 空表；C++ 侧 `ConfigCreatedFileLoggers` 容量上限（MAX_FILE_LOGGERS=5，满后拒收，越界下标返回 NULL）。两个事实：`config()` 对 category 做 **tolower 归一**（cstdmf:315，过滤大小写不敏感）；severities/sources 属性回读为 `bitsToString` 的 **`;` 连接串**。注意 FileLogger 测试的 fileName 一律指向 `/tmp`——`enable=True` 会真的开文件，相对名会在测试 CWD（unit_tests 目录）落盘。
+
+**PyFactoryMethodLink（1 例）**：引擎用法是**静态初始化期构造**——其基类 `Script::InitTimeJob` 在 `Script::init` 之后构造会触发 CRITICAL（"constructed after script init time!"）直接 abort，测试里临时构造必炸。用例改为文件作用域静态实例 + 静态类型字段初始化器（复刻 `PyVarObject_HEAD_INIT`：引用计数 1、元类型 `&PyType_Type`，字段须在 Script::init 跑 job 前备好），测试体只验证 Script::init 已把类型以限定名发布到模块（tp_name 变 `module.method`，这正是 PyDataSection 的 tp_name 显示为 **"ResMgr.DataSection"** 的机制）、`fini()` 恢复原名且二次 fini 无操作。
+
+**链接器坑（ResMgr 模块整体缺失的根因）**：测试对 res_mgr_script.o 没有任何 C++ 符号引用（只经 Python 字符串访问），静态库根本不会把它拉进可执行文件——ResMgr 模块在测试进程里不存在，`__import__('ResMgr')` 直接失败。该文件唯一非静态符号是 `ResMgr_token`，用 `volatile int g = ResMgr_token;` 强制收敛档案成员后模块才可用。
+
+**跨用例状态污染事故（本批最重要的教训）**：`PythonInputSubstituter::substitute(line, NULL, fn)` 在模块为 NULL 时**回落到 `Personality::instance()`**（python_input_substituter.cpp:28）。批次 5 的用例以"无 personality 模块"为前提断言 NULL 分支；本批导入 personality 后该前提失效——回落路径 getattr 我的 fixture 模块的 'expand' 失败，**AttributeError 挂起**，毒化下一个用例（PyLogging）的 `PyImport_ImportModule("BigWorld")`，表现为一个与肇事者毫无表面关联的确定性失败（gdb 断点 + `PyErr_GetRaisedException()` 才定位到）。修复：更新批次 5 该断言块的注释并在其后 `PyErr_Clear()`。结论：**Personality 单例是进程级全局状态，导入它的测试会改变其后所有用例的引擎行为路径**，认领 Personality 测试时必须全局排查 `Personality::instance()` 的消费者（目前仅 input_substituter 一处）。
+
+**CppUnitLite2 陷阱**：`CHECK_EQUAL( const char *, const char * )` 比较的是**指针**——内容相同的字面量与 `PyUnicode_AsUTF8()` 结果必不相等，报错还显示为"expected: 'x' but was: 'x'"。凡与运行时字符串比较，要么 `strcmp(...)==0`，要么包成 `BW::string`。
+
+**并行会话碰撞实录（批次 6 之后第二轮）**：① 被打断的构建在编译中途被杀，留下 **0 字节 .o 且时间戳与源文件同秒**——make 判定"最新"永远跳过重编，二进制静默缺 30 个用例（86 vs 115），`nm` 查不到新测试符号是判别特征；对策是 `touch` 源文件强制重编。② opencode 在同一 obj 目录并发构建/跑全量套件，期间二进制被对方重链成中间态；对策是提交前自查 `ps` 确认无并发 make，且**只相信自己刚构建并立即运行的二进制**。③ opencode 同期提交了它的批次 7（debf3038，py_traceback 7 例），并在我迭代期间给 `py_debug_message_file_logger.cpp` 补了 `MAX_FILE_LOGGERS` 的类外定义、调整了 lib Makefile.rules 源序——均为其未提交改动，本批不触碰。
+
+提交范围：`test_script_infra.cpp`（+14 例与上述修复）、`test_script_utilities.cpp`（回落分支断言更新）、本文档。opencode 的未提交改动（`py_debug_message_file_logger.cpp`、lib `Makefile.rules`、`test_script_events.cpp`、`test_stl_to_py.cpp`、`test_pickler.cpp`）一律不收。

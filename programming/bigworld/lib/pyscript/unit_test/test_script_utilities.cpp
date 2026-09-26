@@ -231,11 +231,15 @@ TEST_F( PyScriptUnitTestHarness, InputSubstituter_behaviour )
 	line = PythonInputSubstituter::substitute( "in", pModule, "expand" );
 	CHECK_EQUAL( BW::string( "expanded:in" ), line );
 
-	// --- No module at all: with no personality module loaded the line is
-	// returned unchanged (no error left behind). ---
+	// --- No module at all: the substitute call falls back to the
+	// personality module (imported by the Personality tests earlier in
+	// this binary). Without an 'expand' attribute it yields no expansion,
+	// the line comes back unchanged and the failed lookup leaves its
+	// exception pending - clear it for the next test. ---
 	line = PythonInputSubstituter::substitute(
 		"as is", NULL, "expand" );
 	CHECK_EQUAL( BW::string( "as is" ), line );
+	PyErr_Clear();
 }
 
 
