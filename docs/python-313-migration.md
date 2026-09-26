@@ -1,4 +1,4 @@
-# BigWorld 内嵌 Python 2.7.3 → 3.13.15 迁移
+# BigWorld 内嵌 Python 2.7.3 [3.13.15 迁移]
 
 > 任务：把 BigWorld 集成的 Python 从 2.7.3 升级到 3.13.15（源码树整换 + 补丁重移植 + C-API/脚本全量迁移）。
 > 分支：dev（所有提交仅在 dev）。
@@ -11,7 +11,7 @@
 - 服务端/工具脚本是 Python 2 语法（含构建工具脚本 `build/make/platform_info.py` 等）。
 - 引擎侧对 BWHooks 的实际使用：`lib/pyscript/script.cpp` 只注册 `ignoreAllocsBegin/End` 两个钩子，malloc/free/realloc 钩子在源码中被注释（`script.cpp:352` 附近）。
 
-## 2. 补丁处置表（2.7 → 3.13）
+## 2. 补丁处置表（2.7 [3.13]
 
 | # | 2.7 补丁 | 处置 | 3.13 落地方式 |
 |---|---|---|---|

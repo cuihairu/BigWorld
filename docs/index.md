@@ -14,11 +14,14 @@ hero:
       link: /architecture/network-io-model
 
 features:
-  - title: 不是目录导览
+  - icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="24" height="24"><rect x="3" y="4" width="18" height="5" rx="1.5"/><rect x="3" y="15" width="8" height="5" rx="1.5"/><rect x="13" y="15" width="8" height="5" rx="1.5"/><path d="M12 9v3"/><path d="M7 15v-3h10v3"/></svg>'
+    title: 不是目录导览
     details: 文档按架构决策组织，每章固定覆盖设计目标、调用链、线程归属、源码取舍和验证边界。
-  - title: 源码证据优先
+  - icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="24" height="24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m21 21-5.7-5.7"/><path d="m8 10.5 1.8 1.8 3.4-3.6"/></svg>'
+    title: 源码证据优先
     details: 对关键结论标注源码入口，明确区分源码事实、高置信推断和无法确认的开放问题。
-  - title: 边界清晰
+  - icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="24" height="24"><circle cx="12" cy="12" r="5.5"/><ellipse cx="12" cy="12" rx="10" ry="4" transform="rotate(-24 12 12)"/></svg>'
+    title: 边界清晰
     details: 先理解引擎架构，再判断哪些属于源码核心约束，哪些只是外围依赖或工具链问题。
 ---
 

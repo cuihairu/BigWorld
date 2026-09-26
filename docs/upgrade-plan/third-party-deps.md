@@ -77,7 +77,7 @@ BigWorld 内嵌了大量第三方库，版本普遍老旧。本文档盘点当�
 
 ## 替换方案
 
-### oursql → mysqlclient
+### oursql [mysqlclient]
 
 **原因**: oursql 不再维护，mysqlclient 是 MySQL 官方推荐。
 
@@ -91,7 +91,7 @@ import mysql.connector
 conn = mysql.connector.connect(host='localhost', user='root', password='')
 ```
 
-### SQLAlchemy 0.6 → 2.0
+### SQLAlchemy 0.6 [2.0]
 
 **主要变更**:
 - Session API 变更
@@ -107,7 +107,7 @@ stmt = select(User).where(User.name == 'Alice')
 result = session.execute(stmt).first()
 ```
 
-### OpenSSL 1.0 → 3.x
+### OpenSSL 1.0 [3.x]
 
 **主要变更**:
 - 废弃旧 API
