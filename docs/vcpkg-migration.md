@@ -212,6 +212,48 @@ vcpkg 静态库的传递依赖在 BW 链接行内闭合：curl→ssl/crypto+zlib
     （`NameError: name 'gAJdc…' is not defined`）。修复：先 Base64 解码再嗅探
     首字节（`(` = 文本协议，`0x80` = 二进制协议 PROTO 操作码）。不能只做字符集
     判断——`"543"` 本身是合法 Base64，但它在测试里的语义是表达式。
+11. **`PyModuleMethodLink::init()` 把 `PyMethodDef` 放在栈上**
+    （`lib/pyscript/script.cpp` + `script.hpp`）。3.x 移植时用
+    `PyModule_AddFunctions()` 取代已移除的 `Py_InitModule()`，而该函数按名字字面
+    意思只借用（borrowed）调用者给的 `PyMethodDef` 数组：它为每项建一个
+    `builtin_function_or_method`，对象的 `m_ml` 指向那张表。原实现写成
+    `PyMethodDef defs[2] = {...}`（自动存储期），`init()` 一返回表就没了，而这些
+    函数对象长期活在模块字典里、并且是被 GC 跟踪的。后果是
+    `Py_Finalize()` 收尾做 GC 时遍历到它们，`meth_traverse` →
+    `PyCFunction_GET_CLASS` 读 `m_ml->ml_flags` 解引用已失效的栈内存 → 段错误，
+    凡是用 Script 的单测（`script_test` / `entitydef_test` / `pyscript_test`）
+    全部在收尾阶段崩。valgrind 直接指认：`Address 0x1ffefff8f1 is on thread 1's
+    stack / 207 bytes below stack pointer`。修复：把表提升为
+    `PyModuleMethodLink::defs_[2]` 成员（该类本就约定以静态/全局对象使用，
+    生命周期足够）。
+12. **`PyArrayDataInstance::pyCompare()` / `PyFixedDictDataInstance::pyCompare()`
+    对异类型操作数直接断言**（`lib/entitydef/data_instances/array_data_instance.cpp`、
+    `fixed_dict_data_instance.cpp`）。原注释声称“Python 保证两边都是本类型”，这是
+    错的：当左操作数（如 `list` / `dict`）的 `__lt__` / `__eq__` 返回
+    `NotImplemented` 时，Python 会调用**反射**操作 `array.__gt__(list)`，于是传进来的
+    左操作数根本不是本类型。脚本里写 `someArray < 5` 就会 `abort()` 掉整个进程。
+    修复：异类型时返回 -1（有序且不相等）且**不置异常**，既保住“异类型永不相等”
+    的既有约定，也让调用方（如 `ScriptObject::compareTo()`、单测的转换回退路径）
+    能继续走到它们自己的转换逻辑。
+13. **`ScriptObject::compareTo()` 先问 `Py_LT` 再问 `Py_EQ`**
+    （`lib/script/py_script_object.hpp`）。`a < b` 对 `dict` / `None` / `set` 这类
+    普通类型本就未定义，会抛 `TypeError`；而 3.13 的
+    `PyObject_RichCompareBool()` 出错返回 **-1**，旧代码只判 `== 1`，于是这个假异常
+    被吞成“大于”，并且异常还留在现场——结果比较两个相等的 dict 也会被判失败
+    （`entitydef_test` 的 FIXED_DICT 系列 24 处失败即此）。修复：先问 `Py_EQ`
+    （对任何类型都有定义），只在已知不等时才问 `Py_LT`；若确实不可比较，清掉
+    `TypeError` 并按“不相等”返回。
+14. **单测里嵌的 Python 2 源码没跟着迁移**
+    （`lib/pyscript/unit_test/test_py_output_writer.cpp`、
+    `lib/entitydef/unit_test/test_stream.cpp`）。此前的 Py2 语法扫描只覆盖 `.py`
+    文件，没覆盖 C++ 字符串字面量里的 Python 代码：
+    `print 'x'` / `print >> sys.stderr, 'x'` 在 Py3 是 `SyntaxError`（34 处失败）；
+    `9223372036854775807L` 的长整型 `L` 后缀在 Py3 已被移除（12 处失败）；
+    `PYTHON_1/4/5/6` 期望的 BinaryStream 字节是 **Python 2 cPickle** 的
+    protocol 2 编码（`U` = SHORT_BINSTRING、`M` = INT2），Py3 改用
+    `X` = BINUNICODE、`J` = BININT，长度与内容都变（8 处失败）。修复：改成 Py3
+    语法、去掉 `L`、按 `pickle.dumps(obj, protocol=2)` 重新生成期望字节
+    （已用当前通过的 `PYTHON_2`/`PYTHON_3` 反向校验过生成器与引擎一致）。
 
 
 ## 5. 验证
@@ -232,98 +274,53 @@ vcpkg 静态库的传递依赖在 BW 链接行内闭合：curl→ssl/crypto+zlib
 | 2026-09-26 | 独立探针验证内嵌 CPython 本体 | 裸 `Py_Initialize` → 导入 stdlib 并持有 bound method → `Py_Finalize` **干净通过**（`/tmp/opencode/pyprobe.c`），证明 §6.2 的崩溃在大世界侧而非解释器侧 |
 | 2026-09-26 | `make -C programming bw-run-all-unit-tests` | 18/21 通过；`script_test` / `entitydef_test` / `pyscript_test` 仍失败（见 §6.2） |
 | 2026-09-26 | `make -C programming all` | **首次完整验证通过**（exit 0，0 错误）：`baseapp` / `serviceapp` / `cellapp` / `process_defs` / `sync_db` 等服务端二进制全部链接成功，链接行可见 `-lbwpython3.13 -lbwssl -lbwcrypto`（vcpkg 静态库）与 `-Wl,-export-dynamic` |
+| 2026-09-26 | 修掉 §4.1 第 11–14 项（`PyModuleMethodLink` 栈上 `PyMethodDef`、两个 `pyCompare` 异类型断言、`compareTo` 先问 `Py_LT`、`pickler.cpp` 的 `s#`→`y#`、单测内嵌 Py2 代码与 Py2 pickle 期望字节） | **21/21 模块全绿，退出码 0**；`entitydef_test` 285 用例 0 失败、`pyscript_test` 24 用例 0 失败、`script_test` 18 用例 0 失败 |
 
-### 6.1 仍未通过的部分（不属于依赖迁移，但暴露出的既有单测问题）
+### 6.1 最终状态：全绿
 
-`lib/cstdmf/unit_test/test_watcher.cpp` 有约 35 处断言与实现不符，集中在
-`SequenceWatcher` / `MapWatcher` / `getAsString` / `setFromString`。抽样确认的
-根因是测试对 API 的理解有误，而非实现有缺陷，例如：
+`make -C programming bw-run-all-unit-tests` **21/21 模块全部通过，退出码 0**
+（`cstdmf_test` / `test_watcher.cpp` 的历史失败也已修完）。
+`make -C programming all` 同样退出码 0、0 错误。
 
-- `makeWatcher( &SequenceElement::value, mode )` 取的是**数据成员指针**重载
-  （`watcher.hpp:2693`），返回的是一个持有**成员副本**的独立 `DataWatcher`
-  （内部用 `pNull->*memberPtr` 取值），并不是绑定到对象的 `MemberWatcher`；
-  测试却期望 `"first/value"` 这样的路径能写回 `values[i].value`。
-- `DirectoryWatcher::visitChildren( base, "first", ... )` 中 `"first"` 是叶子
-  `DataWatcher`，按接口约定（非目录 watcher 返回 false）本就应返回 false，
-  测试断言为 true。
+### 6.2 收尾阶段那三个崩溃是怎么定位的（过程记录）
 
-这些用例在本任务之前从未被执行过（此前 Linux 单测目标根本无法链接），
-属于“把既有单测套件修到可信”这一独立工作项，需要逐个核对 watcher 语义后
-重写，不应靠改实现去迎合错误预期。
+`script_test` / `entitydef_test` / `pyscript_test` 曾在**单测全绿之后**于
+`Py_Finalize()` 崩溃：
 
-### 6.2 仍失败的单测（3 个，均为已定位的引擎缺陷）
+```
+Py_Finalize -> finalize_modules (pylifecycle.c:1758 的 _PyGC_CollectNoFail)
+            -> deduce_unreachable -> subtract_refs (gc.c:464)
+            -> meth_traverse (methodobject.c:248) -> 读 Py_TYPE(op) 段错误
+```
 
-| 单测 | 现象 | 根因 | 状态 |
-|---|---|---|---|
-| `pyscript_test` | `Python_PicklerClass` 段错误；`UnicodeDecodeError: 'utf-8' codec can't decode byte 0x80 in position 0` | `lib/pyscript/pickler.cpp:174` 用 `PyObject_CallFunction(…, "(s#)", …)` 传参。`s#` 会把字节按 **UTF-8** 解码成 `str`，而 protocol 2 的 pickle 首字节是 `0x80`（PROTO 操作码），必然解码失败。应改为 `"(y#)"`（`y#` 直接构造 `bytes`，不做解码） | **未修**：`pickler.cpp` 属另一会话在途改动，按约束不代改 |
-| `script_test` / `entitydef_test` | 单测本身全绿，但 `Py_Finalize` 阶段崩溃 | 见 §6.2.1 | 未修 |
-| `entitydef_test` | `PYTHON_4` 的 `isEqual(inputObject_, resultObject)` 为假 | **与 `pyscript_test` 同一个根因**（`pickler.cpp` 的 `s#`）。加 `-v` 可见 `Pickler::unpickle: Failed to unpickle. Using stand-in object.` + `TypeError: '<' not supported between instances of 'list' and 'FailedUnpickle'`：`createFromSection` 拿到的是 `FailedUnpickle` 替身对象而不是解出来的 list。注意 `PythonDataType::isSameType()` 只检查“能否被 pickle 成功”，对替身对象同样返回 true，所以它挡不住这个错误 | 随 `pickler.cpp` 一并解决 |
+定位过程与被排除的方向：
 
-#### 6.2.0 收敛结论：只剩两个根因
-
-三个失败单测其实只由两个缺陷决定，修掉这两个即可全绿：
-
-1. **`lib/pyscript/pickler.cpp:174` 的 `"(s#)"` → `"(y#)"`**（1 个字符）。
-   一次性解决 `pyscript_test` 的段错误和 `entitydef_test` 的 `PYTHON_4`。
-2. **§6.2.1 的 `Py_Finalize` GC 悬垂指针**。这是三个用 Script 的单测
-   （`script_test` / `entitydef_test` / `pyscript_test`）**共同**的最后一道坎：
-   即使修好 pickler，这两个单测仍会在 `Py_Finalize` 阶段崩。
-
-#### 6.2.1 `Py_Finalize` 阶段 GC 崩溃（`script_test` / `entitydef_test` / `pyscript_test`）
-
-崩溃点：`Py_Finalize` → `finalize_modules`（`Python/pylifecycle.c:1758` 的
-`_PyGC_CollectNoFail`）→ `deduce_unreachable` → `subtract_refs`
-（`Python/gc.c:464`）→ `meth_traverse`（`Objects/methodobject.c:248`）→
-在 `visit_decref` 里读 `Py_TYPE(op)` 时段错误。
-
-已排除的可能：
-
-- **不是内嵌 CPython 本身的问题。** 独立探针（`/tmp/opencode/pyprobe.c`，直接
-  链 `libpython3.13.a`，`-rdynamic --export-dynamic`）跑
-  `Py_Initialize` → 导入 `pickle/collections/functools/types/warnings` 并把
-  bound method 存进 `sys.keepalive` → `while (PyGC_Collect() > 0);` →
-  `Py_Finalize`，**干净退出**。
+- **不是内嵌 CPython 本身。** 独立探针（`/tmp/opencode/pyprobe.c`，直接链
+  `libpython3.13.a`，`-rdynamic --export-dynamic`）跑 `Py_Initialize` -> 导入
+  stdlib 并持有 bound method -> `while (PyGC_Collect() > 0);` -> `Py_Finalize`，
+  **干净退出**。
 - **不是自定义分配器。** 探针 2（`/tmp/opencode/pyprobe2.c`）逐字复刻
-  `Script::init`（`lib/pyscript/script.cpp:419-456`）的安装动作——
-  `PyMem_SetAllocator(PYMEM_DOMAIN_RAW, bwPyRaw*)` +
-  `PyObject_SetArenaAllocator(bwPyArena*)`，并直接调用 `libpython` 里真实的
-  `BW_Py_malloc/calloc/realloc/free`——之后**同样干净退出**；不装分配器的对照组
-  也干净退出。两者都正常，说明分配器这条线可以彻底排除。
-  （`Script::init` 只注册了 `ignoreAllocs*` 两个钩子，没注册
-  `mallocHook/freeHook/reallocHook`，所以 `BW_Py_*` 全部转发到 libc，与 pymalloc
-  默认行为等价。）
-- **不是 `PyObjectPlus` 自身被 GC 跟踪后泄漏。**
-  `PyTypeObjectUtil::flags()` 返回 `Py_TPFLAGS_DEFAULT`，不含
-  `Py_TPFLAGS_HAVE_GC`，所以这类对象根本不进 GC 链表。
+  `Script::init`（`script.cpp:419-456`）的 `PyMem_SetAllocator(PYMEM_DOMAIN_RAW)`
+  + `PyObject_SetArenaAllocator`，并直接调用 libpython 里真实的 `BW_Py_*`，之后
+  **同样干净退出**；不装分配器的对照组也干净。（`Script::init` 只注册了
+  `ignoreAllocs*`，没注册 `mallocHook/freeHook/reallocHook`，所以 `BW_Py_*`
+  全部转发到 libc，与 pymalloc 默认行为等价。）
+- **不是 `PyObjectPlus` 被 GC 跟踪后泄漏。** `PyTypeObjectUtil::flags()` 返回
+  `Py_TPFLAGS_DEFAULT`，不含 `Py_TPFLAGS_HAVE_GC`。
+- **也不是任何 teardown 步骤。** 给 `Script::fini()` 临时加过 `BW_FINI_SKIP`
+  位掩码逐项跳过（`Pickler::finalise` / `runFiniTimeJobs` /
+  `s_pOurInitTimeModules` / `Watcher::fini` / 清 `__main__`）：**全部跳过后依旧
+  崩溃**，只有跳过 `Py_Finalize` 才不崩。说明坏对象是在 `Script::init` 或单测
+  执行期间产生的，`Py_Finalize` 的 GC 只是第一个撞上它的遍历。
+- 崩溃对堆布局敏感（加一行 `printf` 就会“看起来修好”），所以 `-O2` 下 gdb 的栈帧
+  不可信，`PYTHONMALLOC=debug` / `MALLOC_CHECK_=3` 也只字不吭。**决定性证据来自
+  valgrind**（`apt-get install valgrind`）：`PyCFunction_GET_CLASS`
+  （`methodobject.h:61`）读的地址 `is on thread 1's stack / 207 bytes below stack
+  pointer` —— 即 `PyCFunctionObject::m_ml` 指向一段**已失效的栈内存**。顺着
+  `m_ml` 就找到了 §4.1 第 11 项的 `PyMethodDef defs[2]`。
 
-结论：链表里那条记录本身是**已释放但未 `PyObject_GC_UnTrack` 的对象**——
-3.13 的 `PyCFunction_New` 对 `m_self`/`m_module` 都做了 `Py_XNewRef`
-（`Objects/methodobject.c:110-111`），活的 `builtin_function_or_method` 不可能
-持有悬垂引用，所以出问题的只能是“对象已被释放、链表项还在”。最可能的成因是
-大世界侧把 borrowed reference 包进 `ScriptObject` 后又 `Py_DECREF`（引用计数
-失衡导致过早释放），而 `Py_Header` 宏生成的 `_tp_dealloc` 走的是
-`delete` + `operator delete`，与非 GC 类型的分配方式一致、不会漏 UnTrack。
-
-需要逐处审计 `ScriptObject::FROM_BORROWED_REFERENCE` 的用法（数百处）才能
-定位，不适合在依赖迁移任务里顺手改。附带影响：`PyObjectPlus` 不参与 GC，
-含这些对象的引用环无法回收，`Script::fini` 里的
-`while (PyGC_Collect() > 0);` 也清不掉。
-
-排查过程中还发现一个**独立**缺陷，同样未修（因为改它无法让任何单测转绿，
-而它会改变核心比较语义，风险收益不划算）：
-
-- **`ScriptObject::compareTo()` 会把比较错误当成“不相等”吞掉**
-  （`lib/script/py_script_object.hpp:527`）。3.13 的
-  `PyObject_RichCompareBool()` 出错时返回 **-1**，而现有代码只判 `== 1`：
-
-  ```cpp
-  if      (PyObject_RichCompareBool(l, r, Py_LT) == 1) result = -1;
-  else if (PyObject_RichCompareBool(l, r, Py_EQ) == 1) result =  0;
-  else                                                    result =  1;   // -1 落这里
-  ```
-
-  两个不可比较的对象（例如 `list` 与 `FailedUnpickle`）本该抛
-  `TypeError`，这里却被报成“大于”。`entitydef_test` 的 `PYTHON_4` 正是因此
-  只看到“值不相等”而不是“无法比较”，掩盖了真正的错误。正确做法是显式
-  检查 `-1` 并交给 `errorHandler`。
-
+顺带确认了一件相关的事：`third_party_python.mak` 的 `libbwpython3.13` 目标**不依赖
+CPython 源码**，所以 vendored 源码变了 make 也察觉不到（实测
+`make -C programming libbwpython3.13` 直接 “Nothing to be done”）。本次没有因此
+踩坑（增量 `make` 显示只有 `Python/gc.c` 一个 .o 过期，且重建后行为不变），
+但这是干净 clone 之外的复现隐患，值得后续给该目标补上源码依赖。
