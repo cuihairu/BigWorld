@@ -55,8 +55,12 @@ private:
 DatabaseToolApp::DatabaseToolApp():
 			eventDispatcher_(),
 			pSignalHandler_( new DatabaseToolAppSignalHandler( *this ) ),
-			pWatcherNub_( 0 ),
-			pLoggerMessageForwarder_( 0 ),
+			// BIGWORLD_BEGIN(3.13 migration)
+			// Was 0 - a literal 0 makes unique_ptr's nullptr_t and pointer
+			// constructors ambiguous under gcc 15.
+			// BIGWORLD_END
+			pWatcherNub_( nullptr ),
+			pLoggerMessageForwarder_( nullptr ),
 			pLockedConn_(),
 			entityDefs_()
 {

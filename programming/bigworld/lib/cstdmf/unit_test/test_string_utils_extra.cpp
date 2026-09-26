@@ -62,12 +62,31 @@ TEST( StringUtils_utf8StringLength )
 
 TEST( StringUtils_findNextNonUtf8Char )
 {
-	const char * str = "hello";
-
-	CHECK( findNextNonUtf8Char( str ) == str + 5 );
-	CHECK( *findNextNonUtf8Char( str ) == '\0' );
-
+	// NULL means "scanned the whole string without finding an invalid byte".
+	// That is the contract isValidUtf8Str() is built on, so it is what a
+	// well-formed string must return.
 	CHECK( findNextNonUtf8Char( "" ) == NULL );
+	CHECK( findNextNonUtf8Char( "hello" ) == NULL );
+
+	// A valid two byte sequence (e-acute) is still fully valid.
+	CHECK( findNextNonUtf8Char( "caf\xC3\xA9" ) == NULL );
+
+	// Otherwise a pointer to the first offending byte is returned.
+	const char * bare = "\x80";				// continuation byte on its own
+	CHECK( findNextNonUtf8Char( bare ) == bare );
+
+	const char * truncated = "\xC3";		// lead byte, no continuation byte
+	CHECK( findNextNonUtf8Char( truncated ) == truncated );
+
+	// Only the first occurrence, and the offset has to be exact. The literal
+	// is split so that 'c' is not swallowed into the \x escape.
+	const char * mixed = "ab\x80" "cd";
+	CHECK( findNextNonUtf8Char( mixed ) == mixed + 2 );
+
+	// A multi-byte lead byte followed by a non-continuation byte is reported
+	// at the lead byte, not at the byte that failed the check.
+	const char * badCont = "\xE2\x41";
+	CHECK( findNextNonUtf8Char( badCont ) == badCont );
 }
 
 
@@ -92,20 +111,30 @@ TEST( StringUtils_isValidUtf8Str )
 
 TEST( StringUtils_toValidUtf8Str )
 {
+	// toValidUtf8Str() appends to the destination, it does not replace it.
 	BW::string result;
 
-	// Already valid strings are unchanged.
+	// Already valid strings are appended unchanged.
 	toValidUtf8Str( "hello", result );
 	CHECK_EQUAL( BW::string( "hello" ), result );
 
-	// Invalid sequences are replaced.
+	// Invalid sequences are replaced. Each offending byte becomes its
+	// "0xNN" hex form (the byteToString table in string_utils.cpp), not a
+	// '?' placeholder.
 	toValidUtf8Str( "\x80\x80", result );
 	CHECK( isValidUtf8Str( result.c_str() ) );
+	CHECK_EQUAL( BW::string( "hello0x800x80" ), result );
 
-	// Truncated sequences are replaced.
-	toValidUtf8Str( "abc\xC3", result );
-	CHECK( isValidUtf8Str( result.c_str() ) );
-	CHECK_EQUAL( BW::string( "abc?" ), result );
+	// Truncated sequences are replaced the same way.
+	BW::string result2;
+	toValidUtf8Str( "abc\xC3", result2 );
+	CHECK( isValidUtf8Str( result2.c_str() ) );
+	CHECK_EQUAL( BW::string( "abc0xC3" ), result2 );
+
+	// An empty source leaves the destination alone.
+	BW::string result3( "keep" );
+	toValidUtf8Str( "", result3 );
+	CHECK_EQUAL( BW::string( "keep" ), result3 );
 }
 
 
@@ -141,15 +170,28 @@ TEST( StringUtils_utf8WideRoundTrip )
 
 TEST( StringUtils_utf8towBufferOverloads )
 {
+	// Note the units on this platform: both size arguments are in *bytes*
+	// (the destination is handed to iconv as a char buffer), and the output is
+	// not NUL terminated - the caller supplies the exact source length.
 	wchar_t dst[ 8 ];
 
-	CHECK( bw_utf8tow( "abc", 3, dst, 8 ) );
-	CHECK( dst[0] == L'a' );
-	CHECK( dst[2] == L'c' );
+	// Three ASCII bytes become three wide characters, i.e. 12 bytes, which
+	// fits in dst's 8 * wchar_t.
+	CHECK( bw_utf8tow( "abc", 3, dst, sizeof( dst ) ) );
+	CHECK( dst[ 0 ] == L'a' );
+	CHECK( dst[ 2 ] == L'c' );
 
+	// A destination that is too small in bytes must fail rather than
+	// silently truncate: three wide characters need 12 bytes.
+	wchar_t tooSmall[ 2 ];
+	CHECK( !bw_utf8tow( "abc", 3, tooSmall, sizeof( tooSmall ) ) );
+
+	// And back to UTF-8. The wide source length is in bytes too (iconv counts
+	// both sides in bytes), so three wide characters are 3 * sizeof(wchar_t),
+	// and no terminator is written, so the length is explicit.
 	char back[ 8 ];
-	CHECK( bw_wtoutf8( dst, 3, back, 8 ) );
-	CHECK_EQUAL( BW::string( "abc" ), BW::string( back ) );
+	CHECK( bw_wtoutf8( dst, 3 * sizeof( wchar_t ), back, sizeof( back ) ) );
+	CHECK_EQUAL( BW::string( "abc" ), BW::string( back, 3 ) );
 }
 
 

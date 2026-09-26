@@ -329,6 +329,15 @@ endif
 
 # TODO: move these into a rule that is included through
 #  src/lib -> src/lib/third_party
+
+# BIGWORLD_BEGIN(3.13 migration)
+# vcpkg must come first: the per-package .mak files below resolve their
+# include roots and staged archives from $(VCPKG_INSTALLED). It also appends
+# the single vcpkg include root to BW_INCLUDES for zlib/png/sqlite3 headers
+# consumed via <zlib.h> / <png.h> / <sqlite3.h>.
+include $(BW_BLDDIR)/third_party_vcpkg.mak
+BW_INCLUDES += -I$(BW_VCPKG_INCLUDE)
+# BIGWORLD_END
 include $(BW_BLDDIR)/third_party_openssl.mak
 include $(BW_BLDDIR)/third_party_curl.mak
 include $(BW_BLDDIR)/third_party_json.mak
@@ -378,11 +387,15 @@ bw-run-all-unit-tests: $(call removeDuplicates,$(BW_RUN_UNIT_TESTS))
 		bin_path=$${bin_path_src_dir%:*}; \
 		src_dir=$${bin_path_src_dir$##*:}; \
 		cd $$src_dir; \
-		$(TIMEOUT_BIN) 1800 $$bin_path --root $(BW_ROOT) || FAILED_TESTS="$$FAILED_TESTS $$bin_path" \
-		STATUS=`expr $$STATUS + $$?`; \
-		echo $$bin_path result $$STATUS; \
-		if [ "$(UNIT_TEST_STOP_AT_FAILURE)" == "1" -a $$STATUS -gt 0 ]; then \
-			exit $$STATUS; \
+		$(TIMEOUT_BIN) 1800 $$bin_path --root $(BW_ROOT); \
+		MODULE_STATUS=$$?; \
+		echo $$bin_path result $$MODULE_STATUS; \
+		if [ $$MODULE_STATUS -ne 0 ]; then \
+			STATUS=$$MODULE_STATUS; \
+			FAILED_TESTS="$$FAILED_TESTS $$bin_path"; \
+		fi; \
+		if [ "$(UNIT_TEST_STOP_AT_FAILURE)" = "1" ] && [ $$MODULE_STATUS -gt 0 ]; then \
+			exit $$MODULE_STATUS; \
 		fi; \
 	done; \
 	if [ $$STATUS -gt 0 ]; then \

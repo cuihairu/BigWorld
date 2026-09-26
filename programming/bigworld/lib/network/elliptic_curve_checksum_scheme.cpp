@@ -32,8 +32,10 @@ namespace BWOpenSSL
 	 */
 	const BW::string errorString()
 	{
-		// These should be loaded somewhere, and also freed somewhere.
-		BWOpenSSL::ERR_load_crypto_strings();
+		// BIGWORLD_BEGIN(3.13 migration)
+		// ERR_load_crypto_strings() removed in OpenSSL 3.0; error
+		// strings are always available now.
+		// BIGWORLD_END
 
 		char buf[120]; // length specified by ERR_error_string docs
 
@@ -281,21 +283,38 @@ EllipticCurveChecksumScheme::Impl::Impl( const BW::string & keyPEM,
 		return;
 	}
 
-	BWOpenSSL::BIGNUM * kinv = NULL;
-	BWOpenSSL::BIGNUM * rp = NULL;
-
-	if (!BWOpenSSL::ECDSA_sign_setup( pKey_, /* BN_CTX * ctx */ NULL, 
-			&kinv, &rp ))
+	// BIGWORLD_BEGIN(3.13 migration)
+	// ECDSA_sign_setup() precomputes (kinv, rp) for *signing* and fails with
+	// "missing private key" when the EC_KEY carries no private component,
+	// which is exactly the case for the verify-only (public key) scheme. It
+	// used to be called unconditionally, so every public-key scheme bailed
+	// out of this constructor with maxSignatureSize_ left at 0: streamSize()
+	// then reported 0, ChecksumIStream stripped nothing off the tail of the
+	// stream, and verification could never succeed. Only the signing path
+	// needs these precomputed values.
+	// BIGWORLD_END
+	if (isPrivate)
 	{
-		errorString_ = "Could not setup key computed values: " + 
-			BWOpenSSL::errorString();
-		pKey_ = NULL;
-		return;
+		BWOpenSSL::BIGNUM * kinv = NULL;
+		BWOpenSSL::BIGNUM * rp = NULL;
+
+		if (!BWOpenSSL::ECDSA_sign_setup( pKey_, /* BN_CTX * ctx */ NULL,
+				&kinv, &rp ))
+		{
+			errorString_ = "Could not setup key computed values: " +
+				BWOpenSSL::errorString();
+			pKey_ = NULL;
+			return;
+		}
+
+		kinv_ = kinv;
+		rp_ = rp;
 	}
 
-	kinv_ = kinv;
-	rp_ = rp;
-
+	// ECDSA_size() depends only on the group, so it is equally valid for the
+	// private and the public key - and both ends of the wire have to agree on
+	// it, because it is how many signature bytes the scheme appends (writer)
+	// and strips (reader).
 	maxSignatureSize_ = uint( ECDSA_size( pKey_ ) );
 	MF_ASSERT( maxSignatureSize_ > 0 );
 
@@ -429,10 +448,55 @@ bool EllipticCurveChecksumScheme::doVerifyFromStream( BinaryIStream & in )
  */
 bool EllipticCurveChecksumScheme::Impl::verifyFromStream( BinaryIStream & in )
 {
+	// BIGWORLD_BEGIN(3.13 migration)
+	// The signature on stream is the DER encoding padded up to
+	// maxSignatureSize_ with random bytes (see addToStream()). Passing the
+	// whole padded block to ECDSA_verify() worked with OpenSSL 1.0.0d but
+	// OpenSSL 3 rejects the trailing garbage. Decode the DER SEQUENCE header
+	// to find the real signature length and verify only those bytes. The
+	// wire format is unchanged.
+	// BIGWORLD_END
+	const unsigned char * pSigStart =
+		(unsigned char * )in.retrieve( maxSignatureSize_ );
+
+	int signatureLength = -1;
+
+	if ((maxSignatureSize_ >= 2) && (pSigStart[ 0 ] == 0x30 /* SEQUENCE */))
+	{
+		if (pSigStart[ 1 ] & 0x80)
+		{
+			int numLengthBytes = (pSigStart[ 1 ] & 0x7f);
+
+			if ((numLengthBytes <= 4) &&
+					(maxSignatureSize_ >= uint( 2 + numLengthBytes )))
+			{
+				int contentLength = 0;
+
+				for (int i = 0; i < numLengthBytes; ++i)
+				{
+					contentLength = (contentLength << 8) | pSigStart[ 2 + i ];
+				}
+
+				signatureLength = 2 + numLengthBytes + contentLength;
+			}
+		}
+		else
+		{
+			signatureLength = 2 + pSigStart[ 1 ];
+		}
+	}
+
+	if ((signatureLength <= 0) ||
+			(uint( signatureLength ) > maxSignatureSize_))
+	{
+		errorString_ = "Malformed signature on stream";
+		return false;
+	}
+
 	int res = BWOpenSSL::ECDSA_verify( 0,
-		(const unsigned char *)digest_.retrieve( digest_.size() ), 
+		(const unsigned char *)digest_.retrieve( digest_.size() ),
 		digest_.size(),
-		(unsigned char * )in.retrieve( maxSignatureSize_ ), maxSignatureSize_,
+		pSigStart, signatureLength,
 		pKey_ );
 
 	if (res == 0)

@@ -84,6 +84,7 @@ dependsOn  = 			\
 
 usePython = 1
 useOpenSSL = 1
+useSQLite = 1
 usePyURLRequest = 1
 
 # TODO: dbapp shares this code

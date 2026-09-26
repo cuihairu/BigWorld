@@ -15,37 +15,16 @@ BW_BEGIN_NAMESPACE
 // File/directory helper functions for unit tests
 namespace {
 
-	void ensureFileNonExistant( const BW::StringRef& fileName, MultiFileSystemPtr fileSystem )
-	{
-		FILE * f = fileSystem->posixFileOpen( fileName, "r" );
-		if (f)
-		{
-			fclose( f );
-			fileSystem->eraseFileOrDirectory( fileName );
-		}
-	}
+	// BIGWORLD_BEGIN(3.13 migration)
+	// Only the Windows-only tests below use these three helpers. They used to
+	// live in this shared anonymous namespace, which made gcc 15 fail the
+	// Linux build with -Werror=unused-function. They are declared alongside
+	// their (only) callers under _WIN32 instead.
+	// BIGWORLD_END
 
 	bool removeDirectory( const BW::StringRef& fileName, MultiFileSystemPtr fileSystem )
 	{
 		return fileSystem->eraseFileOrDirectory( fileName );
-	}
-
-	bool touchDirectory( const BW::StringRef& dirName, MultiFileSystemPtr fileSystem )
-	{
-		return fileSystem->makeDirectory( dirName );
-	}
-
-	bool touchFile( const BW::StringRef& fileName, MultiFileSystemPtr fileSystem )
-	{
-		FILE * f = fileSystem->posixFileOpen( fileName, "w" );
-
-		bool ret = ( f != NULL );	// file should exist
-		if (f)
-		{
-			fclose( f );
-		}
-
-		return ret;
 	}
 
 }	// anonymous namespace
@@ -182,6 +161,44 @@ TEST_F( ResMgrUnitTestHarness, ResMgr_TestMultiFileSystem )
 
 
 #ifdef  _WIN32	// Windows only tests
+
+// BIGWORLD_BEGIN(3.13 migration)
+// Helpers for the Windows-only tests below. They used to be declared in the
+// shared anonymous namespace at the top of this file, which left them unused
+// (and therefore -Werror) on non-Windows builds.
+// BIGWORLD_END
+namespace // (anonymous)
+{
+
+	void ensureFileNonExistant( const BW::StringRef& fileName, MultiFileSystemPtr fileSystem )
+	{
+		FILE * f = fileSystem->posixFileOpen( fileName, "r" );
+		if (f)
+		{
+			fclose( f );
+			fileSystem->eraseFileOrDirectory( fileName );
+		}
+	}
+
+	bool touchDirectory( const BW::StringRef& dirName, MultiFileSystemPtr fileSystem )
+	{
+		return fileSystem->makeDirectory( dirName );
+	}
+
+	bool touchFile( const BW::StringRef& fileName, MultiFileSystemPtr fileSystem )
+	{
+		FILE * f = fileSystem->posixFileOpen( fileName, "w" );
+
+		bool ret = ( f != NULL );	// file should exist
+		if (f)
+		{
+			fclose( f );
+		}
+
+		return ret;
+	}
+
+} // end namespace (anonymous)
 
 
 // Test file name case-sensitive checking

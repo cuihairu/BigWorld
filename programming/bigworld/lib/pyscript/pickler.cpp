@@ -62,7 +62,10 @@ PyObject * 	s_pUnpickleMethod	= NULL;
  */
 bool Pickler::init()
 {
-	PyObject * pPickleModule = PyImport_ImportModule( "cPickle" );
+	// BIGWORLD_BEGIN(3.13 migration)
+	// Was "cPickle", which became the plain "pickle" module in Python 3.
+	// BIGWORLD_END
+	PyObject * pPickleModule = PyImport_ImportModule( "pickle" );
 
 	if (pPickleModule != NULL)
 	{
@@ -93,12 +96,12 @@ bool Pickler::init()
 	{
 		PyErr_PrintEx(0);
 #ifdef _WIN32
-		ERROR_MSG( "Failed to import cPickle module.\n" );
+		ERROR_MSG( "Failed to import the pickle module.\n" );
 #else
-		ERROR_MSG( "Failed to import cPickle module. "
+		ERROR_MSG( "Failed to import the pickle module. "
 			"Is your resource path set correctly?\n"
-			"\tThis requires scripts/server_common/lib-dynload-<platform>/cPickle.so "
-			"to be relative to a resource path (usually bigworld/res).\n" );
+			"\tThis requires the Python 3 stdlib (including pickle.py) to be "
+			"importable (see python_install).\n" );
 #endif
 	}
 
@@ -168,8 +171,17 @@ ScriptObject Pickler::unpickle( const BW::string & str )
 
 	if (s_pUnpickleMethod != NULL)
 	{
-		pResult = PyObject_CallFunction( s_pUnpickleMethod, "(s#)",
+		/* BIGWORLD_BEGIN(3.13 migration)
+		 * "y#" builds a bytes object directly from the buffer; "s#" would
+		 * UTF-8 *decode* it into a str first. A pickle stream is binary and
+		 * its first byte is the PROTO opcode 0x80 (protocol 2), which is not
+		 * valid UTF-8, so "s#" made every unpickle fail with
+		 *   UnicodeDecodeError: 'utf-8' codec can't decode byte 0x80 ...
+		 * and we silently fell back to the FailedUnpickle stand-in object.
+		 */
+		pResult = PyObject_CallFunction( s_pUnpickleMethod, "(y#)",
 				str.data(), str.length() );
+		/* BIGWORLD_END */
 
 		if (pResult == NULL)
 		{

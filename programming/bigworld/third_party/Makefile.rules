@@ -1,9 +1,10 @@
+# BIGWORLD_BEGIN(3.13 migration)
+# jsoncpp / png / zip(zlib) are now provided by vcpkg (see vcpkg.json and
+# build/make/third_party_vcpkg.mak); their in-tree component builds were
+# removed. CppUnitLite2 is BigWorld's own unit test framework and stays.
 subdirs =					\
-	CppUnitLite2/src		\
-	jsoncpp/src/lib_json	\
-	png						\
-	zip						\
-
+	CppUnitLite2/src
+# BIGWORLD_END
 
 $(call includeMakefilesFrom,$(subdirs))
 

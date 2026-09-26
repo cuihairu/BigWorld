@@ -360,11 +360,11 @@ TEST_F( EntityDefUnitTestHarness, Script_BinaryStream_basictypes )
 			"\x00\x00\x00\x80", 4 ), "INT32_2" );
 
 	TEST_SUB_FUNCTOR_NAMED(
-		CheckBSConversion( "<Type> INT64 </Type>", "9223372036854775807L",
+		CheckBSConversion( "<Type> INT64 </Type>", "9223372036854775807",
 			"\xff\xff\xff\xff\xff\xff\xff\x7f", 8 ), "INT64_1" );
 
 	TEST_SUB_FUNCTOR_NAMED(
-		CheckBSConversion( "<Type> INT64 </Type>", "-9223372036854775808L",
+		CheckBSConversion( "<Type> INT64 </Type>", "-9223372036854775808",
 			"\x00\x00\x00\x00\x00\x00\x00\x80", 8 ), "INT64_2" );
 
 #if 0 && defined( MF_SERVER )
@@ -378,8 +378,14 @@ TEST_F( EntityDefUnitTestHarness, Script_BinaryStream_basictypes )
 	TEST_SUB_FUNCTOR_NAMED(
 		CheckBSConversion( "<Type> PYTHON </Type>",
 			"'A string'",
-			"\x0f\x80\x02\x55\x08\x41\x20\x73\x74\x72\x69\x6e\x67\x71\x01\x2e",
-			16 ),
+			// BIGWORLD_BEGIN(3.13 migration)
+			// 1-byte length prefix + pickle.dumps( 'A string', protocol=2 ).
+			// Python 3 emits BINUNICODE ('X') where Python 2's cPickle used
+			// SHORT_BINSTRING ('U'), so these bytes are version-specific.
+			// BIGWORLD_END
+			"\x12\x80\x02\x58\x08\x00\x00\x00\x41\x20\x73\x74\x72\x69\x6e\x67"
+				"\x71\x00\x2e",
+			19 ),
 		"PYTHON_1" );
 
 	TEST_SUB_FUNCTOR_NAMED(
@@ -394,25 +400,26 @@ TEST_F( EntityDefUnitTestHarness, Script_BinaryStream_basictypes )
 
 	TEST_SUB_FUNCTOR_NAMED(
 		CheckBSConversion( "<Type> PYTHON </Type>", "[ 3, 'a', 4.5 ]",
-			"\x16\x80\x02\x5d\x71\x01\x28\x4b\x03\x55\x01\x61\x47\x40"
-				"\x12\x00\x00\x00\x00\x00\x00\x65\x2e",
-			23 ),
+			"\x1b\x80\x02\x5d\x71\x00\x28\x4b\x03\x58\x01\x00\x00\x00\x61\x71"
+				"\x01\x47\x40\x12\x00\x00\x00\x00\x00\x00\x65\x2e",
+			28 ),
 		"PYTHON_4" );
 
 	TEST_SUB_FUNCTOR_NAMED(
 		CheckBSConversion( "<Type> PYTHON </Type>",
 			"[ 3, 'a', 4.5, [ 'b', -0.01 ] ]",
-			"\x27\x80\x02\x5d\x71\x01\x28\x4b\x03\x55\x01\x61\x47\x40"
-				"\x12\x00\x00\x00\x00\x00\x00\x5d\x71\x02\x28\x55\x01\x62"
-				"\x47\xbf\x84\x7a\xe1\x47\xae\x14\x7b\x65\x65\x2e", 40 ),
+			"\x31\x80\x02\x5d\x71\x00\x28\x4b\x03\x58\x01\x00\x00\x00\x61\x71"
+				"\x01\x47\x40\x12\x00\x00\x00\x00\x00\x00\x5d\x71\x02\x28\x58\x01"
+				"\x00\x00\x00\x62\x71\x03\x47\xbf\x84\x7a\xe1\x47\xae\x14\x7b\x65"
+				"\x65\x2e", 50 ),
 		"PYTHON_5" );
 
 	TEST_SUB_FUNCTOR_NAMED(
 		CheckBSConversion( "<Type> PYTHON </Type>",
 			"( 'hello', 3, -4.56 )",
-			"\x18\x80\x02\x55\x05\x68\x65\x6c\x6c\x6f\x4b\x03\x47\xc0"
-				"\x12\x3d\x70\xa3\xd7\x0a\x3d\x87\x71\x01\x2e",
-			25 ),
+			"\x1d\x80\x02\x58\x05\x00\x00\x00\x68\x65\x6c\x6c\x6f\x71\x00\x4b"
+				"\x03\x47\xc0\x12\x3d\x70\xa3\xd7\x0a\x3d\x87\x71\x01\x2e",
+			30 ),
 		"PYTHON_6" );
 
 	TEST_SUB_FUNCTOR_NAMED(
@@ -433,7 +440,7 @@ TEST_F( EntityDefUnitTestHarness, Script_BinaryStream_basictypes )
 
 	TEST_SUB_FUNCTOR_NAMED(
 		CheckBSConversion( "<Type> UINT64 </Type>",
-			"18446744073709551615L",
+			"18446744073709551615",
 			"\xff\xff\xff\xff\xff\xff\xff\xff", 8 ),
 		"UINT64_1" );
 
@@ -524,11 +531,11 @@ TEST_F( EntityDefUnitTestHarness, Script_BinaryStream_basictypes_persistentOnly 
 			"\x00\x00\x00\x80", 4, true ), "INT32_2" );
 
 	TEST_SUB_FUNCTOR_NAMED(
-		CheckBSConversion( "<Type> INT64 </Type>", "9223372036854775807L",
+		CheckBSConversion( "<Type> INT64 </Type>", "9223372036854775807",
 			"\xff\xff\xff\xff\xff\xff\xff\x7f", 8, true ), "INT64_1" );
 
 	TEST_SUB_FUNCTOR_NAMED(
-		CheckBSConversion( "<Type> INT64 </Type>", "-9223372036854775808L",
+		CheckBSConversion( "<Type> INT64 </Type>", "-9223372036854775808",
 			"\x00\x00\x00\x00\x00\x00\x00\x80", 8, true ), "INT64_2" );
 
 #if 0 && defined( MF_SERVER )
@@ -542,8 +549,14 @@ TEST_F( EntityDefUnitTestHarness, Script_BinaryStream_basictypes_persistentOnly 
 	TEST_SUB_FUNCTOR_NAMED(
 		CheckBSConversion( "<Type> PYTHON </Type>",
 			"'A string'",
-			"\x0f\x80\x02\x55\x08\x41\x20\x73\x74\x72\x69\x6e\x67\x71\x01\x2e",
-			16, true ),
+			// BIGWORLD_BEGIN(3.13 migration)
+			// 1-byte length prefix + pickle.dumps( 'A string', protocol=2 ).
+			// Python 3 emits BINUNICODE ('X') where Python 2's cPickle used
+			// SHORT_BINSTRING ('U'), so these bytes are version-specific.
+			// BIGWORLD_END
+			"\x12\x80\x02\x58\x08\x00\x00\x00\x41\x20\x73\x74\x72\x69\x6e\x67"
+				"\x71\x00\x2e",
+			19, true ),
 		"PYTHON_1" );
 
 	TEST_SUB_FUNCTOR_NAMED(
@@ -558,25 +571,26 @@ TEST_F( EntityDefUnitTestHarness, Script_BinaryStream_basictypes_persistentOnly 
 
 	TEST_SUB_FUNCTOR_NAMED(
 		CheckBSConversion( "<Type> PYTHON </Type>", "[ 3, 'a', 4.5 ]",
-			"\x16\x80\x02\x5d\x71\x01\x28\x4b\x03\x55\x01\x61\x47\x40"
-				"\x12\x00\x00\x00\x00\x00\x00\x65\x2e",
-			23, true ),
+			"\x1b\x80\x02\x5d\x71\x00\x28\x4b\x03\x58\x01\x00\x00\x00\x61\x71"
+				"\x01\x47\x40\x12\x00\x00\x00\x00\x00\x00\x65\x2e",
+			28, true ),
 		"PYTHON_4" );
 
 	TEST_SUB_FUNCTOR_NAMED(
 		CheckBSConversion( "<Type> PYTHON </Type>",
 			"[ 3, 'a', 4.5, [ 'b', -0.01 ] ]",
-			"\x27\x80\x02\x5d\x71\x01\x28\x4b\x03\x55\x01\x61\x47\x40"
-				"\x12\x00\x00\x00\x00\x00\x00\x5d\x71\x02\x28\x55\x01\x62"
-				"\x47\xbf\x84\x7a\xe1\x47\xae\x14\x7b\x65\x65\x2e", 40, true ),
+			"\x31\x80\x02\x5d\x71\x00\x28\x4b\x03\x58\x01\x00\x00\x00\x61\x71"
+				"\x01\x47\x40\x12\x00\x00\x00\x00\x00\x00\x5d\x71\x02\x28\x58\x01"
+				"\x00\x00\x00\x62\x71\x03\x47\xbf\x84\x7a\xe1\x47\xae\x14\x7b\x65"
+				"\x65\x2e", 50, true ),
 		"PYTHON_5" );
 
 	TEST_SUB_FUNCTOR_NAMED(
 		CheckBSConversion( "<Type> PYTHON </Type>",
 			"( 'hello', 3, -4.56 )",
-			"\x18\x80\x02\x55\x05\x68\x65\x6c\x6c\x6f\x4b\x03\x47\xc0"
-				"\x12\x3d\x70\xa3\xd7\x0a\x3d\x87\x71\x01\x2e",
-			25, true ),
+			"\x1d\x80\x02\x58\x05\x00\x00\x00\x68\x65\x6c\x6c\x6f\x71\x00\x4b"
+				"\x03\x47\xc0\x12\x3d\x70\xa3\xd7\x0a\x3d\x87\x71\x01\x2e",
+			30, true ),
 		"PYTHON_6" );
 
 	TEST_SUB_FUNCTOR_NAMED(
@@ -597,7 +611,7 @@ TEST_F( EntityDefUnitTestHarness, Script_BinaryStream_basictypes_persistentOnly 
 
 	TEST_SUB_FUNCTOR_NAMED(
 		CheckBSConversion( "<Type> UINT64 </Type>",
-			"18446744073709551615L",
+			"18446744073709551615",
 			"\xff\xff\xff\xff\xff\xff\xff\xff", 8, true ),
 		"UINT64_1" );
 

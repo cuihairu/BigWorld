@@ -1443,7 +1443,17 @@ public:
 	/* Override from IFileProvider. */
 	virtual int FEOF() 
 	{
-		return (data_.remainingLength() > 0) ? 1 : 0;
+		// Mirror feof(): non-zero once the read cursor has reached the end of
+		// the data. FRead() consumes from data_, so "nothing left to read" is
+		// the end-of-file condition.
+		//
+		// BIGWORLD_BEGIN(3.13 migration)
+		// This used to return 1 while data *remained* - the exact inverse.
+		// ReplayTickLoader::loadFromFile() asserts FEOF() after a short read
+		// (i.e. once it has hit the end of the file), so the inversion turned
+		// every successful replay load into an assertion failure.
+		// BIGWORLD_END
+		return ( data_.remainingLength() <= 0 ) ? 1 : 0;
 	}
 
 

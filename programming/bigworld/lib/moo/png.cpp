@@ -2,9 +2,13 @@
 
 #include "png.hpp"
 
-#include "png/png.h"
-#include "png/pngstruct.h"
-#include "png/pnginfo.h"
+// BIGWORLD_BEGIN(3.13 migration)
+// libpng is now provided by vcpkg (1.6.4x). The private pngstruct.h /
+// pnginfo.h includes are gone: io_ptr and the info fields are accessed
+// through the public accessors (png_get_io_ptr / png_get_image_width /
+// png_get_image_height / png_get_bit_depth / png_get_channels).
+#include <png.h>
+// BIGWORLD_END
 
 #include "cstdmf/concurrency.hpp"
 #include "cstdmf/bw_memory.hpp"
@@ -75,7 +79,7 @@ pngWriteBuffer
 )
 {
 	BW::vector<BinaryPtr> *buffers =
-		(BW::vector<BinaryPtr> *)pngPtr->io_ptr;
+		(BW::vector<BinaryPtr> *)png_get_io_ptr( pngPtr );
 	BinaryPtr buffer = new BinaryBlock(bytes, size, "BinaryBlock/PNGWriter");
 	buffers->push_back(buffer);
 }
@@ -107,7 +111,7 @@ pngReadBuffer
 )
 {
 	BW_GUARD;
-	PNGReadBuffer *buffer = (PNGReadBuffer *)pngPtr->io_ptr;
+	PNGReadBuffer *buffer = (PNGReadBuffer *)png_get_io_ptr( pngPtr );
 	IF_NOT_MF_ASSERT_DEV(buffer->current_ <= buffer->end_)
 	{
 		MF_EXIT( "pointer past end of buffer" );
@@ -360,9 +364,9 @@ bool decompressPNG(BinaryPtr pngData, PNGImageData &imgData)
 	{
 		png_read_info( pngPtr, pngInfo );
 
-		imgData.width_		= imgData.stride_ = pngInfo->width;
-		imgData.height_		= pngInfo->height;
-		imgData.bpp_		= pngInfo->bit_depth*pngInfo->channels;
+		imgData.width_		= imgData.stride_ = png_get_image_width( pngPtr, pngInfo );
+		imgData.height_		= png_get_image_height( pngPtr, pngInfo );
+		imgData.bpp_		= png_get_bit_depth( pngPtr, pngInfo ) * png_get_channels( pngPtr, pngInfo );
 
 		uint32 bytesPP		= imgData.bpp_ / 8;
 
@@ -376,7 +380,7 @@ bool decompressPNG(BinaryPtr pngData, PNGImageData &imgData)
 		imgData.upsideDown_ = false;
 
 		// Do the decompression:
-		for (uint32 i = 0; i < pngInfo->height; ++i)
+		for (uint32 i = 0; i < imgData.height_; ++i)
 			png_read_row(pngPtr, imgData.data_ + i*imgData.width_*bytesPP, NULL);
 
 		// Cleanup:

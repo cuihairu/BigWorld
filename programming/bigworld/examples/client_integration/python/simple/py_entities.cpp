@@ -90,7 +90,7 @@ PY_END_ATTRIBUTES()
  */
 PyObject * PyEntities::subscript( PyObject* entityID )
 {
-	long id = PyInt_AsLong( entityID );
+	long id = PyLong_AsLong( entityID ); // BIGWORLD(3.13 migration): PyInt_* is gone
 
 	if (PyErr_Occurred())
 		return NULL;
@@ -136,7 +136,7 @@ PyObject * PyEntities::py_has_key( PyObject* args )
 
 	const bool hasKey = (entities_.find( id ) != NULL);
 
-	return PyInt_FromLong( hasKey );
+	return PyLong_FromLong( hasKey ); // BIGWORLD(3.13 migration): PyInt_* is gone
 }
 
 
@@ -147,7 +147,7 @@ namespace {
  */
 static PyObject * getEntityID( const BWEntities::const_iterator & iEntity )
 {
-	return PyInt_FromLong( iEntity->first );
+	return PyLong_FromLong( iEntity->first ); // BIGWORLD(3.13 migration): PyInt_* is gone
 }
 
 

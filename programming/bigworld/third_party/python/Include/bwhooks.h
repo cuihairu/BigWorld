@@ -21,21 +21,41 @@ typedef struct
 } BW_Py_Hooks;
 
 /* BIGWORLD_BEGIN
+ * These entry points have to be visible in the dynamic symbol table of the
+ * program that embeds libpython, because _hashlib.so is a separately loaded
+ * extension that calls BW_Py_memoryTrackingIgnoreBegin/End and has to bind
+ * them against the process image.
+ *
+ * CPython compiles its own objects with -fvisibility=hidden, which turns these
+ * into STB_LOCAL symbols, and -export-dynamic cannot export a hidden symbol -
+ * so _hashlib failed to import ("undefined symbol: BW_Py_memoryTrackingIgnoreBegin")
+ * and 3.12+'s Tools/build/check_extension_modules.py renamed it to
+ * _hashlib_failed...so. Marking them default visibility restores the 2.7
+ * behaviour, where the hooks lived in the interpreter image where any module
+ * could reach them. */
+#if defined( __GNUC__ ) && !defined( _WIN32 )
+#define BW_PY_EXPORT __attribute__( ( visibility( "default" ) ) )
+#else
+#define BW_PY_EXPORT
+#endif
+/* BIGWORLD_END */
+
+/* BIGWORLD_BEGIN
  * BW_Py_calloc is new in the Python 3.13 port: PyMem_SetAllocator's
  * PyMemAllocatorEx requires a calloc entry point which the 2.7 hook
  * interface did not have. */
-void* BW_Py_calloc( size_t nelem, size_t elsize );
+BW_PY_EXPORT void* BW_Py_calloc( size_t nelem, size_t elsize );
 /* BIGWORLD_END */
 
-void* BW_Py_malloc( size_t size );
-void BW_Py_free( void * mem );
-void* BW_Py_realloc( void * mem, size_t size );
+BW_PY_EXPORT void* BW_Py_malloc( size_t size );
+BW_PY_EXPORT void BW_Py_free( void * mem );
+BW_PY_EXPORT void* BW_Py_realloc( void * mem, size_t size );
 
-void BW_Py_memoryTrackingIgnoreBegin( void );
-void BW_Py_memoryTrackingIgnoreEnd( void );
+BW_PY_EXPORT void BW_Py_memoryTrackingIgnoreBegin( void );
+BW_PY_EXPORT void BW_Py_memoryTrackingIgnoreEnd( void );
 
-void BW_Py_setHooks( BW_Py_Hooks * hooks );
-void BW_Py_getHooks( BW_Py_Hooks * hooks );
+BW_PY_EXPORT void BW_Py_setHooks( BW_Py_Hooks * hooks );
+BW_PY_EXPORT void BW_Py_getHooks( BW_Py_Hooks * hooks );
 
 #ifdef __cplusplus
 } /* extern "C" */

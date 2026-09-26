@@ -308,12 +308,16 @@ TEST_F( EntityDefUnitTestHarness, Script_DataSection_basictypes )
 		CheckDSConversion( "<Type> INT32 </Type>", "-2147483648",
 			"<value> -2147483648 </value>" ), "INT32_2" );
 
+	// BIGWORLD_BEGIN(3.13 migration)
+	// The "L" suffix on these literals is a Python 2-ism (SyntaxError in
+	// Python 3); plain int literals produce the same objects now.
+	// BIGWORLD_END
 	TEST_SUB_FUNCTOR_NAMED(
-		CheckDSConversion( "<Type> INT64 </Type>", "9223372036854775807L",
+		CheckDSConversion( "<Type> INT64 </Type>", "9223372036854775807",
 			"<value> 9223372036854775807 </value>" ), "INT64_1" );
 
 	TEST_SUB_FUNCTOR_NAMED(
-		CheckDSConversion( "<Type> INT64 </Type>", "-9223372036854775808L",
+		CheckDSConversion( "<Type> INT64 </Type>", "-9223372036854775808",
 			"<value> -9223372036854775808 </value>" ), "INT64_2" );
 
 #if 0 && defined( MF_SERVER )
@@ -345,9 +349,14 @@ TEST_F( EntityDefUnitTestHarness, Script_DataSection_basictypes )
 			"<value> gAJHQBDuFHrhR64u </value>" ), "PYTHON_3" );
 #endif
 
+	// BIGWORLD_BEGIN(3.13 migration)
+	// Regenerated with Python 3's pickle: protocol 2 pickles str as
+	// BINUNICODE ('X') now, where Python 2's cPickle used SHORT_BINSTRING
+	// ('U'), so the expected bytes (and their Base64) changed.
+	// BIGWORLD_END
 	TEST_SUB_FUNCTOR_NAMED(
 		CheckDSConversion( "<Type> PYTHON </Type>", "[ 3, 'a', 4.5 ]",
-			"<value> gAJdcQEoSwNVAWFHQBIAAAAAAABlLg== </value>" ), "PYTHON_4" );
+			"<value> gAJdcQAoSwNYAQAAAGFxAUdAEgAAAAAAAGUu </value>" ), "PYTHON_4" );
 
 #if 0
 	TEST_SUB_FUNCTOR_NAMED(
@@ -381,7 +390,7 @@ TEST_F( EntityDefUnitTestHarness, Script_DataSection_basictypes )
 
 	TEST_SUB_FUNCTOR_NAMED(
 		CheckDSConversion( "<Type> UINT64 </Type>",
-			"18446744073709551615L",
+			"18446744073709551615",
 			"<value> 18446744073709551615 </value>" ),
 		"UINT64_1" );
 

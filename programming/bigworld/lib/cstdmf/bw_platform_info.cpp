@@ -21,6 +21,17 @@ namespace { // anonymous
 
 const BW::string REDHAT_VERSION_FILE = "/etc/redhat-release";
 
+// BIGWORLD_BEGIN(3.13 migration)
+// Mirror build/make/platform_info.py: Debian-family hosts (Ubuntu etc.) have
+// no /etc/redhat-release, and the make side maps them to the el7 toolchain
+// profile (DEBIAN_EQUIVALENT_PLATFORM there). PlatformInfo::str() must agree,
+// otherwise every Script::init() builds its sys.path entry as
+// lib-dynload-unknown while the built directory is lib-dynload-el7, and no
+// C extension stdlib module (e.g. _struct, needed by pickle) can be imported.
+const BW::string DEBIAN_VERSION_FILE = "/etc/debian_version";
+const BW::string DEBIAN_EQUIVALENT_PLATFORM = "el7";
+// BIGWORLD_END
+
 const BW::string SHORT_NAME_ENTERPRISE_LINUX = "el";
 const BW::string SHORT_NAME_CENTOS = "centos";
 const BW::string SHORT_NAME_FEDORA = "fedora";
@@ -198,6 +209,14 @@ const BW::string & PlatformInfo::str()
 			s_cachedPlatformName.clear();
 		}
 	}
+	// BIGWORLD_BEGIN(3.13 migration)
+	// See the DEBIAN_EQUIVALENT_PLATFORM note above: report the same platform
+	// name the makefiles do on Debian-family hosts.
+	else if (stat( DEBIAN_VERSION_FILE.c_str(), &statBuf ) == 0)
+	{
+		s_cachedPlatformName = DEBIAN_EQUIVALENT_PLATFORM;
+	}
+	// BIGWORLD_END
 
 	if (s_cachedPlatformName.empty())
 	{

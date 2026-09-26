@@ -74,7 +74,13 @@ LogMetadataStream & MLDBMetadataStream::add( const BW::string & key,
 {
 	if (!jsonAdded_)
 	{
-		root_[ key.c_str() ] = value;
+		// BIGWORLD_BEGIN(3.13 migration)
+		// 'long long' is ambiguous across Json::Value's numeric constructors
+		// (Int64/UInt64/double/bool are all one standard conversion away);
+		// pin the intended signed 64 bit constructor. Was fine with the old
+		// vendored jsoncpp that had fewer overloads.
+		// BIGWORLD_END
+		root_[ key.c_str() ] = static_cast< Json::Value::Int64 >( value );
 	}
 	return *this;
 }

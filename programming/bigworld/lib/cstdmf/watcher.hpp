@@ -161,6 +161,29 @@ bool watcherStringToValue( const char * valueStr, bool & value )
 bool watcherStreamToValueType( BinaryIStream & stream, BW::string & value,
 								WatcherDataType type );
 
+/*
+ * Every stream produced by watcherValueToStream() (watcher protocol 2, "SET2")
+ * is laid out as a one byte WatcherDataType, a one byte Watcher::Mode, and only
+ * then the payload. WatcherProtocolDecoder::decodeNext() reads it that way.
+ *
+ * The watcherStreamToValueType() payload extractors all take an already parsed
+ * type, so this helper consumes the mode byte on their behalf. Without it the
+ * readers were left looking at the mode byte where they expected the payload
+ * length, which made every watcher SET operation fail to de-stream (and made
+ * watcherValueToStream()/watcherStreamToValue() not round trip).
+ *
+ * BIGWORLD_BEGIN(3.13 migration)
+ * BIGWORLD_END
+ */
+inline
+bool watcherStreamSkipMode( BinaryIStream & stream )
+{
+	char mode;
+	stream >> mode;
+	return !stream.error();
+}
+
+
 /* Fallback stream handler when other type handlers haven't worked */
 template <class VALUE_TYPE>
 bool watcherStreamToStringToValue( BinaryIStream & stream, VALUE_TYPE &value,
@@ -197,6 +220,17 @@ bool watcherStreamToValue( BinaryIStream & stream, VALUE_TYPE &value )
 #if !defined( _XBOX360 )
 	char type;
 	stream >> type;
+
+	if (stream.error())
+	{
+		return false;
+	}
+
+	// watcherValueToStream() writes the mode right after the type.
+	if (!watcherStreamSkipMode( stream ))
+	{
+		return false;
+	}
 
 	// If it's a string, we can push off the handling to the old protocol
 	if (type == WATCHER_TYPE_STRING)
@@ -260,6 +294,12 @@ bool watcherStreamToValue( BinaryIStream & stream, bool & value )
 	stream >> type;
 
 	if (stream.error())
+	{
+		return false;
+	}
+
+	// watcherValueToStream() writes the mode right after the type.
+	if (!watcherStreamSkipMode( stream ))
 	{
 		return false;
 	}
@@ -354,6 +394,12 @@ bool watcherStreamToValue( BinaryIStream & stream, int & value )
 		return false;
 	}
 
+	// watcherValueToStream() writes the mode right after the type.
+	if (!watcherStreamSkipMode( stream ))
+	{
+		return false;
+	}
+
 	// Push the stream into the value now
 	return watcherStreamToValueType( stream, (int32&)value,
 								(WatcherDataType)type );
@@ -369,6 +415,25 @@ bool watcherStreamToValue( BinaryIStream & stream, long & value )
 	if (stream.error())
 	{
 		return false;
+	}
+
+	// watcherValueToStream() writes the mode right after the type.
+	if (!watcherStreamSkipMode( stream ))
+	{
+		return false;
+	}
+
+	// BIGWORLD_BEGIN(3.13 migration)
+	// 'long' is 64-bit on LP64 platforms, and int64_t is a typedef of it
+	// there, so an int64 watcher value binds to this overload (the non-template
+	// beats the generic template on an exact match). The unconditional int32
+	// extractor then truncated every 64-bit value to its low 32 bits. Pick the
+	// extractor by the actual width of the type instead.
+	// BIGWORLD_END
+	if (sizeof( value ) == sizeof( int64 ))
+	{
+		return watcherStreamToValueType( stream, (int64&)value,
+									(WatcherDataType)type );
 	}
 
 	// Push the stream into the value now
@@ -441,6 +506,12 @@ bool watcherStreamToValue( BinaryIStream & stream, unsigned int & value )
 	stream >> type;
 
 	if (stream.error())
+	{
+		return false;
+	}
+
+	// watcherValueToStream() writes the mode right after the type.
+	if (!watcherStreamSkipMode( stream ))
 	{
 		return false;
 	}
@@ -536,6 +607,12 @@ bool watcherStreamToValue( BinaryIStream & stream, float & value )
 		return false;
 	}
 
+	// watcherValueToStream() writes the mode right after the type.
+	if (!watcherStreamSkipMode( stream ))
+	{
+		return false;
+	}
+
 	// Push the stream into the value now
 	return watcherStreamToValueType( stream, value, (WatcherDataType)type );
 }
@@ -548,6 +625,12 @@ bool watcherStreamToValue( BinaryIStream & stream, double & value )
 	stream >> type;
 
 	if (stream.error())
+	{
+		return false;
+	}
+
+	// watcherValueToStream() writes the mode right after the type.
+	if (!watcherStreamSkipMode( stream ))
 	{
 		return false;
 	}
@@ -580,6 +663,12 @@ bool watcherStreamToValue( BinaryIStream & stream, BW::string & value )
 	stream >> type;
 
 	if (stream.error())
+	{
+		return false;
+	}
+
+	// watcherValueToStream() writes the mode right after the type.
+	if (!watcherStreamSkipMode( stream ))
 	{
 		return false;
 	}

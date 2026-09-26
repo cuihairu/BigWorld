@@ -144,8 +144,10 @@ componentDependencies = $(componentBaseFiles:=.d)
 
 # Deal with the specific third party components
 ifeq ($(useCurl),1)
-incFlags_$(bwConfBinName) += -I$(CURL_BUILD_DIR)/include/curl
-incFlags_$(bwConfBinName) += -I$(CURL_DIR)/include
+# BIGWORLD_BEGIN(3.13 migration)
+# curl is provided by vcpkg: single include root, no vendored source tree.
+incFlags_$(bwConfBinName) += -I$(CURL_BUILD_DIR)/include
+# BIGWORLD_END
 
 thirdPartyDependsOn += $(BW_CURL_TARGET)
 
@@ -207,6 +209,33 @@ incFlags_$(bwConfBinName) += $(BW_INCLUDES)
 cppFlags_$(bwConfBinName) += $(BW_CPPFLAGS)
 cxxFlags_$(bwConfBinName) += $(BW_CXXFLAGS)
 endif
+
+# BIGWORLD_BEGIN(3.13 migration)
+# sqlite3 is provided by vcpkg (see third_party_vcpkg.mak). Components that
+# talk to sqlite directly (lib/sqlite wrapper, baseapp, transfer_db,
+# consolidate_dbs) set this to stage/link the vcpkg static library.
+ifeq ($(useSQLite),1)
+incFlags_$(bwConfBinName) += -I$(VCPKG_INSTALLED)/include
+thirdPartyDependsOn += sqlite3
+# sqlite3 (vcpkg static) needs the pthread/dl/m runtime pieces.
+ldLibs_$(bwConfBinName) += -lpthread -ldl -lm
+endif
+# BIGWORLD_END
+
+# BIGWORLD_BEGIN(3.13 migration)
+# libpng is provided by vcpkg (see third_party_vcpkg.mak), which stages
+# libpng16.a under the historical name libpng.a. lib/moo is the only
+# component that includes <png.h>, so it sets this; any binary that links
+# libmoo has to set it as well, because third-party dependencies are not
+# inherited transitively - bwLibraryDepsAsName is built purely from the
+# component's own dependsOn / thirdPartyDependsOn.
+ifeq ($(usePNG),1)
+incFlags_$(bwConfBinName) += -I$(VCPKG_INSTALLED)/include
+# libpng16 is built against zlib, which third_party_vcpkg.mak stages under
+# the name libzip.a, so both archives are needed.
+thirdPartyDependsOn += png zip
+endif
+# BIGWORLD_END
 
 ifeq ($(useMongoDB),1)
 incFlags_$(bwConfBinName) += $(MONGO_CXX_DRIVER_INCLUDE)

@@ -273,8 +273,14 @@ bool release_snapshot( ConfigReader & config )
 		isOK = false;
 	}
 
+	// BIGWORLD_BEGIN(3.13 migration)
+	// Was ("/dev/" + lvGroup, "/" + lvSnapshot).c_str() - a comma expression
+	// that threw the "/dev/" + lvGroup concatenation away and passed only
+	// "/" + lvSnapshot to lvremove. gcc 15's [[nodiscard]] on operator+
+	// turned the silently dropped result into an error.
+	// BIGWORLD_END
 	if (execl( LVREMOVE, "-f",
-		("/dev/" + lvGroup, "/" + lvSnapshot).c_str(), NULL ) != 0)
+		("/dev/" + lvGroup + "/" + lvSnapshot).c_str(), NULL ) != 0)
 	{
 		printf( "Unable to 'lvremove' snapshot.\n" );
 		isOK = false;

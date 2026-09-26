@@ -39,16 +39,25 @@ sourcePythonDependencies := $(PYTHON_BUILD_DIR)/pyconfig.h $(PYTHON_BUILD_DIR)/M
 linkForSharedExtra = -L$(BW_INTERMEDIATE_DIR)/$(BW_PLATFORM_CONFIG)/lib
 # Add our OpenSSL build to the Python interpreter
 # BIGWORLD_BEGIN(3.13 migration)
-# Was: sourcePythonDependencies += $(BW_CRYPTO_LIB) $(BW_SSL_LIB) plus a
-# -Wl,--whole-archive -lbwssl -lbwcrypto -Wl,--no-whole-archive entry in
-# linkForSharedExtra, both feeding the 2.7 _ssl/_hashlib shared modules.
-# 3.13 requires OpenSSL >= 1.1.1 and disables those modules against our
-# vendored 1.0.0d (which additionally no longer compiles under gcc >= 14 /
-# C23), so the interpreter no longer links OpenSSL at all. Restore the
-# dependency, the whole-archive link and --with-openssl once the OpenSSL
-# dependency is upgraded (vcpkg task, see docs/python-313-migration.md).
-# sourcePythonDependencies += $(BW_CRYPTO_LIB) $(BW_SSL_LIB)
-# linkForSharedExtra += -Wl,--whole-archive -lbwssl -lbwcrypto -Wl,--no-whole-archive
+# Restored for the vcpkg OpenSSL 3.6: the interpreter links the same
+# static bwssl/bwcrypto archives that every server binary links, so the
+# _ssl/_hashlib shared modules resolve their OpenSSL symbols against the
+# process image exactly like the 2.7 build did.
+sourcePythonDependencies += $(BW_CRYPTO_LIB) $(BW_SSL_LIB)
+linkForSharedExtra += -Wl,--whole-archive -lbwssl -lbwcrypto -Wl,--no-whole-archive
+# 3.12+ added Tools/build/check_extension_modules.py to the interpreter
+# build: it dlopen()s every extension module from the freshly built
+# interpreter and *renames* any module that fails to import to
+# <name>_failed<EXT_SUFFIX>. _hashlib calls
+# BW_Py_memoryTrackingIgnoreBegin/End (our bwhooks.c, ported from 2.7), which
+# live in libpython's Python/bwhooks.o. Nothing inside libpython references
+# them - in 2.7 the #define malloc redirection in obmalloc.c did - so the
+# linker never pulled bwhooks.o out of the archive, the symbols were absent
+# from the interpreter's dynamic symbol table, and _hashlib was renamed away.
+# Forcing them undefined pulls bwhooks.o in; the interpreter is already
+# linked with -Xlinker -export-dynamic, so the modules can then bind to them.
+linkForSharedExtra += -Wl,-u,BW_Py_memoryTrackingIgnoreBegin
+linkForSharedExtra += -Wl,-u,BW_Py_memoryTrackingIgnoreEnd
 # BIGWORLD_END
 
 pythonLibDir := $(BW_INTERMEDIATE_DIR)/$(BW_PLATFORM_CONFIG)/lib
@@ -128,12 +137,19 @@ pythonInstallBinaryTarget := $(PYTHON_INSTALL_DIR)/bin/$(pythonBinaryFile)
 # BIGWORLD_BEGIN(3.13 migration)
 # --enable-unicode=ucs4 is gone: 3.3+ always uses a flexible ('unicode-internal'
 # in 3.3+, PEP 393) representation and the option was removed.
-# --with-openssl is deliberately NOT passed: the vendored OpenSSL (1.0.0d) is
-# below 3.13's minimum (1.1.1), and passing the option turns that into a hard
-# configure error instead of a soft _ssl/_hashlib disable. Re-add it once the
-# OpenSSL dependency is upgraded (see docs/python-313-migration.md):
-#   pythonConfigureOpts += --with-openssl="$(OPENSSL_BUILD_DIR)"
-# The CPPFLAGS below still expose our OpenSSL headers to configure's checks.
+# OpenSSL comes from vcpkg (>= 1.1.1 required by 3.13): pass the installed
+# root so configure enables _ssl/_hashlib against the same static archives
+# (bwssl/bwcrypto) that the server binaries link.
+pythonConfigureOpts += --with-openssl="$(OPENSSL_BUILD_DIR)"
+# The CPPFLAGS below expose our OpenSSL headers to configure's checks.
+# BIGWORLD_END
+# BIGWORLD_BEGIN(3.13 migration)
+# _bz2 is listed in pythonSharedMods, so configure has to be able to find
+# bzip2. This host has no system bzip2 development files, so take them from
+# the vcpkg installed tree like every other third-party dependency (see
+# vcpkg.json). Without this, configure silently drops _bz2 and the shared
+# module existence assertion below fails the build.
+pythonConfigureOpts += --with-bz2="$(VCPKG_INSTALLED)"
 # BIGWORLD_END
 pythonConfigureOpts += --with-suffix="$(PYTHON_EXE_SUFFIX)"
 pythonConfigureOpts += --prefix="$(PYTHON_INSTALL_DIR)"
@@ -204,7 +220,7 @@ pythonLibrarySentinel := __future__.py
 # cpython-3.13), hence the dedicated variable.
 pythonSoabiVersion := $(subst .,,$(BW_PYTHON_VERSION))
 pythonExtSuffix := .cpython-$(pythonSoabiVersion)-x86_64-linux-gnu.so
-pythonSharedMods := $(foreach mod,array _asyncio _bisect _blake2 _bz2 cmath _codecs_cn _codecs_hk _codecs_iso2022 _codecs_jp _codecs_kr _codecs_tw _contextvars _csv _ctypes _curses_panel _curses _datetime _decimal _elementtree _heapq _interpchannels _interpqueues _interpreters _json _lsprof _lzma _md5 _multibytecodec _multiprocessing _opcode _pickle _posixshmem _posixsubprocess _queue _random _sha1 _sha2 _sha3 _socket _sqlite3 _statistics _struct _uuid _zoneinfo binascii fcntl grp math mmap pyexpat resource select syslog termios unicodedata zlib,$(mod)$(pythonExtSuffix))
+pythonSharedMods := $(foreach mod,_hashlib _ssl array _asyncio _bisect _blake2 _bz2 cmath _codecs_cn _codecs_hk _codecs_iso2022 _codecs_jp _codecs_kr _codecs_tw _contextvars _csv _ctypes _curses_panel _curses _datetime _decimal _elementtree _heapq _interpchannels _interpqueues _interpreters _json _lsprof _lzma _md5 _multibytecodec _multiprocessing _opcode _pickle _posixshmem _posixsubprocess _queue _random _sha1 _sha2 _sha3 _socket _sqlite3 _statistics _struct _uuid _zoneinfo binascii fcntl grp math mmap pyexpat resource select syslog termios unicodedata zlib,$(mod)$(pythonExtSuffix))
 # BIGWORLD_END
 
 # Relative paths in our trees
@@ -318,8 +334,23 @@ $(bwIntermediateSharedModRule): $(sourcePythonSharedModSentinel) $(bwIntermediat
 	$(bwCommand_pythonCopySharedModule)
 
 
+# BIGWORLD_BEGIN(3.13 migration)
+# bw_site.py is the engine's site.py replacement: Script::init() sets
+# Py_NoSiteFlag = 1 (the stdlib site.py is skipped) and then imports bw_site
+# from scripts/common, failing hard if it is missing. The 14.4.1 source drop
+# never shipped it (it only existed in the binary RPM res tree), so it is
+# tracked with the pyscript library that imports it and installed from there.
+# BIGWORLD_END
+bwSitePySource := $(BW_ABS_SRC)/lib/pyscript/bw_site.py
+bwIntermediateBwSitePy := $(bwIntermediateCommonDir)/bw_site.py
+
+$(bwIntermediateBwSitePy): $(bwSitePySource) | $(bwIntermediateCommonDir)
+	cp --preserve=mode,ownership -f $(bwSitePySource) $@
+
+
 .PHONY: python_library
-python_library: $(bwIntermediateLibrarySentinel) $(bwIntermediateSharedMods)
+python_library: $(bwIntermediateLibrarySentinel) $(bwIntermediateSharedMods) \
+	$(bwIntermediateBwSitePy)
 
 BW_MISC += python_library
 
@@ -332,16 +363,21 @@ BW_PYTHON_MODULES += python_library
 
 # Python module symbols that binaries using our Python modules
 # need to provide
-getUndefined = $(shell nm -u $(1) | grep 'U ' | grep -v -E ' _?Py' | grep -v '@@GLIBC' | cut -b20-)
+#
+# BIGWORLD_BEGIN(3.13 migration)
+# The glibc filter used to be '@@GLIBC', which only matched the old binutils
+# spelling of a versioned undefined symbol. Modern nm prints a single '@'
+# (e.g. "U memcpy@GLIBC_2.14"), so every libc symbol leaked into the harvested
+# list and python_compare_symbols could never match the checked-in file.
+# BIGWORLD_END
+getUndefined = $(shell nm -u $(1) | grep 'U ' | grep -v -E ' _?Py' | grep -v '@GLIBC' | cut -b20-)
 
 # BIGWORLD_BEGIN(3.13 migration)
-# Was "_hashlib.so _ssl.so". 3.13's configure disables _ssl/_hashlib while
-# the vendored OpenSSL is below its 1.1.1 minimum, so there are no shared
-# modules left to harvest symbols from; the pregenerated list above is kept
-# unchanged so process link flags stay identical to the 2.7 build. The
-# BW_Py_* entries are satisfied by bwhooks.o inside libbwpython3.13.a and the
-# OpenSSL ones by the engine's own bwssl link, same as before.
-modulesWhichNeedSymbols :=
+# Restored for the vcpkg OpenSSL 3.6 (see docs/python-313-migration.md
+# risk R1): _hashlib/_ssl are built again, so the undefined symbols the
+# shared modules expect from the process image are harvested from the real
+# artefacts. 3.13 module file names carry the full EXT_SUFFIX.
+modulesWhichNeedSymbols := _hashlib$(pythonExtSuffix) _ssl$(pythonExtSuffix)
 # BIGWORLD_END
 sourceModulesWhichNeedSymbols := $(addprefix $(sourcePythonSharedModDir)/,$(modulesWhichNeedSymbols))
 

@@ -1,7 +1,7 @@
 #include "pch.hpp"
 
 #include "cstdmf/base64.h"
-#include "zip/zlib.h"
+#include <zlib.h>
 
 #include <iostream>
 #include <sstream>

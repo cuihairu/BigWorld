@@ -558,6 +558,12 @@ PyObject * extractPyObjectFromStream( BinaryIStream & stream )
 	char cType;
 	stream >> cType;
 
+	// ...and the mode, which watcherValueToStream() writes straight after the
+	// type. The payload extractors below expect to be positioned at the
+	// payload, so it has to be consumed here.
+	char cMode;
+	stream >> cMode;
+
 	if (!stream.error())
 	{
 		WatcherDataType type = (WatcherDataType)cType;

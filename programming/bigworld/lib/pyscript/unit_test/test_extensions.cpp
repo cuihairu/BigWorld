@@ -19,7 +19,7 @@ TEST_F( PyScriptUnitTestHarness, Python_cPickle )
 			Script::ask( PyObject_GetAttrString( module, "testPickleAndUnpickle" ) , PyTuple_New( 0 ),
 			"", false );
 
-		CHECK_EQUAL(true, PyInt_AsLong(res) != 0);
+		CHECK_EQUAL(true, PyLong_AsLong(res) != 0);
 		Py_XDECREF( res );
 	}
 	Py_XDECREF( module );
@@ -28,10 +28,10 @@ TEST_F( PyScriptUnitTestHarness, Python_cPickle )
 // test pyscript::cPickler class
 TEST_F( PyScriptUnitTestHarness, Python_PicklerClass )
 {
-	// we don't need to explicitly initialise cPickle module if we are using Pickler class
+	// we don't need to explicitly initialise the pickle module if we are using Pickler class
 	PyObject* args = PyTuple_New( 2 );
-	PyTuple_SetItem( args, 0, PyString_FromString( "teststring" ) );
-	PyTuple_SetItem( args, 1, PyInt_FromLong( 42 ));
+	PyTuple_SetItem( args, 0, PyUnicode_FromString( "teststring" ) );
+	PyTuple_SetItem( args, 1, PyLong_FromLong( 42 ));
 
 	ScriptObject obj(args, false);
 	BW::string pickledData = Pickler::pickle( obj );
@@ -42,10 +42,10 @@ TEST_F( PyScriptUnitTestHarness, Python_PicklerClass )
 	PyObject* param0 = PyTuple_GetItem( unpickledObj.get(), 0 );
 	PyObject* param1 = PyTuple_GetItem( unpickledObj.get(), 1 );
 	//static ScriptObject 	
-	CHECK( PyString_Check(param0) );
-	CHECK( PyInt_Check(param1) );
-	CHECK_EQUAL( "teststring", BW::string( PyString_AsString( param0 ) ) );
-	CHECK_EQUAL( 42, PyInt_AsLong( param1 ) );
+	CHECK( PyUnicode_Check(param0) );
+	CHECK( PyLong_Check(param1) );
+	CHECK_EQUAL( "teststring", BW::string( PyUnicode_AsUTF8( param0 ) ) );
+	CHECK_EQUAL( 42, (int)PyLong_AsLong( param1 ) );
 }
 
 // test zlib module integration
@@ -59,7 +59,7 @@ TEST_F( PyScriptUnitTestHarness, Python_zlib )
 			Script::ask( PyObject_GetAttrString( module, "testZlib" ) , PyTuple_New( 0 ),
 			"", false );
 
-		CHECK_EQUAL(true, PyInt_AsLong(res) != 0);
+		CHECK_EQUAL(true, PyLong_AsLong(res) != 0);
 		Py_XDECREF( res );
 	}
 	Py_XDECREF( module );
@@ -72,14 +72,16 @@ TEST_F( PyScriptUnitTestHarness, Python_ImportHashlibModule )
 	CHECK(module);
 	if (module)
 	{
+		// hashlib.update() takes bytes, so the argument is a PyBytes object;
+		// hexdigest() comes back as str.
 		PyObject* args = PyTuple_New( 1 );
-		PyTuple_SetItem( args, 0, PyString_FromString( "test source string" ) );
+		PyTuple_SetItem( args, 0, PyBytes_FromString( "test source string" ) );
 		PyObject* res = 
 			Script::ask( PyObject_GetAttrString( module, "encryptTest" ) , args,
 			"Python_ImportHashlibModule", false );
 
-		CHECK(PyString_Check(res));
-		CHECK_EQUAL("e1537ae4352f712da08b93d34310f6de", BW::string(PyString_AsString(res)));
+		CHECK(PyUnicode_Check(res));
+		CHECK_EQUAL("e1537ae4352f712da08b93d34310f6de", BW::string(PyUnicode_AsUTF8(res)));
 
 		Py_XDECREF( res );
 		Py_XDECREF( module );

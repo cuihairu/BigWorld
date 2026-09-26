@@ -84,6 +84,28 @@ void operator delete[]( void * p ) noexcept
 	(*s_allocFuncs.deleteArray_)( p );
 }
 
+// BIGWORLD_BEGIN(3.13 migration)
+// Sized deallocation overloads. gcc 15 makes -Wsized-deallocation an error
+// (-Werror in this component) when an unsized operator delete is declared
+// without its sized counterpart. The hook table has no sized variants, so
+// these simply forward to the unsized hooks, preserving the 2.7-era
+// behaviour where sized and unsized deletes both funnel into the same
+// allocator.
+NOINLINE
+void operator delete( void * p, std::size_t /*sz*/ ) noexcept
+{
+	init();
+	(*s_allocFuncs.delete_)( p );
+}
+
+NOINLINE
+void operator delete[]( void * p, std::size_t /*sz*/ ) noexcept
+{
+	init();
+	(*s_allocFuncs.deleteArray_)( p );
+}
+// BIGWORLD_END
+
 NOINLINE
 void operator delete[]( void * p, const std::nothrow_t & nt ) noexcept
 {

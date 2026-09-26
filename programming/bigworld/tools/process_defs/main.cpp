@@ -588,7 +588,29 @@ int main( int argc, const char *argv[] )
 		return EXIT_SUCCESS;
 	}
 
-	PySys_SetArgv( argc, const_cast< char ** >( argv ) );
+	// BIGWORLD_BEGIN(3.13 migration)
+	// Was PySys_SetArgv( argc, argv ), removed in Python 3.13. Assign
+	// sys.argv directly, the same way Script::init() does for g_scriptArgv.
+	// BIGWORLD_END
+	{
+		PyObject * pArgvList = PyList_New( argc );
+		if (pArgvList != NULL)
+		{
+			for (int i = 0; i < argc; ++i)
+			{
+				PyObject * pArg = PyUnicode_FromString( argv[i] );
+				if ((pArg == NULL) ||
+						(PyList_SetItem( pArgvList, i, pArg ) != 0))
+				{
+					Py_XDECREF( pArg );
+					break;
+				}
+			}
+
+			PySys_SetObject( "argv", pArgvList );
+			Py_DECREF( pArgvList );
+		}
+	}
 
 	EntityDescriptionMap entityDescriptionMap;
 

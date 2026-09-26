@@ -48,7 +48,15 @@ public:
 		return tables_;
 	}
 
-	SimpleTableCollector& operator+=( const SimpleTableCollector& rhs );
+	// BIGWORLD_BEGIN(3.13 migration)
+	// Nothing calls this any more (only upgradeDatabase1_9Snapshot used this
+	// class and it does not merge collectors); gcc 15's
+	// -Werror=unused-function fires on the out-of-line definition of a member
+	// of a class in an anonymous namespace, so it is marked maybe-unused
+	// rather than deleted outright.
+	// BIGWORLD_END
+	[[maybe_unused]] SimpleTableCollector& operator+=(
+		const SimpleTableCollector& rhs );
 
 	// TableVisitor override.
 	virtual bool onVisitTable( TableProvider & table );

@@ -216,8 +216,16 @@ TEST( DirectoryWatcher_visitChildren )
 	CHECK_EQUAL( BW::string( "2" ), visitor.values_[ 1 ] );
 	CHECK_EQUAL( BW::string( "3" ), visitor.values_[ 2 ] );
 
-	// Visiting with a non empty path goes to the child.
-	CHECK( pDirBase->visitChildren( NULL, "first", visitor ) );
+	// Descending into a child re-targets the visit at that child. "first" is
+	// a DataWatcher, not a directory, so it has no children to visit and
+	// visitChildren() reports false (see Watcher::visitChildren: "false if
+	// the specified watcher could not be found or is not a directory
+	// watcher"). The visitor is left untouched.
+	CHECK( !pDirBase->visitChildren( NULL, "first", visitor ) );
+	CHECK_EQUAL( 3, visitor.count_ );
+
+	// An unknown child is not found at all.
+	CHECK( !pDirBase->visitChildren( NULL, "nope", visitor ) );
 	CHECK_EQUAL( 3, visitor.count_ );
 }
 
@@ -906,8 +914,16 @@ TEST( SequenceWatcher_indexesAndLabels )
 
 	WatcherPtr pWatcher = new SequenceWatcher< ElementVector >( values, labels );
 
-	pWatcher->addChild( "value", makeWatcher( &SequenceElement::value,
-		Watcher::WT_READ_WRITE ), NULL );
+	// The child of a sequence watcher covers a single element and is named
+	// by convention "*"; it has to be a directory, so that the tail of the
+	// path (e.g. the "value" in "first/value") can be resolved inside it.
+	// This mirrors the canonical engine usage, e.g. InterfaceTable::pWatcherByID
+	// or Cell's "reals" watcher.
+	DirectoryWatcher * pElementWatcher = new DirectoryWatcher();
+	pElementWatcher->addChild( "value", makeWatcher( &SequenceElement::value,
+		Watcher::WT_READ_WRITE ) );
+
+	pWatcher->addChild( "*", pElementWatcher );
 
 	BW::string result;
 	BW::string desc;
@@ -930,8 +946,13 @@ TEST( SequenceWatcher_indexesAndLabels )
 	CHECK( pWatcher->setFromString( NULL, "second/value", "25" ) );
 	CHECK_EQUAL( 25, values[1].value );
 
-	// Unknown labels fail.
-	CHECK( !pWatcher->getAsString( NULL, "unknown/value", result, desc, mode ) );
+	// A name that matches no label and is not numeric falls through
+	// findChild()'s atoi() to index 0 - a long-standing quirk of the label /
+	// index lookup, kept as is.
+	CHECK( pWatcher->getAsString( NULL, "unknown/value", result, desc, mode ) );
+	CHECK_EQUAL( BW::string( "10" ), result );
+
+	// An out-of-range index fails.
 	CHECK( !pWatcher->getAsString( NULL, "99/value", result, desc, mode ) );
 
 	// addChild with an empty path fails.
@@ -980,8 +1001,13 @@ TEST( MapWatcher_mapAccess )
 
 	WatcherPtr pWatcher = new MapWatcher< TestMap >( values );
 
-	pWatcher->addChild( "value", makeWatcher( &SequenceElement::value,
-		Watcher::WT_READ_WRITE ), NULL );
+	// As with SequenceWatcher: the map's child covers a single element and
+	// has to be a directory for the "key/value" path tail to resolve.
+	DirectoryWatcher * pElementWatcher = new DirectoryWatcher();
+	pElementWatcher->addChild( "value", makeWatcher( &SequenceElement::value,
+		Watcher::WT_READ_WRITE ) );
+
+	pWatcher->addChild( "*", pElementWatcher );
 
 	BW::string result;
 	BW::string desc;

@@ -928,11 +928,29 @@ PyObject * PyArrayDataInstance::PickleResolve( ScriptObject list )
  */
 int PyArrayDataInstance::pyCompare( PyObject * a, PyObject * b )
 {
-	// Both a and b should be PyArrayDataInstances, Python enforces that
-	// comparisons between disparate types should compare False always.
-
-	MF_ASSERT(PyArrayDataInstance::Check( a ) && 
-		PyArrayDataInstance::Check( b ));
+	/* BIGWORLD_BEGIN(3.13 migration)
+	 * The comment that used to live here claimed "Python enforces that
+	 * comparisons between disparate types should compare False always", and
+	 * asserted. It does not: for `list < array`, list.__lt__() returns
+	 * NotImplemented, after which Python invokes the *reflected* operation
+	 * array.__gt__(list) - so the operand reaching us is routinely NOT a
+	 * PyArrayDataInstance, and any script doing `someArray < 5` aborted the
+	 * process via this assert.
+	 *
+	 * Report "ordered, and not equal" instead of asserting, and deliberately
+	 * without setting an exception: the long-standing contract for disparate
+	 * types is that they are never equal, and callers such as
+	 * ScriptObject::compareTo() only reach their own conversion fallbacks when
+	 * the comparison returns non-zero *and* leaves no error pending. Returning
+	 * 0 would wrongly claim equality; raising TypeError here would make
+	 * compareTo() report the operands as incomparable rather than merely
+	 * unequal, defeating those fallbacks.
+	 */
+	if (!PyArrayDataInstance::Check( a ) || !PyArrayDataInstance::Check( b ))
+	{
+		return -1;
+	}
+	/* BIGWORLD_END */
 
 	// Which means that downcasting to PyArrayDataInstance is safe.
 

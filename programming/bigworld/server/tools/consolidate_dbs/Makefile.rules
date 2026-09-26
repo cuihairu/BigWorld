@@ -43,6 +43,7 @@ dependsOn =				\
 usePython = 1
 useOpenSSL = 1
 useMySQL = 1
+useSQLite = 1
 
 include $(BW_COMPONENT_FOOTER)
 

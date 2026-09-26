@@ -1276,8 +1276,18 @@ public:
 	virtual void init();
 
 private:
-	PyMethodDef	mdReal_;
-	PyMethodDef	mdStop_;
+	/* BIGWORLD_BEGIN(3.13 migration)
+	 * The PyMethodDef table must outlive the builtin_function_or_method
+	 * objects that PyModule_AddFunctions() builds from it: those objects
+	 * keep a *borrowed* pointer to the table (PyCFunctionObject::m_ml) for
+	 * their whole lifetime. A table with automatic storage would dangle as
+	 * soon as init() returned, and the still-tracked function objects would
+	 * fault during the Py_Finalize() GC. This class is documented to be
+	 * instantiated as a static/global object, so the table below has the
+	 * lifetime the C API requires.
+	 */
+	PyMethodDef	defs_[ 2 ];
+	/* BIGWORLD_END */
 
 	const char *	moduleName_;
 	const char *	methodName_;

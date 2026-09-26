@@ -157,11 +157,13 @@ TEST_F( EntityDefUnitTestHarness, Script_ScriptDataSource_wstring )
 	BW::wstring result;
 	ScriptDataSource source( inputObject );
 	CHECK( source.read( result ) );
-	// No CHECK_EQUAL for BW::wstring
+	// No CHECK_EQUAL for BW::wstring; compare the code points instead.
+	// C++20 deleted operator<<( ostream&, wchar_t ), so the elements have to
+	// be widened to a streamable integer type.
 	CHECK_EQUAL( 3U, result.size() );
-	CHECK_EQUAL( L'\x8fd9', result[0] );
-	CHECK_EQUAL( L'\x3053', result[1] );
-	CHECK_EQUAL( L'\x042d', result[2] );
+	CHECK_EQUAL( (uint32)L'\x8fd9', (uint32)result[0] );
+	CHECK_EQUAL( (uint32)L'\x3053', (uint32)result[1] );
+	CHECK_EQUAL( (uint32)L'\x042d', (uint32)result[2] );
 }
 
 
@@ -175,11 +177,13 @@ TEST_F( EntityDefUnitTestHarness, Script_ScriptDataSource_wstring_from_utf8 )
 	BW::wstring result;
 	ScriptDataSource source( inputObject );
 	CHECK( source.read( result ) );
-	// No CHECK_EQUAL for BW::wstring
+	// No CHECK_EQUAL for BW::wstring; compare the code points instead.
+	// C++20 deleted operator<<( ostream&, wchar_t ), so the elements have to
+	// be widened to a streamable integer type.
 	CHECK_EQUAL( 3U, result.size() );
-	CHECK_EQUAL( L'\x8fd9', result[0] );
-	CHECK_EQUAL( L'\x3053', result[1] );
-	CHECK_EQUAL( L'\x042d', result[2] );
+	CHECK_EQUAL( (uint32)L'\x8fd9', (uint32)result[0] );
+	CHECK_EQUAL( (uint32)L'\x3053', (uint32)result[1] );
+	CHECK_EQUAL( (uint32)L'\x042d', (uint32)result[2] );
 }
 
 

@@ -19,7 +19,7 @@ TEST_FP( ScriptDebugMatchFixture,
 	CHECK( !this->hasMatched() );
 
 	CHECK_EQUAL( Py_None, Script::runString(
-		"print 'Test stdio string: %s' % ( 25, )",
+		"print('Test stdio string: %s' % ( 25, ))",
 		/* printResult */ true ) );
 
 #if ENABLE_MSG_LOGGING
@@ -37,7 +37,7 @@ TEST_FP( ScriptDebugMatchFixture,
 	CHECK( !this->hasMatched() );
 
 	CHECK_EQUAL( Py_None, Script::runString(
-		"import sys; print >> sys.stderr, 'Test stderr string: %s' % ( 45, )",
+		"import sys; print('Test stderr string: %s' % ( 45, ), file=sys.stderr)",
 		/* printResult */ true ) );
 
 #if ENABLE_MSG_LOGGING
@@ -61,7 +61,7 @@ TEST_FP( ScriptOutputHookLatchFixture,
 	CHECK( !this->hasMatched() );
 
 	CHECK_EQUAL( Py_None, Script::runString(
-		"print 'Test stdio string: %s' % ( 25, )",
+		"print('Test stdio string: %s' % ( 25, ))",
 		/* printResult */ true ) );
 
 	CHECK( this->hasMatched() );
@@ -80,7 +80,7 @@ TEST_FP( ScriptOutputHookLatchFixture,
 	CHECK( !this->hasMatched() );
 
 	CHECK_EQUAL( Py_None, Script::runString(
-		"import sys; print >> sys.stderr, 'Test stderr string: %s' % ( 45, )",
+		"import sys; print('Test stderr string: %s' % ( 45, ), file=sys.stderr)",
 		/* printResult */ true ) );
 
 	CHECK( this->hasMatched() );
@@ -107,7 +107,7 @@ TEST_FP( ScriptOutputHookLatchFixture,
 	CHECK( !this->hasMatched() );
 
 	CHECK_EQUAL( Py_None, Script::runString(
-		"print 'Test stdio string: %s' % ( 25, )",
+		"print('Test stdio string: %s' % ( 25, ))",
 		/* printResult */ true ) );
 
 	CHECK( this->hasMatched() );
@@ -134,7 +134,7 @@ TEST_FP( ScriptOutputHookLatchFixture,
 	CHECK( !this->hasMatched() );
 
 	CHECK_EQUAL( Py_None, Script::runString(
-		"import sys; print >> sys.stderr, 'Test stderr string: %s' % ( 45, )",
+		"import sys; print('Test stderr string: %s' % ( 45, ), file=sys.stderr)",
 		/* printResult */ true ) );
 
 	CHECK( this->hasMatched() );
@@ -162,7 +162,7 @@ TEST_FP( ScriptOutputHookLatchFixture,
 	CHECK( !this->hasMatched() );
 
 	CHECK_EQUAL( Py_None, Script::runString(
-		"print 'Test stdio string: %s' % ( 25, )",
+		"print('Test stdio string: %s' % ( 25, ))",
 		/* printResult */ true ) );
 
 	CHECK( !this->hasMatched() );
@@ -192,13 +192,13 @@ TEST_FP( ScriptOutputHookLatchFixture,
 	CHECK( !this->hasMatched() );
 
 	CHECK_EQUAL( Py_None,
-		Script::runString( "print 'Hook'", /* printResult */ true ) );
+		Script::runString( "print('Hook')", /* printResult */ true ) );
 
 	CHECK( this->isHooked() );
 	CHECK( !this->hasMatched() );
 
 	CHECK_EQUAL( Py_None,
-		Script::runString( "print 'Latch'", /* printResult */ true ) );
+		Script::runString( "print('Latch')", /* printResult */ true ) );
 
 	CHECK( this->isHooked() );
 	CHECK( this->hasMatched() );
@@ -226,14 +226,14 @@ TEST_FP( ScriptOutputHookLatchFixture,
 	CHECK( !this->hasMatched() );
 
 	CHECK_EQUAL( Py_None,
-		Script::runString( "print 'Hook'", /* printResult */ true ) );
+		Script::runString( "print('Hook')", /* printResult */ true ) );
 
 	CHECK( !this->hasMatched() );
 	CHECK( !this->isHooked() );
 	CHECK( !this->wasUsedAfterFree() );
 
 	CHECK_EQUAL( Py_None,
-		Script::runString( "print 'Latch'", /* printResult */ true ) );
+		Script::runString( "print('Latch')", /* printResult */ true ) );
 
 	CHECK( !this->hasMatched() );
 	CHECK( !this->isHooked() );
@@ -259,14 +259,14 @@ TEST_FP( ScriptOutputHookLatchFixture,
 	CHECK( this->isHooked() );
 
 	CHECK_EQUAL( Py_None,
-		Script::runString( "print 'Hook'", /* printResult */ true ) );
+		Script::runString( "print('Hook')", /* printResult */ true ) );
 
 	CHECK( !this->hasMatched() );
 	CHECK( !this->isHooked() );
 	CHECK( !this->wasUsedAfterFree() );
 
 	CHECK_EQUAL( Py_None,
-		Script::runString( "print 'Latch'", /* printResult */ true ) );
+		Script::runString( "print('Latch')", /* printResult */ true ) );
 
 	CHECK( !this->hasMatched() );
 	CHECK( !this->wasUsedAfterFree() );
@@ -283,7 +283,7 @@ TEST_FP( ScriptOutputDelSelfHook,
 	CHECK( this->isHooked() );
 
 	CHECK_EQUAL( Py_None,
-		Script::runString( "print 'Hook'", /* printResult */ true ) );
+		Script::runString( "print('Hook')", /* printResult */ true ) );
 
 	CHECK( !this->isHooked() );
 	CHECK( !this->wasUsedAfterFree() );

@@ -53,14 +53,21 @@ BaseObj::~BaseObj()
 	--s_instCount;
 }
 
-int BaseObj::pyTraverse( visitproc visit, void * arg )
+// BIGWORLD_BEGIN(3.13 migration)
+// The CyclicReferences test below is #if 0'd (it is waiting on
+// PY_TYPEOBJECT_SPECIALISE_GC), and it is the only user of these two. The
+// PY_BASETYPEOBJECT macro hardcodes tp_traverse/tp_clear to 0, so nothing
+// else references them and gcc 15's -Werror=unused-function failed the build.
+// Kept, and marked [[maybe_unused]], so the test stays one #if away.
+// BIGWORLD_END
+[[maybe_unused]] int BaseObj::pyTraverse( visitproc visit, void * arg )
 {
 	TRACE_MSG( "BaseObj::pyTraverse\n" );
 	Py_VISIT( ref_ );
 	return 0; // TODO: check that parent shouldn't be called
 }
 
-int BaseObj::pyClear()
+[[maybe_unused]] int BaseObj::pyClear()
 {
 	TRACE_MSG( "BaseObj::pyClear\n" );
 	Py_CLEAR( ref_ );

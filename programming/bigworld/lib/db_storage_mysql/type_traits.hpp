@@ -83,7 +83,12 @@ struct MySqlTypeTraits< BW::string >
 			default:
 				break;
 		}
-		return NULL;
+		// BIGWORLD_BEGIN(3.13 migration)
+		// Was "return NULL;" - basic_string(nullptr_t) is deleted, and gcc 15
+		// rejects the NULL literal here instead of taking it as an empty
+		// string like the old compilers did.
+		// BIGWORLD_END
+		return BW::string();
 	}
 };
 

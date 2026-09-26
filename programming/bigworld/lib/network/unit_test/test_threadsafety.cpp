@@ -19,7 +19,14 @@ typedef BW::vector<SimpleThread*> Threads;
  *	This function creates the given number of threads that all run the same
  *	function.
  */
-void runTest( int numThreads, SimpleThreadFunc func )
+// BIGWORLD_BEGIN(3.13 migration)
+// The TEST blocks at the bottom of this file are deliberately commented out
+// (they are crash-only checks that assert nothing), so the three helpers in
+// this namespace are only ever referenced from comments. gcc 15's
+// -Werror=unused-function failed the network unit test build on that. They are
+// kept, and marked [[maybe_unused]], so the tests stay one uncomment away.
+// BIGWORLD_END
+[[maybe_unused]] void runTest( int numThreads, SimpleThreadFunc func )
 {
 	Threads threads;
 
@@ -75,7 +82,7 @@ void addPotentialNullBlobToStream( BinaryOStream& stream, const Blob& blob )
 /**
  *	Packet test main thread function.
  */
-void packetTestMain( void * arg )
+[[maybe_unused]] void packetTestMain( void * arg )
 {
 	INFO_MSG( "packetTestMain: thread %lx started\n", pthread_self() );
 
@@ -116,7 +123,7 @@ void packetTestMain( void * arg )
 }
 
 
-void bundleTestMain( void * arg )
+[[maybe_unused]] void bundleTestMain( void * arg )
 {
 	INFO_MSG( "bundleTestMain: thread %lx\n", pthread_self() );
 

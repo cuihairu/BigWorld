@@ -8,7 +8,7 @@
 #include "server/bwconfig.hpp"
 
 // TODO: migrate this to use SqliteConnection
-#include "sqlite/sqlite3.h"
+#include <sqlite3.h>
 
 #include <sys/types.h>
 #include <sys/stat.h>

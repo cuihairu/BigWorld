@@ -12,6 +12,7 @@ cxxSource =							\
 	../write_to_db_reply			\
 
 useOpenSSL = 1
+useSQLite = 1
 
 dependsOn  += 	\
 	chunk		\

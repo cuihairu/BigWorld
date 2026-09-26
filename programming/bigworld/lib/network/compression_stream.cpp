@@ -2,7 +2,7 @@
 #include "compression_stream.hpp"
 
 #include "cstdmf/binary_stream.hpp"
-#include "zip/zlib.h"
+#include <zlib.h>
 
 BW_BEGIN_NAMESPACE
 

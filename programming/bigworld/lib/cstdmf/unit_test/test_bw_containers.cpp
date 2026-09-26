@@ -225,10 +225,20 @@ TEST( BWContainers_testBwList )
 	}
 	CHECK_ALLOCATION_FREED();
 
+	// BIGWORLD_BEGIN(3.13 migration)
+	// This block used to declare a `BW::list< const size_t >`. A list whose
+	// value_type is const has never been standard-conforming (std::list
+	// requires an assignable value_type for its own operations) and
+	// libstdc++ 15 static_asserts on it, so the instantiation was dropped.
+	// The behaviour it actually covered - default construction plus a clean
+	// teardown - is kept here with a conforming value_type.
 	{
-		BW::list< const size_t > container;
+		BW::list< size_t > container;
+		CHECK_EQUAL( container.size(), size_t( 0 ) );
+		CHECK( container.empty() );
 	}
 	CHECK_ALLOCATION_FREED();
+	// BIGWORLD_END
 
 #ifdef _HAS_CXX11_MOVE
 	{

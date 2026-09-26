@@ -503,6 +503,11 @@ TEST( CircularQueue_iterators_and_const_iterators )
 	ConstIntCQueue::const_iterator iCConstBegin = rCIntCQueue.begin();
 	// This fails to compile, 'cause you're not allowed to do that.
 	//ConstIntCQueue::iterator iCBegin = rCIntCQueue.begin();
+	// BIGWORLD_BEGIN(3.13 migration)
+	// The const_iterator is constructed to prove the const begin() overload
+	// resolves; gcc 15 flags the otherwise-unused variable as an error.
+	// BIGWORLD_END
+	(void)iCConstBegin;
 }
 
 // Iterators are for slots in the queue, so as you pop things, they are

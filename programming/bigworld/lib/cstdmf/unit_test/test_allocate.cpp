@@ -143,7 +143,7 @@ TEST( Allocator_testNewBadAlloc )
 	{
 		p = ::operator new( std::numeric_limits<size_t>::max() );
 	}
-	catch (std::bad_alloc)
+	catch (const std::bad_alloc &)
 	{
 		badAllocThrown = true;
 	}
@@ -160,7 +160,7 @@ TEST( Allocator_testNewArrayBadAlloc )
 	{
 		p = ::operator new[]( std::numeric_limits<size_t>::max() );
 	}
-	catch (std::bad_alloc)
+	catch (const std::bad_alloc &)
 	{
 		badAllocThrown = true;
 	}
@@ -177,7 +177,7 @@ TEST( Allocator_testNewNoThrowBadAlloc )
 	{
 		p = ::operator new( std::numeric_limits<size_t>::max(), std::nothrow );
 	}
-	catch (std::bad_alloc)
+	catch (const std::bad_alloc &)
 	{
 		badAllocThrown = true;
 	}
@@ -194,7 +194,7 @@ TEST( Allocator_testNewArrayNoThrowBadAlloc )
 	{
 		p = ::operator new[]( std::numeric_limits<size_t>::max(), std::nothrow );
 	}
-	catch (std::bad_alloc)
+	catch (const std::bad_alloc &)
 	{
 		badAllocThrown = true;
 	}
@@ -221,13 +221,34 @@ TEST( Allocator_testBWReallocNew )
 
 TEST( Allocator_testStlAllocator )
 {
-	bool badAllocThrown = false;
+	// Two different layers can refuse an allocation, and each has its own
+	// exception type:
+	//
+	// 1. The container. A request above max_size() is rejected by
+	//    std::vector itself, which raises std::length_error ("vector::reserve")
+	//    without ever calling the allocator - so this is *not* a bad_alloc.
 	std::vector< int, BW::StlAllocator< int > > vector;
-	try 
+	bool lengthErrorThrown = false;
+	try
 	{
-		vector.reserve( std::numeric_limits< size_t >::max() / sizeof(int) );
+		vector.reserve( std::numeric_limits< size_t >::max() );
 	}
-	catch (std::bad_alloc)
+	catch (const std::length_error &)
+	{
+		lengthErrorThrown = true;
+	}
+	CHECK( lengthErrorThrown );
+	CHECK( vector.empty() );
+
+	// 2. The allocator. A request that is within max_size() but cannot be
+	//    satisfied must be reported as std::bad_alloc, not as a NULL return.
+	BW::StlAllocator< int > allocator;
+	bool badAllocThrown = false;
+	try
+	{
+		allocator.allocate( std::numeric_limits< size_t >::max() / sizeof( int ) );
+	}
+	catch (const std::bad_alloc &)
 	{
 		badAllocThrown = true;
 	}

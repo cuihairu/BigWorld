@@ -5,12 +5,22 @@ include $(BW_COMPONENT_HEADER)
 
 cxxSource =							\
 	main							\
+	test_png_codec					\
 	test_resource					\
 
 # Currently Windows only
 #	test_vertex_lod_manager			\
 
-dependsOn += terrain cstdmf
+dependsOn += terrain moo cstdmf
+
+# BIGWORLD_BEGIN(3.13 migration)
+# test_png_codec drives lib/moo's PNG codec, so this binary needs the vcpkg
+# libpng/zlib archives on its link line (third-party deps are not transitive).
+# Unit tests set noDefaultDependencies, so every library needed has to be
+# named: resmgr is what provides the BinaryBlock that png.cpp allocates into.
+usePNG = 1
+dependsOn += resmgr
+# BIGWORLD_END
 
 include $(BW_COMPONENT_FOOTER)
 

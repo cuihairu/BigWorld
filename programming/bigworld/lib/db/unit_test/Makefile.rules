@@ -11,7 +11,8 @@ cxxSource =							\
 dependsOn += 	db 			\
 				network 	\
 				server 		\
-				cstdmf
+				cstdmf		\
+				zip
 
 include $(BW_COMPONENT_FOOTER)
 

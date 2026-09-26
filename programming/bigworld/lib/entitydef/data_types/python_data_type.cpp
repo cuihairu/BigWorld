@@ -4,6 +4,7 @@
 
 #include "cstdmf/binary_stream.hpp"
 #include "cstdmf/md5.hpp"
+#include "cstdmf/base64.h"
 
 #include "resmgr/datasection.hpp"
 
@@ -307,7 +308,36 @@ bool PythonDataType::isExpression( const BW::string& value )
 	// expression or a Base64 encoded pickled object, we return
 	// true if it doesn't look like a Base64 encoded blob.
 
-	return (!value.empty() && (*(value.rbegin()) != '='));
+	if (value.empty())
+	{
+		return true;
+	}
+
+	// BIGWORLD_BEGIN(3.13 migration)
+	// The old test was "does not end with '='", i.e. it assumed a Base64
+	// encoded blob always ends in padding. That happened to hold for the
+	// Python 2 cPickle output, but protocol 2 pickles a str as BINUNICODE
+	// ('X') whereas cPickle emitted SHORT_BINSTRING ('U'), so the encoded
+	// length - and therefore the padding - changed. A pickle could then be
+	// mis-detected as an expression, and createFromSection tried to eval() the
+	// Base64 text ("NameError: name 'gAJdcQ...' is not defined").
+	//
+	// Base64-decode the value and look at the bytes instead: a pickle always
+	// starts with '(' (text protocol 0/1) or 0x80 (the PROTO opcode that
+	// introduces a binary protocol). A character-class test is not enough -
+	// "543" is valid Base64 but is meant as an expression.
+	// BIGWORLD_END
+
+	BW::string decoded;
+
+	if (!Base64::decode( value, decoded ) || decoded.empty())
+	{
+		return true;
+	}
+
+	const char first = decoded[0];
+
+	return !( first == '(' || first == '\x80' );
 }
 
 

@@ -110,10 +110,33 @@ TEST( ArgParser_boolValues )
 
 	CHECK_EQUAL( true, parser.get( "yes", false ) );
 	CHECK_EQUAL( false, parser.get( "no", true ) );
-	CHECK_EQUAL( true, parser.get( "numbers", false ) );
+
+	// ArgParser::get(name, bool) only treats the literal string "true" as
+	// true; anything else present is false. "1" is therefore false - the
+	// documented way to set a boolean is --name=true (or just --name, which
+	// means true because no value was given at all).
+	CHECK_EQUAL( false, parser.get( "numbers", true ) );
 
 	// Not present uses the default.
 	CHECK_EQUAL( false, parser.get( "missing", false ) );
+	CHECK_EQUAL( true, parser.get( "missing", true ) );
+}
+
+
+TEST( ArgParser_boolFlagWithoutValue )
+{
+	ArgParser parser( "test_program" );
+
+	parser.add( "verbose", "A boolean flag" );
+
+	char arg0[] = "test_program";
+	char arg1[] = "--verbose";
+	char * argv[] = { arg0, arg1, NULL };
+
+	CHECK( parser.parse( 2, argv ) );
+
+	// A present argument with no value at all means true.
+	CHECK_EQUAL( true, parser.get( "verbose", false ) );
 }
 
 

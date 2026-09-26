@@ -583,11 +583,24 @@ bool PyFixedDictDataInstance::pyCompareValuesWithEqualKeys(
 /* static */
 int PyFixedDictDataInstance::pyCompare( PyObject * a, PyObject * b )
 {
-	// Both a and b should be PyFixedDictDataInstances, Python enforces that
-	// comparisons between disparate types should compare False always.
-
-	MF_ASSERT( PyFixedDictDataInstance::Check( a ) && 
-		PyFixedDictDataInstance::Check( b ) );
+	/* BIGWORLD_BEGIN(3.13 migration)
+	 * Same defect as PyArrayDataInstance::pyCompare: Python does NOT
+	 * guarantee both operands have this type, because when the left operand's
+	 * __lt__/__eq__ returns NotImplemented Python calls the reflected
+	 * operation with the foreign type on the left (e.g. `dict < fixedDict`
+	 * reaches us as fixedDict.__gt__(dict)). Asserting here aborted the
+	 * process for any such comparison.
+	 *
+	 * Report "ordered, and not equal" with no exception set, so that
+	 * ScriptObject::compareTo() sees a plain inequality and can fall back to
+	 * its conversion paths rather than an incomparable-types error.
+	 */
+	if (!PyFixedDictDataInstance::Check( a ) ||
+		!PyFixedDictDataInstance::Check( b ))
+	{
+		return -1;
+	}
+	/* BIGWORLD_END */
 
 	PyFixedDictDataInstance * pFixedDictA = 
 		static_cast< PyFixedDictDataInstance * >( a );

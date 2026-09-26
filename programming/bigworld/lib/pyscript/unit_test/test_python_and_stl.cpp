@@ -26,8 +26,8 @@ TEST_F( PyScriptUnitTestHarness, PassSTLVectorToPython )
 		PyObject* res = 
 			Script::ask( PyObject_GetAttrString( module, "sumVector" ) , args,
 			"Python_ImportCustomModule", false );
-		CHECK(PyInt_Check(res));
-		int iRes = PyInt_AsLong(res);
+		CHECK(PyLong_Check(res));
+		int iRes = (int)PyLong_AsLong(res);
 		CHECK_EQUAL(10, iRes);
 		Py_XDECREF( res );
 	}
@@ -42,8 +42,8 @@ TEST_F( PyScriptUnitTestHarness, RecieveSTLVectorFromPython )
 	// build a range vector for given min and max values including min and max values itself
 	{
 		PyObject* args = PyTuple_New( 2 );
-		PyTuple_SetItem( args, 0, PyInt_FromLong( -2 ) );
-		PyTuple_SetItem( args, 1, PyInt_FromLong( 1 ) );
+		PyTuple_SetItem( args, 0, PyLong_FromLong( -2 ) );
+		PyTuple_SetItem( args, 1, PyLong_FromLong( 1 ) );
 
 		PyObject* res = 
 			Script::ask( PyObject_GetAttrString( module, "buildRangeVector" ) , args,

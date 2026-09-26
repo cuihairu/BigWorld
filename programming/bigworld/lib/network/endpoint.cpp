@@ -760,11 +760,19 @@ void finiNetwork()
 
 #if defined(_WIN32)
 #if defined( USE_OPENSSL )
+// BIGWORLD_BEGIN(3.13 migration)
+// EVP_cleanup/ENGINE_cleanup/ERR_free_strings/ERR_remove_state were
+// turned into no-ops in OpenSSL 1.1.0 and removed in 3.0 (the library
+// now cleans up via atexit / auto-init). Only
+// CRYPTO_cleanup_all_ex_data still exists.
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
 	BWOpenSSL::EVP_cleanup();
 	BWOpenSSL::ENGINE_cleanup();
 	BWOpenSSL::ERR_free_strings();
 	BWOpenSSL::ERR_remove_state( 0 );
 	BWOpenSSL::CRYPTO_cleanup_all_ex_data();
+#endif // OPENSSL_VERSION_NUMBER < 1.1.0
+// BIGWORLD_END
 #endif // USE_OPENSSL
 #endif // _WIN32
 

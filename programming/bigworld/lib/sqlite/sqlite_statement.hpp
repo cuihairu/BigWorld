@@ -6,7 +6,7 @@
 
 #include "sqlite_connection.hpp"
 
-#include "sqlite/sqlite3.h"
+#include <sqlite3.h>
 
 #include "cstdmf/bw_string.hpp"
 

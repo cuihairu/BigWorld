@@ -2,7 +2,7 @@
 
 #include "pch.hpp"
 
-#include "sqlite/sqlite3.h"
+#include <sqlite3.h>
 
 #include "sqlite/sqlite_connection.hpp"
 #include "sqlite/sqlite_statement.hpp"

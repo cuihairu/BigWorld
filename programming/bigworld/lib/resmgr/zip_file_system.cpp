@@ -2,7 +2,7 @@
 
 #include "bwresource.hpp"
 #include "zip_file_system.hpp"
-#include "zip/zlib.h"
+#include <zlib.h>
 #include "cstdmf/debug.hpp"
 #include "cstdmf/bw_string_ref.hpp"
 #include "cstdmf/bw_util.hpp"

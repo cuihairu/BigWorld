@@ -22,7 +22,15 @@
  */
 inline ScriptObject ScriptTuple::getItem( ScriptTuple::size_type pos ) const
 {
-	MF_ASSERT( pos < PyList_GET_SIZE( this->get() ) );
+	// BIGWORLD_BEGIN(3.13 migration)
+	// Was PyList_GET_SIZE(). In Python 2 that was a bare ob_size field
+	// access, so it happened to work on a tuple; in Python 3 it is an inline
+	// function that asserts PyList_Check(), so bounds-checking a tuple with it
+	// aborted the process (ScriptArgs_createForSingleScriptObjectIsATrap).
+	// ScriptTuple always holds a PyTuple (see ScriptTuple::check), and
+	// setItem()/size() below already use PyTuple_GET_SIZE.
+	// BIGWORLD_END
+	MF_ASSERT( pos < PyTuple_GET_SIZE( this->get() ) );
 	PyObject * pItem = PyTuple_GET_ITEM( this->get(), pos );
 	return ScriptObject( pItem, ScriptObject::FROM_BORROWED_REFERENCE );
 }

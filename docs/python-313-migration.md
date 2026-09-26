@@ -46,6 +46,13 @@
 - `platform_el7.mak`：恢复 mongodb 探测并以 `ifeq` 包住
 - `discover_python.sh`：`[ == ]` → `[ = ]`（/bin/sh=dash 下 bashism 曾致探测静默失败，错误文本混入链接行）
 
+### 3.1 运行期 Python 初始化修复（单测全绿的前置条件）
+
+单测从「pyscript/script/entitydef/baseapp 批量失败」到全绿，靠的是两个与 3.13 无关、却在 3.13 移植激活 Debian 主机构建后才暴露的缺口：
+
+1. **`bw_site.py` 源码发行包缺失**。`Script::init()` 先置 `Py_NoSiteFlag = 1`（跳过 stdlib site.py），再从 `scripts/common` 强制 `import bw_site`，失败即整个初始化失败（`script.cpp` 末段）。这个模块只存在于二进制 RPM 的 res 树里，源码包从未携带（git 全历史无此文件）。现随 pyscript 源码跟踪（`lib/pyscript/bw_site.py`，注释性空模块，不做路径操作——sys.path 由引擎自建），并经 `third_party_python.mak` 新增规则安装到 `game/res/bigworld/scripts/common/`。
+2. **`PlatformInfo::str()` 无 Debian 回退，lib-dynload 目录名不匹配**。构建侧 `platform_info.py` 已映射 Debian→`el7`，但运行侧 `lib/cstdmf/bw_platform_info.cpp` 只认 `/etc/redhat-release`，在 Ubuntu 上返回 `unknown`。于是 `Script::init()` 组出的 sys.path 是 `lib-dynload-unknown`（实际目录 `lib-dynload-el7`），全部 C 扩展 stdlib 模块（`_struct`、`_pickle`、`zlib`……）导入失败 → `import pickle` 失败 → `Pickler::init()` 失败 → "Could not initialise Script module"。诊断手段：bw_site.py 是引擎导入的普通 Python 文件，可临时在其中把 `sys.path`/`traceback` 写到 `/tmp` 文件取证（BW 日志被 DebugFilter 过滤、`PyErr_Print()` 输出被 ScriptOutputWriter 重定向，均不可见）。修复：`/etc/debian_version` 存在且无 redhat-release 时同样返回 `el7`，与构建侧 `DEBIAN_EQUIVALENT_PLATFORM` 对齐；`cstdmf` 单测补 `PlatformInfo_debianEquivalentPlatform`。附带收益：`bin/server/<platform>` 等运行期二进制定位逻辑同步恢复一致。
+
 ## 4. BWHooks 官方接口方案（替代 #define 重定向）
 
 2.7 的机制是在 obmalloc.c/pymem.h 里 `#define malloc BW_Py_malloc` 等，把 CPython 内部所有裸 malloc 兜进钩子层。3.13 采用官方嵌入接口等价实现：
@@ -59,7 +66,7 @@
 
 | # | 风险 | 影响 | 计划 |
 |---|---|---|---|
-| R1 | vendored OpenSSL 1.0.0d：低于 3.13 最低要求（1.1.1），且在 gcc 15（默认 C23）下无法编译（`bool` 关键字冲突） | `_ssl/_hashlib` 缺席 lib-dynload；依赖 py ssl 的工具受限 | vcpkg 任务引入新版 OpenSSL 后：恢复 `--with-openssl`、共享模块列表、symbols 采集与 libpython 依赖（代码位置已留注释） |
+| R1 | vendored OpenSSL 1.0.0d：低于 3.13 最低要求（1.1.1），且在 gcc 15（默认 C23）下无法编译（`bool` 关键字冲突） | `_ssl/_hashlib` 缺席 lib-dynload；依赖 py ssl 的工具受限 | **已解决**（见 [vcpkg-migration.md](vcpkg-migration.md)）：OpenSSL 3.6 经 vcpkg 引入后恢复 `--with-openssl`、共享模块列表、symbols 采集与 libpython 依赖。落地时另发现两个必须一并处理的点：① CPython 用 `-fvisibility=hidden` 编译自身对象，`BW_Py_*` 钩子符号在 `python.exe` 里是 STB_LOCAL，`-export-dynamic` 导不出去，`_hashlib.so` 导入失败并被 3.12+ 的 `check_extension_modules.py` 重命名成 `_hashlib_failed*.so` —— 已给 `bwhooks.h` 的声明加 `visibility("default")`，并用 `-Wl,-u,...` 强制把 `Python/bwhooks.o` 拉进解释器；② 2.7 靠 `obmalloc.c` 里的 `#define malloc` 引用钩子从而把 `bwhooks.o` 拉进链接，3.13 改用官方 `PyMem_SetAllocator` 后 libpython 内部不再引用钩子，这个引用关系没有了。 |
 | R2 | `third_party/python_modules` 全部为 Py2 生态包（Twisted 11、SQLAlchemy 0.6、Zope 2.11、oursql 等） | 集群监控/日志工具等运行时 Python 服务不可用 | 单独升级各包到 Py3 兼容版本后再启用 mak；不在编译验证关键路径 |
 | R3 | Windows 构建（PCbuild/VS 工程）未迁移 | Windows 侧无法构建 | 后续批次 |
 | R4 | 客户端/大文件资源（FantasyDemo 等）未在 Linux 验证范围 | — | 按批次推进 |
@@ -72,6 +79,8 @@
 | 2 | lib/pyscript 移植 | libpyscript 编译通过 | `ee940e96` |
 | 3 | 引擎其余 C++ 按目录移植（基础库/游戏库/pyscript 残留/common/server 主程序/tools 六组，含 `build(python)` 构建系统组） | 九个 server 主程序 + tools（bots/message_logger/_bwlog.so/bw_profile/bwmachined）全部编译链接通过；cellapp/baseappmgr/loginapp/dbappmgr/reviver 冒烟（启动至无 bw.xml 预期退出，无 Traceback/段错误）；活代码 Py2 API 残留清零 | `ef48c2e5`（构建+三方库）、`871a6589`（基础库）、`bd8ff4cc`（游戏库）、`57b3f1e4`（pyscript/script）、`f86028c6`（common+server）、`7f3cf5ce`（tools） |
 | 4 | 服务端/工具 Python 脚本 2to3（bw_internal 181 + examples 15 + build 散点 + res_packer + eg_tcpechoserver，共 204 文件） | py_compile 全量 204/204（迁移前基线 65 失败）；手工修复 simplejson/encoder.py 的 Py2 局部绑定 hack；活代码 Py2 API 残留清零 | `b3bd5fd7` |
+| 5 | R1 收尾（OpenSSL 经 vcpkg 3.6 升级后恢复 `_ssl`/`_hashlib`）+ 单测可跑通 | `make user_shouldInstallPython=1 python_install` 通过：59 个共享模块 + stdlib 安装完成，`_hashlib` 不再被重命名；`make bw-unit-tests` 22 个可执行文件全部链接通过 | 见 vcpkg-migration.md（本次未提交，见该文档 §6.1） |
+| 6 | 运行期初始化修复：补 `bw_site.py`（源码包缺失，随 pyscript 跟踪 + mak 安装规则）、`bw_platform_info.cpp` Debian→el7 回退对齐构建侧 | 全量单测（21 个模块）无失败；详见 §3.1 | 本次提交（dev） |
 
 ---
 

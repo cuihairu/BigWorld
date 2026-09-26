@@ -4,8 +4,6 @@ and a couple of converters for testing custom streaming
 and conversion operations.
 """
 
-import cPickle
-
 class WrapIntStr( object ):
 	def __init__( self, data ):
 		self.intVal = data[ "int8_5" ]

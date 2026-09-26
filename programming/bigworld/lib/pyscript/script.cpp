@@ -1331,15 +1331,16 @@ PyModuleMethodLink::PyModuleMethodLink( const char * moduleName,
 	moduleName_( moduleName ),
 	methodName_( methodName )
 {
-	mdReal_.ml_name = const_cast< char * >( methodName_ );
-	mdReal_.ml_meth = method;
-	mdReal_.ml_flags = METH_VARARGS;
-	mdReal_.ml_doc = const_cast< char * >( docString );
+	defs_[ 0 ].ml_name = const_cast< char * >( methodName_ );
+	defs_[ 0 ].ml_meth = method;
+	defs_[ 0 ].ml_flags = METH_VARARGS;
+	defs_[ 0 ].ml_doc = const_cast< char * >( docString );
 
-	mdStop_.ml_name = NULL;
-	mdStop_.ml_meth = NULL;
-	mdStop_.ml_flags = 0;
-	mdStop_.ml_doc = NULL;
+	// NULL/0 terminated sentinel required by PyModule_AddFunctions
+	defs_[ 1 ].ml_name = NULL;
+	defs_[ 1 ].ml_meth = NULL;
+	defs_[ 1 ].ml_flags = 0;
+	defs_[ 1 ].ml_doc = NULL;
 }
 
 
@@ -1353,15 +1354,16 @@ PyModuleMethodLink::PyModuleMethodLink( const char * moduleName,
 	moduleName_( moduleName ),
 	methodName_( methodName )
 {
-	mdReal_.ml_name = const_cast< char * >( methodName_ );
-	mdReal_.ml_meth = BW_PYCFUNCTION_CAST( method );
-	mdReal_.ml_flags = METH_VARARGS | METH_KEYWORDS;
-	mdReal_.ml_doc = const_cast< char * >( docString );
+	defs_[ 0 ].ml_name = const_cast< char * >( methodName_ );
+	defs_[ 0 ].ml_meth = BW_PYCFUNCTION_CAST( method );
+	defs_[ 0 ].ml_flags = METH_VARARGS | METH_KEYWORDS;
+	defs_[ 0 ].ml_doc = const_cast< char * >( docString );
 
-	mdStop_.ml_name = NULL;
-	mdStop_.ml_meth = NULL;
-	mdStop_.ml_flags = 0;
-	mdStop_.ml_doc = NULL;
+	// NULL/0 terminated sentinel required by PyModule_AddFunctions
+	defs_[ 1 ].ml_name = NULL;
+	defs_[ 1 ].ml_meth = NULL;
+	defs_[ 1 ].ml_flags = 0;
+	defs_[ 1 ].ml_doc = NULL;
 }
 
 
@@ -1382,6 +1384,12 @@ void PyModuleMethodLink::init()
 	 * Py_InitModule was removed in Python 3.x. As with PyModuleAttrLink the
 	 * module is expected to exist already (its owner creates it during
 	 * initialisation); attach the method with PyModule_AddFunctions.
+	 *
+	 * NOTE: defs_ is a *member*, not a local. The builtin_function_or_method
+	 * objects this call creates store a borrowed pointer to the table
+	 * (PyCFunctionObject::m_ml) and stay alive in the module dict, so a
+	 * stack-allocated table would leave them pointing at dead stack memory -
+	 * harmless until Py_Finalize()'s GC walks them and dereferences m_ml.
 	 */
 	PyObject * pModule =
 		PyImport_AddModule( const_cast<char *>( moduleName_ ) );
@@ -1393,8 +1401,7 @@ void PyModuleMethodLink::init()
 		return;
 	}
 
-	PyMethodDef defs[ 2 ] = { mdReal_, { NULL, NULL, 0, NULL } };
-	if (PyModule_AddFunctions( pModule, defs ) < 0)
+	if (PyModule_AddFunctions( pModule, defs_ ) < 0)
 	{
 		PyErr_Print();
 		ERROR_MSG( "PyModuleMethodLink::init: Failed to add method '%s' to "
@@ -1561,36 +1568,42 @@ int Script::setData( PyObject * pObject, int & rInt,
 	if (PyLong_Check( pObject ))
 	{
 		long asLong = PyLong_AsLong( pObject );
-		rInt = asLong;
 
-		if (asLong == rInt)
+		/* BIGWORLD_BEGIN(3.13 migration)
+		 * PyLong_AsLong() returns (long)-1 *and* sets OverflowError when the
+		 * value does not fit a C long. The 2.7 code assigned rInt before
+		 * testing anything ("rInt = asLong; if (asLong == rInt) return 0;"),
+		 * so the test was trivially true and the function returned success
+		 * for every PyLong - including out-of-range ones, which it reported
+		 * with the OverflowError still pending. Callers such as
+		 * IntegerRangeChecker::findSameRange() then aborted on the leaked
+		 * error.
+		 *
+		 * So: drop the error if it overflowed, and only accept the value when
+		 * it round-trips through int unchanged. The old second PyLong_Check
+		 * block below was unreachable (the first block always returned) and
+		 * is gone.
+		 */
+		if (PyErr_Occurred())
 		{
-			return 0;
+			PyErr_Clear();	// does not fit a C long; treat as out of range
 		}
+		else
+		{
+			rInt = int( asLong );
+
+			if (int64( asLong ) == int64( rInt ))
+			{
+				return 0;
+			}
+		}
+		/* BIGWORLD_END */
 	}
 
 	if (PyFloat_Check( pObject ))
 	{
 		rInt = (int)PyFloat_AsDouble( pObject );
 		return 0;
-	}
-
-	if (PyLong_Check( pObject ))
-	{
-		long asLong = PyLong_AsLong( pObject );
-		rInt = int( asLong );
-
-		if (!PyErr_Occurred())
-		{
-			if (rInt == asLong)
-			{
-				return 0;
-			}
-		}
-		else
-		{
-			PyErr_Clear();
-		}
 	}
 
 	PyErr_Format( PyExc_TypeError, "%s must be set to an int", varName );
@@ -1635,12 +1648,30 @@ int Script::setData( PyObject * pObject, int64 & rInt,
 	{
 		rInt = PyLong_AsLongLong( pObject );
 		if (!PyErr_Occurred()) return 0;
-	}
 
-	if (PyLong_Check( pObject ))
-	{
-		rInt = PyLong_AsLong( pObject );
-		return 0;
+		/* BIGWORLD_BEGIN(3.13 migration)
+		 * The value does not fit in an int64, so PyLong_AsLongLong() left an
+		 * OverflowError behind.
+		 *
+		 * The 2.7 code fell through to a second PyLong_Check() block that
+		 * called PyLong_AsLong() and returned 0 *unconditionally*. That block
+		 * only made sense on 32-bit builds, where a C long is narrower than an
+		 * int64; on LP64 long and int64 are the same width, so it either
+		 *   - accepted a value that does not fit (2**63 came back as
+		 *     9223372036854775808, no error, return 0), or
+		 *   - returned success with an OverflowError still set (anything
+		 *     outside even a long, e.g. -2**64-1). The second case leaked a
+		 *     pending exception into callers - which is what made
+		 *     IntegerRangeChecker::findSameRange() abort with
+		 *     "findSameRange: PyErr_Occurred".
+		 *
+		 * Python 3 has no PyInt/PyLong split, so an int that does not fit in
+		 * an int64 is simply out of range. Drop the error and report failure
+		 * like any other non-convertible value, matching the uint64 overload
+		 * below (whose fallback only ever accepts non-negative values).
+		 */
+		PyErr_Clear();
+		/* BIGWORLD_END */
 	}
 
 	if (PyFloat_Check( pObject ))

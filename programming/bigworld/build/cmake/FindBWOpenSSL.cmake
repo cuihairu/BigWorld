@@ -9,6 +9,36 @@
 # based on http://www.cmake.org/Wiki/CMake:How_To_Find_Libraries
 # and FindALSA.cmake, which is apparently current best-practice
 
+# BIGWORLD_BEGIN(3.13 migration)
+# OpenSSL is provided by vcpkg (see vcpkg.json next to the root
+# CMakeLists.txt). When configuring with the vcpkg toolchain file
+# (-DCMAKE_TOOLCHAIN_FILE=<vcpkg>/scripts/buildsystems/vcpkg.cmake)
+# the manifest is installed automatically and CMake's own FindOpenSSL
+# resolves it; map those results onto the BW-prefixed variables and stop.
+# The legacy branches below are kept for Windows builds that still use the
+# prebuilt third_party/openssl-vsXXXX trees.
+IF( NOT MSVC )
+	FIND_PACKAGE( OpenSSL QUIET )
+	IF( OPENSSL_FOUND )
+		SET( BWOPENSSL_ROOT_DIR "${OPENSSL_INCLUDE_DIR}" )
+		SET( BWOPENSSL_INCLUDE_DIR "${OPENSSL_INCLUDE_DIR}"
+			CACHE FILEPATH "OpenSSL include dir (vcpkg)" FORCE )
+		SET( BWOPENSSL_LIBRARY_CRYPTO "${OPENSSL_CRYPTO_LIBRARY}"
+			CACHE FILEPATH "OpenSSL crypto library (vcpkg)" FORCE )
+		SET( BWOPENSSL_LIBRARY_SSL "${OPENSSL_SSL_LIBRARY}"
+			CACHE FILEPATH "OpenSSL ssl library (vcpkg)" FORCE )
+		SET( BWOPENSSL_LIBRARY_CRYPTO_DEBUG "${OPENSSL_CRYPTO_LIBRARY}" )
+		SET( BWOPENSSL_LIBRARY_SSL_DEBUG "${OPENSSL_SSL_LIBRARY}" )
+		SET( BWOPENSSL_VERSION_STRING "${OPENSSL_VERSION}" )
+		SET( BWOPENSSL_INCLUDE_DIRS "${OPENSSL_INCLUDE_DIR}" )
+		SET( BWOPENSSL_LIBRARIES "${OPENSSL_CRYPTO_LIBRARY}" "${OPENSSL_SSL_LIBRARY}" )
+		SET( BWOPENSSL_FOUND 1 )
+		SET( BWOpenSSL_FOUND 1 )
+		RETURN()
+	ENDIF()
+ENDIF()
+# BIGWORLD_END
+
 # Hide all of the OpenSSL build madness.
 IF( MSVC )
 	# Note: Remote server build windows builds

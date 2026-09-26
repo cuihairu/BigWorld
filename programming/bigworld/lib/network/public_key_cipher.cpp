@@ -60,13 +60,20 @@ OpenSSLInitialiser::OpenSSLInitialiser()
 		BWOpenSSL::RAND_add( &entropy, sizeof( entropy ), 32 );
 	}
 	
-	BWOpenSSL::ERR_load_crypto_strings();
+// BIGWORLD_BEGIN(3.13 migration)
+// ERR_load_crypto_strings() became a no-op in 1.1.0 and was removed in
+// 3.0; error strings are available automatically.
+// BWOpenSSL::ERR_load_crypto_strings();
+// BIGWORLD_END
 }
 
 
 OpenSSLInitialiser::~OpenSSLInitialiser()
 {
-	BWOpenSSL::ERR_free_strings();
+// BIGWORLD_BEGIN(3.13 migration)
+// Removed in OpenSSL 3.0 (no-op since 1.1.0).
+// BWOpenSSL::ERR_free_strings();
+// BIGWORLD_END
 }
 
 OpenSSLInitialiser s_openSSLInitialiser;
@@ -103,15 +110,11 @@ class PublicKeyCipherImpl : public PublicKeyCipher
 	 */
 	static const char * lastError()
 	{
-		static bool errorStringsLoaded = false;
-
-		if (!errorStringsLoaded)
-		{
-			BWOpenSSL::ERR_load_crypto_strings();
-
-			errorStringsLoaded = true;
-		}
-
+		// BIGWORLD_BEGIN(3.13 migration)
+		// The lazy ERR_load_crypto_strings() guard is gone: that call was a
+		// no-op from OpenSSL 1.1.0 and was removed in 3.0, where error
+		// strings are always available.
+		// BIGWORLD_END
 		return BWOpenSSL::ERR_error_string( BWOpenSSL::ERR_get_error(), 0 );
 	}
 

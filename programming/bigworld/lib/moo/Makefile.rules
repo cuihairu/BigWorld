@@ -7,6 +7,12 @@ cxxSource =		\
 	node		\
 	png
 
+# BIGWORLD_BEGIN(3.13 migration)
+# png.cpp includes <png.h> and calls the libpng API directly; libpng comes
+# from vcpkg now (see build/make/third_party_vcpkg.mak).
+usePNG = 1
+# BIGWORLD_END
+
 include $(BW_COMPONENT_FOOTER)
 
 # vi: filetype=make

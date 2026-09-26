@@ -105,9 +105,16 @@ void MySql::connect( const DBConfig::ConnectionInfo & connectInfo )
 			this->throwError();
 		}
 
+		// BIGWORLD_BEGIN(3.13 migration)
+		// my_bool and MYSQL_SECURE_AUTH were removed from the client headers
+		// (MySQL 8 / MariaDB Connector/C). Pre-4.1 passwords are not supported
+		// by these clients at all any more, so the option is unnecessary.
+		// BIGWORLD_END
+#ifdef MYSQL_SECURE_AUTH
 		my_bool secureAuth = connectInfo.secureAuth;
 
 		mysql_options( sql_, MYSQL_SECURE_AUTH, & secureAuth );
+#endif
 
 		// When server is not available and when timeout is 0, we block
 		// here until SIGQUIT. SIGINT is trapped by mysql_real_connect.

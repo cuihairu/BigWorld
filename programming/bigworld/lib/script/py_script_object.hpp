@@ -527,25 +527,55 @@ public:
 	int compareTo( ScriptObject other,
 		const ERROR_HANDLER & errorHandler ) const
 	{
-		// BIGWORLD_BEGIN(3.13 migration)
-		// PyObject_Compare was removed; rebuild its -1/0/1 result from
-		// rich comparisons (an error keeps the exception set for the
-		// handler below).
+		/* BIGWORLD_BEGIN(3.13 migration)
+		 * PyObject_Compare was removed, so the -1/0/1 answer has to be
+		 * rebuilt from rich comparisons. The order of the two questions
+		 * matters, and asking Py_LT first is wrong: `a < b` is simply not
+		 * defined for plenty of ordinary types (dict, None, set, ...), so
+		 * PyObject_RichCompareBool raised TypeError even when the two objects
+		 * were perfectly comparable for equality. That spurious exception was
+		 * then folded into "not equal" *and* left pending, so a caller
+		 * comparing two equal dicts saw a failure.
+		 *
+		 * Ask Py_EQ first, since equality is defined for every type, and only
+		 * consult Py_LT once we already know the objects differ.
+		 */
 		int result;
-		if (PyObject_RichCompareBool( this->get(), other.get(), Py_LT ) == 1)
+		const int eq =
+			PyObject_RichCompareBool( this->get(), other.get(), Py_EQ );
+		if (eq < 0)
 		{
-			result = -1;
+			// A real comparison failure (e.g. __eq__ raised): let the handler
+			// deal with it rather than reporting an inequality.
+			errorHandler.checkMinusOne( eq );
+			return 1;
 		}
-		else if (PyObject_RichCompareBool( this->get(), other.get(),
-				Py_EQ ) == 1)
+
+		if (eq == 1)
 		{
 			result = 0;
 		}
 		else
 		{
-			result = 1;
+			const int lt =
+				PyObject_RichCompareBool( this->get(), other.get(), Py_LT );
+			if (lt < 0)
+			{
+				/* The two objects are known to be unequal but are not
+				 * orderable. compareTo() has no way to say "unordered", and
+				 * every caller reads a non-zero result as "not equal", which
+				 * is exactly right - so drop the TypeError that `a < b` raised
+				 * for an everyday pair of dicts/None. Leaving it pending
+				 * would make each of those equality checks spuriously fail. */
+				PyErr_Clear();
+				result = 1;
+			}
+			else
+			{
+				result = (lt == 1) ? -1 : 1;
+			}
 		}
-		// BIGWORLD_END
+		/* BIGWORLD_END */
 		errorHandler.checkErrorOccured();
 		return result;
 	}

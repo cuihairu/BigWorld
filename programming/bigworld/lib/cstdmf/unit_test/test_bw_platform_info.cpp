@@ -2,6 +2,8 @@
 
 #include "cstdmf/bw_platform_info.hpp"
 
+#include <sys/stat.h>
+
 
 BW_BEGIN_NAMESPACE
 
@@ -11,6 +13,13 @@ namespace // anonymous
 	bool platformStartsWith( const BW::string & str, const BW::string & prefix )
 	{
 		return str.find( prefix ) == 0;
+	}
+
+
+	bool fileExists( const char * path )
+	{
+		struct stat statBuf;
+		return stat( path, &statBuf ) == 0;
 	}
 
 } // namespace anonymous
@@ -57,6 +66,29 @@ TEST( PlatformInfo_buildStrMatchesPlatform )
 		!platformStartsWith( platformName, "rhel" ))
 	{
 		CHECK( buildName == platformName );
+	}
+}
+
+
+// BIGWORLD_BEGIN(3.13 migration)
+// Debian-family hosts must report the same platform name as
+// build/make/platform_info.py does for the build, so that the
+// lib-dynload-<platform> resource directory built by the makefiles is the
+// one Script::init() puts on sys.path.
+// BIGWORLD_END
+TEST( PlatformInfo_debianEquivalentPlatform )
+{
+	const bool hasRedhatRelease = fileExists( "/etc/redhat-release" );
+	const bool hasDebianVersion = fileExists( "/etc/debian_version" );
+
+	if (!hasRedhatRelease && hasDebianVersion)
+	{
+		CHECK_EQUAL( BW::string( "el7" ), PlatformInfo::str() );
+	}
+	else
+	{
+		// The fallback never applies when a RedHat release file is present.
+		CHECK( hasRedhatRelease || !hasDebianVersion );
 	}
 }
 

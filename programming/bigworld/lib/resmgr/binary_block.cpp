@@ -8,7 +8,7 @@
 #include "cstdmf/debug.hpp"
 #include "cstdmf/resource_counters.hpp"
 
-#include "zip/zlib.h"
+#include <zlib.h>
 
 #include <string.h>
 

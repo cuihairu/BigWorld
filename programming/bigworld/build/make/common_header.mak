@@ -140,6 +140,16 @@ useJSON    := 0
 useSDL     := 0
 useRT      := 0
 
+# BIGWORLD_BEGIN(3.13 migration)
+# These must be reset per component like the ones above. They are only ever
+# set by a Makefile.rules that follows this include, so leaving them out would
+# make the first component that opts in leak the flag into every component
+# included after it (and with it an extra third-party library on the link
+# line). See the useSQLite/usePNG blocks in common_footer_config.mak.
+useSQLite  := 0
+usePNG     := 0
+# BIGWORLD_END
+
 useBigWorld := 0
 
 ccFlags_$(binName)  :=

@@ -223,7 +223,11 @@ bool PyEntity::initCellPlayerFromStream( BinaryIStream & stream )
 
 	std::cout << "Entity::initCellPlayerFromStream:" << std::endl;
 	PyObject * pStr = PyObject_Str( pDict );
-	std::cout << PyString_AsString( pStr ) << std::endl;
+	// BIGWORLD_BEGIN(3.13 migration)
+	// Was PyString_AsString(); PyObject_Str() returns a unicode object in
+	// Python 3.
+	// BIGWORLD_END
+	std::cout << PyUnicode_AsUTF8( pStr ) << std::endl;
 	Py_DECREF( pStr );
 
 	Py_DECREF( pDict );

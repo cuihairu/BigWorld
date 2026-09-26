@@ -79,9 +79,12 @@ template <class ThreadArg>
 class ConcurrencyTestWrapper
 {
 public:
-	ConcurrencyTestWrapper<ThreadArg>() : threadIndex_( 0 ) {}
+	// BIGWORLD_BEGIN(3.13 migration)
+	// C++20: a constructor/destructor may not use its own template-id.
+	// BIGWORLD_END
+	ConcurrencyTestWrapper() : threadIndex_( 0 ) {}
 
-	~ConcurrencyTestWrapper<ThreadArg>()
+	~ConcurrencyTestWrapper()
 	{
 		MF_ASSERT( threads_.empty() );
 	}

@@ -1,0 +1,17 @@
+{
+    "$comment": "BigWorld third-party dependencies provided by vcpkg (see docs/vcpkg-migration.md). bzip2 is here only because CPython's _bz2 extension is in third_party_python.mak's pythonSharedMods list and this host has no system bzip2 development files. The embedded CPython tree under third_party/python is a heavily patched BigWorld build (BWHooks memory tracking, see bw_changes.txt) and is deliberately NOT taken from vcpkg; the legacy MongoDB C++ driver under third_party/mongodb predates the vcpkg mongo-cxx-driver 3.x API and stays vendored.",
+    "name": "bigworld",
+    "version": "14.4.1",
+    "dependencies": [
+        "openssl",
+        {
+            "name": "curl",
+            "features": [ "openssl" ]
+        },
+        "jsoncpp",
+        "zlib",
+        "libpng",
+        "sqlite3",
+        "bzip2"
+    ]
+}

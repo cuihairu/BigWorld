@@ -44,8 +44,8 @@ TEST_F( PyScriptUnitTestHarness, Python_ImportCustomModule )
 		PyObject* res = 
 			Script::ask(  PyObject_GetAttrString( module, "funcReturnInt" ) , PyTuple_New(0),
 			"Python_ImportCustomModule", false );
-		CHECK(PyInt_Check(res));
-		int iRes = PyInt_AsLong(res);
+		CHECK(PyLong_Check(res));
+		int iRes = (int)PyLong_AsLong(res);
 		CHECK_EQUAL(42, iRes);
 		Py_XDECREF( res );
 
@@ -53,14 +53,14 @@ TEST_F( PyScriptUnitTestHarness, Python_ImportCustomModule )
 	// test function which divides first input parameter by the second one and returns result
 	{
 		PyObject* args = PyTuple_New( 2 );
-		PyTuple_SetItem( args, 0, PyInt_FromLong( 6 ) );
-		PyTuple_SetItem( args, 1, PyInt_FromLong( 2 ) );
+		PyTuple_SetItem( args, 0, PyLong_FromLong( 6 ) );
+		PyTuple_SetItem( args, 1, PyLong_FromLong( 2 ) );
 
 		PyObject* res = 
 			Script::ask( PyObject_GetAttrString( module, "funcDiv" ) , args,
 			"Python_ImportCustomModule", false );
-		CHECK(PyInt_Check(res));
-		int iRes = PyInt_AsLong(res);
+		CHECK(PyLong_Check(res));
+		int iRes = (int)PyLong_AsLong(res);
 		CHECK_EQUAL(3, iRes);
 		Py_XDECREF( res );
 	}
@@ -68,15 +68,14 @@ TEST_F( PyScriptUnitTestHarness, Python_ImportCustomModule )
 	// test function which concatenates two strings and returns result
 	{
 		PyObject* args = PyTuple_New( 2 );
-		PyTuple_SetItem( args, 0, PyString_FromString( "hello " ) );
-		PyTuple_SetItem( args, 1, PyString_FromString( "world" ) );
-		//PyTuple_SetItem( args, 1, PyString_FromString( msg.c_str() ) );
+		PyTuple_SetItem( args, 0, PyUnicode_FromString( "hello " ) );
+		PyTuple_SetItem( args, 1, PyUnicode_FromString( "world" ) );
 
 		PyObject* res = 
 			Script::ask( PyObject_GetAttrString( module, "funcSum" ) , args,
 			"Python_ImportCustomModule", false );
-		CHECK(PyString_Check(res));
-		char* resStr = PyString_AsString(res);
+		CHECK(PyUnicode_Check(res));
+		const char *resStr = PyUnicode_AsUTF8(res);
 		CHECK_EQUAL("hello world", BW::string(resStr));
 		Py_XDECREF( res );
 	}

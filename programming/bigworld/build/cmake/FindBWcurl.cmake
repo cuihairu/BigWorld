@@ -9,6 +9,30 @@
 # based on http://www.cmake.org/Wiki/CMake:How_To_Find_Libraries
 # and FindALSA.cmake, which is apparently current best-practice
 
+# BIGWORLD_BEGIN(3.13 migration)
+# curl is provided by vcpkg (see vcpkg.json next to the root CMakeLists.txt)
+# with the openssl feature. When configuring with the vcpkg toolchain file,
+# CMake's own FindCURL resolves it; map the results onto the BW-prefixed
+# variables and stop. The legacy branches below remain for the prebuilt
+# Windows third_party/curl trees.
+IF( NOT MSVC )
+	FIND_PACKAGE( CURL QUIET )
+	IF( CURL_FOUND )
+		SET( BWCURL_ROOT_DIR "${CURL_INCLUDE_DIRS}" )
+		SET( BWCURL_INCLUDE_DIR_RELEASE "${CURL_INCLUDE_DIRS}"
+			CACHE FILEPATH "curl include dir (vcpkg)" FORCE )
+		SET( BWCURL_LIBRARY_RELEASE "${CURL_LIBRARIES}"
+			CACHE FILEPATH "curl library (vcpkg)" FORCE )
+		SET( BWCURL_LIBRARY_DEBUG "${CURL_LIBRARIES}" )
+		SET( BWCURL_INCLUDE_DIRS "${CURL_INCLUDE_DIRS}" )
+		SET( BWCURL_LIBRARIES "${CURL_LIBRARIES}" )
+		SET( BWCURL_FOUND 1 )
+		SET( BWcurl_FOUND 1 )
+		RETURN()
+	ENDIF()
+ENDIF()
+# BIGWORLD_END
+
 FIND_PATH( BWCURL_ROOT_DIR
 	include/curl/curlver.h
 	PATHS	${BW_SOURCE_DIR}/third_party/curl

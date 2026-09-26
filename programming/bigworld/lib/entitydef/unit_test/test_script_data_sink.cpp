@@ -404,11 +404,13 @@ TEST_F( EntityDefUnitTestHarness, Script_ScriptDataSink_wstring )
 	RETURN_ON_FAIL_CHECK( PyUnicode_Check( resultObject.get() ) );
 	BW::wstring resultStr;
 	CHECK_EQUAL( 0, Script::setData( resultObject.get(), resultStr, "" ) );
-	// No CHECK_EQUAL for BW::wstring
+	// No CHECK_EQUAL for BW::wstring; compare the code points instead.
+	// C++20 deleted operator<<( ostream&, wchar_t ), so the elements have to
+	// be widened to a streamable integer type.
 	CHECK_EQUAL( input.size(), resultStr.size() );
-	CHECK_EQUAL( input[ 0 ], resultStr[ 0 ] );
-	CHECK_EQUAL( input[ 1 ], resultStr[ 1 ] );
-	CHECK_EQUAL( input[ 2 ], resultStr[ 2 ] );
+	CHECK_EQUAL( (uint32)input[ 0 ], (uint32)resultStr[ 0 ] );
+	CHECK_EQUAL( (uint32)input[ 1 ], (uint32)resultStr[ 1 ] );
+	CHECK_EQUAL( (uint32)input[ 2 ], (uint32)resultStr[ 2 ] );
 }
 
 

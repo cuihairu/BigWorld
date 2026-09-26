@@ -9,7 +9,7 @@ cxxSource =							\
 	test_bsptree					\
 	test_worldtri
 
-dependsOn += physics2 cstdmf math resmgr
+dependsOn += physics2 cstdmf math resmgr zip
 
 include $(BW_COMPONENT_FOOTER)
 

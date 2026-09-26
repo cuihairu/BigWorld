@@ -3,11 +3,15 @@ type         := library
 
 include $(BW_COMPONENT_HEADER)
 
-cSource = ../../third_party/sqlite/sqlite3
+# BIGWORLD_BEGIN(3.13 migration)
+# The sqlite3 amalgamation (3.6.23.1) is gone: sqlite3 itself now comes
+# from vcpkg and this component only builds the BigWorld wrapper.
+useSQLite = 1
 
 cxxSource =				\
 	sqlite_connection	\
 	sqlite_statement	\
+# BIGWORLD_END
 
 include $(BW_COMPONENT_FOOTER)
 

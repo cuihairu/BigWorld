@@ -2,7 +2,7 @@
 
 #include "zip_stream.hpp"
 
-#include "zip/zlib.h"
+#include <zlib.h>
 
 BW_BEGIN_NAMESPACE
 

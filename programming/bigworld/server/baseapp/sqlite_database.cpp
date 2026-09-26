@@ -5,7 +5,7 @@
 #include "cstdmf/timestamp.hpp"
 #include "cstdmf/string_utils.hpp"
 
-#include "sqlite/sqlite3.h"
+#include <sqlite3.h>
 
 #include <sstream>
 

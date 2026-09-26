@@ -4,7 +4,7 @@
 #include "cstdmf/bw_string.hpp"
 #include "cstdmf/memory_stream.hpp"
 
-#include "jsoncpp/include/json/json.h"
+#include <json/json.h>
 
 BW_BEGIN_NAMESPACE
 
