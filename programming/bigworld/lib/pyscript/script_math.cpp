@@ -716,8 +716,14 @@ PY_FACTORY_NAMED( PyMatrix, "Matrix", Math )
  */
 PyObject * PyMatrix::py___getstate__( PyObject * args )
 {
-	BW::string state( (char*)static_cast<Matrix*>(this), sizeof(Matrix) );
-	return Script::getData( state );
+	// BIGWORLD_BEGIN(3.13 migration)
+	// Was Script::getData( BW::string ), which builds a str and validates the
+	// blob as UTF-8 - a raw matrix is binary and blew up with
+	// UnicodeDecodeError. __setstate__ was migrated to expect bytes, so hand
+	// it bytes here as well, like the PyVector state methods do.
+	return PyBytes_FromStringAndSize( (char*)static_cast<Matrix*>(this),
+		sizeof(Matrix) );
+	// BIGWORLD_END
 }
 
 /**
@@ -1312,7 +1318,12 @@ ScriptObject PyVector<V>::pyGetAttribute( const ScriptString & attrObj )
 	if (attr[0] != '\0' && attr[1] == '\0')
 	{
 		const char * pPos = strchr( memNames, attr[0] );
-		if (pPos && (pPos - attr < NUMELTS))
+		// The bounds check used to compare pPos - attr, a difference
+		// between two unrelated strings that only matched by luck of
+		// layout; requesting an out-of-range component (Vector2.z,
+		// Vector3.w) read past the vector instead of raising
+		// AttributeError.
+		if (pPos && ((pPos - memNames) < NUMELTS))
 		{
 			size_t index = pPos - memNames;
 			return ScriptObject::createFrom( this->getVector()[index] );
@@ -2117,10 +2128,20 @@ template <>
 PyObject * PyVector<Vector3>::py_setPitchYaw( PyObject * args )
 {
 	float pitch, yaw;
-	if (PyTuple_Size( args ) != 2 ||
-		Script::setData( PyTuple_GET_ITEM( args, 0 ), pitch ) != 0 ||
+	if (PyTuple_Size( args ) != 2)
+	{
+		// BIGWORLD_BEGIN(3.13 migration)
+		// This path used to return NULL without setting an error, which the
+		// interpreter surfaces as a SystemError.
+		PyErr_SetString( PyExc_TypeError,
+			"Vector3.setPitchYaw expects exactly two arguments" );
+		return NULL;
+		// BIGWORLD_END
+	}
+	if (Script::setData( PyTuple_GET_ITEM( args, 0 ), pitch ) != 0 ||
 		Script::setData( PyTuple_GET_ITEM( args, 1 ), yaw ) != 0)
 	{
+		// setData has already raised.
 		return NULL;
 	}
 
@@ -2410,31 +2431,64 @@ const char * PyVector_baseName()
 	return pBase ? (pBase + 1) : path;
 }
 
-int PyVector_tp_compare( PyObject * v, PyObject * w )
+/**
+ *	Rich comparison between two vectors of the same width. Equality is the
+ *	component-wise comparison, ordering is lexicographic; these are exactly
+ *	the answers the old three-way comparator produced, expressed per op.
+ */
+template <class V>
+PyObject * pyVector_richCompareSameWidth( PyObject * v, PyObject * w, int op )
 {
-	if (PyVector< Vector2 >::Check( v ) &&
-		(PyVector< Vector2 >::Check( w )))
+	const V & a = ((PyVector<V> *)v)->getVector();
+	const V & b = ((PyVector<V> *)w)->getVector();
+
+	switch (op)
 	{
-		const Vector2 & a = ((PyVector<Vector2> *)v)->getVector();
-		const Vector2 & b = ((PyVector<Vector2> *)w)->getVector();
-		return (a < b) ? -1 : (b < a) ? 1 : 0;
-	}
-	if (PyVector< Vector3 >::Check( v ) &&
-		(PyVector< Vector3 >::Check( w )))
-	{
-		const Vector3 & a = ((PyVector<Vector3> *)v)->getVector();
-		const Vector3 & b = ((PyVector<Vector3> *)w)->getVector();
-		return (a < b) ? -1 : (b < a) ? 1 : 0;
-	}
-	if (PyVector< Vector4 >::Check( v ) &&
-		(PyVector< Vector4 >::Check( w )))
-	{
-		const Vector4 & a = ((PyVector<Vector4> *)v)->getVector();
-		const Vector4 & b = ((PyVector<Vector4> *)w)->getVector();
-		return (a < b) ? -1 : (b < a) ? 1 : 0;
+	case Py_EQ:
+		return PyBool_FromLong( !(a < b) && !(b < a) );
+	case Py_NE:
+		return PyBool_FromLong( (a < b) || (b < a) );
+	case Py_LT:
+		return PyBool_FromLong( a < b );
+	case Py_GT:
+		return PyBool_FromLong( b < a );
+	case Py_LE:
+		return PyBool_FromLong( !(b < a) );
+	case Py_GE:
+		return PyBool_FromLong( !(a < b) );
+	default:
+		break;
 	}
 
-	return 0;
+	Py_RETURN_NOTIMPLEMENTED;
+}
+
+
+/**
+ *	BIGWORLD_BEGIN(3.13 migration)
+ *	The old three-way comparator answered 0 ("equal") for every pair that was
+ *	not two vectors of the same width, so Vector3(1,2,3) == 5 was True and
+ *	Vector3 == Vector4 was True. A rich comparison defers those pairs to the
+ *	other operand instead: == falls back to False and the ordering operators
+ *	raise TypeError, as they do for every other Python 3 type.
+ *	BIGWORLD_END
+ */
+PyObject * PyVector_tp_richcompare( PyObject * v, PyObject * w, int op )
+{
+	if (PyVector< Vector2 >::Check( v ) && PyVector< Vector2 >::Check( w ))
+	{
+		return pyVector_richCompareSameWidth< Vector2 >( v, w, op );
+	}
+	if (PyVector< Vector3 >::Check( v ) && PyVector< Vector3 >::Check( w ))
+	{
+		return pyVector_richCompareSameWidth< Vector3 >( v, w, op );
+	}
+	if (PyVector< Vector4 >::Check( v ) && PyVector< Vector4 >::Check( w ))
+	{
+		return pyVector_richCompareSameWidth< Vector4 >( v, w, op );
+	}
+
+	Py_RETURN_NOTIMPLEMENTED;
 }
 
 #define DEFINE_PYVECTOR_TYPEOBJECT( V ) 									\
@@ -2442,8 +2496,8 @@ int PyVector_tp_compare( PyObject * v, PyObject * w )
 		&PyVector<V>::_pyStr, &PyVector<V>::_pyStr )						\
 	PY_TYPEOBJECT_SPECIALISE_BASIC_SIZE( PyVector< V >, 					\
 		sizeof( PyVectorCopy< V > )	)										\
-	PY_TYPEOBJECT_SPECIALISE_CMP( PyVector< V >, 							\
-		PyVector_tp_compare )												\
+	PY_TYPEOBJECT_SPECIALISE_SIMPLE( PyVector< V >, 						\
+		richCompareFunction, richcmpfunc, &PyVector_tp_richcompare )		\
 	PY_TYPEOBJECT_SPECIALISE_SEQ( PyVector< V >, 							\
 		PyVector_tp_as_sequence< V >() )									\
 	PY_TYPEOBJECT_SPECIALISE_NUM( PyVector< V >, 							\
@@ -3190,7 +3244,7 @@ PyObjectPtr Vector4Provider::coerce( PyObject * pObject )
 	Vector4 v4;
 	if (Script::setData( pObject, v4 ) == 0)
 	{
-		return PyObjectPtr( new Vector4Basic( v4 ), 
+		return PyObjectPtr( new Vector4Basic( v4 ),
 			PyObjectPtr::STEAL_REFERENCE );
 	}
 	else
@@ -4909,12 +4963,12 @@ PY_BEGIN_METHODS( Vector4Shader )
 	 *	4 - MULTIPLY
 	 *	5 - DIVIDE
 	 *	6 - ADD
-	 *	6 - SUBTRACT
-	 *	7 - DOT
-	 *	8 - MIN
-	 *	9 - MAX
-	 *	10 - SGE
-	 *	11 - SLT
+	 *	7 - SUBTRACT
+	 *	8 - DOT
+	 *	9 - MIN
+	 *	10 - MAX
+	 *	11 - SGE
+	 *	12 - SLT
 	 *
 	 *	@param	opcode	One of the above values as an uint8
 	 *	@param	outreg	Temporary output register as Vector4ProviderPtr to store result

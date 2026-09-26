@@ -16,6 +16,8 @@ cxxSource =							\
 	test_pywatcher					\
 	test_resource_table				\
 	test_script_events				\
+	test_script_math				\
+	test_script_utilities				\
 	test_stl_refs					\
 	test_stl_to_py					\
 

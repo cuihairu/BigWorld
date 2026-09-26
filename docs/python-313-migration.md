@@ -166,3 +166,30 @@ pyscript_test 新增 13 个用例（38→51，3 个新测试文件 + 1 个 XML f
 
 1. **待决 Python 异常会跨 CppUnitLite2 用例泄漏**：某用例结束时不 `PyErr_Clear()`，下一个用例的 `PyRun_String` 会带着上一个用例的异常直接失败（且无 traceback——Python stderr 走 BW 压制的输出钩子，非 `-v` 不可见），表现为"下游用例监听器为 NULL → `Script::ask(NULL)` 段错误/`MF_ASSERT` abort"。查错类型的 helper 必须"消费式"取异常（`PyErr_Fetch` 后不再 restore），每处产生错误的断言后紧跟 `PyErr_Clear()`。
 2. **`PySequence_GetItem/SetItem` 在协议层归一化负索引**：CPython 先取 `sq_length` 把负下标加上长度再调 `sq_item`/`sq_ass_item`，槽位实现本身仍拒绝负数——测试负索引行为要在协议入口断言，而不是假设槽位语义穿透。
+
+### 7.5 覆盖率补强批次 5：lib/pyscript script_math + 脚本工具面（2026-09-26）
+
+pyscript_test 新增 28 个用例（51→79；全量 21 模块 912→940）：
+
+- `test_script_utilities.cpp`（5 用例）：`PyImportPaths`（非 res 路径插入序去重、分隔符可配、`append()` 保持他方路径在后；res 路径按 BWResource 展开成多条、重复添加不增长；`pathAsObject` 产出 Python list、空集出空表）、`PythonInputSubstituter`（模块缺函数时原行返回且异常待决、非 callable/抛错/返回非串一律空串、正常展开、无 personality 模块原样返回）、`PyLogging` 八个 `BigWorld.log*` 模块函数（(category, message, metaData) 三元组、metaData 可 None 或 JSON 串、参数个数/类型不符 TypeError）。
+- `test_script_math.cpp`（23 用例，接管自并行会话的半成品后按引擎实测行为全部重写）：`Math.Matrix` 工厂/元素/乘法求逆/applyPoint/lookAt/投影、Euler 属性回路、`__getstate__`/`__setstate__` 字节回路、Vector2/3/4 运算与方法、引用语义与只读、`Vector4Basic`/`Vector4Product`、LFO/Morph/Animation/Translation/Distance/Swizzle/Combiner/MatrixAdaptor、`Vector4Shader` 寄存器机（13 个 op 全覆盖 + 指令序 + 跨 shader 寄存器喂入）。
+
+本批修复了四个真实引擎缺陷（均已最小化修复并保留 BIGWORLD_BEGIN(3.13 migration) 注释）：
+
+1. **`Script::getRetData` 对智能指针返回类型解析到 `getData( const bool )`**（script.hpp）：`IsValidRetData<>::getData` 里的 `Script::getData( data )` 是限定调用（不走 ADL），且在该模板的定义处只看得到 script.hpp 内建的 bool/int/Vector3 等重载——`PY_SCRIPT_CONVERTERS()` 为各类型生成的 `getData( ConstSmartPointer<CLASS> )` 声明在其后，从不参与重载决议。SmartPointer 的 safe-bool 运算符于是成了唯一可行候选：所有以 RETDATA 声明且返回 `SmartPointer<CLASS>` 的函数都把 `Py_True`/`Py_False` 发给 Python。本批实证受害者是 `Math.getRegister()`（返回 True，随后每个 `addOp` 的 Vector4Provider 形参都报 "argument 2 must be set to a Vector4Provider or None"）。修复：新增 `getRetData( const SmartPointer<T>& )` 偏特化重载，直接走内建 `getData( const PyObject* )`（同一对象 incref、NULL 映 None），凭偏序关系自然胜出。
+2. **`PyMatrix::__getstate__` 产 str 触发 UTF-8 校验崩**（script_math.cpp）：原来经 `Script::getData( BW::string )` 把矩阵原始字节构造成 str，3.13 对其做 UTF-8 校验直接 UnicodeDecodeError（`__setstate__` 早已迁成要求 bytes）。改 `PyBytes_FromStringAndSize`，与 PyVector 的 state 方法对齐。
+3. **`PyVector` 三种宽度共用 `tp_compare` 声称"一切皆相等"**（script_math.cpp）：旧比较器对任何不匹配返回 0，`Vector3(1,2,3) == 5`、`Vector3 == Vector4` 均为 True。换成 `tp_richcompare`：同宽度按字典序六算子，异类型返回 NotImplemented（`==` 落 False、排序比较按 Py3 约定 TypeError），旧 `tp_compare` 经迁移漏斗 `LegacyCompareAdapter` 的通道随之撤销。
+4. **`Vector3.setPitchYaw` 实参数错时返回 NULL 未设异常**（script_math.cpp）：解释器把无异常的 NULL 当系统错误（SystemError）上报。补 TypeError。附带修正 `addOp` 文档串里的 op 编号表（6 ADD 曾被错标成别的名字）。
+
+本批确立的引擎事实（都是测试预期与实现的偏差来源）：
+
+1. **Vector4Provider 强制转换在属性与方法两条路上语义一致**：都过 `Vector4Provider::coerce`——四元组/Vector4 会被快照成新 `Vector4Basic`；活提供者（LFO、Register、Product 等）转换失败后原样透传、保持引用语义；None 复位为空。shader 寄存器喂入由此保持"活"语义（寄存器内容后写覆盖前读）。寄存器本身无 Python 属性可写（`Vector4Register` 不暴露 value），常量得经 `Vector4Product` 单源直通构造。
+2. **`Matrix::lookAt` 产视图矩阵**：第三行是 −position·(Right/Up/Direction)，位于 (0,0,−10) 朝 +z 看的观察者 translation.z 读作 +10。`Vector4MatrixAdaptor` 的 X_ROTATE 是绕 X 的俯仰（pitch），Euler 提取在 |pitch|≥90° 退化（roll 出 ±π）；角度属性报主值区间，4 弧度 roll 读作 4−2π——旋转语义不确定时直接断言矩阵元素（BigWorld 行主序，`setRotateX` 存 m[1][2]=+sin）。
+3. **无 source 的 MatrixAdaptor 让接收矩阵原样保留**：`Math.Matrix(adaptor)` 新建的是全零矩阵，determinant 为 0（不是单位阵）。
+4. **`Vector4Morph` 的 time 钳制链**：time 钳在 [0.0001, duration]，写 duration 会把已有 time 经钳制重写；`target()` setter 直接把 time 清 0（换目标即回起点）。
+
+方法论（接 7.4）：
+
+1. **引擎侧 fprintf 取证**：BW 的 DebugFilter 压掉 ERROR_MSG、`PyErr_Print()` 输出被 ScriptOutputWriter 重定向，均不可见；在怀疑的 C++ 强制转换函数里临时 `fprintf( stderr, ... )` 打 `ob_type->tp_name` 是最短的实证路径（本批靠它 3 分钟定位"reg 竟是 bool"，随后才顺藤摸到 getRetData 重载决议缺陷）。
+2. **`checkRaises`/`checkSucceeds` 必须走 `Py_file_input`**：表达式模式无法执行赋值语句（全数报假 SyntaxError），属性 setter 与方法调用的错误路径都要以语句块形式运行；表达式取值仍用 `Py_eval_input` 的 `checkTrue`/`evalFloat`/`evalString`。
+3. **跨 C++ 单测的寄存器是全局共享状态**：`Vector4Shader` 的 63 个临时寄存器是进程级单例，多个用例先后写同一寄存器会互相污染——依赖寄存器初值的断言要么先 MOVE 覆写、要么换没用过的寄存器号。
