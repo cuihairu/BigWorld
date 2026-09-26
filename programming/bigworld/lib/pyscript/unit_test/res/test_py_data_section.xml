@@ -1,0 +1,15 @@
+<root>
+	<child1>	hello	</child1>
+	<child2>	42	</child2>
+	<child3>	3.5	</child3>
+	<child4>	true	</child4>
+	<alist>
+		<item>	1	</item>
+		<item>	2	</item>
+		<item>	3	</item>
+	</alist>
+	<vector2>	1.5 2.5	</vector2>
+	<vector3>	1 2 3	</vector3>
+	<vector4>	1 2 3 4	</vector4>
+	<big>	4294967296	</big>
+</root>

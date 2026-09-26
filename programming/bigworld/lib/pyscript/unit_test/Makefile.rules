@@ -11,7 +11,10 @@ cxxSource =							\
 	test_pyobject_base				\
 	test_python_and_stl				\
 	test_python_integration			\
+	test_py_data_section			\
 	test_py_output_writer			\
+	test_pywatcher					\
+	test_stl_refs					\
 
 dependsOn += \
 	pyscript 		\

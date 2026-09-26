@@ -98,3 +98,15 @@
 - 薄弱：`lib/chunk` 3.8%、`lib/terrain` 2.5%、`lib/physics2` 6.9%（客户端/资源侧子系统，服务端单测基本不触及）、`lib/server` 8.9%、`lib/pyscript` 20.2%。
 
 说明：本次迁移触碰的代码（pyscript/script 绑定层、watcher、pickler、ECDSA/zip/sqlite 封装、平台信息等）均有新增针对性测试覆盖；100% 覆盖率对整个引擎是长期目标，短期性价比最高的补强点是 `lib/pyscript` 与 `lib/connection`（迁移改动密集且可测）。覆盖率周期脚本留存于会话记录：删 `build/el7/obj` 下 `*.o` → `user_shouldBuildCodeCoverage=1 make bw-run-all-unit-tests` → `gcovr --gcov-ignore-errors=all --gcov-ignore-parse-errors=all`（必须加这两个参数，否则 gcov 工作目录缺失的 gcda 会让 gcovr 整体失败）→ 恢复正常构建并复验全绿。
+
+### 7.1 覆盖率补强批次 1：lib/pyscript（2026-09-26）
+
+pyscript_test 新增 14 个用例（24→38，全量 21 模块 856→870 全绿）：
+
+- `test_pywatcher.cpp`（+ `res/test_pywatcher.py` 辅助模块）：BigWorld.getWatcher/setWatcher/getWatcherDir、addWatcher（PyAccessorWatcher 读写回路 + 非 callable 报错）、delWatcher（含 ValueError 路径）、addFunctionWatcher（手工构造 WATCHER_TYPE_TUPLE 流驱动 PyFunctionWatcher，验证回调副作用）、PyObjectWatcher（str() 渲染、setFromString 求值 Python 源码且不做类型强转、SET2 字符串载荷回路、getAsStream）。
+- `test_py_data_section.cpp`（+ `res/test_py_data_section.xml`）：结构（keys/has_key/len/下标/child/childName/values/items）、类型化读取（string/int/float/bool/int64/vector2/3/4、复数读取、默认值、as* 访问器）、写入与变更（write* 回路、write 按类型分发、createSection/createSectionFromString/deleteSection/copy）、ResMgr.DataSection() 工厂。
+- `test_stl_refs.cpp`：PySequenceSTL/PyMappingSTL（size/迭代/引用读写/拷贝语义）、PyObjectPtrRefSimple（引用计数语义）、PyObjectWatcher 在 list/dict 上的目录行为。
+
+附带修复：`py_data_section.cpp` `createSection` 在 Linux 上父目录名被截断一个字符——`BWUtil::getFilePath`（dirname）不返回尾部分隔符，旧代码无条件 `substr(0, len-1)` 把 `"a/b"` 的父目录削成 `"a"` 的前缀；改为仅在分隔符实际存在时剥离（裸名产生的 `"."` 清空，行为不变）。
+
+备注：network_test 的 ConfigTest 依赖主机内核参数 `net.core.rmem_max ≥ 16MB`（`wmem_max/wmem_default ≥ 1MB`），主机重启后会回落默认值 4MB 导致环境性失败，按测试输出用 sysctl 恢复即可。已发现的预存引擎局限（本次未修）：`PyMappingSTL` 迭代器的按键查找在 `py_to_stl.hpp` 中被注释掉（只做指针同一性比较的 std::find），经 watcher 路径按键查 Python dict 成员永远无法命中，目录枚举不受影响。

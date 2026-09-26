@@ -1707,9 +1707,19 @@ PyObject * PyDataSection::py_createSection( PyObject * args )
 	}
 
 	BW::string sectionBase = BWResource::getFilePath( path );
-	// Strip the trailing / off the directory name
-	// (this gets added even if the path has no dir blank)
-	sectionBase = sectionBase.substr( 0, sectionBase.length() - 1 );
+	// Strip the trailing separator off the directory name if there is one.
+	// getFilePath() returns the dirname, which carries no trailing separator
+	// on Linux (and "." for a bare name), so only strip when actually
+	// present or single-segment paths lose their last character.
+	if (sectionBase == ".")
+	{
+		sectionBase.clear();
+	}
+	else if (!sectionBase.empty() &&
+		sectionBase[sectionBase.length() - 1] == '/')
+	{
+		sectionBase = sectionBase.substr( 0, sectionBase.length() - 1 );
+	}
 	BW::StringRef sectionName = BWResource::getFilename( path );
 
 	// We do this, so that names such as foldername/filename.xml can be passed in
