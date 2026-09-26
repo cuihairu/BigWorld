@@ -29,9 +29,13 @@ PY_END_ATTRIBUTES()
 
 
 /* BIGWORLD_BEGIN(3.13 migration)
- * sq_slice/sq_ass_slice were removed in Python 3.x. Slicing still works:
- * the type machinery synthesises x[i:j] and x[i:j] = v from the remaining
- * sq_item/sq_ass_item slots, so the dedicated helpers are gone.
+ * sq_slice/sq_ass_slice were removed in Python 3.x, and there is no
+ * protocol fallback that would synthesise x[i:j] from the remaining
+ * slots - PySequence_GetSlice and friends only route through
+ * tp_as_mapping, and the shared table wired up by
+ * PY_TYPEOBJECT_SPECIALISE_SEQ only forwards integer keys. Slicing is
+ * therefore not available on this type at all; the integer-key item
+ * access x[i] / x[i] = v / del x[i] is what the mapping table restores.
  */
 PySequenceMethods PySTLSequence::s_seq_methods_ = {
 	.sq_length = _pySeq_length,			// len(x)
@@ -185,6 +189,17 @@ int PySTLSequence::pySeq_ass_item( Py_ssize_t index, PyObject * pItem )
 		PyErr_SetString( PyExc_IndexError,
 			"PySTLSequence assignment index out of range" );
 		return -1;
+	}
+
+	// Deletion arrives here too - the sequence protocol passes a NULL item
+	// for "del seq[index]" rather than through a separate slot. There is
+	// nothing to convert, the element is simply dropped.
+	if (pItem == NULL)
+	{
+		MF_ASSERT( index + 1 <= INT_MAX );
+		holder_.erase( ( int ) index, ( int ) ( index + 1 ) );
+		holder_.commit();
+		return 0;
 	}
 
 	// replace the item

@@ -265,3 +265,28 @@ pyscript_test 新增 14 个用例（101→115；全量 21 模块 962→976），
 **并行会话碰撞实录（批次 6 之后第二轮）**：① 被打断的构建在编译中途被杀，留下 **0 字节 .o 且时间戳与源文件同秒**——make 判定"最新"永远跳过重编，二进制静默缺 30 个用例（86 vs 115），`nm` 查不到新测试符号是判别特征；对策是 `touch` 源文件强制重编。② opencode 在同一 obj 目录并发构建/跑全量套件，期间二进制被对方重链成中间态；对策是提交前自查 `ps` 确认无并发 make，且**只相信自己刚构建并立即运行的二进制**。③ opencode 同期提交了它的批次 7（debf3038，py_traceback 7 例），并在我迭代期间给 `py_debug_message_file_logger.cpp` 补了 `MAX_FILE_LOGGERS` 的类外定义、调整了 lib Makefile.rules 源序——均为其未提交改动，本批不触碰。
 
 提交范围：`test_script_infra.cpp`（+14 例与上述修复）、`test_script_utilities.cpp`（回落分支断言更新）、本文档。opencode 的未提交改动（`py_debug_message_file_logger.cpp`、lib `Makefile.rules`、`test_script_events.cpp`、`test_stl_to_py.cpp`、`test_pickler.cpp`）一律不收。
+
+### 7.9 覆盖率补强批次 9：lib/pyscript 收尾（2026-09-26）
+
+先收录并复验了并行会话（opencode）的遗留未提交改动（`1331bf28`）：`MAX_FILE_LOGGERS` 类外定义（ODR 正解）、lib Makefile.rules 源序调整、`runPython` 失败分支简化为 `PyErr_Print()`、`test_stl_to_py.cpp` 四处 `PyErr_Clear()` 补漏；`test_pickler.cpp` 继续保持不入库。
+
+pyscript_test 新增 3 个用例（115→118；全量 976→979）：
+
+- `test_stl_to_py.cpp` +2：`PySTLSequence_operatorArgumentTypes`（非序列参数走 `PyNumber_Add`（类型机制把 sq_concat 接进 nb_add）与 `PySequence_Concat`/`InPlaceConcat` C API 双路命中引擎自己的 "Argument to + / += must be a sequence" TypeError、向量不动）、`PySTLSequence_subscriptAndDeletion`（下标读/写/删、负索引归一、非整数与 slice key 拒绝、C-API 切片入口同样拒绝）。
+- `test_script_events.cpp` +1：`ScriptEvents_secondInstanceKeepsFirst`（二实例构造/析构双 WARNING，模块函数始终路由首实例，二实例容器与注册表互不干扰）。
+- `test_script_utilities.cpp`：PyLogging 用例补 metaData **空串**分支（与 None 同走普通 write 路径，仅非空串才当 JSON 载荷）——py_logCommon 最后一个未覆盖分支。
+
+本批修出两个真实缺陷：
+
+1. **`del seq[i]` 在 PySTLSequence 上必然崩溃**（stl_to_py.cpp）：映射协议把删除表达为 `sq_ass_item(i, NULL)`，旧代码无条件 `holder_.insert(pItem)` → `Script::setData(NULL, …)` → `PyLong_Check(NULL)` 段错误。修复：`pySeq_ass_item` 识别 NULL pItem，单独走 `erase(index, index+1)+commit`（holder 契约允许"单 erase 无 insertRange"的 commit 组）。
+2. **序列型类型整体丢失脚本下标能力（迁移回归）**（pyobject_plus.hpp/.cpp）：Py2 的 `PyObject_GetItem/SetItem/DelItem` 对无 `tp_as_mapping` 的类型有 int-key 回退到 `sq_item/sq_ass_item`（脚本可 `seq[i]`）；Py3 删除了该回退——`PySTLSequence` 在 3.13 下 `seq[i]`/`seq[i]=v`/`del seq[i]` 全部 TypeError（"'X' object is not subscriptable"）。修复：新增共享 `PyTypeObjectUtil::seqMappingMethods`（`mp_subscript`/`mp_ass_subscript` 经类型自身 sq 槽派发、负索引归一、NULL 值转删除），`PY_TYPEOBJECT_SPECIALISE_SEQ` 自动接线 tp_as_mapping。影响面：Linux 构建内 WITH_SEQUENCE 用户只有 PySTLSequence 一个（另一用户 gizmo/item_view 是客户端库、不在 Linux 构建）；无类型同时自带 mapping 表。stl_to_py.cpp 顶部的旧迁移注释（"the type machinery synthesises x[i:j]"）与 3.13 源码不符（abstract.c 三个 Slice 入口对无 mp 实现的类型一律 type_error），已更正：**切片在本类型上彻底不可用**，可用面是整数键下标。
+
+本批确立的引擎/协议事实：
+
+1. **CPython 3.13 无 mp_subscript 的类型没有任何切片合成回路**：`PySequence_GetSlice/SetSlice/DelSlice`（abstract.c:1905/1993/2016）只走 `mp_subscript/mp_ass_subscript`，否则直接 `"'%.200s' object is unsliceable"` 类 type_error；解释器层 `x[i]` 同样需要 mp_subscript。sq_item/sq_ass_item 仍被迭代、`PySequence_GetItem/SetItem` C API 与 `PyObject_Size`（len 走 sq_length）使用。
+2. **`PyNumber_Add` 能到 sq_concat 的非序列参数分支**：类型机制（typeobject.c add_operators）把 sq_concat/sq_repeat 包进 nb_add/nb_multiply 派发，所以 `x + 42` 由引擎槽位报自己的错；`PySequence_Concat`/`InPlaceConcat` 则无条件直调槽位。
+3. **ScriptEvents 单例是"首实例获胜"**：二实例构造只 WARNING 不接管 `g_pInstance`，析构时非单例也只 WARNING 不清槽——模块函数全程路由首实例，两实例的事件容器完全独立。
+
+方法论（接 7.8）：待测协议行为先读 vendored CPython 源码再写断言（abstract.c 的三个 Slice 入口直接推翻了引擎旧注释与我的第一版测试预期——测试跑出来的段错误/NULL 是"断言写错"的第一信号，gdb 回溯+源码比对十分钟内定位）；对 NULL 返回值做 `PyList_Check` 这类解引用断言前必须先 `CHECK(p != NULL)` 短路，否则断言失败本身变崩溃。
+
+提交范围：`stl_to_py.cpp`（删除分支修复+注释更正）、`pyobject_plus.hpp/.cpp`（共享下标表）、`test_stl_to_py.cpp`、`test_script_events.cpp`、`test_script_utilities.cpp`、本文档。

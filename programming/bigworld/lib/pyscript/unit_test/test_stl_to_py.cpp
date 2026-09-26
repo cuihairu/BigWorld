@@ -64,6 +64,43 @@ PyObject * newIntList( long first, long second )
 	return pList;
 }
 
+
+/**
+ *	Consumes the currently raised exception and reports whether its str()
+ *	rendering contains the given needle (false when nothing is raised, so
+ *	a pending error never leaks into the next check either).
+ */
+bool exceptionMessageMatches( const char * needle )
+{
+	if (!PyErr_Occurred())
+	{
+		return false;
+	}
+
+	PyObject * pType = NULL;
+	PyObject * pValue = NULL;
+	PyObject * pTraceback = NULL;
+	PyErr_Fetch( &pType, &pValue, &pTraceback );
+
+	bool found = false;
+	if (pValue != NULL)
+	{
+		PyObject * pStr = PyObject_Str( pValue );
+		if (pStr != NULL)
+		{
+			const char * pMessage = PyUnicode_AsUTF8( pStr );
+			found = (pMessage != NULL) &&
+				(strstr( pMessage, needle ) != NULL);
+			Py_DECREF( pStr );
+		}
+	}
+
+	Py_XDECREF( pType );
+	Py_XDECREF( pValue );
+	Py_XDECREF( pTraceback );
+	return found;
+}
+
 } // end namespace (anonymous)
 
 
@@ -358,6 +395,147 @@ TEST_F( PyScriptUnitTestHarness, PySTLSequence_setDataOverwrite )
 	CHECK_EQUAL( size_t( 2 ), ints.size() );
 	CHECK_EQUAL( 7, ints[ 0 ] );
 	PyErr_Clear();
+}
+
+
+// The non-sequence argument branches of + and += raise the engine's own
+// TypeError - both through the type machinery's operator dispatch and via
+// the direct C-API slot calls - and leave the vector untouched.
+TEST_F( PyScriptUnitTestHarness, PySTLSequence_operatorArgumentTypes )
+{
+	IntVector ints;
+	ints.push_back( 10 );
+	ints.push_back( 20 );
+	ints.push_back( 30 );
+
+	IntVectorHolder holder( ints, NULL, /* writable */ true );
+	PyObjectPtr pSeq( Script::getData( holder ),
+		PyObjectPtr::STEAL_REFERENCE );
+	CHECK( pSeq.get() != NULL );
+
+	PyObjectPtr pInt( PyLong_FromLong( 42 ), PyObjectPtr::STEAL_REFERENCE );
+
+	// PyNumber_Add dispatches through the nb_add slot the type machinery
+	// wired to sq_concat, so the slot's own non-sequence branch fires.
+	PyErr_Clear();
+	PyObjectPtr pSum( PyNumber_Add( pSeq.get(), pInt.get() ),
+		PyObjectPtr::STEAL_REFERENCE );
+	CHECK( pSum.get() == NULL );
+	CHECK( exceptionMessageMatches( "Argument to + must be a sequence" ) );
+
+	// The sequence C API calls the slot unconditionally.
+	PyErr_Clear();
+	PyObjectPtr pConcat( PySequence_Concat( pSeq.get(), pInt.get() ),
+		PyObjectPtr::STEAL_REFERENCE );
+	CHECK( pConcat.get() == NULL );
+	CHECK( exceptionMessageMatches( "Argument to + must be a sequence" ) );
+
+	// += with a non-sequence argument is rejected the same way.
+	PyErr_Clear();
+	PyObjectPtr pInPlace( PySequence_InPlaceConcat( pSeq.get(),
+		pInt.get() ), PyObjectPtr::STEAL_REFERENCE );
+	CHECK( pInPlace.get() == NULL );
+	CHECK( exceptionMessageMatches( "Argument to += must be a sequence" ) );
+
+	CHECK( !PyErr_Occurred() );
+	CHECK_EQUAL( size_t( 3 ), ints.size() );
+	CHECK_EQUAL( 10, ints[ 0 ] );
+	CHECK_EQUAL( 30, ints[ 2 ] );
+}
+
+
+// The mapping subscript table wired up by the type macros routes integer
+// keys back into sq_item/sq_ass_item - Python 3 dropped the protocol
+// fallback that used to do this, and this table restores it: x[i],
+// x[i] = v and del x[i] all work, negative indices are normalised, and
+// non-integer keys (including slices) are refused before the slot runs.
+// The slice C-API entry points only route through tp_as_mapping as well,
+// so slicing stays unavailable on this type.
+TEST_F( PyScriptUnitTestHarness, PySTLSequence_subscriptAndDeletion )
+{
+	IntVector ints;
+	ints.push_back( 10 );
+	ints.push_back( 20 );
+	ints.push_back( 30 );
+
+	IntVectorHolder holder( ints, NULL, /* writable */ true );
+	PyObjectPtr pSeq( Script::getData( holder ),
+		PyObjectPtr::STEAL_REFERENCE );
+	CHECK( pSeq.get() != NULL );
+
+	// Integer keys read through the mapping entry point.
+	PyObjectPtr pOne( PyLong_FromLong( 1 ),
+		PyObjectPtr::STEAL_REFERENCE );
+	PyObjectPtr pItem( PyObject_GetItem( pSeq.get(), pOne.get() ),
+		PyObjectPtr::STEAL_REFERENCE );
+	CHECK( isLong( pItem.get(), 20 ) );
+
+	// Negative indices are normalised against the length.
+	PyObjectPtr pMinusOne( PyLong_FromLong( -1 ),
+		PyObjectPtr::STEAL_REFERENCE );
+	PyObjectPtr pLast( PyObject_GetItem( pSeq.get(), pMinusOne.get() ),
+		PyObjectPtr::STEAL_REFERENCE );
+	CHECK( isLong( pLast.get(), 30 ) );
+
+	// Out of range raises IndexError from the slot itself.
+	PyObjectPtr pThree( PyLong_FromLong( 3 ),
+		PyObjectPtr::STEAL_REFERENCE );
+	PyErr_Clear();
+	CHECK( PyObject_GetItem( pSeq.get(), pThree.get() ) == NULL );
+	CHECK_EQUAL( BW::string( "IndexError" ), currentExceptionType() );
+
+	// Non-integer keys are refused before the slot runs.
+	PyObjectPtr pName( PyUnicode_FromString( "name" ),
+		PyObjectPtr::STEAL_REFERENCE );
+	PyErr_Clear();
+	CHECK( PyObject_GetItem( pSeq.get(), pName.get() ) == NULL );
+	CHECK_EQUAL( BW::string( "TypeError" ), currentExceptionType() );
+
+	// Slice keys reach the same refusal - slicing has no implementation
+	// on this type.
+	PyObjectPtr pStop( PyLong_FromLong( 2 ),
+		PyObjectPtr::STEAL_REFERENCE );
+	PyObjectPtr pSliceKey( PySlice_New( pOne.get(), pStop.get(), NULL ),
+		PyObjectPtr::STEAL_REFERENCE );
+	PyErr_Clear();
+	CHECK( PyObject_GetItem( pSeq.get(), pSliceKey.get() ) == NULL );
+	CHECK_EQUAL( BW::string( "TypeError" ), currentExceptionType() );
+
+	// Assignment through the mapping entry point replaces the item.
+	PyObjectPtr pNine( PyLong_FromLong( 9 ),
+		PyObjectPtr::STEAL_REFERENCE );
+	PyErr_Clear();
+	CHECK_EQUAL( 0, PyObject_SetItem( pSeq.get(), pOne.get(),
+		pNine.get() ) );
+	CHECK_EQUAL( 9, ints[ 1 ] );
+
+	// Deletion: "del seq[i]" arrives as a NULL item in sq_ass_item and
+	// drops exactly that element.
+	PyErr_Clear();
+	CHECK_EQUAL( 0, PyObject_DelItem( pSeq.get(), pOne.get() ) );
+	CHECK_EQUAL( size_t( 2 ), ints.size() );
+	CHECK_EQUAL( 10, ints[ 0 ] );
+	CHECK_EQUAL( 30, ints[ 1 ] );
+
+	// A normalised negative deletion index drops the last element.
+	PyErr_Clear();
+	CHECK_EQUAL( 0, PyObject_DelItem( pSeq.get(), pMinusOne.get() ) );
+	CHECK_EQUAL( size_t( 1 ), ints.size() );
+	CHECK_EQUAL( 10, ints[ 0 ] );
+
+	// The C-API slice entry points route through tp_as_mapping too, so
+	// they hit the same integer-only refusal instead of slicing.
+	PyErr_Clear();
+	CHECK( PySequence_GetSlice( pSeq.get(), 0, 1 ) == NULL );
+	CHECK_EQUAL( BW::string( "TypeError" ), currentExceptionType() );
+
+	PyErr_Clear();
+	CHECK_EQUAL( -1, PySequence_DelSlice( pSeq.get(), 0, 1 ) );
+	CHECK_EQUAL( BW::string( "TypeError" ), currentExceptionType() );
+	PyErr_Clear();
+
+	CHECK_EQUAL( size_t( 1 ), ints.size() );
+	CHECK( !PyErr_Occurred() );
 }
 
 

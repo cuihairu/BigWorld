@@ -358,6 +358,64 @@ TEST_F( PyScriptUnitTestHarness, ScriptEvents_moduleFunctions )
 }
 
 
+// A second ScriptEvents instance does not take the singleton slot: it
+// warns on construction, keeps its own (disconnected) event container,
+// and on destruction warns again without disturbing the first instance -
+// the module functions keep routing to the instance that came first.
+TEST_F( PyScriptUnitTestHarness, ScriptEvents_secondInstanceKeepsFirst )
+{
+	CHECK( runPython(
+		"second_order = []\n"
+		"def second_listener( arg ):\n"
+		"\tsecond_order.append( arg )\n" ) );
+
+	PyObjectPtr pListener( mainAttr( "second_listener" ),
+		PyObjectPtr::STEAL_REFERENCE );
+	CHECK( pListener.get() != NULL );
+
+	ScriptEvents first;
+	first.createEventType( "onSecondInstance" );
+
+	{
+		// Warns "Already have a ScriptEvents instance." and stays
+		// disconnected from the module functions.
+		ScriptEvents second;
+		second.createEventType( "onSecondInstance" );
+
+		// The module functions still resolve to the first instance.
+		PyObjectPtr pBigWorld( PyImport_ImportModule( "BigWorld" ),
+			PyObjectPtr::STEAL_REFERENCE );
+		CHECK( pBigWorld.get() != NULL );
+		if (pBigWorld.get() != NULL)
+		{
+			PyObjectPtr pAddRet( PyObject_CallMethod( pBigWorld.get(),
+				"addEventListener", "sO", "onSecondInstance",
+				pListener.get() ), PyObjectPtr::STEAL_REFERENCE );
+			CHECK( pAddRet.get() != NULL );
+		}
+
+		// Triggering on the second instance finds no listeners there.
+		CHECK( second.triggerEvent( "onSecondInstance",
+			Py_BuildValue( "(i)", 1 ) ) );
+	}
+	// The second instance's destruction warns "Was not singleton
+	// instance." and must not have cleared the slot.
+
+	// The listener registered through the module functions fires on the
+	// first instance - proof both that the slot never changed and that
+	// the second instance's teardown left the registry alone.
+	CHECK( first.triggerEvent( "onSecondInstance",
+		Py_BuildValue( "(i)", 2 ) ) );
+	PyObjectPtr pOrder( mainAttr( "second_order" ),
+		PyObjectPtr::STEAL_REFERENCE );
+	CHECK( pOrder.get() != NULL );
+	CHECK_EQUAL( 1, int( PyList_Size( pOrder.get() ) ) );
+	CHECK_EQUAL( 2, PyLong_AsLong( PyList_GetItem( pOrder.get(), 0 ) ) );
+
+	CHECK( !PyErr_Occurred() );
+}
+
+
 BW_END_NAMESPACE
 
 // test_script_events.cpp

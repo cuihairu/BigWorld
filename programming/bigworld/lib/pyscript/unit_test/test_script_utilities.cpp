@@ -289,6 +289,15 @@ TEST_F( PyScriptUnitTestHarness, PyLogging_moduleFunctions )
 		PyObjectPtr::STEAL_REFERENCE );
 	CHECK( pMeta.get() == Py_None );
 
+	// An empty meta data string shares the plain-write path with None -
+	// only a non-empty string is treated as a JSON payload.
+	PyErr_Clear();
+	PyObjectPtr pEmptyMeta( PyObject_CallMethod( pBigWorld.get(),
+		"logInfo", "sss", "TestCategory", "empty meta", "" ),
+		PyObjectPtr::STEAL_REFERENCE );
+	CHECK( pEmptyMeta.get() == Py_None );
+	CHECK( !PyErr_Occurred() );
+
 	// --- Error paths ---
 
 	// Wrong number of elements.

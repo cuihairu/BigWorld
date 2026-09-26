@@ -183,6 +183,124 @@ const PyMethodDef * PyObjectPlus::searchMethods( const PyMethodDef *methods,
 
 
 // -----------------------------------------------------------------------------
+// Section: PyTypeObjectUtil shared subscript table
+// -----------------------------------------------------------------------------
+
+namespace PyTypeObjectUtil
+{
+
+/* BIGWORLD_BEGIN(3.13 migration)
+ * Implementations of the shared subscript entry points declared in
+ * pyobject_plus.hpp. See the comment there for why sequence-only types
+ * need a mapping table again.
+ * BIGWORLD_END */
+
+/**
+ *	This function resolves an integer subscript, normalising negative
+ *	indices against the sequence's length as the Python 2 protocol layer
+ *	used to do for us.
+ */
+static bool seqIndexKey( PyObject * pSelf, PyObject * pKey,
+	Py_ssize_t & index )
+{
+	if (!PyIndex_Check( pKey ))
+	{
+		PyErr_Format( PyExc_TypeError,
+			"%.200s indices must be integers, not %.200s",
+			Py_TYPE( pSelf )->tp_name, Py_TYPE( pKey )->tp_name );
+		return false;
+	}
+
+	index = PyNumber_AsSsize_t( pKey, PyExc_IndexError );
+	if ((index == -1) && PyErr_Occurred())
+	{
+		return false;
+	}
+
+	if (index < 0)
+	{
+		PySequenceMethods * pSeq = Py_TYPE( pSelf )->tp_as_sequence;
+		if ((pSeq == NULL) || (pSeq->sq_length == NULL))
+		{
+			PyErr_SetString( PyExc_IndexError,
+				"cannot normalise a negative index without a length" );
+			return false;
+		}
+
+		Py_ssize_t length = pSeq->sq_length( pSelf );
+		if (length < 0)
+		{
+			return false;	// sq_length left its own error pending
+		}
+
+		index += length;
+	}
+
+	return true;
+}
+
+
+/**
+ *	This function reads seq[key] through the type's own sq_item slot.
+ */
+PyObject * seqSubscript( PyObject * pSelf, PyObject * pKey )
+{
+	PySequenceMethods * pSeq = Py_TYPE( pSelf )->tp_as_sequence;
+	if ((pSeq == NULL) || (pSeq->sq_item == NULL))
+	{
+		PyErr_Format( PyExc_TypeError,
+			"'%.200s' object is not subscriptable",
+			Py_TYPE( pSelf )->tp_name );
+		return NULL;
+	}
+
+	Py_ssize_t index;
+	if (!seqIndexKey( pSelf, pKey, index ))
+	{
+		return NULL;
+	}
+
+	return pSeq->sq_item( pSelf, index );
+}
+
+
+/**
+ *	This function implements seq[key] = value through the type's own
+ *	sq_ass_item slot. A NULL value is the mapping protocol's spelling of
+ *	"del seq[key]" and is forwarded as such.
+ */
+int seqAssSubscript( PyObject * pSelf, PyObject * pKey, PyObject * pValue )
+{
+	PySequenceMethods * pSeq = Py_TYPE( pSelf )->tp_as_sequence;
+	if ((pSeq == NULL) || (pSeq->sq_ass_item == NULL))
+	{
+		PyErr_Format( PyExc_TypeError,
+			"'%.200s' object does not support item %.50s",
+			Py_TYPE( pSelf )->tp_name,
+			(pValue == NULL) ? "deletion" : "assignment" );
+		return -1;
+	}
+
+	Py_ssize_t index;
+	if (!seqIndexKey( pSelf, pKey, index ))
+	{
+		return -1;
+	}
+
+	return pSeq->sq_ass_item( pSelf, index, pValue );
+}
+
+
+PyMappingMethods seqMappingMethods = {
+	NULL,				// len() keeps using sq_length
+	seqSubscript,
+	seqAssSubscript
+};
+
+} // end namespace PyTypeObjectUtil
+
+
+// -----------------------------------------------------------------------------
 // Section: PyObjectPlusWithWeakReference
 // -----------------------------------------------------------------------------
 

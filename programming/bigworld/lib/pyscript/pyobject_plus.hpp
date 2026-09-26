@@ -625,9 +625,19 @@ typedef int (*traverseproc)(PyObject *, visitproc, void *);
 	PY_TYPEOBJECT_SPECIALISE_SIMPLE( THIS_CLASS, 							\
 		asNumber, PyNumberMethods *, NUM )
 
+/* BIGWORLD_BEGIN(3.13 migration)
+ * Sequence-only types also get the shared subscript table above, so
+ * Python 2's integer-key item access keeps working through
+ * tp_as_mapping. No type combines a sequence table with its own mapping
+ * table today; a type that needs both would have to wire
+ * tp_as_mapping by hand instead of using this macro.
+ */
 #define PY_TYPEOBJECT_SPECIALISE_SEQ( THIS_CLASS, SEQ )						\
 	PY_TYPEOBJECT_SPECIALISE_SIMPLE( THIS_CLASS, 							\
-		asSequence, PySequenceMethods *, SEQ )
+		asSequence, PySequenceMethods *, SEQ )							\
+	PY_TYPEOBJECT_SPECIALISE_SIMPLE( THIS_CLASS, 							\
+		asMapping, PyMappingMethods *, &seqMappingMethods )
+/* BIGWORLD_END */
 
 #define PY_TYPEOBJECT_SPECIALISE_MAP( THIS_CLASS, MAP )						\
 	PY_TYPEOBJECT_SPECIALISE_SIMPLE( THIS_CLASS, 							\
@@ -790,6 +800,20 @@ PyMappingMethods * asMapping()
 {
 	return 0;
 }
+
+/* BIGWORLD_BEGIN(3.13 migration)
+ * PyObject_GetItem/SetItem/DelItem no longer fall back to
+ * sq_item/sq_ass_item for integer keys the way they did in Python 2,
+ * which took seq[i] / seq[i] = v / del seq[i] away from every type that
+ * only defines tp_as_sequence. seqMappingMethods is a shared mapping
+ * table that routes subscripting back into the type's own sequence slots
+ * (normalising negative indices like the old protocol layer did); it is
+ * wired up automatically by PY_TYPEOBJECT_SPECIALISE_SEQ below.
+ */
+PyObject * seqSubscript( PyObject * pSelf, PyObject * pKey );
+int seqAssSubscript( PyObject * pSelf, PyObject * pKey, PyObject * pValue );
+extern PyMappingMethods seqMappingMethods;
+/* BIGWORLD_END */
 
 template< typename T >
 ternaryfunc callFunction()
