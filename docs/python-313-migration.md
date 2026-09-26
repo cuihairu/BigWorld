@@ -125,3 +125,25 @@ connection 库此前没有任何单测宿主，本次把 `lib/network/unit_test`
 - 正向 PoW 回路：客户端 `writeResponseToStream` 挖矿 → 服务端 `readResponseFromStream` 验证 42-cycle 通过。
 
 坑：挖矿 easiness 不能为了"更快找到解"调到 100——加载率越高，`Cuckoo::path` 越容易超过 MAXPATHLEN，BW_CHANGES 版 worker 直接放弃整次尝试，`writeResponseToStream` 换 key 无限重试，测试表现为挂死（实测 10 分钟无解）。50%（出厂默认）是实测可行点：首个可解 key 通常在百余次迭代内出现，整个挖矿用例 ~15s。
+
+勘误：§7.2 中"17 字符随机 hex 前缀"不准确。前缀是随机 key 的 `"%.16llx:"` 渲染——最多 16 个 hex 位、零填充到至少 2 位、外加冒号，实际长度 3..17 浮动。断言固定长度（如 26 字节挑战流）是概率性通过的，批次 3 已改为动态探测 `readPackedInt` 长度后断言区间。
+
+### 7.3 覆盖率补强批次 3：lib/connection 其余可测面（2026-09-26）
+
+network_test 新增 19 个用例（92→111，3 个新测试文件；全量 21 模块 880→899）：
+
+- `test_replay_header.cpp`（11 用例）：`ReplayHeader` 写读回路（streamSize/calculateStreamSize 一致、digest/频率/时间戳/numTicks/签名长度全字段还原）、签名篡改检测（翻签名字节即报错）、协议版本不匹配前置拒绝（"version mismatch"）、不验签读取时 16 字节签名原样 transfer 给调用方、`checkSufficientLength` 恰好/差一字节/不足以容纳签名长度字段三态、numTicks 字段偏移；`ClientServerProtocolVersion` 流回路（4 字节、"2.9.0" 渲染）与 `supports()` 逐分量相等语义；`ReplayMetaData` 集合行为（增删改查、覆盖不增长）、签名块读回路+篡改检测、不验签读取报告块长并 transfer 签名。
+- `test_replay_tick_loader.cpp`（5 用例）：手工构造最小 replay 文件（签名 header + 签名 metadata 块 + 签名 tick 块）驱动后台任务：READ_HEADER 报 header+首 tick 游戏时间、APPEND 区间取回链表（[1,3) 两 tick 且 pStart->pNext()==pEnd）、文件缺失 → ERROR_FILE_MISSING、坏验签 key → ERROR_FILE_CORRUPTED、请求排队簿记与 onListenerDestroyed。
+- `test_server_finder.cpp`（3 用例）：`ServerInfo` 值对象、`ServerProbeHandler` 键值对探测回路（handleMessage 逐对回调 onKeyValue → onSuccess → onFinished，用不自杀的测试子类记录）、handleException → onFailure → onFinished。
+
+构建：network_test 的 `dependsOn` 追加 `resmgr`——libnetwork 的 `compression_stream.cpp` 引用 `DataSection`（initCompressionType），tick loader 测试把该目标文件拉进了链接。
+
+本批三个关键事实（都曾是测试的"错误预期"或崩溃源，记录为引擎行为）：
+
+1. **`ReplayTickLoader` 必须堆分配**。它继承 `SafeReferenceCount`，任务持有 `ReplayTickLoaderPtr` 强引用；`TaskManager::tick()` 收割已完成任务时任务析构、引用归零即 `delete this`。栈上实例会被 delete 栈地址，glibc 报 "double free or corruption (out)" 直接 abort（gdb 回溯定位到 `ReplayTickLoader_readHeader`）。引擎自身（ReplayController）就是 `new ReplayTickLoader` + 成员 SmartPointer，测试照做即可。
+2. **`appendString` ≠ 追加裸字节**：它先 `writePackedInt( length )` 再 `addBlob`（带长度前缀，无结束符）。签名、cuckoo proof、tick 载荷这类裸字节必须用 `addBlob`，否则每处多出一个长度前缀字节——本批三个测试文件（含批次 2 的 proof 构造）都踩过。附带教训：长度错时 `readResponseFromStream` 走的是"长度不符"分支而非"验证失败"分支，测试通过了但没测到想测的路径。
+3. **`ReplayMetaData` 每次读取要新 scheme 实例**：元数据读取用 `ChecksumIStream( shouldReset=false )`，不重置 scheme 的 MD5 状态；复用写侧 scheme 读数据会在脏状态上累加导致 verify 恒败。
+
+坏验签 key 的真实行为：`ReplayChecksumScheme::create` 返回的 ChainedChecksumScheme（SHA+EC）不采纳 EC 子方案的错误状态，`isGood()` 仍为真，坏 PEM key 不会在 `addData` 早期走 `ERROR_KEY_ERROR`，而是拖到 header 签名校验时以 `ERROR_FILE_CORRUPTED` + "Failed to read header: Malformed signature on stream" 呈现（"Verifying key error: " 前缀只进 reader 内部 `lastError()`，该路径不使用；且 task 侧 `addData==false` 分支最终覆盖监听回调里的错误类型）。
+
+`loginapp_login_request_protocol` 评估后主动跳过：其可测行为是 Mercury 消息编解码 + LoginHandler 协作，需要活的 NetworkInterface 与完整登录回合，纯流面已由本批协议版本/元数据用例覆盖；为 ~1 个集成测试引入整套 Mercury 联网环境性价比过低，留待有集成测试宿主时再补。

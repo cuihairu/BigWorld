@@ -383,8 +383,14 @@ TEST( CuckooCycle_challengeStreamRoundTrip )
 	MemoryOStream challengeData;
 	CHECK( pServer->writeChallengeToStream( challengeData ) );
 
-	// packed-int length + 17 character prefix + 8 byte maximum nonce.
-	CHECK_EQUAL( 1 + 17 + int( sizeof( uint64 ) ), challengeData.size() );
+	// packed-int length + prefix + 8 byte maximum nonce. The prefix is the
+	// random challenge key rendered "%.16llx:" — up to 16 hex digits, zero
+	// padded to at least two characters, plus a trailing colon.
+	MemoryIStream probe( challengeData.data(), challengeData.size() );
+	const int prefixLength = probe.readPackedInt();
+	CHECK( (2 <= prefixLength) && (prefixLength <= 17) );
+	CHECK_EQUAL( 1 + prefixLength + int( sizeof( uint64 ) ),
+		challengeData.size() );
 
 	LoginChallengePtr pClient = factory.create();
 	MemoryIStream reader( challengeData.data(), challengeData.size() );
@@ -410,7 +416,9 @@ TEST( CuckooCycle_readResponseFailurePaths )
 	CHECK( pServer.hasObject() );
 
 	BW::string prefix = challengePrefix( *pServer );
-	CHECK_EQUAL( 17, int( prefix.length() ) );
+	// The prefix is the random challenge key rendered "%.16llx:" — up to 16
+	// hex digits, zero padded to at least two characters, plus a colon.
+	CHECK( (2 <= int( prefix.length() )) && (int( prefix.length() ) <= 17) );
 	CHECK_EQUAL( ':', prefix[ prefix.length() - 1 ] );
 
 	const int PROOF_BYTES = 42 * sizeof( uint32 );
@@ -429,7 +437,7 @@ TEST( CuckooCycle_readResponseFailurePaths )
 
 		char proof[ PROOF_BYTES ];
 		memset( proof, 0, sizeof( proof ) );
-		response.appendString( proof, PROOF_BYTES );
+		response.addBlob( proof, PROOF_BYTES );
 
 		MemoryIStream reader( response.data(), response.size() );
 		CHECK( !pServer->readResponseFromStream( reader ) );
@@ -445,7 +453,7 @@ TEST( CuckooCycle_readResponseFailurePaths )
 
 		char shortProof[ 4 ];
 		memset( shortProof, 0, sizeof( shortProof ) );
-		response.appendString( shortProof, sizeof( shortProof ) );
+		response.addBlob( shortProof, sizeof( shortProof ) );
 
 		MemoryIStream reader( response.data(), response.size() );
 		CHECK( !pServer->readResponseFromStream( reader ) );
@@ -460,7 +468,7 @@ TEST( CuckooCycle_readResponseFailurePaths )
 
 		char proof[ PROOF_BYTES ];
 		memset( proof, 0, sizeof( proof ) );
-		response.appendString( proof, PROOF_BYTES );
+		response.addBlob( proof, PROOF_BYTES );
 
 		MemoryIStream reader( response.data(), response.size() );
 		CHECK( !pServer->readResponseFromStream( reader ) );
