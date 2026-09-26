@@ -1106,9 +1106,8 @@ TEST_F( PyScriptUnitTestHarness, FileLogger_defaultLoggersEmpty )
 // is a null pointer.
 TEST_F( PyScriptUnitTestHarness, FileLoggers_registryLimit )
 {
-	// The class constant is only declared in-class, so copy it into a local
-	// before passing it anywhere - taking its address directly would need an
-	// out-of-line definition.
+	// Copy the class constant into a local so no ODR-use of it can creep in
+	// through future edits of this test.
 	const size_t MAX_LOGGERS = ConfigCreatedFileLoggers::MAX_FILE_LOGGERS;
 
 	ConfigCreatedFileLoggers registry;

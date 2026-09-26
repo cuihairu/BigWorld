@@ -24,21 +24,7 @@ bool runPython( const char * source )
 
 	if (pResult == NULL)
 	{
-		// A pending error from an earlier check poisons PyRun_String, so
-		// dump whatever is set to make the diagnosis obvious.
-		PyObject * pType = NULL;
-		PyObject * pValue = NULL;
-		PyObject * pTraceback = NULL;
-		PyErr_Fetch( &pType, &pValue, &pTraceback );
-		PyErr_NormalizeException( &pType, &pValue, &pTraceback );
-
-		fprintf( stderr, "runPython failed: type=%s value=%s\n",
-			(pType != NULL) ? ((PyTypeObject *)pType)->tp_name : "(none)",
-			(pValue != NULL) ?
-				PyUnicode_AsUTF8( PyObject_Str( pValue ) ) : "(no value)" );
-		Py_XDECREF( pType );
-		Py_XDECREF( pValue );
-		Py_XDECREF( pTraceback );
+		PyErr_Print();
 		return false;
 	}
 

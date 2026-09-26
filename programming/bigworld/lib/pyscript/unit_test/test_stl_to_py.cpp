@@ -249,6 +249,7 @@ TEST_F( PyScriptUnitTestHarness, PySTLSequence_failedInsertCancels )
 	CHECK_EQUAL( 30, ints[ 2 ] );
 
 	// The sequence still reads fine after the cancel.
+	PyErr_Clear();
 	PyObjectPtr pItem( PySequence_GetItem( pSeq.get(), 1 ),
 		PyObjectPtr::STEAL_REFERENCE );
 	CHECK( isLong( pItem.get(), 20 ) );
@@ -260,6 +261,7 @@ TEST_F( PyScriptUnitTestHarness, PySTLSequence_failedInsertCancels )
 	PyErr_Clear();
 	CHECK_EQUAL( size_t( 3 ), ints.size() );
 	CHECK_EQUAL( 20, ints[ 1 ] );
+	PyErr_Clear();
 }
 
 
@@ -292,6 +294,7 @@ TEST_F( PyScriptUnitTestHarness, PySTLSequence_readOnlyRejections )
 	PyErr_Clear();
 	CHECK( PySequence_InPlaceRepeat( pSeq.get(), 2 ) == NULL );
 	CHECK_EQUAL( BW::string( "TypeError" ), currentExceptionType() );
+	PyErr_Clear();
 
 	// Reads still work on the read-only sequence.
 	CHECK_EQUAL( 2, int( PySequence_Size( pSeq.get() ) ) );
@@ -354,6 +357,7 @@ TEST_F( PyScriptUnitTestHarness, PySTLSequence_setDataOverwrite )
 	PyErr_Clear();
 	CHECK_EQUAL( size_t( 2 ), ints.size() );
 	CHECK_EQUAL( 7, ints[ 0 ] );
+	PyErr_Clear();
 }
 
 

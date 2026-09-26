@@ -430,6 +430,8 @@ PyDebugMessageFileLoggerPtr ConfigCreatedFileLoggers::operator []( size_t i )
 
 ConfigCreatedFileLoggers  configCreatedFileLoggers_;
 
+const size_t ConfigCreatedFileLoggers::MAX_FILE_LOGGERS;
+
 
 /*~ function BigWorld.defaultLoggers
  *	@components{ client, tools }
