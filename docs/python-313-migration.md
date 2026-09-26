@@ -216,3 +216,30 @@ pyscript_test 新增 15 个用例（79→94；全量 21 模块 940→955），�
 4. **Pickler 的替身语义**：`unpickle` 失败不报错，返回持有原始字节的 `FailedUnpickle` 对象；对替身再 `pickle` 走透传分支原样吐回。pickle 流是二进制（PROTO 头 0x80 非 UTF-8），unpickle 侧必须以 bytes 传入——批次前迁移已把 "s#" 改 "y#"，本批的回路用例即是该修复的回归锁。
 
 协作事故记录：本批期间一个并行会话在同一工作树上持续覆写 `test_pickler.cpp`（其内容引用不存在的 API，无法编译）。处置：`test_pickler` 移出构建清单、该文件不入库；Pickler 用例改并入并行会话未触碰的 `test_script_infra.cpp`；其 `keyword_parser.hpp` 修复经审阅属实后收录并补测试。教训：**有并行会话同时改树时，提交前必须以 `git status` 快照为准逐文件核对，构建产物只信任自己刚构建的那一份**。
+
+### 7.7 覆盖率补强批次 7：lib/pyscript 回溯打印器（2026-09-26）
+
+pyscript_test 新增 7 个用例（94→101；全量 21 模块 955→962），全部落在 `test_py_traceback.cpp`（+ fixture `res/test_py_traceback_mod.py`）。`py_traceback.cpp` 此前只有被间接踩到的路径，源码行渲染、缓冲增长、异步补读三条主线都没有直接断言，本批为其补齐并顺带修出两个真实缺陷。
+
+- `PyTraceback_initExceptionHook_installsHook`：`Script::initExceptionHook` 把 `sys.excepthook` 换成引擎的 `printTraceBack`。
+- `PyTraceback_rendersFramesOfNestedCall`：三级嵌套调用（`run_nested` → `_outer_boom` → `_inner_boom`）的完整帧链渲染——每帧的 `File "…", line N, in <name>` 头、去缩进后补四个空格的源码行、行末的 `ValueError: tb boom`；`<string>` 帧（fixture 模块是绝对路径，snippet 是相对名）拿不到源码，必须只有头没有源码行。fixture 行号由文件尾部常量钉死（15/19/23/27），改动 fixture 需同步改断言。
+- `PyTraceback_missingSourceFile_omitsLine`：帧指向不存在的文件时，头照常打印、源码行省略。
+- `PyTraceback_longSourceLine_growsBuffer`：`outputFrame()` 的缓冲初值 256 字节，fixture 里 354 列的源码行触发翻倍增长，断言整行（354 列、含 "padding padding padding"）无截断落地。
+- `PyTraceback_nonTracebackArg_fallsBack`：第三参不是 traceback（传 42）时整条交给 `PyErr_Display`，输出里不出现引擎的 "Traceback (most recent call last):" 前缀但异常照常可见。
+- `PyTraceback_wrongArgCount_returnsNone`：参数个数不对时引擎侧报错并清掉，hook 仍返回 None 而不是往调用方抛。
+- `PyTraceback_blockedRead_registersWithDispatcher`：源码文件是 fifo（无写端时 open/read 都不阻塞），引擎读到 EAGAIN → 把 fd 注册进 `EventDispatcher` → 测试喂数据 → `processOnce(false)` 后补出源码行。构建侧为此给 unit_test 的 `Makefile.rules` 加 `dependsOn += network`（`Mercury::EventDispatcher`）。
+
+捕获机制：把 `sys.stderr` 换成一个只有 `write`/`flush` 的 Python 对象——`PySys_WriteStderr` 走 `sysmodule.c: sys_write`、`PyErr_Display` 走 `pythonrun.c`，两者都写 **sys.stderr 对象**，于是引擎整块输出落到捕获串里；析构时还原。注意 stdlib 自己的 `_print_exception_bltin` 还会再渲染一遍异常（带 caret 的那段），断言一律用 `find`/`!= npos` 而非全等。
+
+本批引擎修复（2 项）：
+
+1. **`TraceBack::tb_lineno` 在 3.13 恒为 -1**：`_PyTraceBack_FromFrame()` 现在只记 `tb_lasti`（字节码偏移），行号由 `tb_lineno_get` 惰性 `addr2Line` 解析；直接读字段永远得到 -1，`isAtDesiredLineNum()` 永不命中 → **任何帧都不会打印源码行**（帧头照常）。修复：新增 `TraceBack::lineNo()`，用 `PyFrame_GetCode` + `PyCode_Addr2Line( code, tb_lasti )` 现算，替换 `isAtDesiredLineNum`、`ERROR_MSG`、`outputFrame` 三处直读。
+2. **绝对 `co_filename` 被 `getAbsolutePath` 加前缀**：`startFrame` 原本无条件走 `MultiFileSystem::getAbsolutePath`，它会给名字挂上第一个 res 路径前缀——而源码文件名来自 import 机制（`sys.path` 条目 + 模块名），服务端 res 路径本身是绝对的，所以拼出的路径不存在，open 失败被静默吞掉。修复：`BWUtil::isAbsolutePath` 为真时直接用原名。sys.path 条目形如 `<resPath>/.`，所以 fixture 的 `co_filename` 是 `…/unit_test/res/./test_py_traceback_mod.py`（含 `./` 但绝对），这正是修复 2 覆盖的形态；`<string>` 帧是相对名、走 getAbsolutePath 必失败，构成修复 1 之外的对照组。
+
+本批确立的取证（都曾是测试的错误预期）：
+
+1. **无写端的 fifo 上 `read()` 返回 0（EOF），不是 `EAGAIN`**——异步分支根本触发不了；且此时再用 `O_WRONLY|O_NONBLOCK` 去开写端会直接 `ENXIO`。正确做法是先 `open(fifo, O_RDWR|O_NONBLOCK)` 自己持住写端再调 hook（既不会 EOF，也不会 ENXIO），喂数据时从同一个 fd 写。
+2. **`linecache` 会去读帧的源文件**：`PyErr_Display` 回落渲染时若 `__traceback__` 还挂着，会对 fifo 再开一个读端等数据，与引擎自己的读端抢数据（可能永久挂住）。用例显式 `value.__traceback__ = None` 切断这条路径，只留引擎侧的单读者。
+3. 测试里产生待决异常后必须消费式取错或紧跟 `PyErr_Clear`，否则会毒化下一用例的 `PyRun_String`（本批 7 例反复踩到）。
+
+分工记录：本批与批次 6（§7.6）由两个并行会话在同一工作树上分头进行——批次 6 认领 pickler + keyword_parser，本批只认领 `py_traceback`，互不触碰对方文件；`test_pickler.cpp` 依批次 6 的决定保持 untracked 不入库。提交前以 `git status` 逐文件核对，本批只含 `test_py_traceback.cpp`、`res/test_py_traceback_mod.py`、`Makefile.rules`、`py_traceback.cpp`、本文档。

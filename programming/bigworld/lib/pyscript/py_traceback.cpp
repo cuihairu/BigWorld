@@ -2,6 +2,7 @@
 #include "script.hpp"
 
 #include "cstdmf/bw_string.hpp"
+#include "cstdmf/bw_util.hpp"
 #include "cstdmf/debug.hpp"
 #include "cstdmf/timestamp.hpp"
 
@@ -54,6 +55,9 @@ public:
 
 private:
 	PyTracebackObject * traceback() const;
+
+	// The line number this frame of the traceback was recorded at.
+	int lineNo() const;
 
 	bool isAtDesiredLineNum() const;
 
@@ -177,11 +181,33 @@ PyTracebackObject * TraceBack::traceback() const
 
 
 /**
+ *	Convenience accessor for the line number this frame was recorded at.
+ */
+int TraceBack::lineNo() const
+{
+	// BIGWORLD_BEGIN(3.13 migration)
+	// PyTracebackObject::tb_lineno is -1 for every frame the exception
+	// propagated through: _PyTraceBack_FromFrame() now stores the bytecode
+	// offset instead and Python resolves the line on demand from it
+	// (tb_lineno_get in Python/traceback.c). Reading the field directly
+	// therefore reported "line -1", which never matched the source line
+	// being scanned for, so no source line was ever printed. Resolve it the
+	// same way the standard library does, from the code object and the
+	// recorded offset.
+	PyCodeObject * pCode = PyFrame_GetCode( this->traceback()->tb_frame );
+	const int result = PyCode_Addr2Line( pCode, this->traceback()->tb_lasti );
+	Py_DECREF( pCode );
+	return result;
+	// BIGWORLD_END
+}
+
+
+/**
  *	Returns whether the current line is the one wanted.
  */
 bool TraceBack::isAtDesiredLineNum() const
 {
-	return (lineNum_ == this->traceback()->tb_lineno);
+	return (lineNum_ == this->lineNo());
 }
 
 
@@ -205,9 +231,17 @@ void TraceBack::startFrame()
 	Py_DECREF( pCode );
 	// BIGWORLD_END
 
-	BW::string absFilePath = 
-		BWResource::instance().fileSystem()->getAbsolutePath( 
-			PyUnicode_AsUTF8( pFilename_.get() ) );
+	const char * pFilename = PyUnicode_AsUTF8( pFilename_.get() );
+
+	// MultiFileSystem::getAbsolutePath() prefixes the first res path, which
+	// is only meaningful for a res-relative name. Source file names come
+	// from the import machinery (a sys.path entry joined with the module
+	// name) and those entries are absolute whenever the res paths are -
+	// BWResource canonicalises them on the server - so prefixing produced a
+	// path that does not exist and the source line was silently dropped.
+	BW::string absFilePath = BWUtil::isAbsolutePath( pFilename ) ?
+			BW::string( pFilename ) :
+			BWResource::instance().fileSystem()->getAbsolutePath( pFilename );
 
 	MF_ASSERT( fd_ == -1 );
 	fd_ = open( absFilePath.c_str(), O_RDONLY | O_NONBLOCK );
@@ -297,7 +331,7 @@ int TraceBack::processInput( int fd )
 				PyUnicode_AsUTF8( pFilename_.get() ),
 				// BIGWORLD_END
 				strerror( errno ),
-				this->traceback()->tb_lineno );
+				this->lineNo() );
 
 			line_ = "";
 			isDone = true;
@@ -396,7 +430,7 @@ void TraceBack::outputFrame()
 		size_t bufWritten = bw_snprintf( tbOutputBuf, tbOutputBufLen, 
 			"  File \"%.500s\", line %d, in %.500s\n",
 			PyUnicode_AsUTF8( pFilename_.get() ), 
-			this->traceback()->tb_lineno, 
+			this->lineNo(), 
 			PyUnicode_AsUTF8( pCode->co_name ) );
 		Py_DECREF( pCode );
 		// BIGWORLD_END
