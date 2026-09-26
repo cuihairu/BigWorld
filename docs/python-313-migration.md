@@ -110,3 +110,18 @@ pyscript_test 新增 14 个用例（24→38，全量 21 模块 856→870 全绿�
 附带修复：`py_data_section.cpp` `createSection` 在 Linux 上父目录名被截断一个字符——`BWUtil::getFilePath`（dirname）不返回尾部分隔符，旧代码无条件 `substr(0, len-1)` 把 `"a/b"` 的父目录削成 `"a"` 的前缀；改为仅在分隔符实际存在时剥离（裸名产生的 `"."` 清空，行为不变）。
 
 备注：network_test 的 ConfigTest 依赖主机内核参数 `net.core.rmem_max ≥ 16MB`（`wmem_max/wmem_default ≥ 1MB`），主机重启后会回落默认值 4MB 导致环境性失败，按测试输出用 sysctl 恢复即可。已发现的预存引擎局限（本次未修）：`PyMappingSTL` 迭代器的按键查找在 `py_to_stl.hpp` 中被注释掉（只做指针同一性比较的 std::find），经 watcher 路径按键查 Python dict 成员永远无法命中，目录枚举不受影响。
+
+### 7.2 覆盖率补强批次 2：lib/connection（2026-09-26）
+
+connection 库此前没有任何单测宿主，本次把 `lib/network/unit_test` 的 `dependsOn` 增加 `connection`，network_test 新增 8 个用例（82→92；文件 `test_login_challenge.cpp`，全量 21 模块 870→880）：
+
+- `LoginChallengeFactories`：默认注册表（delay/fail/cuckoo_cycle 三种）、createChallenge 缺名报错、deregister 后 registerDefaultFactories 恢复、自定义工厂注册与挑战回路。
+- delay 挑战：挑战/响应浮点流回路 + 篡改时长校验失败；用 `configureFactories` 注入 0.05s 短时长避免默认 1s 真实 sleep 拖慢套件。测试用最小 `LoginChallengeConfig` 桩（纯虚接口，getDouble/getChild）驱动 configure，免依赖 resmgr。
+- fail 挑战：流方法恒真、readResponseFromStream 恒假。
+- `configureFactories`：cuckoo easiness 非法（≤0 或 >100）时对应工厂被注销且整体报失败、其余工厂保留；无子配置时全部跳过 configure。
+- `CuckooCycleLoginChallengeFactory`：默认 50%、setter 钳位 [0,100]、configure 缺项保留现值、越界拒绝、pWatcher（protected，经测试子类暴露仅验存在）。
+- cuckoo 挑战流：17 字符随机 hex 前缀 + 8 字节 maxNonce 的写读回路、重序列化逐字节一致。
+- `readResponseFromStream` 失败路径：空流（key 读不出）、外部 key（前缀不匹配）、proof 长度 ≠ 168 字节、proof 非法（全零 nonce 非递增，verify() 拒绝）。
+- 正向 PoW 回路：客户端 `writeResponseToStream` 挖矿 → 服务端 `readResponseFromStream` 验证 42-cycle 通过。
+
+坑：挖矿 easiness 不能为了"更快找到解"调到 100——加载率越高，`Cuckoo::path` 越容易超过 MAXPATHLEN，BW_CHANGES 版 worker 直接放弃整次尝试，`writeResponseToStream` 换 key 无限重试，测试表现为挂死（实测 10 分钟无解）。50%（出厂默认）是实测可行点：首个可解 key 通常在百余次迭代内出现，整个挖矿用例 ~15s。

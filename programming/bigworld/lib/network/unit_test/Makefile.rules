@@ -18,6 +18,7 @@ cxxSource =							\
 	test_flood						\
 	test_fragment					\
 	test_interface					\
+	test_login_challenge			\
 	test_mangle						\
 	test_msgtypes					\
 	test_netmask					\
@@ -39,7 +40,7 @@ useOpenSSL = 1
 # zip is the vcpkg zlib staged as libzip.a (third_party_vcpkg.mak); libnetwork
 # needs it for zip_stream.cpp / compression_stream.cpp. Unit tests set
 # noDefaultDependencies, so BW_DEPENDS_ON's "zip" does not reach this link line.
-dependsOn += network math cstdmf zip
+dependsOn += network connection math cstdmf zip
 
 # BWT-25539: CPPUnitLite2 fails to compile on RHEL 7
 cxxFlags_$(binName) += -Wno-float-equal
