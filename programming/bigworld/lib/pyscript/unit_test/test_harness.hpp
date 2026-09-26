@@ -22,6 +22,17 @@ public:
 			BWUnitTest::unitTestError( "Could not initialise Script module" );
 		}
 	}
+
+	// Runs a Python snippet and returns whether it raised. A raised exception
+	// is consumed and cleared so it cannot leak into the next TEST() and
+	// poison its PyRun_String.
+	static bool runAndClear( const char * code )
+	{
+		PyRun_SimpleString( code );
+		const bool raised = (PyErr_Occurred() != NULL);
+		PyErr_Clear();
+		return raised;
+	}
 };
 
 BW_END_NAMESPACE

@@ -206,17 +206,27 @@ public:
 			PyObject * key = NULL;
 			while (PyDict_Next( pDict, &i, &key, NULL ))
 			{
-				if (shouldRemove ||
-						(arguments_.count(
-							/* BIGWORLD_BEGIN(3.13 migration) Was PyUnicode_AsUTF8 */
-							string( PyUnicode_AsUTF8( key ) ) ) == 0))
-							/* BIGWORLD_END */
+				// BIGWORLD_BEGIN(3.13 migration)
+				// PyUnicode_AsUTF8() rejects non-str keys (bytes, int, ...)
+				// with PyErr_BadArgument and returns NULL, and constructing
+				// a BW::string from that NULL is undefined behaviour - so a
+				// bytes key used to crash the unknown-keyword check. A
+				// non-string key can never name a registered keyword, so it
+				// is invalid either way; only resolve UTF-8 for str keys.
+				const bool isKnownKeyword = PyUnicode_Check( key ) &&
+					(arguments_.count(
+						/* Was PyUnicode_AsUTF8 */
+						string( PyUnicode_AsUTF8( key ) ) ) != 0);
+
+				if (shouldRemove || !isKnownKeyword)
 				{
+					const char * keyStr = PyUnicode_Check( key ) ?
+						PyUnicode_AsUTF8( key ) : NULL;
+
 					PyErr_Format( PyExc_TypeError,
 						"Invalid keyword argument: \"%s\"",
-						/* BIGWORLD_BEGIN(3.13 migration) Was PyUnicode_AsUTF8 */
-						PyUnicode_AsUTF8( key ) );
-						/* BIGWORLD_END */
+						( keyStr != NULL ) ? keyStr : "<non-string key>" );
+					// BIGWORLD_END
 
 					return EXCEPTION_RAISED;
 				}

@@ -193,3 +193,26 @@ pyscript_test 新增 28 个用例（51→79；全量 21 模块 912→940）：
 1. **引擎侧 fprintf 取证**：BW 的 DebugFilter 压掉 ERROR_MSG、`PyErr_Print()` 输出被 ScriptOutputWriter 重定向，均不可见；在怀疑的 C++ 强制转换函数里临时 `fprintf( stderr, ... )` 打 `ob_type->tp_name` 是最短的实证路径（本批靠它 3 分钟定位"reg 竟是 bool"，随后才顺藤摸到 getRetData 重载决议缺陷）。
 2. **`checkRaises`/`checkSucceeds` 必须走 `Py_file_input`**：表达式模式无法执行赋值语句（全数报假 SyntaxError），属性 setter 与方法调用的错误路径都要以语句块形式运行；表达式取值仍用 `Py_eval_input` 的 `checkTrue`/`evalFloat`/`evalString`。
 3. **跨 C++ 单测的寄存器是全局共享状态**：`Vector4Shader` 的 63 个临时寄存器是进程级单例，多个用例先后写同一寄存器会互相污染——依赖寄存器初值的断言要么先 MOVE 覆写、要么换没用过的寄存器号。
+
+### 7.6 覆盖率补强批次 6：lib/pyscript 脚本基础设施（2026-09-26）
+
+pyscript_test 新增 15 个用例（79→94；全量 21 模块 940→955），全部落在 `test_script_infra.cpp`：
+
+- `KeywordParser`（6 用例）：全量提取 + 缺省删除（ALL_FOUND、值经 `Script::setData` 落到输出变量、字典清空）、部分缺失与空/NULL 字典（SOME_MISSING 只相对已注册关键字、缺失项输出保持缺省）、坏值 EXCEPTION_RAISED + TypeError 带关键字名、未注册 key 默认忽略（既不提取也不删除、子集解析仍 ALL_FOUND）、`allowOtherArguments=false` 下报字典序第一个未注册残留 key（精确到报文文本）、`shouldRemove=false` 字典原样可重复解析、bytes key 报 `"<non-string key>"` 而非崩溃。
+- `Script::ask`（3 用例）：调用成功并返回新引用（fn/args 引用恒被偷走，调用后仅剩调用方自己的引用计数）、四条错误路径（非 callable/非 tuple 报 TypeError 带前缀、NULL fn + 不允许 → ValueError、NULL fn + 允许 → 无异常且顺手清掉残留异常）、`printException` 两态（false 时异常留在待决区、true 时打印进 BW 日志并吞掉）。
+- `Script::runString`（1 用例）：表达式模式求值返回值、语句模式（printResult=true → Py_single_input）接受赋值并返回 None 且变量落 `__main__`、eval 模式拒语句、坏语法 SyntaxError 待决。
+- 标量转换器（1 用例）：`setData(bool)` 收 int 与大小写不敏感的 "true"/"false" 字符串、其余 TypeError；`setData(int)` 收 PyLong 与截断 float、字符串拒绝。
+- `Pickler`（4 用例）：协议 2 回路（首字节 0x80/0x02、unicode/bytes/容器结构原样还原）、垃圾与空载荷落 `FailedUnpickle` 替身且 `pickle(替身)` 原样吐回原始字节、NULL ScriptObject 拒绝、`finalise`/`init` 生命周期可逆。
+
+本批引擎修复（1 项，附带并行会话的成果并补齐测试验收）：
+
+1. **`KeywordParser::parse` 非字符串 key 崩溃**（keyword_parser.hpp）：严格模式检查未知关键字时把 `PyUnicode_AsUTF8( key )` 直接喂给 `BW::string` 构造——bytes/int key 下该函数返回 NULL，构造即未定义行为。修复后仅对 str key 做 UTF-8 解析，非串 key 视为未知关键字，报文显示 `Invalid keyword argument: "<non-string key>"`。
+
+本批确立的引擎事实：
+
+1. **`KeywordParser` 的语义都以"已注册关键字"为基准**：`SOME_MISSING` 只在字典缺已注册 key 时出现；`shouldRemove` 只删已注册项（未注册 key 留在字典里，继续参与后续严格检查）；严格模式报的是 `PyDict_Next`（插入序）里第一个未通过检查的残留 key。
+2. **`Script::ask` 默认 `printException=true`**：异常会被打印进 BW 日志然后吞掉（`PyErr_PrintEx` 消费 + 显式 `PyErr_Clear`）——要在测试里检查待决异常必须显式传 false。`ask` 无论成败都偷走 fn/args 的引用。
+3. **`Script::runString` 第二参无默认值**，false → `Py_eval_input`（仅表达式、返回值），true → `Py_single_input`（接受语句、交互式回显、返回 None）。
+4. **Pickler 的替身语义**：`unpickle` 失败不报错，返回持有原始字节的 `FailedUnpickle` 对象；对替身再 `pickle` 走透传分支原样吐回。pickle 流是二进制（PROTO 头 0x80 非 UTF-8），unpickle 侧必须以 bytes 传入——批次前迁移已把 "s#" 改 "y#"，本批的回路用例即是该修复的回归锁。
+
+协作事故记录：本批期间一个并行会话在同一工作树上持续覆写 `test_pickler.cpp`（其内容引用不存在的 API，无法编译）。处置：`test_pickler` 移出构建清单、该文件不入库；Pickler 用例改并入并行会话未触碰的 `test_script_infra.cpp`；其 `keyword_parser.hpp` 修复经审阅属实后收录并补测试。教训：**有并行会话同时改树时，提交前必须以 `git status` 快照为准逐文件核对，构建产物只信任自己刚构建的那一份**。
