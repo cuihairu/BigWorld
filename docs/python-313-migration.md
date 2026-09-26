@@ -147,3 +147,22 @@ network_test 新增 19 个用例（92→111，3 个新测试文件；全量 21 �
 坏验签 key 的真实行为：`ReplayChecksumScheme::create` 返回的 ChainedChecksumScheme（SHA+EC）不采纳 EC 子方案的错误状态，`isGood()` 仍为真，坏 PEM key 不会在 `addData` 早期走 `ERROR_KEY_ERROR`，而是拖到 header 签名校验时以 `ERROR_FILE_CORRUPTED` + "Failed to read header: Malformed signature on stream" 呈现（"Verifying key error: " 前缀只进 reader 内部 `lastError()`，该路径不使用；且 task 侧 `addData==false` 分支最终覆盖监听回调里的错误类型）。
 
 `loginapp_login_request_protocol` 评估后主动跳过：其可测行为是 Mercury 消息编解码 + LoginHandler 协作，需要活的 NetworkInterface 与完整登录回合，纯流面已由本批协议版本/元数据用例覆盖；为 ~1 个集成测试引入整套 Mercury 联网环境性价比过低，留待有集成测试宿主时再补。
+
+### 7.4 覆盖率补强批次 4：lib/pyscript 残留面（2026-09-26）
+
+pyscript_test 新增 13 个用例（38→51，3 个新测试文件 + 1 个 XML fixture；全量 21 模块 899→912）：
+
+- `test_resource_table.cpp`（4 用例）：`ResourceTable` 映射导航（`PyObject_Size`/`at()` 正负索引/越界 ValueError、`sub()` 按 key、`PyObject_GetItem` 整数与字符串双路、浮点 key 留错、`keyOfIndex`/`indexOfKey` 哨兵值）、census 身份（同资源两次 `New` 同一对象）、value 结构体类型猜测（int/float/bool/string 属性与 `get()` 缺省回退、根表无 `<value>` 时全落缺省、AttributeError、子表 value 继承链）、`link()`/`unlink()`（link 立即回调表本体、非 callable TypeError、带 updateFn 的 New 只挂不调、New 的 TypeError/ValueError 路径）。注意 ResourceTable/ResMgr 已是弃用接口，仅按现状行为锁定。
+- `test_script_events.cpp`（4 用例）：`ScriptEventList`（level 升序稳定插入、triggerEvent 逐监听器回填结果列表、坏监听器 → 返回 false 且补 None、remove 语义、空列表 trigger 为真）、`ScriptEvents` 注册表（未知事件全路径拒绝、`triggerTwoEvents` 一参两发、`clear()` 连事件类型一起删）、`initFromPersonality`（以 `__main__` 充当 personality 模块，有名函数注册、无名事件类型空跑）、`BigWorld.addEventListener/removeEventListener` 模块函数（单例驱动、非 callable TypeError、未知事件 ValueError、二次 remove ValueError）。
+- `test_stl_to_py.cpp`（5 用例）：`PySTLSequence` 读路径（len/逐项/越界 IndexError/contains 类型不匹配静默假/concat/repeat 产生普通 list 且不动底层数组/`length` 属性/repr 渲染成 list 样式）、写路径（`x[i]=v` 的 erase+insertRange+insert+commit 全回路、`x+=y`/`x*=n` 原位变异且返回同一对象、`x*=0` 清空）、失败插入整组 cancel（`+=` 中途坏项取消、向量原样、序列可继续读）、只读 holder 三路写拒绝（均 TypeError）、`Script::setData` 整体覆写（list 覆写、同 holder 赋值 no-op、非序列 TypeError、只读拒绝、坏列表整组取消）。
+
+本批修复了三个真实引擎缺陷（均已最小化修复并保留注释）：
+
+1. **`ScriptEventList::remove` 死循环**（script_events.cpp）：原循环不推进迭代器，删除"非首元素"的监听器会原地打转。发布版从未暴露是因为 C++ 里无副作用的无限循环是未定义行为，GCC 直接把循环优化没了——退化成"只看首元素"的 remove，语义错而不崩。修复即补上 `++iter`。
+2. **`ResTblStruct::pyGetAttribute` 哨兵崩溃**（resource_table.cpp）：属性miss时把 `(PyObject*)-1` 当 not-found 哨兵传给 `get()`，而 `get()` 的缺省路径会 `Py_INCREF(defVal)`——沿父链查到底必崩。改为先沿父链探测成员是否存在、存在才调 `get()`，miss 落回 `PyObjectPlus::pyGetAttribute`（报 AttributeError）。
+3. **`ResourceTable::New` census 探测 UB**（resource_table.cpp）：原代码在未初始化栈缓冲上伪造 ResourceTable、只清零 8 字节 `pSect_` 指针的低 4 位就拿去查 set——64 位上 `DataSectionPtr` 析构会对垃圾指针 decref。改为新增 `findInCensus()` 静态成员做一次真实指针扫描，命中才 incref 返回。
+
+本批两条测试方法论：
+
+1. **待决 Python 异常会跨 CppUnitLite2 用例泄漏**：某用例结束时不 `PyErr_Clear()`，下一个用例的 `PyRun_String` 会带着上一个用例的异常直接失败（且无 traceback——Python stderr 走 BW 压制的输出钩子，非 `-v` 不可见），表现为"下游用例监听器为 NULL → `Script::ask(NULL)` 段错误/`MF_ASSERT` abort"。查错类型的 helper 必须"消费式"取异常（`PyErr_Fetch` 后不再 restore），每处产生错误的断言后紧跟 `PyErr_Clear()`。
+2. **`PySequence_GetItem/SetItem` 在协议层归一化负索引**：CPython 先取 `sq_length` 把负下标加上长度再调 `sq_item`/`sq_ass_item`，槽位实现本身仍拒绝负数——测试负索引行为要在协议入口断言，而不是假设槽位语义穿透。

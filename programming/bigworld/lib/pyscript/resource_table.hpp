@@ -62,6 +62,8 @@ private:
 	ResourceTable( const ResourceTable& );
 	ResourceTable& operator=( const ResourceTable& );
 
+	static ResourceTable * findInCensus( DataSection * pSect );
+
 	DataSectionPtr		pSect_;
 	ResourceTablePtr	pParent_;
 	uint				index_;

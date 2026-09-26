@@ -1,0 +1,18 @@
+<root>
+	<key> alpha
+		<value>
+			<name>	Alpha Table	</name>
+			<num>	42	</num>
+			<ratio>	1.5	</ratio>
+			<flag>	true	</flag>
+			<greeting>	hello world	</greeting>
+		</value>
+	</key>
+	<key> beta
+		<value>
+			<name>	Beta Table	</name>
+		</value>
+	</key>
+</root>
+
+<!-- test_resource_table.xml -->

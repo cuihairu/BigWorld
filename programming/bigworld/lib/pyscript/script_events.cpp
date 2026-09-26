@@ -85,6 +85,11 @@ bool ScriptEventList::remove( PyObject * pListener )
 {
 	Container::iterator iter = container_.begin();
 
+	// The original loop never advanced its iterator, so removing a
+	// listener that was not the first element spun forever; release
+	// builds hid this because the side-effect-free infinite loop is
+	// undefined behaviour and was optimised away entirely (leaving
+	// remove() to only ever consider the first element).
 	while (iter != container_.end())
 	{
 		if (iter->matches( pListener ))
@@ -92,6 +97,8 @@ bool ScriptEventList::remove( PyObject * pListener )
 			container_.erase( iter );
 			return true;
 		}
+
+		++iter;
 	}
 
 	return false;

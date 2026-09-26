@@ -96,12 +96,20 @@ ScriptObject ResTblStruct::pyGetAttribute( const ScriptString & attrObj )
 {
 	const char * attr = attrObj.c_str();
 
-	// try it as a member of our struct
-	PyObject * pVal = this->get( attr, (PyObject*)-1 );
-	// (if we passed in NULL we'd get None back)
-	if (pVal != (PyObject*)-1)
+	// Look for the attribute as a value in our own section, then our
+	// parents'. This used to call get() with an invalid (PyObject*)-1
+	// sentinel as the not-found marker, but get()'s default path increfs
+	// whatever defVal it is handed, so any miss whose parent chain
+	// bottomed out at a struct with no section crashed.
+	for (ResTblStruct * pStruct = this; pStruct != NULL;
+			pStruct = pStruct->pParent_.get())
 	{
-		return ScriptObject( pVal, ScriptObject::FROM_NEW_REFERENCE );
+		if (pStruct->pValues_ && pStruct->pValues_->openSection( attr ))
+		{
+			PyObject * pVal = this->get( attr, PyObjectPtr() );
+
+			return ScriptObject( pVal, ScriptObject::FROM_NEW_REFERENCE );
+		}
 	}
 
 	return this->PyObjectPlus::pyGetAttribute( attrObj );
@@ -597,21 +605,14 @@ PyObject * ResourceTable::New( const BW::string & resourceID,
 
 	ResourceTable * rt = NULL;
 
-	// check the census
-	uint32 fakeRTBuf[8];	// 8 is plenty
-	ResourceTable * fakeRT = (ResourceTable*)fakeRTBuf;
-
-	// HACK: this is a hack that prevents the next line from crashing. 
-	//			fakeRT->pSect_ was not initialised so smartpointer tried
-	//			to decrement the reference count on a random bit of memory.
-	*(uint32*)(&fakeRT->pSect_) = 0;
-
-	fakeRT->pSect_ = pSect;
-	ResourceTableSet::iterator found = s_census.find( fakeRT );
-	if (found != s_census.end())
+	// check the census. (The old probe faked a ResourceTable on an
+	// uninitialised stack buffer and zeroed only half of its pSect_
+	// pointer before handing it to the census set, which decref'd garbage
+	// on 64-bit builds; a plain scan reads only real objects.)
+	rt = ResourceTable::findInCensus( pSect.get() );
+	if (rt != NULL)
 	{
-		rt = *found;	// Note: single-threaded only for now
-		Py_INCREF( rt );
+		Py_INCREF( rt );	// Note: single-threaded only for now
 	}
 
 	// make a new one
@@ -620,9 +621,6 @@ PyObject * ResourceTable::New( const BW::string & resourceID,
 		rt = new ResourceTable( pSect, NULL );
 		s_census.insert( rt );
 	}
-
-	// Decrement the reference count again.
-	fakeRT->pSect_ = NULL;
 
 	// link in the update function
 	if (updateFn)
@@ -633,6 +631,27 @@ PyObject * ResourceTable::New( const BW::string & resourceID,
 
 	// and return it
 	return rt;
+}
+
+
+/**
+ *	Finds the census entry whose table wraps the given section, if any.
+ */
+ResourceTable * ResourceTable::findInCensus( DataSection * pSect )
+{
+	ResourceTableSet::iterator iter = s_census.begin();
+
+	while (iter != s_census.end())
+	{
+		if ((*iter)->pSect_.get() == pSect)
+		{
+			return *iter;
+		}
+
+		++iter;
+	}
+
+	return NULL;
 }
 
 /*	function ResMgr.ResourceTable
