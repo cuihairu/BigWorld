@@ -457,3 +457,31 @@ cstdmf 334（+12）：`test_ansi_allocator.cpp` +4（allocate/reallocate 保内�
 **覆盖率注记**：同批次14 口径，未跑插桩基线（需数小时全量重建）。`file_stream.cpp` 全部 11 个方法（ctor/dtor/strerror/tell/seek/length/commit/retrieve/stat/setMode/open/close/remove）+ ipp 的 good/error 由 10 用例从零覆盖变为已覆盖；仅 commit 的 fwrite 短写失败臂（需盘满注入）未覆盖，登记。用例数：network 155→165；全量 1061→1071（21 模块全绿）。
 
 提交范围：`lib/network/unit_test/test_file_stream.cpp`（新）、`lib/network/unit_test/Makefile.rules` + `CMakeLists.txt`、本文档。
+### 7.16 覆盖率补强批次 16：tcp_bundle 线格式整层 + login_request 二次可测性判定（2026-09-27）
+
+**巡检派发与判定**：批次14 判定表点名的两候选 `lib/network/tcp_bundle.cpp`（369L）与 `lib/connection/login_request.cpp`（341L）做二次可测性细查：
+
+- **login_request：登记不可测**（理由同批次14 判定表口径，无新发现可翻案）。纯协议面可测部分（time 预算算术、finish 生命周期、pChannel wiring）极薄；全部失败路径——`onTransportConnect` 超时臂、`onTransportFailed`、`handleException`、`onChannelGone`——落到**非虚** `LoginRequestProtocol::onAttemptFailed`（login_request_protocol.cpp:72-86）→ `loginHandler.onRequestFailed`，冒烟必须先有真 `LoginHandler` 实例，而 `pProtocol_` 是 private、仅 `start()` 设置，`start()` 一调用即引爆 `makeRequest`/`sendNextRequest` 全套真实机制（要真 transport、真 protocol 应答流）。`#define private public` 无仓库先例，弃。
+- **tcp_bundle：派测**。整层 TCP 线格式编码器此前零直接断言（`test_compresslength.cpp` 只测 UDPBundle 侧的 compressLength 契约），纯编码面最大。
+
+**源码分析核心事实（含首跑失败自证的端序发现）**：
+
+1. **BigWorld 线序=小端**（binary_stream.ipp:100-103 注释自述："BigWorld uses little-endian over the network"；BW_HTONS/BW_HTONL 仅 `_BIG_ENDIAN` 构建做字节交换，x86 即恒等宏）。因此 compressLength 的 width2/width4 "HTONS/HTONL" 字段实测按小端落盘（258→字节 02 01；4→04 00 00 00）。**本批首跑 25 失败中的"请求 offset 槽谜团"根因即此**：把 BW_HTONL 当标准大端网络序、用 NBO 读回必然不符（offset 5 落盘 05 00 00 00，NBO 读回 0x05000000）。
+2. TCPBundle 帧几何：ctor 先 `reserve(Flags=1)` 再 `reserve(Offset=4)` → frame size 5、`frameStartOffset_=4`；`size() = frame + msg - frameStartOffset_` → 新鲜 bundle size()==1（4B 请求偏移保留头对外隐形）；`data() = frame + frameStartOffset_` 是唯一合法观察窗（pFrameData_/frameStartOffset_ 均 private，派生类不可达）。
+3. 非请求帧 wire = `[flags][id][len?][payload]`，size()=1+msg 总长——**flags 字节计入 size()**（首跑多数失败源于漏计此字节）。
+4. compressLength（interface_element.cpp:283-409）：FIXED 长度不符走 CRITICAL_MSG abort（进程级中止，不可测臂）；VARIABLE width1 内联 `len<0xff`（254 为内联上限）/ width2 / width3 BW_PACK3 / width4；oversize → 0xff 填充 + 返 -1；负长返 -1（长度由流尺寸推导恒 ≥0，不可达）。
+5. 逃逸路径（finaliseCurrentMessage :255-275）：compressLength 返 -1 → transfer(id+len 字段) + `*pFrameData_ << uint32(length)`（裸 operator<< 主机序写，与内联字段同为小端、只在 BE 主机上显示差异）+ transfer 余下。
+6. 请求链（startRequest :71-115 / setNextRequestOffset :123-152 / doFinalise :281-302）：startRequest 把 frameStartOffset_ 4→0（flags 字节自 frame[4] 下移到 frame[0]，原保留头位置被首个请求 offset 覆写）、置 FLAG_HAS_REQUESTS(0x01)；offset=size()（首请求=5）；首请求 offset 写 frame[1..4]，后续第 N 个写第 N-1 个请求的 replyIDOffset+4 处（覆写 -1 占位）；每请求 msg=[id][len][ReplyID 0x12345678 占位 4B][nextOffset 0xFFFFFFFF 占位 4B][payload]，payload 长度扣 8（currentMessagePayloadLength :327-330）；doFinalise 经 ReplyIDOrOffset union hack 把存储的偏移解析为 frame 基址真指针（防 MemoryOStream 重分配使指针失效）。
+7. startReply：REPLY 元素=("Reply", 0xFF, VARIABLE, 4) → `[flags][FF][u32 4 小端][replyID 4B host]`。
+
+**环境工程**：TCPBundle 构造即需真 TCPChannel；`maxSegmentSize()` 活读 TCP_INFO 的 snd_mss——未连接 socket mss=0 会让 numDataUnits/freeBytesInLastDataUnit 对 0 取模（除零臂，只能以已建立连接测）。环回对搭建：listener socket/bind(0)/listen(5) + 阻塞 connect/accept（无需泵 dispatcher），服务端 `TCPChannel( iface, *pAccepted, true )`。生命周期：~Channel MF_ASSERT(isDestroyed_) → 必须 `destroy()`（decRef→0→delete，且 channel 析构接管 accepted endpoint 所有权）；rig 析构按 pChannel_ 是否生成分叉释放。
+
+**新增 `test_tcp_bundle.cpp`（13 用例，network_test 164→177 实测 "177 tests run"）**：`_freshState`（size()==1 隐形保留头+flags 字节）、`_fixedLengthMessageFrame`（FIXED 无长度字段）、`_variableLengthWidth1`（[id][len 1B][payload]）、`_variableLengthWidth1Boundary`（254=内联上限）、`_variableLengthWidth2WireOrder`（258→02 01，钉死小端）、`_variableLengthWidth3Pack3`（300→2C 01 00，钉死 BW_PACK3 臂）、`_oversizeEscape`（300B→[id][FF][u32 300][payload]，size 307）、`_startReplyFrame`、`_firstRequestFrame`（offset 槽=5、ReplyID 占位、链尾 sentinel、doFinalise 解析 pReplyID==frame+7）、`_requestChain`（offset 链 5→17、占位覆写、双 ReplyOrder 位置 7/19）、`_clearResets`（重建帧复用）、`_numDataUnitsArithmetic`（真 mss：恰好一段 / +1 滚两段；numDataUnits/freeBytesInLastDataUnit 首次直接断言）。
+
+**迭代取证实录**：首跑 25 失败全部为测试侧断言算术错（生产代码零缺陷），报错值可逐字节解码自证：77055=0x00012CFF=FF 2C 01 00（0xff 逃逸 + LE 300）、67108864=0x04000000（LE 4 被 NBO 误读）、width2 首跑"缺失"的那行恰证 wire[2]==0x02（LE 低位在前）。两处系统性错因：非请求帧漏计 flags 字节（+1 偏移）、把 BW_HTONL 当真大端序。
+
+**陷阱复用与新增**：rig 构造器内不放 CHECK 宏（CppUnitLite2 宏只在 TEST 体内展开），改守卫链 + `isCreated()` 每用例首行断言；FLAG_HAS_REQUESTS 无类外定义，先拷局部再 CHECK_EQUAL（批次10 教训）；**新增**：`CHECK_EQUAL( uint8, uint8 )` 按 char 打印字节——0x11/0x00 等控制字节在日志里显示为两个相同的空串，误导排查，一律 `int(...)` 转型后再断言（fixed/fresh 两处字节断言即曾如此）。
+
+**覆盖率注记**：同批次14/15 口径，未跑插桩基线。tcp_bundle.cpp 全部方法（ctor/dtor/startMessage/startRequest/setNextRequestOffset/startReply/finaliseCurrentMessage/doFinalise/clear/size/reserve/data/flags/newMessage/currentMessagePayloadLength/tcpChannel）+ compressLength 的 width1/2/3/4/oversize 臂由 13 用例直接覆盖；登记不可测臂：FIXED 长度不符 CRITICAL abort（进程终止）、compressLength 负长臂（长度恒 ≥0）、width 越界 default 臂（CRITICAL abort）、未连接 socket 的 mss=0 除零臂。用例数：network_test 164→177（实测 "177 tests run"）；全量 21 模块全绿、实测合计 **1083**（此前的"全量 1071"计数含同一 ±1 漂移——network 基线实为 164 而非 165，本批起以实测 run 计数为准）。
+
+提交范围：`lib/network/unit_test/test_tcp_bundle.cpp`（新）、`lib/network/unit_test/Makefile.rules` + `CMakeLists.txt`、本文档。

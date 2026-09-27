@@ -57,6 +57,7 @@ IF (BW_IS_SERVER)
 		test_receive_window.cpp
 		test_snprintf.cpp
 		test_stream.cpp
+		test_tcp_bundle.cpp
 		test_threadsafety.cpp
 	)
 ELSE()

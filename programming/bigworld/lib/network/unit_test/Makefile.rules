@@ -42,6 +42,7 @@ cxxSource =							\
 	test_snprintf 					\
 	test_stream						\
 	test_symmetric_block_cipher		\
+	test_tcp_bundle					\
 	test_zip_stream					\
 	test_tcp_channels				\
 	test_threadsafety				\
