@@ -485,3 +485,29 @@ cstdmf 334（+12）：`test_ansi_allocator.cpp` +4（allocate/reallocate 保内�
 **覆盖率注记**：同批次14/15 口径，未跑插桩基线。tcp_bundle.cpp 全部方法（ctor/dtor/startMessage/startRequest/setNextRequestOffset/startReply/finaliseCurrentMessage/doFinalise/clear/size/reserve/data/flags/newMessage/currentMessagePayloadLength/tcpChannel）+ compressLength 的 width1/2/3/4/oversize 臂由 13 用例直接覆盖；登记不可测臂：FIXED 长度不符 CRITICAL abort（进程终止）、compressLength 负长臂（长度恒 ≥0）、width 越界 default 臂（CRITICAL abort）、未连接 socket 的 mss=0 除零臂。用例数：network_test 164→177（实测 "177 tests run"）；全量 21 模块全绿、实测合计 **1083**（此前的"全量 1071"计数含同一 ±1 漂移——network 基线实为 164 而非 165，本批起以实测 run 计数为准）。
 
 提交范围：`lib/network/unit_test/test_tcp_bundle.cpp`（新）、`lib/network/unit_test/Makefile.rules` + `CMakeLists.txt`、本文档。
+### 7.17 覆盖率补强批次 17：machine_guard MGM 编解码面（2026-09-27）
+
+**派测判定（批次14 口径，五候选逐个）**：
+
+- `machine_guard.cpp`（1481L）：**可测，本批派测**。MGMPacket/MachineGuardMessage 家族是纯流编解码（wire 布局、首字节分派、错误回退），零 nub/TaskManager/EC 依赖；sendto/sendAndRecv 网络臂与 bwmachined 进程管理臂（fork/exec/signal，`machined` 专属）不硬凑。
+- `event_poller.cpp`（1238L）：**可测（下批候选）**。`EventPoller::create()` 无参工厂 + fd 注册表（registerRead/WriteFileDescriptor 只需 fd + InputNotificationHandler 接口实现），maxFD 算术可直测。
+- `logger_endpoint.cpp`（1120L）：**受限登记**。LoggerEndpoint 需要 LoggerMessageForwarder（MessageLogger 消息面）+ TCP 端点状态机 + dispatcher 定时器臂，冒烟必须真消息日志管线。
+- `watcher_nub.cpp`（678L）：**受限登记**。WatcherNub 无参构造但 init/收包走 UDP 绑定 machined 标准端口 + watcher 协议路由，协议面窄。
+- `packet_sender.cpp`（440L）：**受限登记**。六件套构造（Endpoint/RequestManager/OnceOffSender/SendingStats/PacketLossParameters/EventDispatcher），send() 主体需 UDPBundle/UDPChannel 协同。
+
+**源码分析核心事实**：
+
+1. MGMPacket wire = `[flags(1B)][buddy(u32 LE)]` + 每消息 `[len(u16 LE)]+[消息体]`（BW_HTONS 在 x86 恒等，批次16 端序口径）；write 超 32KB 返 false（碎片化未实现的告警臂）；`s_buddy_` 是进程级静态，非 BROADCAST 时覆写所有 write 的 buddy 字段。
+2. `MachineGuardMessage::create` peek 首字节分派 16 种具体消息 + UnknownMessage 兜底；peek 空流安全置 error → 返 NULL（MemoryIStream::peek 无断言，与 retrieve 的 MF_ASSERT_DEV 越界 abort 不同——**这是"空流可测、截断体不可测"的分界**）。
+3. 基类头 = `[message(1B)][flags(1B)][seq(u16)]`，seq_ 是 **private**（读回对象只能经 write 回观察——read 侧 seqSent_ 为 false，write 原样发出；第二次 write 走 refreshSeq 生产路径）；wire flags 含 MESSAGE_NOT_UNDERSTOOD(0x2)/OUTGOING(0x1)。
+4. UnknownMessage：body 原样吞进 data_，write 回 = 头 + appendString（writePackedInt(\<255 为 1B) + blob），即"echo + 长度前缀 + NOT_UNDERSTOOD 置位"。
+5. ProcessMessage 读段 = 头 + param/category/uid(均 1B)+uid(u16)+pid/port/id(u16)+name(packed string)，extra 前向兼容段（extraData 计数 + 未知字节 skip）；**构造默认 username_(getUsername())/pid_(getpid())**，legacy 无 extra body 不触碰这些默认。
+6. typeStr() switch **缺 ERROR_MESSAGE case** → ErrorMessage 报 "** UNKNOWN **"（日志可读性小疵，记录不修）；readExtra 的 `is.retrieve(extraData)` 遇恶意 extraData 会触发 retrieve 断言 abort——单测不可造此畸形。
+
+**新增 `test_machine_guard.cpp`（16 用例，network_test 177→193）**：`MGM_packetEmptyRoundTrip`（5B 头+stagger 旗标）、`_packetMessageRoundTrip`（QIM 往返）、`_packetLengthPrefixLittleEndian`、`_packetTruncatedTailFlagsError`（hasError_ 显式臂）、`_packetZeroLenMessageDropped`（空 msgstream→create NULL→静默丢弃）、`_packetSetBuddyOverrides`（静态覆写+恢复 BROADCAST）、`_packetOversizeReturnsFalse`（33000B→write false，33016B 逐字节账）、`MGM_createByFirstByteDispatch`（手工 wire→QIM，write 回观察 seq）、`_createUnknownEchoes`（NOT_UNDERSTOOD+packed-len echo）、`_createEmptyStreamReturnsNull`、`_queryInterfaceDefaults`（typeStr 映射）、`_processMessageFullRoundTrip`（含 extra 段与 c_str 格式串）、`_processMessageLegacyBodyWithoutExtra`（readExtra remaining==0 臂+默认保留）、`_errorMessageRoundTrip`、`_refreshSeqAdvances`（两次 write 观察刷新）、`_typeStrFallbacks`。
+
+**陷阱复用与新增**：字节断言一律 `int()` 转型（批次16）；手工 wire 的字节数值按 LE 语义解读（[01][02] 读回 0x0201 而非 0x0102，首跑 2 失败之一）；类内 enum（PACKET_STAGGER_REPLIES 等）无 ODR 问题，static const MAX_SIZE 未用；MF_USE_ASSERTS 下 retrieve 越界=abort，"截断 body 回退 UnknownMessage"臂（create 的 is.error() 分支）在单测构建不可达，登记；进程级静态（s_buddy_）用后必须恢复，防毒化后续用例。
+
+**覆盖率注记**：同前批口径，未跑插桩。MGMPacket 全方法（read/write/append/shouldStaggerReply/hasError/dtor/setBuddy）+ MachineGuardMessage 基类流读写/refreshSeq/create 两入口/typeStr/c_str + QueryInterface/Process/ErrorMessage 与 UnknownMessage 的 impl/extra 臂由 16 用例直接覆盖；登记不可测臂：create 截断回退（retrieve 断言 abort 在先）、readExtra 恶意 extraData、sendto/sendAndRecv 真网络臂、machined 进程管理面。用例数：network_test 177→193（实测 "193 tests run" 无失败）；全量 21 模块实测合计见提交信息（批次16 实测 1083 + 16 = 1099）。
+
+提交范围：`lib/network/unit_test/test_machine_guard.cpp`（新）、`lib/network/unit_test/Makefile.rules` + `CMakeLists.txt`、本文档。

@@ -23,6 +23,7 @@ SET( ALL_SRCS
 	test_login_challenge_task.cpp
 	test_login_request_protocol.cpp
 	test_login_challenge_factories.cpp
+	test_machine_guard.cpp
 	test_login_challenge_interfaces.hpp
 	test_cuckoo_cycle_login_challenge.cpp
 	test_movement_filter.cpp
