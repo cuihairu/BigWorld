@@ -290,3 +290,38 @@ pyscript_test 新增 3 个用例（115→118；全量 976→979）：
 方法论（接 7.8）：待测协议行为先读 vendored CPython 源码再写断言（abstract.c 的三个 Slice 入口直接推翻了引擎旧注释与我的第一版测试预期——测试跑出来的段错误/NULL 是"断言写错"的第一信号，gdb 回溯+源码比对十分钟内定位）；对 NULL 返回值做 `PyList_Check` 这类解引用断言前必须先 `CHECK(p != NULL)` 短路，否则断言失败本身变崩溃。
 
 提交范围：`stl_to_py.cpp`（删除分支修复+注释更正）、`pyobject_plus.hpp/.cpp`（共享下标表）、`test_stl_to_py.cpp`、`test_script_events.cpp`、`test_script_utilities.cpp`、本文档。
+
+### 7.10 覆盖率补强批次 10：lib/connection 零覆盖可测面（2026-09-26）
+
+为 `lib/connection` 下三个此前零引用的文件补齐了单元测试，全部挂在 `lib/network/unit_test` 宿主（其 `Makefile.rules` 的 `dependsOn += network connection resmgr math cstdmf zip` 已含 connection；CMakeLists.txt 的 `ALL_SRCS` 已登记三个新 `.cpp`）。`nm` 确认二进制中测试符号真实编入。
+
+新增用例（7 个，network_test 111→118）：
+
+- **`test_log_on_params.cpp`**（4 例）：
+  - `LogOnParams_plainRoundTrip`：完整参数集（username/password/encryptionKey/digest/nonce）经 plain-text 流往返不变，size 断言对齐真实线上格式（1 flags + 16 digest + 4 nonce + 3 个 BW::string 的 packed-length 前缀 = 35 字节）。
+  - `LogOnParams_flagControl`：`HAS_DIGEST` 开关控制 digest 是否上墙；默认构造的空字符串对象同样往返。
+  - `LogOnParams_encoderRouting`：`addToStream`/`readFromStream` 在附加 `StreamEncoder` 时各走 encrypt/decrypt 恰好一次；pass-through 编码器保持明文布局；fail 方向返回 false 且不产出可读对象。
+  - `LogOnParams_streamingOperators`：`<<`/`>>` 运算符包装同样的非加密路径。
+- **`test_data_download.cpp`**（2 例）：
+  - `DataDownload_segmentsAndCompletion`：描述符与末段任意顺序到达即完成；`size()` 反映段数。
+  - `DataDownload_writeOrderIsInsertionOrder`：`write()` 按插入顺序拼接段载荷（`seq_` 字段不参与排序），证明"sorted fashion"注释与实际行为的关系。
+- **`test_filter_helper.cpp`**（1 例）：
+  - `FilterHelper_forwardsToEnvironment`：五个受保护转发方法（`filterDropPoint`/`resolveOnGroundPosition`/`transformIntoCommon`/`transformFromCommon`）经测试子类公有包装调用后，参数与返回值正确透传给 `FilterEnvironment`。
+
+本批修出的真实缺陷：**无引擎缺陷**。7 个失败全部是测试侧 Bug，已在本次修复：
+
+1. **`MemoryIStream` 辅助函数返回悬挂指针**（`streamOf`/`stringStream`）：`MemoryOStream out` 是局部对象，`out.retrieve(...)` 返回其内部缓冲区指针，函数返回时 `out` 析构，指针悬空。`MemoryIStream` 只借指针不拥有它，`~MemoryIStream` 不释放缓冲。修复：新增 `OwnedIStream` 子类（`MemoryIStream` 的 `virtual ~MemoryIStream()` 允许），在辅助函数内把字节 `memcpy` 到 `new char[]` 堆缓冲并由 `OwnedIStream` 析构时 `delete[]`。同一模式在 `test_log_on_params.cpp` 与 `test_data_download.cpp` 各一处。
+2. **`retrieve()` 破坏式读取被重复调用**（`encoderRouting`）：`encrypted.retrieve(encrypted.size())` 在 `memcmp` 行已把读指针推到末尾，紧跟的第二次 `retrieve` 得到空流。修复：一次 `retrieve` 缓存到 `const void*`，供 `memcmp` 与 `MemoryIStream` 构造复用。
+3. **BW::string 线上格式开销未计入**（`plainRoundTrip` size 断言）：`appendString` 采用「packed-int 长度前缀 + 原样字节」，3 个串各 1 字节前缀（共 3 字节），实测 35 字节而非最初按「1+16+4+11=32」计算的 32。修复：断言改为 `1 + 16 + 4 + 3 + strlen(...)` 并加注释说明 packed-length 语义。
+
+本批确立的方法论/CppUnitLite2 事实：
+
+1. **`MemoryOStream::retrieve(n)` 是破坏式的**（推进 `pRead_`），且 `MemoryIStream(const void*, int)` 只借指针不拥有；跨函数返回流时必须把字节复制到堆缓冲并让返回的对象持有它。
+2. **`BW::string` 序列化带 packed-length 前缀**（<255 时 1 字节），不能用 `strlen` 之和直接算线上字节数。
+3. **`FilterHelper` 的五个方法与 `FilterEnvironment` 的四个虚函数均为 `protected`**——测试子类需提供公有包装才能从 `TEST` 宏调用；`FilterHelper` 构造器亦为 `protected`（类是抽象的）。
+4. **`MD5::Digest::NUM_BYTES` 与 `LogOnParams::HAS_ALL` 是类内 `static const` 整型成员**——`CHECK_EQUAL` ODR-use 它们会导致链接期 undefined reference；解法是复制到局部变量再比较。
+5. **`Direction3D(Vector3)` 构造函数把 `v[0]→roll, v[1]→pitch, v[2]→yaw`**（与 `Vector3` 的 xyz 不同序），断言 yaw 要用 `.yaw` 不是 `.z`。
+
+验收：`network_test` 新增 7 用例全绿；全量 21 模块单元测试 986 用例全绿（`There were no test failures` × 21，无 `result [1-9]`）；`unit_test_network` 构建零警告。
+
+提交范围：`programming/bigworld/lib/network/unit_test/test_log_on_params.cpp`、`test_data_download.cpp`、`test_filter_helper.cpp`、`Makefile.rules`、`CMakeLists.txt`、本文档。`test_pickler.cpp` 保持 untracked 不入库。

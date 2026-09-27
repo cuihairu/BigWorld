@@ -13,11 +13,14 @@ cxxSource =							\
 	test_channel_version			\
 	test_compresslength				\
 	test_config						\
+	test_data_download				\
 	test_exposed_message_range		\
 	test_elliptic_curve 			\
+	test_filter_helper				\
 	test_flood						\
 	test_fragment					\
 	test_interface					\
+	test_log_on_params				\
 	test_login_challenge			\
 	test_mangle						\
 	test_msgtypes					\

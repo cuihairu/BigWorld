@@ -11,8 +11,11 @@ SET( ALL_SRCS
 	pch.hpp
 	test_channel.cpp
 	test_channel_interfaces.hpp
+	test_data_download.cpp
 	test_elliptic_curve.cpp
+	test_filter_helper.cpp
 	test_interface.cpp
+	test_log_on_params.cpp
 	test_msgtypes.cpp
 	test_network_checksum_schemes.cpp
 	test_reliable.cpp
