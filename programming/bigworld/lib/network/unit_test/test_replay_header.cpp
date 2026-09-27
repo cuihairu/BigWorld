@@ -7,7 +7,6 @@
 #include "connection/client_server_protocol_version.hpp"
 #include "connection/replay_data.hpp"
 #include "connection/replay_header.hpp"
-#include "connection/replay_metadata.hpp"
 
 #include <string.h>
 
@@ -248,113 +247,6 @@ TEST( ClientServerProtocolVersion_supportsSemantics )
 	CHECK( version.supports( same ) );
 	CHECK( !version.supports( otherSubpatch ) );
 	CHECK( !version.supports( otherMinor ) );
-}
-
-
-// -----------------------------------------------------------------------------
-// Section: ReplayMetaData
-// -----------------------------------------------------------------------------
-
-// add/hasKey/get behave as a small string map; re-adding a key replaces the
-// value without growing the collection.
-TEST( ReplayMetaData_collection )
-{
-	ReplayMetaData metaData;
-	CHECK_EQUAL( 0, int( metaData.size() ) );
-
-	metaData.add( "key1", "value1" );
-	metaData.add( "key2", "value2" );
-	CHECK_EQUAL( 2, int( metaData.size() ) );
-
-	CHECK( metaData.hasKey( "key1" ) );
-	CHECK( !metaData.hasKey( "missing" ) );
-
-	CHECK_EQUAL( BW::string( "value1" ), metaData.get( "key1" ) );
-	CHECK_EQUAL( BW::string( "fallback" ),
-		metaData.get( "missing", "fallback" ) );
-
-	metaData.add( "key1", "replaced" );
-	CHECK_EQUAL( 2, int( metaData.size() ) );
-	CHECK_EQUAL( BW::string( "replaced" ), metaData.get( "key1" ) );
-}
-
-
-// A signed meta-data block round trips through readFromStream, and flipping
-// a value byte is detected by the checksum.
-TEST( ReplayMetaData_signedRoundTrip )
-{
-	ChecksumSchemePtr pScheme = MD5SumScheme::create();
-
-	ReplayMetaData metaData;
-	metaData.init( pScheme );
-	metaData.add( "recording_name", "test" );
-	metaData.add( "version", "1" );
-
-	MemoryOStream stream;
-	metaData.addToStream( stream );
-
-	// StreamSize field + packed pairs + 16 byte MD5 signature.
-	CHECK_EQUAL( 4 + metaData.streamSize() + 16, stream.size() );
-
-	// The meta-data read path uses a ChecksumIStream that never resets its
-	// scheme, so each read needs a scheme with fresh MD5 state.
-	ReplayMetaData readMetaData;
-	readMetaData.init( MD5SumScheme::create() );
-	MemoryIStream reader( stream.data(), stream.size() );
-	BW::string errorString;
-	CHECK( readMetaData.readFromStream( reader, NULL, &errorString ) );
-	CHECK( errorString.empty() );
-	CHECK_EQUAL( metaData.size(), readMetaData.size() );
-	CHECK_EQUAL( BW::string( "test" ),
-		readMetaData.get( "recording_name" ) );
-	CHECK_EQUAL( 0, int( reader.remainingLength() ) );
-
-	// Corrupt a byte inside the first value ("test") without disturbing any
-	// length fields: the checksum catches it.
-	char * pBytes = static_cast< char * >( stream.data() );
-	pBytes[ 4 + 1 + 14 + 1 ] ^= 0xFF;
-
-	readMetaData.init( MD5SumScheme::create() );
-	MemoryIStream tamperedReader( stream.data(), stream.size() );
-	CHECK( !readMetaData.readFromStream( tamperedReader, NULL,
-		&errorString ) );
-	CHECK( !errorString.empty() );
-}
-
-
-// A meta-data block read without a scheme reports the expected block length
-// and transfers the signature bytes to the caller.
-TEST( ReplayMetaData_unverifiedSignatureTransfer )
-{
-	ReplayMetaData metaData;
-	metaData.init( /* signatureLength */ 16 );
-	metaData.add( "k", "v" );
-
-	// Hand-craft the block: StreamSize, the pairs, then the signature.
-	MemoryOStream crafted;
-	crafted << uint32( metaData.streamSize() );
-	crafted << BW::string( "k" ) << BW::string( "v" );
-
-	char signature[ 16 ];
-	memset( signature, 0xAB, sizeof( signature ) );
-	crafted.addBlob( signature, sizeof( signature ) );
-
-	size_t metaDataLength = 0;
-	CHECK( ReplayMetaData::checkSufficientLength( crafted.data(),
-		crafted.size(), 16, metaDataLength ) );
-	CHECK_EQUAL( crafted.size(), metaDataLength );
-	CHECK( !ReplayMetaData::checkSufficientLength( crafted.data(),
-		crafted.size() - 1, 16, metaDataLength ) );
-
-	ReplayMetaData readMetaData;
-	readMetaData.init( 16 );
-	MemoryOStream readSignature;
-	MemoryIStream reader( crafted.data(), crafted.size() );
-	BW::string errorString;
-	CHECK( readMetaData.readFromStream( reader, &readSignature,
-		&errorString ) );
-	CHECK_EQUAL( 16, int( readSignature.size() ) );
-	CHECK_EQUAL( BW::string( "v" ), readMetaData.get( "k" ) );
 }
 
 

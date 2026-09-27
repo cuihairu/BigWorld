@@ -5,12 +5,14 @@ include $(BW_COMPONENT_HEADER)
 
 cxxSource =							\
 	main							\
+	test_bdiff						\
 	test_bwresource					\
 	test_data_resource				\
 	test_file_system				\
 	test_packed_section				\
 	test_path_resource				\
 	test_xml_section				\
+	test_xml_special_chars		\
 	test_zip_section
 
 dependsOn += resmgr cstdmf math zip

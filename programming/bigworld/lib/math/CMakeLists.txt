@@ -13,6 +13,8 @@ SET( ALL_SRCS
 	forward_declarations.hpp
 	integrat.hpp
 	linear_animation.hpp
+	linear_lut.cpp
+	linear_lut.hpp
 	math_extra.cpp
 	math_extra.hpp
 	math_lib.hpp
@@ -64,8 +66,6 @@ IF( NOT BW_IS_SERVER )
 		graham_scan.hpp
 		frustum_hull.hpp
 		frustum_hull.cpp
-		linear_lut.cpp
-		linear_lut.hpp
 		lineeq.hpp
 		lineeq.ipp
 		lineeq3.hpp

@@ -42,7 +42,7 @@ MemoryIStream * stringStream( const char * text )
 	out << value;
 	int n = out.size();
 	char * buf = new char[ n ];
-	memcpy( buf, out.retrieve( n ), n );
+	memcpy( buf, out.data(), n );
 	return new OwnedIStream( buf, n );
 }
 

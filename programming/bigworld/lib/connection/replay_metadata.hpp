@@ -42,7 +42,11 @@ public:
 	size_t size() const 	{ return collection_.size(); }
 
 	/** This method clears the meta-data key-value pairs. */
-	void clear() 			{ collection_.clear(); }
+	void clear()
+	{
+		collection_.clear();
+		streamSize_ = 0U;
+	}
 
 	void add( const BW::string & key, const BW::string & value );
 	bool hasKey ( const BW::string & key ) const;

@@ -6,6 +6,7 @@ INCLUDE( BWStandardProject )
 SET( ALL_SRCS
 	main.cpp
 	test_dbapps_gateway.cpp
+	test_db_config.cpp
 	test_db_hash_schemes.cpp
 )
 
@@ -17,6 +18,7 @@ BW_TARGET_LINK_LIBRARIES( db_unit_test
 	db
 	math
 	network
+	resmgr
 	server
 	zip
 	)

@@ -520,14 +520,18 @@ CuckooCycleLoginChallengeFactory::CuckooCycleLoginChallengeFactory() :
 bool CuckooCycleLoginChallengeFactory::configure(
 		const LoginChallengeConfig & config ) /* override */
 {
-	easiness_ = config.getDouble( "easiness", easiness_ );
+	// Validate before committing, so a rejected configuration leaves the
+	// previous easiness in place.
+	const double configured = config.getDouble( "easiness", easiness_ );
 
-	if ((easiness_ <= 0) || (easiness_ > 100.0))
+	if ((configured <= 0) || (configured > 100.0))
 	{
 		ERROR_MSG( "CuckooCycleLoginChallengeFactory::configure: "
 			"Invalid easiness value\n" );
 		return false;
 	}
+
+	easiness_ = configured;
 
 	INFO_MSG( "CuckooCycleLoginChallengeFactory::configure: Easiness: %.03f\n",
 		easiness_ );

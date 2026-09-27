@@ -4,9 +4,11 @@ PROJECT( resmgr_unit_test )
 INCLUDE( BWStandardProject )
 
 SET( ALL_SRCS
+	test_bdiff.cpp
 	test_bwresource.cpp
 	test_file_system.cpp
 	test_xml_section.cpp
+	test_xml_special_chars.cpp
 	test_path_resource.cpp
 	test_packed_section.cpp
 	test_zip_section.cpp

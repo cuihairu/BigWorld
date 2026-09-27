@@ -11,6 +11,7 @@ SET( ALL_SRCS
 	pch.cpp
 	test_vector3.cpp
 	test_ema.cpp
+	test_linear_lut.cpp
 	test_matrix_data.hpp
 	test_matrix.cpp
 	test_math_extra.cpp

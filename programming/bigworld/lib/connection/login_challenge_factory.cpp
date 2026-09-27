@@ -118,15 +118,19 @@ public:
 	/* Override from LoginChallengeFactory. */
 	bool configure( const LoginChallengeConfig & config ) /* override */
 	{
-		duration_ = static_cast< float >(
+		// Validate before committing, so a rejected configuration leaves
+		// the previous duration in place.
+		const float configured = static_cast< float >(
 			config.getDouble( "duration", duration_ ) );
 
-		if (duration_ <= 0.f)
+		if (configured <= 0.f)
 		{
 			ERROR_MSG( "DelayLoginChallengeFactory::configure: "
 					"Invalid duration configured\n" );
 			return false;
 		}
+
+		duration_ = configured;
 
 		INFO_MSG( "DelayLoginChallengeFactory::configure: Duration %.03fs\n",
 			duration_ );

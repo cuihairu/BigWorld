@@ -43,6 +43,9 @@ cxxSource =							\
 	test_tcp_channels				\
 	test_threadsafety				\
 	test_websockets 				\
+	test_login_challenge_factories	\
+	test_cuckoo_cycle_login_challenge	\
+	test_replay_metadata			\
 
 useOpenSSL = 1
 

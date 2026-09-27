@@ -15,6 +15,10 @@ SET( ALL_SRCS
 	test_binary_file.cpp
 	test_bit_reader.cpp
 	test_bw_containers.cpp
+	test_ansi_allocator.cpp
+	test_bw_hash.cpp
+	test_bw_safe_allocatable.cpp
+	test_debug_message_source.cpp
 	test_bw_snprintf.cpp
 	test_bw_string_ref.cpp
 	test_bw_util.cpp

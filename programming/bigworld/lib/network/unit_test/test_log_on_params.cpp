@@ -115,7 +115,7 @@ MemoryIStream * streamOf( const LogOnParams & params,
 	params.addToStream( out, flags, pEncoder );
 	int n = out.size();
 	char * buf = new char[ n ];
-	memcpy( buf, out.retrieve( n ), n );
+	memcpy( buf, out.data(), n );
 	return new OwnedIStream( buf, n );
 }
 
@@ -137,11 +137,15 @@ TEST( LogOnParams_plainRoundTrip )
 	// 1 flags byte + 16 digest + 4 nonce + the three strings. Each
 	// BW::string is written by appendString(): one packed-int length
 	// byte (all three strings are shorter than 255) plus the payload
-	// chars, hence the three extra bytes.
+	// chars, hence the three extra bytes (1+16+4+3+4+4+3==35).
 	CHECK_EQUAL( 1 + 16 + 4 + 3 + int( strlen( "user" ) +
 		strlen( "pass" ) + strlen( "key" ) ), stream.size() );
 
-	MemoryIStream in( stream.retrieve( stream.size() ), stream.size() );
+	// The size is taken first: retrieve() consumes the stream, and the
+	// order in which the two constructor arguments are evaluated is not
+	// specified, so a second size() call could well see an empty stream.
+	const int plainBytes = stream.size();
+	MemoryIStream in( stream.retrieve( plainBytes ), plainBytes );
 	LogOnParams back;
 	CHECK( back.readFromStream( in ) );
 	CHECK_EQUAL( 0, in.remainingLength() );
@@ -188,8 +192,8 @@ TEST( LogOnParams_flagControl )
 	CHECK_EQUAL( int( DIGEST_BYTES ), withDigest.size() -
 		withoutDigest.size() );
 
-	MemoryIStream in( withoutDigest.retrieve( withoutDigest.size() ),
-		withoutDigest.size() );
+	const int leanBytes = withoutDigest.size();
+	MemoryIStream in( withoutDigest.retrieve( leanBytes ), leanBytes );
 	LogOnParams back;
 	CHECK( back.readFromStream( in ) );
 	CHECK_EQUAL( 0, int( back.flags() ) );
@@ -266,7 +270,8 @@ TEST( LogOnParams_streamingOperators )
 	MemoryOStream stream;
 	stream << out;
 
-	MemoryIStream in( stream.retrieve( stream.size() ), stream.size() );
+	const int bytes = stream.size();
+	MemoryIStream in( stream.retrieve( bytes ), bytes );
 	LogOnParams back;
 	in >> back;
 	CHECK_EQUAL( 0, in.remainingLength() );

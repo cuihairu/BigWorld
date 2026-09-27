@@ -6,13 +6,20 @@ include $(BW_COMPONENT_HEADER)
 cxxSource =							\
 	main							\
 	test_dbapps_gateway 			\
+	test_db_config					\
 	test_db_hash_schemes			
 
+# resmgr: test_db_config builds its configuration tree with
+# XMLSection::createFromStream() and hands it to BWConfig::hijack(), so the
+# link needs the DataSection implementation (libserver's bwconfig.cpp only
+# declares it).
 dependsOn += 	db 			\
 				network 	\
 				server 		\
 				cstdmf		\
-				zip
+				resmgr		\
+				zip			\
+				math
 
 include $(BW_COMPONENT_FOOTER)
 

@@ -19,9 +19,13 @@ SET( ALL_SRCS
 	test_log_on_params.cpp
 	test_login_challenge_task.cpp
 	test_login_request_protocol.cpp
+	test_login_challenge_factories.cpp
+	test_login_challenge_interfaces.hpp
+	test_cuckoo_cycle_login_challenge.cpp
 	test_movement_filter.cpp
 	test_msgtypes.cpp
 	test_network_checksum_schemes.cpp
+	test_replay_metadata.cpp
 	test_reliable.cpp
 	test_tcp_channels.cpp
 	test_tcp_channels_interfaces.hpp

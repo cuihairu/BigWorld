@@ -7,6 +7,7 @@ cxxSource =							\
 	main							\
 	test_boundingbox				\
 	test_ema						\
+	test_linear_lut				\
 	test_matrix						\
 	test_quaternion					\
 	test_vector3					\

@@ -314,6 +314,7 @@ network_test 新增 7 个用例（111→118；全量 21 模块 979→986）：
 2. **CppUnitLite2 的 `CHECK_EQUAL` 会 ODR-use 类内 `static const` 整型常量**，若该常量没有类外定义就链接失败（`LogOnParams::HAS_ALL`、`MD5::Digest::NUM_BYTES` 都是 `enum`/整型常量且无 out-of-line definition）；`CHECK_EQUAL( const char*, const char*)` 同样比指针。两条都靠"先拷进局部变量再断言"绕开（`const int HAS_ALL = LogOnParams::HAS_ALL;`），已在两个新测试文件里各留注释。
 3. 待测类若把转发面设成 `protected`（`FilterHelper` 五个方法全是，真实 filter 在 `input()/output()` 内部调用），测试子类要补 public 包装再转发——这正好顺带验证"protected 只影响可见性、不影响派发"；`FilterHelper` 构造器同为 `protected`（类是抽象的），子类化是唯一入口。
 4. **`Direction3D( const Vector3 & )` 的分量映射与 `Vector3` 不同序**：`v[0]→roll`、`v[1]→pitch`、`v[2]→yaw`，所以断言构造结果要读 `.yaw` 而不是 `.z`。
+5. **"消耗流"与"读流长"不能写在同一个实参表里**（`7820caf9` 之后的补修）：`MemoryIStream in( stream.retrieve( stream.size() ), stream.size() )` 看着无害，实则两个实参的求值顺序在 C++ 里**未指定**；GCC 从右向左求值，第二个 `size()` 抢在 `retrieve()` 之前跑，所以一直是绿的，换个求值顺序的实现就会拿到 `length == 0` 的空流、`readFromStream` 直接失败。这类隐患的共同点是"当前编译器恰好正确"，所以新写测试里凡是要先取长度再建流，一律先把长度存进局部变量（`const int n = stream.size();`），别指望求值顺序。
 
 提交范围：`test_log_on_params.cpp`、`test_data_download.cpp`、`test_filter_helper.cpp`、`unit_test/Makefile.rules`、`unit_test/CMakeLists.txt`（三个文件同批登记进两处构建描述，`nm` 确认 7 个用例符号确实编进二进制）、本文档。`test_pickler.cpp` 继续保持 untracked 不入库。
 
@@ -343,3 +344,35 @@ network_test 新增 8 个用例（118→126；全量 21 模块 986→994）：
 方法论（接 7.10）：**新增一个"看起来无害"的测试可能改变链接图，从而引爆早已存在的 ODR 冲突**。本批的教训是给 fixture 接口起名时先扫一遍生产命名空间——`ClientInterface`/`ServerInterface` 这种名字在测试语境下"读起来很自然"，恰恰因为自然才危险；正确做法是像 `TCPChannels*` 那样带模块前缀。另外，`CppUnitLite2` 的 `CHECK_EQUAL` 指针比较陷阱（7.10 记过）在 `appName()` 返回 `const char *` 时又撞上一次，改用 `strcmp(...) == 0`。
 
 提交范围：`test_movement_filter.cpp`、`test_login_challenge_task.cpp`、`test_login_request_protocol.cpp`、`test_filter_interfaces.hpp`（新增：把 `test_filter_helper.cpp` 里的 `TestFilterEnvironment`/`TestFilter` 提到共享头，并追加 `TestMovementFilter` 替身；沿用同目录 `test_channel_interfaces.hpp`/`test_flood_interfaces.hpp` 的 `*_interfaces.hpp` 惯例，避免两个文件各写一份 80 行环境桩）、`test_filter_helper.cpp`（改为包含共享头）、`test_channel_interfaces.hpp` + `test_channel.cpp`（命名空间冲突修复）、`unit_test/Makefile.rules`、`unit_test/CMakeLists.txt`、本文档。
+
+### 7.12 覆盖率补强批次 12：connection 挑战/replay 面 + cstdmf/math/resmgr/db 零覆盖（2026-09-27）
+
+多线并进的批次：lib/connection 侧把 `replay_metadata.cpp` 的用例从 `test_replay_header.cpp` 迁出成独立文件并补 4 个新用例、给 login challenge 工厂面（`login_challenge_factory.cpp`/`cuckoo_cycle_login_challenge_factory.cpp`）补测；另外四个模块各扫出零覆盖文件补测。用例数变化：network 126→139、cstdmf 322→334、math 38→44、resmgr 38→50、db 3→11，全量 21 模块 994→1045。
+
+network_test（宿主仍是 lib/network/unit_test，`dependsOn` 已含 connection）：
+
+- `test_replay_metadata.cpp`（新，7 用例）：`_collection`/`_signedRoundTrip` 自 `test_replay_header.cpp` 迁入（旧文件同步删除该节，否则 registrer 符号 multiple definition），新增 `_rejectsTamperedBlock`（改一个 value 字节、不动任何长度字段，签名必须抓到）、`_unverifiedRead`（`init(signatureLength)` 的不校验读：签名原样交还、内容照读）、`_rejectsMalformedBlock`（头部声称 1000 字节 → "Insufficient data for meta-data"）、`_checkSufficientLength`（静态长度检查：完整块、差一字节、连头都没有三态）、`_swap`。
+- `test_login_challenge_factories.cpp`（新，6 用例）+ `test_login_challenge_interfaces.hpp`（新，`TestChallengeConfig` 提为共享 fixture，cuckoo 文件同用）：`_defaultRegistrations`（delay/fail/cuckoo_cycle 三个内建、未知名拒绝）、`_registerAndDeregister`（计数工厂注册/注销/重复注册替换）、`_configuresDelayChallenge`（configure→create→线上 float 往返）、`_rejectsBadDelay`（见缺陷 1）、`_alwaysFailChallenge`（不读流的 true/false 应答对）、`_addWatchers`（每个工厂一个目录节点）。
+- `test_cuckoo_cycle_login_challenge.cpp`（新，3 用例）：`Factory_easiness`（setter 钳位 0..100、configure 区间拒绝——见缺陷 2）、`challengeStream`（1 长度字节 + 16 个补零 hex + ':' + uint64 = 26 字节，对端读取后 `writeChallengeToStream` 逐字节还原）、`responseVerifies`（真实解一次 PoW：响应 = key(prefix+attempt) + 42×4B nonce；换了前缀的挑战、改动一个 nonce 的响应都必须拒）。
+
+cstdmf 334（+12）：`test_ansi_allocator.cpp` +4（allocate/reallocate 保内容/allocateAligned 各对齐档位/非 `sizeof(void*)` 倍数对齐拒绝/debugReport·onThreadFinish 空操作）、`test_bw_safe_allocatable.cpp` +2（类 operator new/delete 与 new[]/delete[] 全生命周期计数）、`test_bw_hash.cpp` +4（FNV-1a 64 位向量先用手写 python 核算再写断言；确定性/敏感性/hashCombine/pair 特化）、`test_debug_message_source.cpp` +2（已知源枚举 + 越界回落 "unknown"）。math 44（+6）：`test_linear_lut.cpp`（段内插值与段缓存、data() 按 x 排序、退化表与单点 BC、上下边界条件、访问器）。resmgr 50（+12）：`test_bdiff.cpp` +5、`test_xml_special_chars.cpp` +7。db 11（+8）：`test_db_config.cpp`——`BWConfig::hijack()` 装入内存 XML、经 `db_config.cpp` 的文件级 `pTopLevelConfig` 指针发布自建块（`extern` 引用，析构还原），覆盖读取/缺省/`postInit` 校验（port>65535、空库名拒绝；numConnections/maxSpaceDataSize 零值钳一）、废弃名拒绝、`secondsToTicks` 舍入与下限、`maxCommitPeriodInTicks`、`get()` 单例。
+
+本批修出的真实缺陷（4 处，全部引擎侧）：
+
+1. **`DelayLoginChallengeFactory::configure` 先赋值后校验**：`duration_(config.getDouble(...))` 落进成员之后才判 `<= 0` 拒绝——配置被拒后工厂仍带着 duration=-1 存活，`create()` 产出带毒挑战。修法：读入局部、校验通过才提交。
+2. **`CuckooCycleLoginChallengeFactory::configure` 同一模式**：easiness 越界（0 或 >100）被拒时成员已被覆写，easiness=0 意味着客户端要搜遍整个 nonce 空间。同修法。两例均由新用例的第一条"拒绝后应保留前值"断言钉住（`LoginChallengeFactories::configureFactories` 对失败工厂是整员注销，容器层不受毒化——只有直接 configure 的调用方受害）。
+3. **`ReplayMetaData::clear()` 漏清 `streamSize_`**（并行会话修，本批复验）：clear 后 `streamSize()` 仍报旧值，而 `addToStream()` 写的是这个陈旧长度——读侧按它取数据必错。`_collection` 用例的 clear 后断言钉住。
+4. **`linear_lut.cpp` 在 server 构建里是孤儿**：mak 侧 `lib/math/Makefile.rules` 的 cxxSource 没有它，CMake 侧它被圈在 `IF(NOT BW_IS_SERVER)` 里，只有 Android.mk 编——于是 server 端 `math_test` 链接 `test_linear_lut` 直接 undefined reference。修法：mak 的 cxxSource 加 `linear_lut`（静态库成员选择惰性，server 无人引用则零影响），CMake 把它挪进主源列表，两种构建、两个配置对称。顺带发现 **mak 的 unit_test 链接不做传递闭包**：链接行就是 `--start-group -l<dependsOn 平铺列表> --end-group`，db/unit_test 的 dependsOn 没列 math，`interface_element.o` 引 `EMA::calculateBiasFromNumSamples` 即 undefined（CMake 侧 writer 已列 math）——补 `math` 一行。
+
+本批确立的引擎/协议事实：
+
+1. **测试二进制里 `MemoryIStream` 读越界不是错误标志而是进程 abort**：`memory_stream.ipp` 的 `retrieve()` 用 `IF_NOT_MF_ASSERT_DEV`，dev 断言直通 `LogMsg::linuxAssertAndAbort`（SIGABRT，exit 134）；只有 release 构建才落到 `error_` 标志。推论：**凡是"畸形长度字段→读更多字节"的协议分支（`data >> string` 先读 packed 长度再按它取）在单测里不可测 malformed 路径**——本批为此删掉两处用例内断言（cuckoo `readChallengeFromStream` 的 "ab" 截断流、replay `_rejectsMalformedBlock` 的"块内字符串越界"段），文件内留注释说明。`_rejectsMalformedBlock` 保留的"头部声称 1000"段安全，因为生产在 `readFromStream` 入口就有 `streamSize_ > remainingLength` 前置防护。
+2. **`ChecksumScheme` 是有状态对象，`shouldReset=false` 约定下同一 scheme 二次 addToStream 会互相污染签名**：`ReplayMetaData::addToStream` 的 ChecksumOStream 用 `shouldReset=false`（scheme 允许喂更大的流），digest 从上一状态继续——同一 meta 连写两次，第二块的签名是"两段 payload 之和"，单块验证方必拒。本批 `signedRoundTrip` 的"块自带签名"探针因此必须对**孪生对象**跑，不能复用 writer。读侧同源：`readFromStream` 同样不 reset（旧用例已注释过"每次读要新 scheme"）。**待核实线索**：生产 `replay_data_file_reader.cpp:675` 循环读多块时共享同一个 `pChecksumScheme_` 且不 reset（`verifyFromStream` 成功路径也不 reset）——多块文件是否真会撞这颗雷，留给下一批（正是候选清单里的文件）。
+3. **`LinearLUT` 下界 BC_WRAP 实际不回绕**（`_lowerBoundaryConditions` 钉住不修）：C `fmod` 保留被除数符号，x<x0 时"回绕"落点仍在 ≤x0，穿第一段 lerp 过去，-2.5 与 -0.5 读值相同；上界 BC_WRAP 是真回绕（2.5→0.5）。另记一次**自查教训**：插值断言的期望值必须按 `(yb-ya)*(x-a)/(b-a)+ya` 重算再写，本批初稿把 slope=4 段的 1.5 处脑算成 5，三连红。
+4. **bdiff 缺陷钉而不修**（`bdiff_excessLiteralFlushDropsOneByte`）：溢出字面量收尾把 `lastMatch` 置 `i+1` 而不是 `i`，多吐场景丢一字节；`performDiff` 此时返回 false，调用方须放弃 patch——行为可钉、修复需评估历史 patch 兼容性。
+5. **XmlSpecialChars 解析器怪癖钉而不修**（+7 用例）：`&#0;` 截断输出、`&lt` 缺分号也参与折叠等，用例按实际行为断言并逐条注释。
+6. **测试配置对象必须用 SmartPointer 持有**：network_test `setCrashOnLeak(true)`，裸 `new TestChallengeConfig` 在进程退出时 abort（与事实 1 同为 134，gdb `bt` 才能分辨）；`LoginChallengeConfigPtr pRoot(pRootConfig)` 收口（`setChild` 只在派生类上，先裸指针装配再入 ptr）。`SafeReferenceCount` 计数从 0 起，禁栈分配（批次 11 已记，本批在工厂用例上再次踩到）。
+
+方法论与并行干扰（本批网络部分被干扰 6 轮才收口）：并行会话以"构建→pkill→跑"循环工作，其 `pkill -f network_test` 按整条命令行匹配，连包装 shell 一起杀；对策是把刚链好的二进制 `cp` 成不含库名字面量的路径（`/tmp/p12nw13`）再跑。空日志 + 134 有两种截然不同的成因（leak 检查 abort vs dev 断言 abort），一律 `gdb -batch -ex run -ex bt` 分辨，不猜。构建中断留 0 字节 .o、并发重链把产物写成半文件（秒退 exit 1）的旧坑本批再验：`rm` 重链 + `make && ls && run` 一条链。archive 竞态（库重编与依赖它的测试重链并发）表现为随机 undefined，串行重链即恢复。**本批中途出现第三方 `git stash -u`**：19 个跟踪文件的改动一度整体消失——`git checkout stash@{0} -- <显式路径清单>` 恢复、不 pop 不 drop（留给发起方），恢复后逐文件 `git diff HEAD --stat` + 关键点 grep 核对。
+
+提交范围：引擎侧 `login_challenge_factory.cpp`、`cuckoo_cycle_login_challenge_factory.cpp`、`replay_metadata.hpp`、`lib/math/Makefile.rules`、`lib/math/CMakeLists.txt`；测试侧 network 的 `test_replay_metadata.cpp`/`test_login_challenge_factories.cpp`/`test_cuckoo_cycle_login_challenge.cpp`/`test_login_challenge_interfaces.hpp`（新）、`test_replay_header.cpp`（删迁出节）、`test_data_download.cpp`/`test_log_on_params.cpp`（§7.10 方法论第 5 条的求值顺序加固）；cstdmf 四个新测试、math 的 `test_linear_lut.cpp`、resmgr 的 `test_bdiff.cpp`/`test_xml_special_chars.cpp`、db 的 `test_db_config.cpp`；五组件 `unit_test/Makefile.rules` + `unit_test/CMakeLists.txt` 双描述登记（db 另补 resmgr/math 依赖）；本文档。`test_pickler.cpp` 与各 `unit_test/xmldataresource.xml`（DataResource 用例的工作目录产物）继续保持 untracked 不入库。
