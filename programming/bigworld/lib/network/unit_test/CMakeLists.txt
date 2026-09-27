@@ -15,6 +15,7 @@ SET( ALL_SRCS
 	test_data_download.cpp
 	test_elliptic_curve.cpp
 	test_encryption_filter.cpp
+	test_file_stream.cpp
 	test_filter_helper.cpp
 	test_filter_interfaces.hpp
 	test_interface.cpp

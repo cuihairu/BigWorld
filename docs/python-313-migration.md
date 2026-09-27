@@ -433,3 +433,27 @@ cstdmf 334（+12）：`test_ansi_allocator.cpp` +4（allocate/reallocate 保内�
 方法论：沿用批次12/13 的二进制改名跑法与后台无 timeout 套路，无新坑。另：本批窗口内按用户指示完成 logo 替换（根 `logo.svg` + `docs/public/logo.svg` 替换原 2048×1024 PNG，README 与 VitePress config 同步改引），独立成提交、不与测试批次混合。
 
 提交范围：`lib/network/unit_test/test_encryption_filter.cpp`（新）、`lib/connection/cuckoo_cycle_login_challenge_factory.cpp`（位宽缺陷修复）、`lib/network/unit_test/Makefile.rules` + `CMakeLists.txt`、本文档；logo 提交另列。用例数：network 149→155；全量 1055→1061。
+
+### 7.15 覆盖率补强批次 15：file_stream 零覆盖（2026-09-27）
+
+**派测文件**：`lib/network/file_stream.cpp`（354L + 头 89L + ipp），批次14 判定表点名的下批候选。生产用户是 message_logger 三件套与 bwmachined（`server/tools/`），本身编入 libnetwork（`Makefile.rules:32`），network_test 天然可链。无任何既有测试引用（`grep` unit_test 全目录零命中），确认零覆盖。
+
+**可测性判定：可测**。自足 FILE* 包装（构造即 fopen、析构即 close+提交），无 nub/TaskManager 依赖；静态 LRU 句柄表虽是 protected，但 C++ 允许派生类访问基类 protected 静态成员——测试用 `ProbeFileStream : public FileStream` 的静态访问器（`openFileCount()`/`maxOpenFiles()`）精确观察驱逐行为，不用桩、不碰生产代码。
+
+**源码分析**（断言全部由此推导）：
+
+*双面流语义*：`FileStream : public MemoryOStream`——写路径是内存流（`addBlob` 进缓冲，`commit()` 才 `fwrite`+`fflush` 并 `reset()` 清缓冲），读路径是**磁盘流**（`retrieve(int)` 是虚覆盖，从 FILE* `fread` 进独立读缓冲，与内存缓冲无关）。`length()` 明确只报磁盘尺寸、不计未提交内存（头文件 119-121 行注释自述）——用例钉住"commit 前 length()==0、补写后仍不变"。
+
+*LRU 句柄管理（`open()` :261-311）*：进程级 `s_openFiles_` 链表，`MAX_OPEN_FILES=20`；三条分支——队首快路径直接返回、已开但不在队首先 `remove()` 再重压队首（:271-275）、真开（fopen + 恢复 `offset_` :289-297）+ 压队首 + 超限关掉队尾（:305-308）。**失败路径不入队**（fopen 失败 return 先于 push_front，:280-284）——用例钉住计数不变。20 个洪水流恰好把最老流驱逐（第 20 次压入时 size 21>20 触发关闭 back），驱逐流下次 `retrieve` 透明重开并 `fseek` 恢复原位置——"rb" 流位置无损续读是设计语义，用例精确钉住（40B 文件读 10B → 驱逐 → 再读得 [10,20) 字节）。
+
+*错误语义（`strerror()` :52-62）*：errno 非零走 libc 串、零走 `errorMsg_`。`retrieve()` 在 fread 前 `errno=0`，短读（fread 因 EOF 返短）不设 errno → `strerror()` 精确回落到源码自带的 "Couldn't read desired number of bytes from disk"——用例钉住该确切串（这依赖"短读不设 errno"的 libc 事实，与源码的 errno=0 前置共同成立）。
+
+*风险注记（源码推论，未断言）*：真开分支用保存的 `mode_` 再 fopen——"wb" 流被驱逐后重开会**先截断文件**再恢复 offset（fopen "w" 语义），写型句柄跨驱逐有丢数据面；message_logger 实际用法（追加/读日志）不踩此路。记录不修。
+
+**新增 `test_file_stream.cpp`（10 用例，network_test 155→165）**：`_commitWritesToDisk`（commit 前后 length/size 与磁盘内容逐字节）、`_destructorAutoCommits`（close 对非空缓冲自动提交，:324-327）、`_readBackGrowsReadBuf`（INIT_READ_BUF_SIZE=128 → retrieve(200) 精确扩到 200）、`_shortReadFlagsError`（error/good 翻转 + strerror 确切串）、`_tellSeekLengthStat`（seek/tell/SEEK_END/未提交不计长/stat 一致）、`_openFailureFlagsError`（坏路径：tell/seek/length/stat 全 -1、retrieve 返回非 NULL 读缓冲、失败不入队）、`_lruQueueCap`（25 流恒 ≤20、销毁全清零）、`_lruEvictionRestoresPosition`（驱逐后续读位置精确恢复）、`_alternatingStreamsStayDistinct`（双流交错读写各归各，驱动 remove-and-repush 分支）、`_writeThenReadSameStream`（"w+b" 单句柄 commit→seek(0)→读回，驱动 setMode 的 ANSI 读写交错 fseek 分支 :246-250）。
+
+**陷阱复用**：`INIT_READ_BUF_SIZE`/`MAX_OPEN_FILES` 均无类外定义——按批次10 教训先拷局部再 `CHECK_EQUAL`（避免 ODR-use 链接失败）；临时文件 `/tmp/fs_test_<pid>_<tag>.bin` 进测先清、出测必清，pid 防并行会话撞车。
+
+**覆盖率注记**：同批次14 口径，未跑插桩基线（需数小时全量重建）。`file_stream.cpp` 全部 11 个方法（ctor/dtor/strerror/tell/seek/length/commit/retrieve/stat/setMode/open/close/remove）+ ipp 的 good/error 由 10 用例从零覆盖变为已覆盖；仅 commit 的 fwrite 短写失败臂（需盘满注入）未覆盖，登记。用例数：network 155→165；全量 1061→1071（21 模块全绿）。
+
+提交范围：`lib/network/unit_test/test_file_stream.cpp`（新）、`lib/network/unit_test/Makefile.rules` + `CMakeLists.txt`、本文档。
