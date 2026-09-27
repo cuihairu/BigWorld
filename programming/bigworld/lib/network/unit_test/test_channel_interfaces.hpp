@@ -8,9 +8,19 @@
 #include "network/udp_channel.hpp"
 #include "network/interface_macros.hpp"
 
+/**
+ *	These fixture interfaces deliberately do *not* reuse the production
+ *	names (BW::ClientInterface / BW::ServerInterface): this header
+ *	defines its interface, so any binary that also links the real
+ *	connection objects - which define those very namespaces - would
+ *	collide on ClientInterface::gMinder and friends. The TCP channel
+ *	fixtures already name theirs TCPChannels*Interface for the same
+ *	reason.
+ */
 #define BW_COMMON_MSG( NAME, TYPE )										\
 	BEGIN_HANDLED_STRUCT_MESSAGE( NAME,									\
-		TYPE##StructMessageHandler< TYPE##Interface::NAME##Args >,		\
+		TYPE##StructMessageHandler<											\
+			TYPE##ChannelTestInterface::NAME##Args >,						\
 		&Channel##TYPE##App::NAME )										\
 
 #define BW_SERVER_MSG( NAME ) BW_COMMON_MSG( NAME, Server )
@@ -24,7 +34,7 @@ BW_BEGIN_NAMESPACE
 // -----------------------------------------------------------------------------
 
 #pragma pack(push,1)
-BEGIN_MERCURY_INTERFACE( ServerInterface )
+BEGIN_MERCURY_INTERFACE( ServerChannelTestInterface )
 
 	BW_SERVER_MSG( msg1 )
 		Mercury::UDPChannel::Traits traits;
@@ -38,7 +48,7 @@ BEGIN_MERCURY_INTERFACE( ServerInterface )
 
 END_MERCURY_INTERFACE()
 
-BEGIN_MERCURY_INTERFACE( ClientInterface )
+BEGIN_MERCURY_INTERFACE( ClientChannelTestInterface )
 
 	BW_CLIENT_MSG( msg1 )
 		uint32	seq;

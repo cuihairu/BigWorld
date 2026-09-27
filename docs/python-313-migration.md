@@ -317,4 +317,29 @@ network_test 新增 7 个用例（111→118；全量 21 模块 979→986）：
 
 提交范围：`test_log_on_params.cpp`、`test_data_download.cpp`、`test_filter_helper.cpp`、`unit_test/Makefile.rules`、`unit_test/CMakeLists.txt`（三个文件同批登记进两处构建描述，`nm` 确认 7 个用例符号确实编进二进制）、本文档。`test_pickler.cpp` 继续保持 untracked 不入库。
 
-下一批候选（同样零引用、行数适中、Linux 构建可测）：`movement_filter.cpp`（124）、`login_request_protocol.cpp`（93）、`login_challenge_task.cpp`（81）、`replay_checksum_scheme.cpp`（37）。`replay_data_file_reader.cpp`（1166）、`login_handler.cpp`（653）、`smart_server_connection.cpp`（362）体量大且依赖 res 树/真实连接，可测性需另行评估。
+下一批候选（同样零引用、行数适中、Linux 构建可测）：`movement_filter.cpp`（124）、`login_request_protocol.cpp`（93）、`login_challenge_task.cpp`（81）。`replay_data_file_reader.cpp`（1166）、`login_handler.cpp`（653）、`smart_server_connection.cpp`（362）体量大且依赖 res 树/真实连接，可测性需另行评估。（更正：本条原把 `replay_checksum_scheme.cpp` 也列为零覆盖，**这是错的**——当时的扫描按文件 basename 做的区分大小写匹配，而实际引用用的是类名 `ReplayChecksumScheme`；`server/baseapp/unit_test/test_recording.cpp` 早已覆盖它（签名回路、错公钥拒绝、手工核对三处）。批次 11 已按类名重扫纠正。）
+
+### 7.11 覆盖率补强批次 11：lib/connection filter/login 面（2026-09-26）
+
+承接 7.10 的候选清单（已按上面那条更正剔除 `replay_checksum_scheme.cpp`），本批三个文件全部可测，无需替换：`movement_filter.cpp`（124 行）、`login_challenge_task.cpp`（81 行）、`login_request_protocol.cpp`（93 行）。零覆盖的判定这次改用**类名**扫描（`MovementFilter` / `LoginChallengeTask` / `LoginRequestProtocol`），避免 7.10 那种 basename 漏判。
+
+network_test 新增 8 个用例（118→126；全量 21 模块 986→994）：
+
+- `test_movement_filter.cpp` +4：`MovementFilter_copyStateUsesTryCopyState`（子类 `tryCopyState` 返回 true 时**立即返回**，`input` 一次都不被调）、`MovementFilter_copyStateReplaysLastInput`（回退路径：源 filter 的 last input 被原样重放成目标的首次 input，time/spaceID/vehicleID/position/positionError/direction 六项逐一比对）、`MovementFilter_copyStateWithNoLastInput`（源无可用样本时回退是空操作）、`MovementFilter_forwardsToEnvironment`（四个环境转发面 + 可选 ground normal）。
+- `test_login_challenge_task.cpp` +3：`LoginChallengeTask_performWritesResponse`（perform 跑一次挑战、翻转 isFinished、响应留在 `data()`、耗时被记录）、`LoginChallengeTask_performIsNotRepeatable`（二次 perform 被拒：挑战不再被调用、`data()` 长度与耗时都不变）、`LoginChallengeTask_disassociateDropsHandler`。
+- `test_login_request_protocol.cpp` +1：`LoginRequestProtocol_singletons`（两个访问器都是进程级单例、重复调用同一对象、两者互不相同且 `appName()` 分别是 LoginApp/BaseApp、释放全部本地句柄后再取仍存活）。
+
+本批修出一个**真实缺陷**（潜伏型，由新测试触发链接面变化才暴露）：
+
+**`test_channel_interfaces.hpp` 的 fixture 接口占了生产命名空间 `BW::ClientInterface` / `BW::ServerInterface`**。`BEGIN_MERCURY_INTERFACE` 的"定义"变体会在头文件里生成 `Mercury::InterfaceMinder gMinder( "..." )` 这个**有实体的命名空间级对象**（外加三个非 inline 的自由函数）。该 fixture 头此前只有 `test_channel.cpp` 一个 TU 包含，而 network_test 从不链入 `libconnection` 的 `server_connection.o`，所以两处定义碰不到一起；本批新增的 `test_login_challenge_task.cpp` 一旦构造 `LoginHandler` 就把 `server_connection.o` 拖进链接图，于是 `gMinder` 与三个 `registerWith*` 立刻 multiple definition。修复：把 fixture 接口改名 `ServerChannelTestInterface` / `ClientChannelTestInterface`（`test_channel.cpp` 内 14 处引用同步更新），这正是同目录 `test_tcp_channels_interfaces.hpp` 早就采用的 `TCPChannels*Interface` 惯例——只有这个更老的 fixture 头没跟上。顺带确认其余四个 fixture 头（flood/fragment/mangle/tcp_channels）命名都不侵占生产名，无需处理。
+
+本批确立的引擎/协议事实：
+
+1. **`tryCopyState()` 在 `MovementFilter` 里是 private virtual，但派生类照样能覆写**——访问控制不阻止虚函数覆写，基类 `copyState()` 经 vtable 派发。测试正是靠这一点分别构造"接管"与"回退"两条路径。
+2. **`LoginChallengeTask::perform()` 的重复调用保护在单测里完全不可见**：拒绝分支只发一条 `ERROR_MSG`，而 network_test 的 DebugFilter 会吞掉 ERROR_MSG；可观测的等价证据是"挑战没被再调一次、`data()` 长度与耗时都没动"。
+3. **两个 BackgroundTask 覆写与 `onAttemptFailed` 本批不覆盖，原因是依赖链而非偷懒**：`doBackgroundTask`/`doMainThreadTask` 需要真实 `TaskManager` 驱动并回调 `LoginHandler::onLoginChallengeCompleted()`（会牵动登录状态机与 ServerConnection）；`LoginRequestProtocol::onAttemptFailed` 需要构造完整 `LoginRequest`，而它要求一个 `LoginRequestTransport &`，后者（`login_request_transport.cpp`，488 行）本身依赖真实 ServerConnection。这三处的可测性留待后续批次。
+4. **`LoginHandler` 在单测里必须堆分配且带非 `NOT_SET` 的状态**：`SafeReferenceCount` 的构造函数把计数置 **0**（不是 1），而 `LoginChallengeTask` 会用 `LoginHandlerPtr` 持有一份引用——若 handler 是栈对象，引用归零时 `release()` 会去 `delete` 一个栈对象。同时析构函数在 `!isDone_` 时会 WARNING 并调 `finish()`，而 `finish()` 会去碰 NULL 的 `pServerConnection`；传 `LogOnStatus::LOGGED_ON` 之类的状态即可让 `isDone_` 为真、绕开这条路径。
+
+方法论（接 7.10）：**新增一个"看起来无害"的测试可能改变链接图，从而引爆早已存在的 ODR 冲突**。本批的教训是给 fixture 接口起名时先扫一遍生产命名空间——`ClientInterface`/`ServerInterface` 这种名字在测试语境下"读起来很自然"，恰恰因为自然才危险；正确做法是像 `TCPChannels*` 那样带模块前缀。另外，`CppUnitLite2` 的 `CHECK_EQUAL` 指针比较陷阱（7.10 记过）在 `appName()` 返回 `const char *` 时又撞上一次，改用 `strcmp(...) == 0`。
+
+提交范围：`test_movement_filter.cpp`、`test_login_challenge_task.cpp`、`test_login_request_protocol.cpp`、`test_filter_interfaces.hpp`（新增：把 `test_filter_helper.cpp` 里的 `TestFilterEnvironment`/`TestFilter` 提到共享头，并追加 `TestMovementFilter` 替身；沿用同目录 `test_channel_interfaces.hpp`/`test_flood_interfaces.hpp` 的 `*_interfaces.hpp` 惯例，避免两个文件各写一份 80 行环境桩）、`test_filter_helper.cpp`（改为包含共享头）、`test_channel_interfaces.hpp` + `test_channel.cpp`（命名空间冲突修复）、`unit_test/Makefile.rules`、`unit_test/CMakeLists.txt`、本文档。

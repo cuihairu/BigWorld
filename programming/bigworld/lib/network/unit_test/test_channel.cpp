@@ -61,8 +61,8 @@ public:
 
 	void sendNextMessage()
 	{
-		ClientInterface::msg1Args & args =
-			ClientInterface::msg1Args::start( this->bundle() );
+		ClientChannelTestInterface::msg1Args & args =
+			ClientChannelTestInterface::msg1Args::start( this->bundle() );
 
 		args.seq = outSeq_++;
 		args.data = 0;
@@ -103,7 +103,8 @@ public:
 		MF_ASSERT( s_pInstance == NULL );
 		s_pInstance = this;
 
-		ServerInterface::registerWithInterface( this->networkInterface() );
+		ServerChannelTestInterface::registerWithInterface(
+			this->networkInterface() );
 	}
 
 	~ChannelServerApp()
@@ -113,10 +114,10 @@ public:
 	}
 
 	void disconnect( const Mercury::Address & srcAddr,
-			const ServerInterface::disconnectArgs & args );
+			const ServerChannelTestInterface::disconnectArgs & args );
 
 	void msg1( const Mercury::Address & srcAddr,
-			const ServerInterface::msg1Args & args );
+			const ServerChannelTestInterface::msg1Args & args );
 
 	static ChannelServerApp & instance()
 	{
@@ -191,7 +192,7 @@ PeerPtr ChannelServerApp::startChannel( const Mercury::Address & addr,
 // -----------------------------------------------------------------------------
 
 void ChannelServerApp::msg1( const Mercury::Address & srcAddr,
-		const ServerInterface::msg1Args & args )
+		const ServerChannelTestInterface::msg1Args & args )
 {
 	PeerPtr pPeer = peers_[ srcAddr ];
 
@@ -206,7 +207,7 @@ void ChannelServerApp::msg1( const Mercury::Address & srcAddr,
 
 
 void ChannelServerApp::disconnect( const Mercury::Address & srcAddr,
-		const ServerInterface::disconnectArgs & args )
+		const ServerChannelTestInterface::disconnectArgs & args )
 {
 	Peers::iterator peerIter = peers_.find( srcAddr );
 
@@ -255,7 +256,8 @@ public:
 
 		// masterNub.add( interface_ );
 
-		ClientInterface::registerWithInterface( this->networkInterface() );
+		ClientChannelTestInterface::registerWithInterface(
+			this->networkInterface() );
 	}
 
 	~ChannelClientApp()
@@ -271,7 +273,7 @@ public:
 	void handleTimeout( TimerHandle handle, void * arg );
 
 	void msg1( const Mercury::Address & srcAddr,
-			const ClientInterface::msg1Args & args );
+			const ClientChannelTestInterface::msg1Args & args );
 
 	static ChannelClientApp & instance()
 	{
@@ -324,8 +326,8 @@ void ChannelClientApp::startTest()
 
 void ChannelClientApp::handleTimeout( TimerHandle handle, void * arg )
 {
-	ServerInterface::msg1Args & args =
-		ServerInterface::msg1Args::start( pChannel_->bundle() );
+	ServerChannelTestInterface::msg1Args & args =
+		ServerChannelTestInterface::msg1Args::start( pChannel_->bundle() );
 
 	args.traits = pChannel_->traits();
 	args.seq = outSeq_++;
@@ -333,8 +335,8 @@ void ChannelClientApp::handleTimeout( TimerHandle handle, void * arg )
 
 	if (outSeq_ == numToSend_)
 	{
-		ServerInterface::disconnectArgs & args =
-			ServerInterface::disconnectArgs::start( pChannel_->bundle() );
+		ServerChannelTestInterface::disconnectArgs & args =
+			ServerChannelTestInterface::disconnectArgs::start( pChannel_->bundle() );
 
 		args.seq = outSeq_;
 		this->stopTimer();
@@ -346,7 +348,7 @@ void ChannelClientApp::handleTimeout( TimerHandle handle, void * arg )
 }
 
 void ChannelClientApp::msg1( const Mercury::Address & srcAddr,
-			const ClientInterface::msg1Args & args )
+			const ClientChannelTestInterface::msg1Args & args )
 {
 }
 

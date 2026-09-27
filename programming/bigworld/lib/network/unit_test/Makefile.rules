@@ -22,7 +22,10 @@ cxxSource =							\
 	test_interface					\
 	test_log_on_params				\
 	test_login_challenge			\
+	test_login_challenge_task		\
+	test_login_request_protocol	\
 	test_mangle						\
+	test_movement_filter			\
 	test_msgtypes					\
 	test_netmask					\
 	test_networkstats				\

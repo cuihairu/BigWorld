@@ -14,8 +14,12 @@ SET( ALL_SRCS
 	test_data_download.cpp
 	test_elliptic_curve.cpp
 	test_filter_helper.cpp
+	test_filter_interfaces.hpp
 	test_interface.cpp
 	test_log_on_params.cpp
+	test_login_challenge_task.cpp
+	test_login_request_protocol.cpp
+	test_movement_filter.cpp
 	test_msgtypes.cpp
 	test_network_checksum_schemes.cpp
 	test_reliable.cpp
