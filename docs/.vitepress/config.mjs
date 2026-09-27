@@ -18,7 +18,7 @@ export default {
     }
   },
   themeConfig: {
-    logo: "/logo.png",
+    logo: "/logo.svg",
     siteTitle: "BigWorld 架构研究",
     search: {
       provider: "local"

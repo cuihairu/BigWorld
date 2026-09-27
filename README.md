@@ -1,4 +1,4 @@
-![BigWorld for everyone](logo.png)
+![BigWorld for everyone](logo.svg)
 
 # BigWorld (TM) Open-Source Edition
 
