@@ -359,7 +359,12 @@ CuckooCycleLoginChallenge::CuckooCycleLoginChallenge( uint64 maxNonce ) :
 
 	BW::ostringstream stream;
 	stream.fill( '0' );
-	stream.width( sizeof( prefixValue ) / 8 * 2 );
+	// Two hex digits per byte: the prefix must be a fixed 16 hex digits
+	// (17 bytes with the colon) on the wire. The old expression
+	// (sizeof / 8 * 2) evaluated to 2, so the padding never engaged and
+	// the prefix shrank whenever the top nibble of the random value was
+	// zero.
+	stream.width( sizeof( prefixValue ) * 2 );
 	stream << std::hex << std::right << prefixValue << ":";
 
 	prefix_ = stream.str();

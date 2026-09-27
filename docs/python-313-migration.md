@@ -396,3 +396,40 @@ cstdmf 334（+12）：`test_ansi_allocator.cpp` +4（allocate/reallocate 保内�
 方法论：`timeout 560` 差点误伤整模块跑（批次12 基线 334s，机器忙时 >10 分钟，且 stdout 全缓冲零字节日志无从判断进度）——长跑一律后台无 timeout + `ps -C <bin>` 看 CPU TIME 确认在推进，跑完读 exit 文件。pkill 规避沿用批次12：二进制先 `cp` 成无库名字面量路径（`/tmp/p13afh2`）再跑。
 
 提交范围：`lib/network/unit_test/test_avatar_filter_helper.cpp`（新）、`lib/network/unit_test/Makefile.rules` + `CMakeLists.txt`（双描述登记）、本文档。用例数：network 139→149；全量 1045→1055。`test_pickler.cpp` 与各 `unit_test/xmldataresource.xml` 继续保持 untracked 不入库。
+
+### 7.14 覆盖率补强批次 14：encryption_filter 流式加密面 + 零覆盖清单可测性判定（2026-09-27）
+
+**清单逐项可测性判定**（§7.13 末尾的"剩余零覆盖大文件"）：
+
+| 文件 | 行数 | 判定 | 理由 |
+|---|---|---|---|
+| `lib/network/encryption_filter.cpp` | 391 | **本批派测** | 流式 API（encryptStream/decryptStream）公开且仅依赖 BlockCipherPtr，密码链逻辑可用恒等密码精确验证 |
+| `lib/connection/login_request.cpp` + `login_request_transport.cpp` | 829 | 不可单测，登记 | 需真实 TaskManager/Channel/NetworkInterface 依赖链（批次11 已登记同类） |
+| `lib/network/machine_guard.cpp` | 1481 | 不可单测，登记 | machined 守护进程面（fork/信号/进程间注册） |
+| `lib/network/event_poller.cpp` | 1238 | 不可单测，登记 | epoll/kqueue/select 事件循环，需真实 fd 生态 |
+| `lib/network/logger_endpoint.cpp` | 1120 | 不可单测，登记 | 日志守护 socket 协议端 |
+| `lib/network/watcher_nub.cpp` | 678 | 不可单测，登记 | watcher UDP nub，需 NetworkInterface |
+| `lib/connection/server_connection.cpp` / `smart_server_connection.cpp` | 3333 | 不可单测，登记 | 需完整 Mercury nub + 接口注册栈（批次11 记过链接陷阱） |
+| `lib/network/file_stream.cpp` | 354 | 可测，**下批候选** | 自足 FILE* 包装（FileStream: MemoryOStream + open/commit/seek/stat/remove + 静态打开文件登记表），纯 I/O 逻辑含量较低故让位本批 |
+
+**派测文件的源码分析**（断言全部由此推导，不凑数）：
+
+*密码链（`encryption_filter.cpp:266-344` encrypt、`:350-386` decrypt）*：无 IV 的类 CBC。`combineBlocks` 是逐字节 XOR（`block_cipher.ipp`，x86_64 有 8 字节字快速路径）。加密第 i 块：先 `combineBlocks( src+i, pPrevBlock, dest+i )`（与**明文**上一块异或），再 `encryptBlock` 原地加密——即 **C₀ = E(P₀)，Cᵢ = E(Pᵢ ⊕ Pᵢ₋₁)**；首块 memcpy 直拷。解密严格逆链：`decryptBlock` 后再与已解出的**明文**上一块异或，in-place 安全（prev 已还原）。注释明说链的用途：防不同包密文块重组重放。推论（协议事实，记录不修）：首块无链保护，同 key 同首块内容密文可预测（ECB 弱点仍在 C₀）。
+
+*分帧（`send()` :51-113、`recv()` :119-201）*：尾部追加 `ENCRYPTION_MAGIC = 0xdeadbeef`(4B) + wastage(1B)；`wastage = ((BS - ((len+1) % BS)) % BS) + 1`，len = payload+4——保证加密总长为 BS 整数倍且 wastage ≥ 1（永不写覆原始数据）。整段加密进**新包**（原包不动）。`recv()` 解密 in-place（注释：对 Blowfish 安全，其他算法未必），四个 corrupted 出口：非整块长度 / magic 不符 / wastage > BS / footer 越界，均走 `stats().incCorruptedPackets()` + `REASON_CORRUPTED_PACKET`；通过后 `shrink( footerSize )` 交回 `PacketFilter::recv` → `receiver.processFilteredPacket`。空 key 两侧直接 `REASON_GENERAL_NETWORK`。
+
+*可测性边界*：`PacketSender`/`PacketReceiver` 是**非虚具体类**（`packet_sender.hpp:36` 构造需 Endpoint/RequestManager/EventDispatcher/OnceOffSender/SendingStats/PacketLossParameters 六个引用；`packet_receiver.hpp:41` 需 Endpoint/NetworkInterface），无法桩替——**send/recv 包级分帧路径（含 4 个 corrupted 出口）本批不可测，登记**，留待 Mercury nub 级集成测试。
+
+**新增 `test_encryption_filter.cpp`（6 用例，network_test 149→155）**：`_streamRoundTrip`（Blowfish 20B→24B 补齐、明文流原地增长至块边界、解密还原且 4 字节零填充尾精确验证）、`_streamRoundTripExactMultiple`（16B 整块无补齐往返）、`_nullCipherRevealsChain`（NullCipher(8) 恒等密码把链算术摊开：C₀=P₀ 逐字节、C₁=P₁⊕P₀ 逐字节、解密折回；**NullCipher 空 key 只封包级 API 不封流 API**）、`_decryptStreamRejectsNonMultiple`（10B 密文拒解；reserve 先于 decrypt、失败路径输出流仍增长——事实钉）、`_blockRearrangementBreaksChain`（交换两密文块：首块独立还原、次块变垃圾——链属性钉）、`_maxSpareSize`（= BS + 4B magic + 200B MTU 余量：Blowfish 212、NullCipher(16) 220）。
+
+**本批修出的真实缺陷（1 处，由既有用例的偶发失败暴露）**：`cuckoo_cycle_login_challenge_factory.cpp:362` 的挑战前缀十六进制位宽写错——`stream.width( sizeof( prefixValue ) / 8 * 2 )` 实际求值 8/8×2 = **2** 而非 16，`fill('0')`/`std::right` 的补零装置形同虚设：随机 uint64 顶层半字节为 0 时（概率 1/16）前缀只有 15 个 hex 位，线上前缀在 17/16 字节间抖动（整包 26/25 字节）。批次12 的 `CuckooCycleLoginChallenge_challengeStream` 断言 26 字节 + 16 hex + ':'@17，因此带着 1/16 的隐发失败率跑了两个批次才踩中。修法：`stream.width( sizeof( prefixValue ) * 2 )`（16 位十六进制恒定）。读侧 `>> BW::string` 按打包长度读，新旧格式互通；`verify` 的 `key.find( prefix_ )` 不受长度影响。既有用例即回归钉。
+
+**链自愈语义（源码分析修正本批初稿断言）**：交换两个密文块后解密 out₀ = D(C₁) = P₁⊕P₀（打花），但 out₁ = D(C₀)⊕out₀ = P₀⊕P₁⊕P₀ = **P₁ 精确复原**——XOR 链只打花移动区域的**首块**，随后逐块自愈；N 块场景下交换 C₀/C₁ 只毁前两块且仅 out₀ 变垃圾。因此**排列检测实际由 recv() 的尾部 magic 落位检查完成**（任何块移动都会让 0xdeadbeef 错位→corrupted），链本身的贡献是"保证至少打花头部"。`_blockRearrangementBreaksChain` 按此精确断言（首块 ≠P₀、次块 =P₁、整体 ≠明文），初稿"次块变垃圾"的想当然已修正。
+
+**引擎事实**：`SymmetricBlockCipher::BLOCK_SIZE = 64bit = 8B`（静态断言保证，`symmetric_block_cipher.cpp:97`）；`BlockCipher::Key = BW::string`；`readableKey()` 静态 1024B 缓冲返回十六进制串（非线程安全，测试未用仅记录）。
+
+**覆盖率注记**：本批未跑 §7 基线法插桩（删 obj → `user_shouldBuildCodeCoverage=1` 全量重建 → gcovr → 恢复重建，需数小时），覆盖率变化按测试面如实描述：`encryption_filter.cpp` 的流式 API（encryptStream/decryptStream/maxSpareSize/key + Blowfish 与 NullCipher 两条密码链、非整块拒绝路径）由本批 6 用例从零覆盖变为已覆盖；包级 send/recv 分帧（4 个 corrupted 出口）因 PacketSender/PacketReceiver 不可桩替仍为零覆盖（登记见上）。工具链钩子确认存在：`common_footer_config.mak:357` 读 `user_shouldBuildCodeCoverage`（全 mak 树无内置赋值，纯用户 make 变量）。
+
+方法论：沿用批次12/13 的二进制改名跑法与后台无 timeout 套路，无新坑。另：本批窗口内按用户指示完成 logo 替换（根 `logo.svg` + `docs/public/logo.svg` 替换原 2048×1024 PNG，README 与 VitePress config 同步改引），独立成提交、不与测试批次混合。
+
+提交范围：`lib/network/unit_test/test_encryption_filter.cpp`（新）、`lib/connection/cuckoo_cycle_login_challenge_factory.cpp`（位宽缺陷修复）、`lib/network/unit_test/Makefile.rules` + `CMakeLists.txt`、本文档；logo 提交另列。用例数：network 149→155；全量 1055→1061。
