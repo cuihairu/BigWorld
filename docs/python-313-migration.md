@@ -293,35 +293,28 @@ pyscript_test 新增 3 个用例（115→118；全量 976→979）：
 
 ### 7.10 覆盖率补强批次 10：lib/connection 零覆盖可测面（2026-09-26）
 
-为 `lib/connection` 下三个此前零引用的文件补齐了单元测试，全部挂在 `lib/network/unit_test` 宿主（其 `Makefile.rules` 的 `dependsOn += network connection resmgr math cstdmf zip` 已含 connection；CMakeLists.txt 的 `ALL_SRCS` 已登记三个新 `.cpp`）。`nm` 确认二进制中测试符号真实编入。
+本批转向 `lib/connection`。三个目标文件经核实全部可在 Linux 构建里可测，**无需替换**（批次 2/3 的做法照抄：宿主 `lib/network/unit_test`，其 `dependsOn` 已含 `connection`）：`log_on_params.cpp`（114 行）、`data_download.cpp`（74 行）、`filter_helper.cpp`（50 行），合计 238 行此前被全仓库 `test_*.cpp` 零引用。
 
-新增用例（7 个，network_test 111→118）：
+network_test 新增 7 个用例（111→118；全量 21 模块 979→986）：
 
-- **`test_log_on_params.cpp`**（4 例）：
-  - `LogOnParams_plainRoundTrip`：完整参数集（username/password/encryptionKey/digest/nonce）经 plain-text 流往返不变，size 断言对齐真实线上格式（1 flags + 16 digest + 4 nonce + 3 个 BW::string 的 packed-length 前缀 = 35 字节）。
-  - `LogOnParams_flagControl`：`HAS_DIGEST` 开关控制 digest 是否上墙；默认构造的空字符串对象同样往返。
-  - `LogOnParams_encoderRouting`：`addToStream`/`readFromStream` 在附加 `StreamEncoder` 时各走 encrypt/decrypt 恰好一次；pass-through 编码器保持明文布局；fail 方向返回 false 且不产出可读对象。
-  - `LogOnParams_streamingOperators`：`<<`/`>>` 运算符包装同样的非加密路径。
-- **`test_data_download.cpp`**（2 例）：
-  - `DataDownload_segmentsAndCompletion`：描述符与末段任意顺序到达即完成；`size()` 反映段数。
-  - `DataDownload_writeOrderIsInsertionOrder`：`write()` 按插入顺序拼接段载荷（`seq_` 字段不参与排序），证明"sorted fashion"注释与实际行为的关系。
-- **`test_filter_helper.cpp`**（1 例）：
-  - `FilterHelper_forwardsToEnvironment`：五个受保护转发方法（`filterDropPoint`/`resolveOnGroundPosition`/`transformIntoCommon`/`transformFromCommon`）经测试子类公有包装调用后，参数与返回值正确透传给 `FilterEnvironment`。
+- `test_log_on_params.cpp` +4：`LogOnParams_plainRoundTrip`（明文回路：三个字符串/16 字节摘要/4 字节 nonce 全部回读一致、`remainingLength()` 归零、flags 回 HAS_ALL；并用"同一对象写两次"证明 nonce 随机但逐字节透传）、`LogOnParams_flagControl`（写侧 flags 决定可选字段：无 HAS_DIGEST 时线上恰少 16 字节、读侧 flags 为 0 且摘要保持空；默认构造的空串也能回路）、`LogOnParams_encoderRouting`（挂 encoder 时 encrypt/decrypt 各恰好被调一次、透传 encoder 保持明文布局逐字节相同、encoder 失败时 addToStream/readFromStream 都返回 false）、`LogOnParams_streamingOperators`（`stream << out` / `in >> back` 走同一条非加密路径）。
+- `test_data_download.cpp` +2：`DataDownload_segmentsAndCompletion`（`complete()` = 末段与描述**同时**到齐：只有段不行、只有末段不行、描述后补也算完成；描述与 id 同存，`size()` 计段数）、`DataDownload_writeOrderIsInsertionOrder`（乱序 seq 的三段写出仍是插入序，见下方"行为事实 1"）。
+- `test_filter_helper.cpp` +1：`FilterHelper_forwardsToEnvironment`（5 个转发面逐个验参数顺序、出参双向传递、返回值保真，含 `pGroundNormal == NULL` 的调用形态）。
 
-本批修出的真实缺陷：**无引擎缺陷**。7 个失败全部是测试侧 Bug，已在本次修复：
+三个文件均达到完整行/分支覆盖（析构回收段与描述、`insert` 的 isLast 真假两支、`write` 的 `MF_ASSERT_DEV(complete())` 前置、`FilterHelper` 构造与四个转发面）。
 
-1. **`MemoryIStream` 辅助函数返回悬挂指针**（`streamOf`/`stringStream`）：`MemoryOStream out` 是局部对象，`out.retrieve(...)` 返回其内部缓冲区指针，函数返回时 `out` 析构，指针悬空。`MemoryIStream` 只借指针不拥有它，`~MemoryIStream` 不释放缓冲。修复：新增 `OwnedIStream` 子类（`MemoryIStream` 的 `virtual ~MemoryIStream()` 允许），在辅助函数内把字节 `memcpy` 到 `new char[]` 堆缓冲并由 `OwnedIStream` 析构时 `delete[]`。同一模式在 `test_log_on_params.cpp` 与 `test_data_download.cpp` 各一处。
-2. **`retrieve()` 破坏式读取被重复调用**（`encoderRouting`）：`encrypted.retrieve(encrypted.size())` 在 `memcmp` 行已把读指针推到末尾，紧跟的第二次 `retrieve` 得到空流。修复：一次 `retrieve` 缓存到 `const void*`，供 `memcmp` 与 `MemoryIStream` 构造复用。
-3. **BW::string 线上格式开销未计入**（`plainRoundTrip` size 断言）：`appendString` 采用「packed-int 长度前缀 + 原样字节」，3 个串各 1 字节前缀（共 3 字节），实测 35 字节而非最初按「1+16+4+11=32」计算的 32。修复：断言改为 `1 + 16 + 4 + 3 + strlen(...)` 并加注释说明 packed-length 语义。
+**本批没有修出引擎缺陷**——这三处是纯管道代码（序列化转发、列表持有、虚调用转发），7 个用例首跑全红但**七处失败全在测试侧**，引擎行为与断言预期一致。这与批次 8/9（pyscript 连出两个真实缺陷）形成对照：越靠近"纯转发"的文件，越可能只产出事实而非缺陷。据此记下两条行为事实：
 
-本批确立的方法论/CppUnitLite2 事实：
+1. **`DataDownload::insert` 的注释与实现不符**（data_download.cpp:25-27 写 "Insert the segment into this record in a sorted fashion"，实现只是 `push_back`）：`DownloadSegment::seq()` 被携带但**从不参与排序或校验**，`write()` 因此按**到达序**拼接。唯一生产调用方 `ServerConnection::onDataDownload`（server_connection.cpp:2907）的分段消息走可靠有序通道，到达序恰与 seq 序一致，故当前不是活跃缺陷；测试用 seq 为 1/0/2 的乱序插入把这一事实钉住。
+2. **`LogOnParams` 的线上布局是 `flags | username | password | encryptionKey | [digest] | nonce`**，其中每个 `BW::string` 占 **1 字节 packed length + 载荷**（`appendString`，<255 的串前缀恒 1 字节），故 35 字节的完整消息 = 1 + (1+4) + (1+4) + (1+3) + 16 + 4。摘要分支由**写侧 flags 参数**而非对象自身状态决定（`PASS_THRU=0xFF` 时才回落到 `flags_`）。
 
-1. **`MemoryOStream::retrieve(n)` 是破坏式的**（推进 `pRead_`），且 `MemoryIStream(const void*, int)` 只借指针不拥有；跨函数返回流时必须把字节复制到堆缓冲并让返回的对象持有它。
-2. **`BW::string` 序列化带 packed-length 前缀**（<255 时 1 字节），不能用 `strlen` 之和直接算线上字节数。
-3. **`FilterHelper` 的五个方法与 `FilterEnvironment` 的四个虚函数均为 `protected`**——测试子类需提供公有包装才能从 `TEST` 宏调用；`FilterHelper` 构造器亦为 `protected`（类是抽象的）。
-4. **`MD5::Digest::NUM_BYTES` 与 `LogOnParams::HAS_ALL` 是类内 `static const` 整型成员**——`CHECK_EQUAL` ODR-use 它们会导致链接期 undefined reference；解法是复制到局部变量再比较。
-5. **`Direction3D(Vector3)` 构造函数把 `v[0]→roll, v[1]→pitch, v[2]→yaw`**（与 `Vector3` 的 xyz 不同序），断言 yaw 要用 `.yaw` 不是 `.z`。
+方法论（本批新增的 C++ 测试基础设施陷阱，共四条）：
 
-验收：`network_test` 新增 7 用例全绿；全量 21 模块单元测试 986 用例全绿（`There were no test failures` × 21，无 `result [1-9]`）；`unit_test_network` 构建零警告。
+1. **`MemoryIStream` 只借指针，`MemoryOStream::retrieve()` 又是破坏式的**（推进 `pRead_`）——于是"helper 里 `return new MemoryIStream( localOStream.retrieve( n ), n )`"是双重陷阱：helper 一返回局部 `MemoryOStream` 就析构，缓冲随即悬垂；而在同一个输出流上第二次 `retrieve()` 拿到的是已耗尽的流（表现为"字符串读出来是空的"，而不是崩溃）。对策两条：需要跨函数持有时把字节 `new char[n]` 拷出、用一个持有 `delete[]` 的 `MemoryIStream` 子类包住（本批两个文件的 `OwnedIStream`）；同一段字节要既比较又建流，就先取一次指针存进局部变量复用。这条坑的迷惑性在于**失败表现是"值不对"而非崩溃**，`CHECK` 报错完全指不到根因。
+2. **CppUnitLite2 的 `CHECK_EQUAL` 会 ODR-use 类内 `static const` 整型常量**，若该常量没有类外定义就链接失败（`LogOnParams::HAS_ALL`、`MD5::Digest::NUM_BYTES` 都是 `enum`/整型常量且无 out-of-line definition）；`CHECK_EQUAL( const char*, const char*)` 同样比指针。两条都靠"先拷进局部变量再断言"绕开（`const int HAS_ALL = LogOnParams::HAS_ALL;`），已在两个新测试文件里各留注释。
+3. 待测类若把转发面设成 `protected`（`FilterHelper` 五个方法全是，真实 filter 在 `input()/output()` 内部调用），测试子类要补 public 包装再转发——这正好顺带验证"protected 只影响可见性、不影响派发"；`FilterHelper` 构造器同为 `protected`（类是抽象的），子类化是唯一入口。
+4. **`Direction3D( const Vector3 & )` 的分量映射与 `Vector3` 不同序**：`v[0]→roll`、`v[1]→pitch`、`v[2]→yaw`，所以断言构造结果要读 `.yaw` 而不是 `.z`。
 
-提交范围：`programming/bigworld/lib/network/unit_test/test_log_on_params.cpp`、`test_data_download.cpp`、`test_filter_helper.cpp`、`Makefile.rules`、`CMakeLists.txt`、本文档。`test_pickler.cpp` 保持 untracked 不入库。
+提交范围：`test_log_on_params.cpp`、`test_data_download.cpp`、`test_filter_helper.cpp`、`unit_test/Makefile.rules`、`unit_test/CMakeLists.txt`（三个文件同批登记进两处构建描述，`nm` 确认 7 个用例符号确实编进二进制）、本文档。`test_pickler.cpp` 继续保持 untracked 不入库。
+
+下一批候选（同样零引用、行数适中、Linux 构建可测）：`movement_filter.cpp`（124）、`login_request_protocol.cpp`（93）、`login_challenge_task.cpp`（81）、`replay_checksum_scheme.cpp`（37）。`replay_data_file_reader.cpp`（1166）、`login_handler.cpp`（653）、`smart_server_connection.cpp`（362）体量大且依赖 res 树/真实连接，可测性需另行评估。
