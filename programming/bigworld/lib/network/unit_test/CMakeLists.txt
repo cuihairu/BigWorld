@@ -9,6 +9,7 @@ SET( ALL_SRCS
 	main.cpp
 	pch.cpp
 	pch.hpp
+	test_avatar_filter_helper.cpp
 	test_channel.cpp
 	test_channel_interfaces.hpp
 	test_data_download.cpp

@@ -8,6 +8,7 @@ cxxSource =							\
 	common_interface				\
 	packet_generator				\
 	test_auto_switch				\
+	test_avatar_filter_helper		\
 	test_baseapp_death				\
 	test_channel					\
 	test_channel_version			\
