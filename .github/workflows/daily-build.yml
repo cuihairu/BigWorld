@@ -60,6 +60,12 @@ jobs:
           git clone --depth 1 https://github.com/microsoft/vcpkg.git "$HOME/vcpkg"
           "$HOME/vcpkg/bootstrap-vcpkg.sh" -disableMetrics
           echo "VCPKG_ROOT=$HOME/vcpkg" >> "$GITHUB_ENV"
+          # The embedded CPython stdlib is only installed into game/ when this
+          # flag is set (third_party_python.mak gates python_install on it;
+          # nothing in the makefiles defaults it). Without it the build passes
+          # but python-embedding unit tests die with
+          # "No module named 'encodings'" — second run failure.
+          echo "user_shouldInstallPython=1" >> "$GITHUB_ENV"
 
       - name: Build (third party + all components)
         working-directory: programming
