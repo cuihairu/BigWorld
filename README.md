@@ -1,6 +1,8 @@
-![BigWorld for everyone](logo.svg)
+<p align="center">
+  <img src="logo.svg" alt="BigWorld logo" width="120" />
+</p>
 
-# BigWorld (TM) Open-Source Edition
+<h1 align="center">BigWorld (TM) Open-Source Edition</h1>
 
 This repository contains BigWorld Open-Source Edition (OSE) that is comprised of server, 
 client and tools components which are used together to build massively multiplayer games 
