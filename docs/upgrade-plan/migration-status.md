@@ -13,9 +13,9 @@
 | 事项 | 状态 | 说明 |
 |------|------|------|
 | 嵌入式解释器 | ✅ Python 2.7 → **3.13** | 已完成并合入 dev 分支；版本从规划期的 3.12 随依赖链上调至 3.13 |
-| 全量单测门禁 | ✅ 21 模块 / 1113 用例全绿 | 2026-09-28 实测（批次18 后；network_test 193 → 207） |
-| 覆盖率补强工程 | ✅ 批次 1–18 已完成 | 批次18 首次建立全量插桩实跑基线（gcovr 8.6，496 个 .gcda） |
-| 下批首位候选 | ⏳ `physics2/bsp.cpp` | 778 可执行行、0%，BSP 树构建/查询疑似纯几何可测（待通读判定） |
+| 全量单测门禁 | ✅ 21 模块 / 1127 用例全绿 | 2026-09-28 实测（批次19 后；physics2_test 6 → 20） |
+| 覆盖率补强工程 | ✅ 批次 1–19 已完成 | 批次19 收口 `bsp.cpp` 死门；缺口 top 清单落 [TESTING.md](../../TESTING.md) |
+| 下批首位候选 | ⏳ `physics2/quad_tree.ipp` | 299 可执行行、0%，BSP 邻接面、纯几何、依赖面同 bsp.cpp |
 
 </div>
 
@@ -27,23 +27,23 @@ gcovr 全量聚合值。客户端大件（moo / physics2 / server / chunk）接�
 
 | 模块 | 覆盖率 | 解读 |
 |------|--------|------|
-| script | 91% | 脚本抽象层，覆盖率最高的模块（批次1 起主攻） |
-| pyscript | 67% | 嵌入解释器封装，批次4–9 六连批收口 |
-| math | 67% | 几何与数学工具 |
-| network | 65% | Mercury 网络层，批次10–18 主攻区 |
-| resmgr | 57% | 资源管理器 |
-| cstdmf | 50% | 基础设施（调试、内存、流） |
-| entitydef | 42% | 类型契约；装载机依赖重 |
+| script | 92% | 脚本抽象层，覆盖率最高的模块（批次1 起主攻） |
+| math | 68% | 几何与数学工具 |
+| pyscript | 68% | 嵌入解释器封装，批次4–9 六连批收口 |
+| network | 66% | Mercury 网络层，批次10–18 主攻区 |
+| resmgr | 58% | 资源管理器 |
+| cstdmf | 51% | 基础设施（调试、内存、流） |
+| entitydef | 43% | 类型契约；装载机依赖重 |
 | terrain | 34% | 地形（含 gcovr 记录异常项，见台账批次18） |
 | connection | 24% | 服务端连接面；`server_connection.cpp`（990 行 0%）维持不可测登记拖底 |
 | moo | 13% | 客户端渲染支撑，服务端单测不触 |
-| physics2 | 12% | 客户端物理；`bsp.cpp` 为下批首位候选 |
-| server | 12% | 服务端骨架，需完整 app 装配 |
+| physics2 | **61%** | 客户端物理；批次19 收口 `bsp.cpp` 死门（12% → 61%，+49pp） |
+| server | 13% | 服务端骨架，需完整 app 装配 |
 | chunk | 3% | 客户端 chunk 体系，需 ChunkSpace 装载机 |
 
 </div>
 
-文件级亮点：`network/tcp_bundle.cpp` 达 100%（批次16 收口）；`network/machine_guard.cpp` 28%（bwmachined 面不可达，批次17 登记）；批次18 派测的 `event_poller.cpp` 45% → 57%（其余缺口为 Linux 死代码的 SelectPoller/PollPoller，175 行结构性登记）。
+文件级亮点：`physics2/bsp.cpp` 0% → 91%（批次19 死门激活）；`network/tcp_bundle.cpp` 达 100%（批次16 收口）；`network/machine_guard.cpp` 28%（bwmachined 面不可达，批次17 登记）；批次18 派测的 `event_poller.cpp` 45% → 57%（其余缺口为 Linux 死代码的 SelectPoller/PollPoller，175 行结构性登记）。
 
 ## 批次时间线
 
@@ -61,10 +61,11 @@ gcovr 全量聚合值。客户端大件（moo / physics2 / server / chunk）接�
 | 16 | 2026-09-27 | tcp_bundle 线格式整层 |
 | 17 | 2026-09-27 | machine_guard MGM 编解码面 |
 | 18 | 2026-09-28 | 全量覆盖率实跑基线 + event_poller 轮询器面 |
+| 19 | 2026-09-28 | bsp.cpp 死门激活（MF_SERVER 守卫移除 + 14 用例） |
 
 </div>
 
-用例总量演进：批次14 后 1061 → 批次15 后 1071 → 批次16 后 1083 → 批次17 后 1099 → 批次18 后 **1113**（全量 21 模块门禁全绿）。
+用例总量演进：批次14 后 1061 → 批次15 后 1071 → 批次16 后 1083 → 批次17 后 1099 → 批次18 后 1113 → 批次19 后 **1127**（全量 21 模块门禁全绿）。
 
 ## 不可达 / 受限登记摘要
 
@@ -72,7 +73,6 @@ gcovr 全量聚合值。客户端大件（moo / physics2 / server / chunk）接�
 
 - `connection/server_connection.cpp`（990 行）— **维持不可测**：真登录管线 + TCPChannel 状态机（批次14/16 口径）。
 - `connection/message_handlers.hpp`（538 行）— **结构性死代码**：服务端 app 实例化的模板 handler 表，单测无人实例化。
-- `physics2/bsp.cpp`（778 行）— **候选，未派测**，下批首位。
 - `entitydef/entity_description.cpp`（665 行）— 受限：需 EntityType/EntityDef XML 装载机全套。
 - `moo/image.ipp`（589 行）— 受限：客户端图像合成面。
 - `chunk/chunk_space.cpp`（506 行）— 受限：需 ChunkSpace + chunk 装载机。
@@ -80,9 +80,11 @@ gcovr 全量聚合值。客户端大件（moo / physics2 / server / chunk）接�
 - `network/logger_endpoint.cpp` / `logger_message_forwarder.cpp` / `watcher_nub.cpp` — 维持受限登记（真消息日志管线、UDP 绑 machined 标准端口，批次17）。
 - `terrain/terrain2/terrain_height_map2.cpp`（755 行）— gcovr 对该记录丢失文件名列（空名条目），未逐臂判定。
 
+已收口（移出登记）：`physics2/bsp.cpp`（778 行，0% → **91%**，批次19 死门激活；残余 67 行为构造校验/加载错误臂，逐段登记见台账 §7.19）。缺口 top 全清单见 [TESTING.md](../../TESTING.md) TODO 段。
+
 ## 口径与边界
 
-- 覆盖率为 **gcovr 8.6 插桩全量实跑**值（`user_shouldBuildCodeCoverage=1`，21 模块测试全跑完、496 个 .gcda 聚合），不是估算。
+- 覆盖率为 **gcovr 8.6 插桩全量实跑**值（`user_shouldBuildCodeCoverage=1`，21 模块测试全跑完、498 个 .gcda 聚合），不是估算。嵌 Python 三模块的可用前提：树重建后显式 `make python_install`（`bw-run-all-unit-tests` 链路不触发安装，台账 §7.19）。
 - 台账中部分批次的门禁措辞为等效口径：本仓无 ctest、无独立覆盖率门禁脚本，等效标准 = `bw-run-all-unit-tests` 21 模块全绿 + gcovr 聚合成功。
 - 覆盖率数字会随后续批次继续变动，本页与台账同步更新；冲突时以台账为准。
 

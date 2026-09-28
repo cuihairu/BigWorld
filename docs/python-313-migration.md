@@ -551,3 +551,27 @@ cstdmf 334（+12）：`test_ansi_allocator.cpp` +4（allocate/reallocate 保内�
 **门禁记录**：插桩全量 21 模块跑（496 gcda 产出时）全绿；精准插桩单模块 207 绿；最终无桩全量 21 模块门禁结果见提交信息（本批后 network_test 193→207，全量合计 1099+14=1113，以实测为准）。
 
 提交范围：`lib/network/unit_test/test_event_poller.cpp`（新）、`lib/network/unit_test/Makefile.rules` + `CMakeLists.txt`（各 +1 行）、本文档。
+
+### 7.19 覆盖率补强批次 19：bsp.cpp 死门激活 + physics2 面（2026-09-28）
+
+**根因闭环（批次18 首位候选）**：`lib/physics2/bsp.cpp`（778 行）0% 的原因不在物理——`test_bsptree.cpp` 整文件包在 `#ifndef MF_SERVER` 里（上游注释 "unusual linkage issues to be fixed later"），服务端单测二进制里编译为空，3 个休眠用例从未在服务端跑过。核实 bsp.cpp 现依赖面仅 physics2/cstdmf/math/resmgr、`unit_test/Makefile.rules` 的 cxxSource 与 dependsOn 早已挂好 → 判定"链接问题"为上游历史包袱，移除死门即可激活。本批 `test_bsptree.cpp` 完整重写：复活 3 个休眠用例（两个浮点断言按 `-Werror=float-equal` 口径改 `CHECK(closeTo(a,b))` 容差比较——unit_test_lib 无 CHECK_CLOSE）+ 新增 11 个用例，physics2_test 6→20。
+
+**14 个用例的可测面**：构造/查询不变量（单三角形树的 contains/intersects/visitor）、射线未中与 maxDistance 截断、visitor 否决后找到更远命中、三角形重叠查询、**强制分区树**（11 瓦片 >MAX_TRIANGLES_PER_NODE=10 → 根分割；分割面 15 个随机候选导致树形状非确定，断言只基于不变量）、save/load 现行格式往返（含结构尺寸校验头）、坏 magic 拒载、**legacy 三节点树手工 blob**（NodeRecord 逐字段写：u8 flags(0x02 FRONT/0x04 BACK) + PlaneEq(16) + u16 计数与 refs；TriRecord 40 字节静态断言）、空树 save/load、remapFlags 模映射、`notInBsp` 三角形排除、WorldTriangle 扫掠平移。BSP_FILE 版本常量 LEGACY=0/CUR=2/INVALID=0xFF、MAGIC=0x505342。
+
+**prism 扫掠语义陷阱（4 断言失败实录）**：`WorldTriangle::intersects(triangle, offset)` 测的是**扫掠壳边界穿越面**（worldtri.cpp:295-367）：offset 对另三角形面近似平行 → bruteCheck；另三角形三顶点过本面分数 vd 全 <0（面之前）或全 ≥1（面之后）→ 直接 false，部分出界才转 bruteCheck。首轮用"零平移已重叠"与"z 向穿越"几何全判 false——零平移使 `unitVector()` 退化、z 向扫掠方向躺在 mover 自身平面内（prism 体积为零），**containment 式几何按实现就该 false**。修正后用例 5 臂：近距下扫 1 单位（brute 路径命中）、20 单位远穿越、向上 miss、沿树三角形法向 8 单位扫掠（vd∈(0,1) 快路径命中）、法向远离（快路径拒绝）。要义：**offset 必须离开 mover 自身平面且真穿越目标面，非退化 prism**。
+
+**覆盖率复跑（沿用批次18 口径）**：`rm -rf bigworld/build/el7` + `user_shouldBuildCodeCoverage=1` 全量重编 21 模块跑完（498 gcda）+ gcovr 8.6 聚合。**gcc#68080 第二形态首现**：smartpointer.hpp:610 负命中（NegativeHits），批次18 只需 suspicious_hits 容错，本批起两个都要（`--gcov-ignore-parse-errors` 可重复传参）。
+
+**encodings 三连败真根因（跨会话二次踩坑后闭环）**：entitydef/pyscript/script 三模块 "Fatal Python error: Failed to import encodings" 的机制不是环境变量没生效——`env user_shouldInstallPython=1` 确实进了 make（-pn 可见），该变量只把 `python_install` 挂进 `BW_THIRD_PARTY`，而 `python_install` 目标只被 `third-party-libraries`（make all 链 `depsForRuleAll` 成员）引用，**`bw-run-all-unit-tests` 只依赖 `BW_RUN_UNIT_TESTS`（各测试二进制），链接用的 libpython 在构建树、不依赖 game/ 安装副本 → 安装目标在单测链路中永不可达**。树重建后正确操作：显式 `make python_install`（`bwsentinel_postinstall.txt` 幂等哨兵）。已固化进 TESTING.md 测试入口节。
+
+**覆盖率对账（gcovr，补测前→后）**：模块级 physics2 **12%→61%**（2356 行基盘）；文件级 `bsp.cpp` 0%→**91%**（711/778）。bsp.cpp 剩余 67 缺口行分布：:282-424 区（BSPConstructor 内部校验臂，需畸形树输入，结构性登记）、:1297-1319/:1378-1379（版本探测/加载错误臂）、:1581-1596（legacy 子树回溯残余臂）、:1705-1710（remapFlags 未映射值臂）、:1933-1934/:1997-1999（射线遍历边界臂）——均直击成本高或需构造畸形输入，不硬凑。`worldtri.cpp` 85%（156 行；`test_worldtri.cpp` 既有 100%）。新增 `physics2/quad_tree.ipp`（299 行 0%）为下批首位候选：BSP 邻接、纯几何、依赖面同 bsp.cpp。
+
+**缺口 top 清单落点**：任务口径 "落 TESTING/todo 对应段"——仓库根无 TESTING.md，**新建**，含测试入口、覆盖率口径（含 python_install 前置与 gcovr 双容错参数）、模块表、缺口 top 文件清单（22 项，逐项标注状态：不可测/受限/候选）与收口记录。
+
+**并行会话实录（本批第三次）**：插桩树 497 gcda 被并行 `rm -rf` 全灭后，放弃定点补编（混合树 undefined `__gcov_*` 老坑），排干后干净全量重建；重编 test_bsptree.cpp 后旧 gcda checksum 不匹配（"overwriting an existing profile data with a different checksum"）—— checksum 冲突即"必须干净重建"的直接证据。
+
+**假门禁事故（本批新陷阱，入档防复发）**：首轮"无桩门禁"21 绿 exit 0，但对象树核验拆穿——`bsp.o` mtime 仍是插桩轮时间戳且带 323 个 gcov 符号、498 个 gcda 在"无桩"构建后重新出现。根因：后台任务继承会话 cwd，而会话 cwd 已被中途 cd 漂到仓库根（无 Makefile，`make` 在此必报 "No rule"——真实执行路径是从组件子目录起的 make，相对路径 `rm -rf bigworld/build/el7` 打在子目录下静默 no-op），于是"门禁"只是**在原封未动的插桩树上原样重跑测试**。教训两条：① 构建类后台命令必须显式 `cd <绝对路径> && pwd` 自证 + rm 用绝对路径；② **"21 绿 + exit 0" 不等于"门禁跑了"**——门禁后必须核验 `find -name '*.o' -newer <起点标记>` 与对象内 gcov 符号数（无桩应为 0）。
+
+**门禁记录**：插桩轮 18 模块绿（706 用例）+ python_install 补装后 entitydef 18/pyscript 118/script 285 补跑绿，合计 **1127**（1113+14）；无桩全量终局门禁（绝对路径 rm + pwd 自证 + 对象树 gcov 符数核验）结果见提交信息（21 模块全绿为提交前置）。
+
+提交范围：`lib/physics2/unit_test/test_bsptree.cpp`（重写）、`TESTING.md`（新）、`docs/upgrade-plan/migration-status.md`、本文档。
