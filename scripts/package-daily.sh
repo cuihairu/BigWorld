@@ -69,7 +69,6 @@ dpkg-deb --build --root-owner-group "$DEB_DIR" "$OUT_DIR"
 echo "== rpm =="
 RPM_TOP="$STAGE/rpmbuild"
 mkdir -p "$RPM_TOP"/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
-cp -a "$STAGE/pkg/opt" "$RPM_TOP/BUILDROOT-opt"
 cat > "$RPM_TOP/SPECS/bigworld.spec" <<EOF
 Name:           bigworld
 Version:        ${BASE_VER}
@@ -85,8 +84,8 @@ Built from source by the daily-build workflow.
 
 %install
 mkdir -p %{buildroot}/opt/bigworld
-cp -a %{_topdir}/BUILDROOT-opt/bin %{buildroot}/opt/bigworld/bin
-cp -a %{_topdir}/BUILDROOT-opt/res %{buildroot}/opt/bigworld/res
+cp -a %{bwsrc}/bin %{buildroot}/opt/bigworld/bin
+cp -a %{bwsrc}/res %{buildroot}/opt/bigworld/res
 
 %files
 /opt/bigworld
@@ -94,6 +93,7 @@ EOF
 rpmbuild -bb \
 	--define "_topdir $RPM_TOP" \
 	--define "dist %{nil}" \
+	--define "bwsrc $PKG_STAGE" \
 	"$RPM_TOP/SPECS/bigworld.spec"
 mv "$RPM_TOP"/RPMS/x86_64/*.rpm "$OUT_DIR/"
 
