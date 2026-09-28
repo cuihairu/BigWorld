@@ -24,6 +24,9 @@ programming/bigworld/lib/resmgr/unit_test/res/delete_*_result.*
 programming/bigworld/lib/resmgr/unit_test/res/dup_child_test_save.zip
 programming/bigworld/lib/resmgr/unit_test/res/xmldataresource.xml
 programming/bigworld/lib/resmgr/unit_test/xmldataresource.xml
+# 同名生成物落在过测试运行时 CWD 的其他目录（build/make、network 单测）
+programming/bigworld/build/make/xmldataresource.xml
+programming/bigworld/lib/network/unit_test/xmldataresource.xml
 programming/bigworld/lib/resmgr/unit_test/res/test_path/**/test_create*.zip
 programming/bigworld/lib/resmgr/unit_test/res/test_path/**/test_delete*.zip
 programming/bigworld/lib/resmgr/unit_test/res/test_path/**/test_tag*.zip
