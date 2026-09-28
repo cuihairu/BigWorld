@@ -38,8 +38,14 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             build-essential gcc-14 g++-14 rpm dpkg-dev \
             libreadline-dev libncurses-dev libbz2-dev libsqlite3-dev \
-            libgdbm-dev libmysqlclient-dev libffi-dev uuid-dev \
+            libgdbm-dev libgdbm-compat-dev liblzma-dev tk-dev \
+            libmysqlclient-dev libffi-dev uuid-dev \
             xz-utils file
+          # liblzma/libgdbm-compat/tk headers are load-bearing: the python
+          # build sentinel (third_party_python.mak) checks every module in
+          # pythonSharedMods exists as a built .so, and _lzma silently drops
+          # out of the CPython build without liblzma-dev (first run failed on
+          # exactly that: "3 missing" -> bwsentinel.txt Error 1).
           # The mak chain invokes g++ directly; point it at gcc-14 for C++23.
           sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-14 200 \
             --slave /usr/bin/g++ g++ /usr/bin/g++-14
