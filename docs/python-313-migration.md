@@ -511,3 +511,43 @@ cstdmf 334（+12）：`test_ansi_allocator.cpp` +4（allocate/reallocate 保内�
 **覆盖率注记**：同前批口径，未跑插桩。MGMPacket 全方法（read/write/append/shouldStaggerReply/hasError/dtor/setBuddy）+ MachineGuardMessage 基类流读写/refreshSeq/create 两入口/typeStr/c_str + QueryInterface/Process/ErrorMessage 与 UnknownMessage 的 impl/extra 臂由 16 用例直接覆盖；登记不可测臂：create 截断回退（retrieve 断言 abort 在先）、readExtra 恶意 extraData、sendto/sendAndRecv 真网络臂、machined 进程管理面。用例数：network_test 177→193（实测 "193 tests run" 无失败）；全量 21 模块实测合计见提交信息（批次16 实测 1083 + 16 = 1099）。
 
 提交范围：`lib/network/unit_test/test_machine_guard.cpp`（新）、`lib/network/unit_test/Makefile.rules` + `CMakeLists.txt`、本文档。
+
+### 7.18 覆盖率补强批次 18：全量覆盖率实跑 + event_poller 轮询器面（2026-09-28）
+
+**本批首次实跑插桩覆盖率**（此前批次注记均为"未跑插桩"）：`user_shouldBuildCodeCoverage=1` 强制 `rm -rf obj` 全量重编 21 模块测试并跑完（496 个 .gcda），gcovr 8.6 聚合。任务模板中"ctest 全绿、覆盖率门禁 RC=0"为模板化措辞——本仓无 ctest、无独立覆盖率门禁脚本；等效口径 = `bw-run-all-unit-tests` 21 模块全绿（RC=0）+ gcovr 聚合成功（RC=0），两者均实测达成。
+
+**lib/ 模块级覆盖率基线（插桩全量跑，gcovr）**：network 65%、pyscript 67%、script 91%、math 67%、resmgr 57%、cstdmf 50%、entitydef 42%、connection 24%、terrain 34%、moo 13%、physics2 12%、server 12%、chunk 3%（客户端大件近零：单测宿主是服务端构建，chunk/moo/physics2/server 的执行路径基本不在 21 个单测里）。tcp_bundle.cpp 100%（批次16 收口）、machine_guard.cpp 28%（bwmachined 面不可达，批次17 登记）。
+
+**lib/ 0% 大文件判定表（行数=可执行行，按缺口排）**：
+
+- `connection/server_connection.cpp`（990L，0%）：**维持不可测登记**（批次14/16 口径：真登录管线 + TCPChannel 状态机）。
+- `physics2/bsp.cpp`（778L，0%）：**候选，未派测**。BSP 树构建/查询疑似纯几何可测，本批按台账序列派 event_poller，留作下批首位候选（判定做实需通读 778 行）。
+- `entitydef/entity_description.cpp`（665L，0%）：受限。需 EntityType/EntityDef XML 装载机全套。
+- `moo/image.ipp`（589L，0%）：受限。客户端图像合成面，服务端单测不触 moo 运行时。
+- `connection/message_handlers.hpp`（538L，0%）：结构性死代码（服务端 app 实例化的模板 handler 表，单测无人实例化）。
+- `chunk/chunk_space.cpp`（506L，0%）：受限。需 ChunkSpace + chunk 装载机。
+- `connection/replay_controller.cpp`（495L，0%）：受限。录像/回放文件管线（replay_metadata 线格式已批次12 测）。
+- `network/logger_endpoint.cpp`（398L）/`logger_message_forwarder.cpp`（335L）：**维持受限登记**（批次17：真消息日志管线）。
+- `network/watcher_nub.cpp`（248L）：**维持受限登记**（批次17：UDP 绑 machined 标准端口）。
+- `terrain/terrain2/terrain_height_map2.cpp`（755L，0%）：terrain 近零区成员；gcovr 对该记录丢失文件名列（空名条目），按字母序邻居归属，未逐臂判定。
+
+**派测 `event_poller.cpp`（台账批次17 既定下批候选；基线 45%，257 可执行行）**：三个具体 Poller（SelectPoller :296/PollPoller :685/EPoller :998）全在 .cpp 内，测试只能经 `EventPoller::create()` 工厂 + 基类接口；Linux（HAS_EPOLL）→ EPoller。双通道策略：StubPoller 探针子类（public 转发 protected 面）测基类机制，create() 真 EPoller + pipe() 驱动平台行为。
+
+**新增 `test_event_poller.cpp`（14 用例，network_test 193→207）**：`EventPoller_registerMapsTrackDoRegisterResult`（doRegister 失败不落 map——源码实证先 doRegister 后 `fdReadHandlers_[fd]=`）、`_maxFDAcrossMaps`（跨读/写两表，空→-1）、`_triggersDispatchToRegisteredHandler`、`_triggerErrorArms`（读 handler 优先认领→不回退；不认领→回退 input 且 triggerError 仍返 true；仅写 handler 时错误路由到写；无 handler→false）、`_isReadyForShutdownConjunction`（全注册 handler 就绪合取）、`_selfHandlerRunsPollPass`（EventPoller 自身是 InputNotificationHandler：handleInputNotification→processPendingEvents(0) 返 0；getFileDescriptor 基类默认 -1）、`_inputHandlerEntryTriggerCounting`（各 10 万次输入/错误触发过 INFORM_COUNT=100000 INFO 臂）、`_createReturnsUsablePoller`（EPoller epfd≥0）、`_pollDispatchesReadEvent`（写 1 字节→epoll_wait(0) 返 1→排空后返 0）、`_pollDispatchesWriteEvent`（pipe 写端恒可写）、`_bothDirectionsAndSelectiveRemoval`（同 fd 读+写=EPOLL_CTL_MOD；摘读兴趣后数据不再上报）、`_epollDeregisterUnknownFdFails`（epoll_ctl 失败臂）、`_epollRegisterBadFdFails`（非 ENOENT→ERROR 臂+不落 map）、`_pollHangupRoutesToErrorHandler`（关写端→EPOLLHUP→triggerError：未认领错误回退 input，errorCalls=inputCalls=1）。
+
+**覆盖率对账（gcovr，补测前→后）**：event_poller.cpp 45%→**57%**（116→147 行），event_poller.hpp 68%→**85%**。after 快照口径：精准插桩（仅重编 event_poller 两个 TU，混合树重链）单跑 network_test 一轮——before 的 45% 来自全量 21 模块跑，故 after 略保守。剩余缺口逐臂登记：**:302-670（175 行）SelectPoller/PollPoller = Linux 构建死代码**（create() 只实例化 EPoller，两类不可达，结构性登记）；:1098 ENOENT→WARNING 臂（两个失败用例实测走的都是 EBADF→ERROR 臂：fd 9999 未打开得 EBADF，fd -1 得 EINVAL/EBADF——ENOENT 需"已打开但未注册"的 fd，下批一行可补）；:1037-1038 EPoller::doDeregisterForWrite 包装行（基类层已由 StubPoller 测）；hpp :71-83 访问器 6 行（调用实测在跑但 gcov 归属被内联吞并的怪癖）；:67,69,96 琐碎残留。
+
+**陷阱新增（本批实录）**：
+
+1. **lib/network 的接口类在 `Mercury::` 命名空间而非 BW**（event_poller.hpp/interfaces.hpp 自带 namespace Mercury）——测试文件 BW_BEGIN_NAMESPACE 内裸写 `InputNotificationHandler` 编译失败，必须 `Mercury::` 限定。
+2. **`using Base::f;` 会把 private 同名重载一并拖进作用域**：EventPoller::maxFD 有 protected 实例版 + private static `maxFD(const FDHandlers&)`，public 段 using 声明直接编译错；改派生类转发方法（`exposedMaxFD()`）靠重载解析只选中实例版。
+3. **本构建对 `warn_unused_result` 开 -Werror**：`pipe()` 返回值必须检查，否则 cc1plus 直接拒绝。
+4. **管道 fd 默认阻塞：`while (read(...) > 0) {}` 排空循环在写端未关时永久挂死**（读空后 read 阻塞等数据而非返 0）——首轮跑 207 卡死在 anon_pipe_read 即此因；明确只写了 N 字节就单次 read(N)。症状取证：ps wchan=anon_pipe_read + CPU TIME 停涨。
+5. **epoll 默认水平触发：注册读事件后再次 poll 前必须排空数据**，否则事件重复上报（并行会话代修的一处，正确采纳）。
+6. gcovr 8.6 实操：`--txt-summarized` 不存在（用 `--txt`）；`-r` 必须指源码根且对象树在根下（`-r obj目录` 会把 lib/ 源全过滤成 "All coverage data is filtered out"）；gcc#68080 可疑命中需 `--gcov-ignore-parse-errors suspicious_hits.warn_once_per_file`（bit_reader/bit_writer/memory_stream.ipp 热点行触发）。
+7. **精准插桩法**（对象树被并行重建为无桩后的 after 快照手段）：`rm` 指定 .o → 带 `user_shouldBuildCodeCoverage=1` 重编→只有缺失 TU 拿到 -fprofile-arcs，混合树重链可跑可出 gcda；跑完删桩重编恢复无桩。
+8. **并行会话三连击实录**：① 插桩 gcda 全被其 `rm -rf obj` 清掉（496 个）；② 两份构建清单各被复制入一行重复 `test_machine_guard` 条目（make 变量重复项无害但污染 diff）；③ 批次17 的 test_machine_guard.cpp 被重写为 readNBO16/32"网络字节序"helper——**该端序模型正是批次16 用 25 个失败证伪的**（BW 线序=小端，binary_stream.ipp:100-103），按"破坏性残留还原"预案 `git checkout HEAD` 还原并清除重复行，不纳入本批提交。
+
+**门禁记录**：插桩全量 21 模块跑（496 gcda 产出时）全绿；精准插桩单模块 207 绿；最终无桩全量 21 模块门禁结果见提交信息（本批后 network_test 193→207，全量合计 1099+14=1113，以实测为准）。
+
+提交范围：`lib/network/unit_test/test_event_poller.cpp`（新）、`lib/network/unit_test/Makefile.rules` + `CMakeLists.txt`（各 +1 行）、本文档。

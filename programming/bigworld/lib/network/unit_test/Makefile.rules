@@ -18,6 +18,7 @@ cxxSource =							\
 	test_exposed_message_range		\
 	test_elliptic_curve 			\
 	test_encryption_filter			\
+	test_event_poller				\
 	test_file_stream				\
 	test_filter_helper				\
 	test_flood						\
