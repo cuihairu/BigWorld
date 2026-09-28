@@ -343,7 +343,11 @@ TEST_F( PyScriptUnitTestHarness, PyTraceback_blockedRead_registersWithDispatcher
 	Script::initExceptionHook( &dispatcher );
 	ScopedStderrCapture capture;
 
-	const char * pFifoPath = "/tmp/opencode/pyscript_py_traceback_fifo.py";
+	// /tmp root, not a subdirectory: the subdirectory is not guaranteed to
+	// exist on a clean machine (the daily-build runner failed this test with
+	// mkfifo ENOENT because the path had been baked in from a local scratch
+	// directory).
+	const char * pFifoPath = "/tmp/pyscript_py_traceback_fifo.py";
 	unlink( pFifoPath );
 	if (mkfifo( pFifoPath, 0600 ) != 0)
 	{
