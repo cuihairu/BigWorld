@@ -2,14 +2,16 @@
 
 ## 构建入口
 
-BigWorld 同时保留 Make、CMake、批处理脚本和容器脚本。源码分析时不要把这些入口理解成互相等价，它们服务的平台和目标不同。
+BigWorld 同时保留 Make、vcpkg、CMake、批处理脚本和容器脚本。源码分析时不要把这些入口理解成互相等价，它们服务的平台和目标不同。
 
 | 入口 | 代表路径 | 主要用途 |
 |---|---|---|
-| Make | `programming/Makefile`, `programming/bigworld/build/make/Makefile` | Linux 服务端和部分第三方库构建 |
+| Make | `programming/Makefile`, `programming/bigworld/build/make/Makefile` | Linux 服务端主构建链（已现代化为 C++23 口径），含嵌入式 CPython 3.13 与 21 模块单测 |
+| vcpkg | manifest `programming/bigworld/vcpkg.json`，构建时设 `VCPKG_ROOT` 指向官方 vcpkg | 第三方依赖（openssl/curl/jsoncpp/zlib 等）在 make 过程中自动物化 |
 | CMake | `programming/bigworld/CMakeLists.txt`, `programming/bigworld/build/cmake/` | Windows/IDE 工程生成和跨平台工程描述 |
 | 批处理脚本 | `programming/bigworld/build/*.bat` | Windows 构建辅助 |
-| Docker | `programming/bigworld/build/docker/Dockerfile` | 固定 Linux 构建环境 |
+| Docker | `programming/bigworld/build/docker/Dockerfile` | 遗产入口——centos:7 已于 2024-06 EOL，其 gcc 4.8 无法承载 C++23；干净构建环境改由每日构建工作流承担 |
+| GitHub Actions | `.github/workflows/daily-build.yml` + `scripts/package-daily.sh` | ubuntu-24.04 + gcc-14：全量构建 → 21 模块单测门禁 → tar/deb/rpm 三格式产物（详见[打包与每日构建](/upgrade-plan/packaging-and-daily-build)） |
 
 构建体系本身不是架构核心，但它决定哪些服务进程、库和工具会被编译到同一个运行闭环中。
 
@@ -21,7 +23,7 @@ Linux 构建主入口是：
 make -C programming
 ```
 
-入口会进入 `programming/bigworld/build/make/Makefile`，再按平台配置、目标类型和模块 Makefile 组织构建。
+入口会进入 `programming/bigworld/build/make/Makefile`，再按平台配置、目标类型和模块 Makefile 组织构建。现代化后的口径是 C++23 + gcc-14 级编译器；首次全量构建需设 `VCPKG_ROOT` 指向官方 vcpkg，manifest 模式会在 make 过程中自动物化第三方依赖。
 
 重点源码和配置：
 
@@ -30,10 +32,18 @@ make -C programming
 | `programming/Makefile` | 顶层转发入口 |
 | `programming/bigworld/build/make/Makefile` | BigWorld Make 构建主控 |
 | `programming/bigworld/build/make/platform_*.mak` | 平台差异和编译参数 |
+| `programming/bigworld/build/make/third_party_python.mak` | 嵌入式 CPython 3.13 构建、标准库安装与共享模块哨兵 |
 | `programming/bigworld/server/*/Makefile.rules` | 服务端进程输出目录和源文件规则 |
 | `programming/bigworld/lib/*/Makefile.rules` | 共享库构建规则 |
 
-服务端二进制通常输出到 `game/bin/server/<platform>`。源码分析运行问题时，需要同时看构建产物位置、资源路径和配置文件加载路径。
+服务端二进制输出到 `game/bin/server/el7/`。平台探测（`platform_info.py`）把无 `/etc/redhat-release` 的 Debian 系主机也映射为 `el7` 工具链配置——`el7` 是历史命名，不代表运行环境要求。
+
+嵌入式 Python 构建有两个容易踩中的暗门：
+
+- `python_install`（把 CPython 标准库装入 `game/`）受 `user_shouldInstallPython=1` 门控，全构建系统无默认值——不设则标准库不安装，嵌 Python 程序启动即死于 `No module named 'encodings'`；
+- `bwsentinel` 对约 60 个 Python 共享扩展逐一做存在性检查：缺系统 dev 头文件（如 `liblzma-dev`）时 CPython 会静默少编模块而不报错，由哨兵兜底断言。
+
+源码分析运行问题时，需要同时看构建产物位置、资源路径和配置文件加载路径。
 
 ## CMake 工程链
 
@@ -125,6 +135,14 @@ EntityDef、脚本和部分第三方运行时内容都通过资源路径参与�
 | 服务端测试 | `server/baseapp/unit_test/`, `server/cellapp/unit_test/` | BaseApp/CellApp 局部行为 |
 | DB 测试 | `server/dbapp/unit_test/`, `lib/db/unit_test/` | DB interface 和部分 DB 行为 |
 | 通用测试框架 | `lib/unit_test_lib/` | 单测宏、多进程测试辅助 |
+
+全量门禁入口是 make 目标（需 `VCPKG_ROOT`）：
+
+```sh
+env VCPKG_ROOT=<vcpkg> make -C programming bw-run-all-unit-tests
+```
+
+当前基线为 **21 个模块、1113 个用例**，二进制在 `game/bin/server/el7/unit_tests/` 下、从各模块源码 `unit_test/` 目录用全路径执行；每日构建工作流在干净环境以同一口径执行。
 
 验证某个架构判断时，优先找对应单测。若没有测试，应在文档中标记为“源码推断”而不是“已验证行为”。
 
