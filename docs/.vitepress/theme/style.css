@@ -63,6 +63,22 @@
   color: var(--bw-clay);
 }
 
+.bw-brand-mark {
+  display: flex;
+  justify-content: center;
+  margin: 6px 0 18px;
+}
+
+.bw-brand-mark img {
+  padding: 13px;
+  border: 1px solid var(--bw-line);
+  border-radius: 26px;
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.7), transparent 60%),
+    var(--bw-paper);
+  box-shadow: 0 12px 30px rgba(44, 34, 16, 0.14);
+}
+
 .evidence-grid,
 .decision-grid,
 .topology-grid {
@@ -137,6 +153,7 @@
   padding: 12px 14px;
   text-align: left;
   vertical-align: top;
+  font-variant-numeric: tabular-nums;
 }
 
 .decision-table th {
@@ -217,6 +234,12 @@
   .arch-hero {
     padding: 20px;
     border-radius: 22px;
+  }
+
+  .bw-brand-mark img {
+    width: 84px;
+    height: 84px;
+    padding: 10px;
   }
 
   .flow-arrow {

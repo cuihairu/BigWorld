@@ -1,3 +1,19 @@
+// The migration ledger lives at the repo-docs root (/python-313-migration), so
+// the same group is mounted under both route prefixes to keep one sidebar.
+const upgradePlanSidebar = [
+  {
+    text: "迁移工程",
+    items: [
+      { text: "迁移与覆盖率现状", link: "/upgrade-plan/migration-status" },
+      { text: "Python 升级路线图", link: "/upgrade-plan/python-upgrade-plan" },
+      { text: "Python C API 迁移", link: "/upgrade-plan/python-c-api-guide" },
+      { text: "第三方依赖升级", link: "/upgrade-plan/third-party-deps" },
+      { text: "构建系统现代化", link: "/upgrade-plan/build-system-modernization" },
+      { text: "Python 3.13 迁移全量台账", link: "/python-313-migration" }
+    ]
+  }
+]
+
 export default {
   lang: "zh-CN",
   title: "BigWorld 引擎架构研究",
@@ -5,6 +21,11 @@ export default {
   base: "/BigWorld/",
   cleanUrls: false,
   lastUpdated: true,
+  // VitePress does not apply `base` to head entries; the project-site base is
+  // pinned below so the favicon resolves on GitHub Pages (/BigWorld/).
+  head: [
+    ["link", { rel: "icon", type: "image/svg+xml", href: "/BigWorld/logo.svg" }]
+  ],
   ignoreDeadLinks: [
     /^\/home\/cui\/workspaces\/BigWorld\//
   ],
@@ -27,7 +48,8 @@ export default {
       { text: "总览", link: "/" },
       { text: "快速开始", link: "/getting-started/" },
       { text: "架构研究", link: "/architecture/research-method" },
-      { text: "项目分析", link: "/analysis/overview" }
+      { text: "项目分析", link: "/analysis/overview" },
+      { text: "迁移工程", link: "/upgrade-plan/migration-status" }
     ],
     sidebar: {
       "/getting-started/": [
@@ -125,17 +147,8 @@ export default {
           ]
         }
       ],
-      "/upgrade-plan/": [
-        {
-          text: "升级计划",
-          items: [
-            { text: "Python 升级路线图", link: "/upgrade-plan/python-upgrade-plan" },
-            { text: "Python C API 迁移", link: "/upgrade-plan/python-c-api-guide" },
-            { text: "第三方依赖升级", link: "/upgrade-plan/third-party-deps" },
-            { text: "构建系统现代化", link: "/upgrade-plan/build-system-modernization" }
-          ]
-        }
-      ],
+      "/upgrade-plan/": upgradePlanSidebar,
+      "/python-313-migration": upgradePlanSidebar,
       "/references/": [
         {
           text: "参考资料",
