@@ -59,10 +59,22 @@
 
 </div>
 
-### 验证口径
+### 验证口径（2026-09-28 dev 分支全链打通）
 
-- `scripts/package-daily.sh` 已在本机实跑验证（tar.gz 与 deb 实际产出并检查了内容；本机无 `rpmbuild`，rpm 分支经检查 + CI 首跑验证）。
-- workflow 首跑依赖合并到 main 后的首次调度，或任意分支手动 `workflow_dispatch`——在此之前其正确性是**检查级**而非**运行级**，首个运行日志应重点核对 gcc-14 与 vcpkg manifest 两步。
+workflow 在 dev 分支经**五轮 `workflow_dispatch` 实跑迭代**后全链贯通（终局 run `36420988341`，39m29s，全部步骤 ✓，1113 用例 CI 门禁全绿）：
+
+<div class="decision-table">
+
+| 轮 | 失败点 | 根因 | 修复 |
+|------|--------|------|------|
+| 1 | Build | runner 缺 `liblzma-dev`，`_lzma` 落出 CPython 模块集，`bwsentinel` 的逐模块存在性检查断裂 | 补 `liblzma-dev` / `libgdbm-compat-dev` / `tk-dev` |
+| 2 | 单测 | `python_install` 被 `user_shouldInstallPython=1` 门控且全构建系统无默认值——标准库从未安装，嵌 Python 测试死于 `No module named 'encodings'` | workflow 注入该环境变量 |
+| 3 | 单测 1 用例 | `test_py_traceback` 硬编码 `/tmp/opencode`（本地会话临时目录），干净机器 `mkfifo ENOENT` | 测试路径挪 `/tmp` 根（`876561a4`） |
+| 4 | Package.rpm | 打包脚本 rpm 段中转拷贝错层寻址（本机无 rpmbuild 恰好从未执行到该行） | `bwsrc` 宏直连暂存树（`f74985bb`） |
+
+</div>
+
+终局产物共 2.5 GB：**tar.gz 1.4G / deb 905M / rpm 169M**（版本 `14.4.1+daily20260928.f74985bb`），以 workflow artifact 交付（保留 14 天）。每日 schedule 自动运行仍需合并到 main 后生效；dev 上保持手动 dispatch。
 
 ### 与覆盖率工程的关系
 
