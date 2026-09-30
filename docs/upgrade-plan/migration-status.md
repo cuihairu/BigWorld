@@ -13,9 +13,9 @@
 | 事项 | 状态 | 说明 |
 |------|------|------|
 | 嵌入式解释器 | ✅ Python 2.7 → **3.13** | 已完成并合入 dev 分支；版本从规划期的 3.12 随依赖链上调至 3.13 |
-| 全量单测门禁 | ✅ 21 模块 / 1151 用例全绿 | 2026-09-30 实测（批次20 后；physics2_test 20 → 44） |
-| 覆盖率补强工程 | ✅ 批次 1–20 已完成 | 批次20 收口 `quad_tree.ipp` 漏列激活；缺口 top 清单落 [TESTING.md](../../TESTING.md) |
-| 下批首位候选 | ⏳ `cstdmf/fixed_sized_allocator.cpp` | 289 可执行行、0%，纯内存分配器不变量、无外部依赖 |
+| 全量单测门禁 | ✅ 21 模块 / 1163 用例全绿 | 2026-09-30 实测（批次21 后；cstdmf_test 334 → 346） |
+| 覆盖率补强工程 | ✅ 批次 1–21 已完成 | 批次21 收口 `fixed_sized_allocator.cpp` 平台宏死测试；缺口 top 清单落 [TESTING.md](../../TESTING.md) |
+| 下批首位候选 | ⏳ `cstdmf/watcher.hpp` | 5471 可执行行缺口、14%，候选（巨型模板 watcher 族，需逐类可测性判定） |
 
 </div>
 
@@ -43,7 +43,7 @@ gcovr 全量聚合值。客户端大件（moo / physics2 / server / chunk）接�
 
 </div>
 
-文件级亮点：`physics2/quad_tree.ipp` 0% → 98%（测试 TU 视角 860/876，批次20 Makefile.rules 漏列修复激活）；`physics2/bsp.cpp` 0% → 91%（批次19 死门激活）；`network/tcp_bundle.cpp` 达 100%（批次16 收口）；`network/machine_guard.cpp` 28%（bwmachined 面不可达，批次17 登记）；批次18 派测的 `event_poller.cpp` 45% → 57%（其余缺口为 Linux 死代码的 SelectPoller/PollPoller，175 行结构性登记）。
+文件级亮点：`cstdmf/fixed_sized_allocator.cpp` 0% → **99%**（286/289，批次21：既有测试组被 `ENABLE_FIXED_SIZED_POOL_ALLOCATOR` 平台宏守卫恒 0，新建 12 用例直驱；残余 3 行为 findPool 排序 shift 死臂）；`physics2/quad_tree.ipp` 0% → 98%（测试 TU 视角 860/876，批次20 Makefile.rules 漏列修复激活）；`physics2/bsp.cpp` 0% → 91%（批次19 死门激活）；`network/tcp_bundle.cpp` 达 100%（批次16 收口）；`network/machine_guard.cpp` 28%（bwmachined 面不可达，批次17 登记）；批次18 派测的 `event_poller.cpp` 45% → 57%（其余缺口为 Linux 死代码的 SelectPoller/PollPoller，175 行结构性登记）。
 
 ## 批次时间线
 
@@ -63,10 +63,11 @@ gcovr 全量聚合值。客户端大件（moo / physics2 / server / chunk）接�
 | 18 | 2026-09-28 | 全量覆盖率实跑基线 + event_poller 轮询器面 |
 | 19 | 2026-09-28 | bsp.cpp 死门激活（MF_SERVER 守卫移除 + 14 用例） |
 | 20 | 2026-09-30 | quad_tree.ipp 激活（Makefile.rules 漏列修复 + 22 用例 + 四死函数登记） |
+| 21 | 2026-09-30 | fixed_sized_allocator 直驱（平台宏死测试实证 + 12 用例，0%→99%） |
 
 </div>
 
-用例总量演进：批次14 后 1061 → 批次15 后 1071 → 批次16 后 1083 → 批次17 后 1099 → 批次18 后 1113 → 批次19 后 1127 → 批次20 后 **1151**（全量 21 模块门禁全绿）。
+用例总量演进：批次14 后 1061 → 批次15 后 1071 → 批次16 后 1083 → 批次17 后 1099 → 批次18 后 1113 → 批次19 后 1127 → 批次20 后 1151 → 批次21 后 **1163**（全量 21 模块门禁全绿）。
 
 ## 不可达 / 受限登记摘要
 
@@ -82,11 +83,11 @@ gcovr 全量聚合值。客户端大件（moo / physics2 / server / chunk）接�
 - `terrain/terrain2/terrain_height_map2.cpp`（755 行）— gcovr 对该记录丢失文件名列（空名条目），未逐臂判定。
 - `physics2/quad_tree.ipp` 死函数族 — **结构性死代码**（批次20 三重取证）：`QuadTree::del`（calculateQTRange 少传 origin_）、`QuadTree::testPoint`（调不存在的 `QuadTreeNode::testPoint`）、`print`/`printQTNode`（`node.elements()` 不存在）、`countAt`（int 实参传 Quad 形参）——从未实例化，一实例化即编译错；生产侧 chunk 的 `pChunkTree_` 是 HullTree，对 ObstacleTree 只用 addToRoot。
 
-已收口（移出登记）：`physics2/quad_tree.ipp`（0% → **98%** 测试 TU 视角，批次20 漏列激活；残余 16 行为断言/日志失败臂 + 上述死函数族）；`physics2/bsp.cpp`（778 行，0% → **91%**，批次19 死门激活；残余 67 行为构造校验/加载错误臂，逐段登记见台账 §7.19）。缺口 top 全清单见 [TESTING.md](../../TESTING.md) TODO 段。
+已收口（移出登记）：`cstdmf/fixed_sized_allocator.cpp`（289 行，0% → **99%**，批次21 平台宏死测试直驱；根因是既有 test_allocate.cpp 两组用例整体被 `ENABLE_FIXED_SIZED_POOL_ALLOCATOR` 守卫、el7 服务端构建恒 0——“有测试却 0%”第三例；残余 3 行为 findPool 排序 shift 结构性死臂，登记 `getNumPoolItemsForSize` 未命中读 `allocSizes_[-1]` 越界隐患，见台账 §7.21）；`physics2/quad_tree.ipp`（0% → **98%** 测试 TU 视角，批次20 漏列激活；残余 16 行为断言/日志失败臂 + 上述死函数族）；`physics2/bsp.cpp`（778 行，0% → **91%**，批次19 死门激活；残余 67 行为构造校验/加载错误臂，逐段登记见台账 §7.19）。缺口 top 全清单见 [TESTING.md](../../TESTING.md) TODO 段。
 
 ## 口径与边界
 
-- 覆盖率为 **gcovr 8.6 插桩全量实跑**值（`user_shouldBuildCodeCoverage=1`，21 模块测试全跑完、498 个 .gcda 聚合），不是估算。嵌 Python 三模块的可用前提：树重建后显式 `make python_install`（`bw-run-all-unit-tests` 链路不触发安装，台账 §7.19）。
+- 覆盖率为 **gcovr 8.6 插桩全量实跑**值（`user_shouldBuildCodeCoverage=1`，21 模块测试全跑完、498 个 .gcda 聚合），不是估算。嵌 Python 三模块的可用前提：树重建后显式 `make python_install`（`bw-run-all-unit-tests` 链路不触发安装，台账 §7.19）。批次21 的 `fixed_sized_allocator.cpp` 文件级数字来自**精准插桩口径**（只重编 cstdmf TU 拿 -fprofile-arcs，普通 .cpp 单 TU 分母与全量一致、精确可比；模板头分母随插桩 TU 集缩放故模块表维持批次18/20 全量插桩值，台账 §7.21）。
 - 台账中部分批次的门禁措辞为等效口径：本仓无 ctest、无独立覆盖率门禁脚本，等效标准 = `bw-run-all-unit-tests` 21 模块全绿 + gcovr 聚合成功。
 - 覆盖率数字会随后续批次继续变动，本页与台账同步更新；冲突时以台账为准。
 

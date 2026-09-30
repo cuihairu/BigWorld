@@ -599,3 +599,23 @@ cstdmf 334（+12）：`test_ansi_allocator.cpp` +4（allocate/reallocate 保内�
 **门禁记录**：插桩轮数据取自并行会话 run#3 全量插桩 run（gcda 全集 499，本会话即时快照聚合成功，EXIT=0）。无桩终局门禁实跑（15:08–15:24，自有日志 `/tmp/pcov20_gate4.log`）：静默探测确认无并发 make 后**无 rm 续跑** 14:04 无桩代——`cd && pwd` 自证 + 抽样对象 gcov 符数 0 + gcda 0 + mtime 代龄四重证据替代 rm 全量（三连败取证与 python 重配见上段）；**GATE_EXIT=0**：21 模块 result 全 0、**1151 用例全绿**（physics2_test **44**、network 207、pyscript 118、script 285），跑后 gcda=0、`test_quadtree.o`/`bsp.o` gcov 符数=0，窗口内无外来 make/configure 介入（inotify 全程监听仅录得本会话 configure 自身的临时文件清理）。
 
 提交范围：`lib/physics2/unit_test/test_quadtree.cpp`、`lib/physics2/unit_test/Makefile.rules`（补列 cxxSource）、`TESTING.md`、`docs/upgrade-plan/migration-status.md`、本文档。
+
+### 7.21 覆盖率补强批次 21：fixed_sized_allocator.cpp 平台宏死测试直驱（2026-09-30）
+
+**根因闭环（"有测试却 0%"第三例，机制不同于漏列/死门）**：`lib/cstdmf/fixed_sized_allocator.cpp`（289 行 0%）的 test_allocate.cpp 里既有两组 FixedSizedAllocator 用例（testFull1/testFull2），却整组包在 `ENABLE_FIXED_SIZED_POOL_ALLOCATOR` 守卫下——config.hpp:123 `defined(_WIN32) || (defined(MF_SERVER) && ENABLE_MEMORY_DEBUG)`，el7 服务端测试构建两臂恒 0，守卫体在单测二进制里编译为空。该宏是内存调试器配套口径（ENABLE_MEMORY_DEBUG 走整套 debug allocator），开宏等于换掉被测对象本身，不取；类本身无条件编入 libcstdmf，故新建 `test_fixed_sized_allocator.cpp` 12 用例直驱，cstdmf_test 334→**346**。
+
+**12 个用例的可测面**：构造（定尺寸表/自动表）与六 accessor 无池臂、空表全查询臂；deallocate(NULL) 早退；超界直落 heap hooks（memorySize/allocationInfo 堆臂，allocFlags_=0）；池分配全链（首池建立 free-block 链、满池 16/16、二池头插、memorySize/allocationInfo 池臂 IF_POOL_ALLOC）；三池链表 relink（中间池 prev/next 双非空臂 → lastFree 消耗至 numFree=0 跳过重链 → 尾池 prevPool_ 非空 nextPool_ 空臂）；池移除三形态（中间/尾/独池 + span 归零 + 重初始）；单项池 firstFree_=null 臂（poolSize==allocSize）；reallocate 五分支（NULL、同档快返 `allocSizes_[newPool]==currentPool->allocSize_`、池→异档 copySize=min(allocSizes_[newPool],size)、池→超界落堆、堆→堆 realloc、堆→池 copySize=min(poolSize,size)，图案 memcmp 校验拷贝量）；autoFindPool 建档（32 建档、48 追加、超 maxPoolSize 堆直通）；池 span 数组倍增与归零塌缩（65 单项池倍增一轮回、全删归零、再分配重初始）；析构释放未还池（三档故意不 deallocate）。
+
+**残余 3 行死臂与源码隐患登记（不硬凑）**：findPool 排序 shift `:755-772`——autoPools 建档路径本身维持单调递增（新档恒大于尾档），`:757` 比较恒 false，`:759-771` swap 体结构性不可达，仅手工构造乱序表可触（现构造只收只读指针，属假设性输入）；残余行 `:760-761,:766` 恰为该臂。另登记 `getNumPoolItemsForSize :641` 未命中即读 `allocSizes_[-1]` 的源码级越界隐患（调用方约定先行 poolExistsForSize，生产面无触发，不修只记）。MF_ASSERT 失败臂（`MF_ASSERT_NOALLOC(numPoolItems > 0)`，poolSize 小于档尺寸即崩 + ENTER_DEBUGGER）不测；STATISTICS/DUMP_ALLOCS/BOUNDS_CHECKING/MEMORY_FILLS 调试宏面本构建不参编。
+
+**测试设计陷阱两处（写码期修正）**：① 析构 `:173` **无条件** `(*free_)(poolSpans_)`——即使从未建池也解引用函数指针，故每个用例必先 `installHeapHooks()`（挂 heapAllocate/heapDeallocate/heapReallocate/heapMemorySize 四钩子），否则空表析构即崩；② **free-list LIFO**——deallocate 头插回收，relink 用例中被回收的 scratch 块会被后续 allocate 再发出，teardown 若按原下标盲 free 即双重释放（两连错修正：回收者经持有变量显式 free，未回收的空闲 scratch 跳过）。
+
+**gate1 断言失败实录**：`test_fixed_sized_allocator.cpp(389): "expected: '2' but was: '1'"`——getFirstPoolNumFreeForSize(32) 断言写成分配前值 64/32=2，漏算"本次分配消耗一格"；修复为 `size_t( 64 / 32 - 1 )`。单 TU 重编复验后 gate2 全绿。
+
+**15:58 代际环境事件（python 污染第二次实证）**：无桩门禁发车前发现对象树 15:58 被并发会话整体清零（残留 53 个 .o，来源会话无进程存活，批次 20 已有同型实录）；续跑构建撞出 `python_install` 三连败——`SIZEOF_VOID_P` undeclared / `long must be 4 or 8` / `Require native threads`，与批次 20 并发 configure 互踩**同签名**。取证 pyconfig.h 全 undef（0 个 define 命中）→ 定向 `rm -rf build/el7/third_party/python` 单进程 `make python_install` 重配（EXIT=0，SIZEOF_LONG 8 / SIZEOF_VOID_P 8 恢复）→ 全树重建 558 TU 约 9 分钟 → 门禁绿。树上"没有 make"≠"没有 configure"教训再次应验。
+
+**覆盖率对账（gcovr，补测前→后）**：文件级 `fixed_sized_allocator.cpp` 0%→**99%**（286/289，残余 :760-761,:766）。本批采用**精准插桩口径**：`rm` cstdmf 对象目录 → `user_shouldBuildCodeCoverage=1` 只重编 cstdmf TU 拿 -fprofile-arcs → 混合树重链 21 个二进制 → 21 模块跑完 93 个 gcda → gcovr 三容错聚合 → 跑完删桩重编恢复。普通 .cpp 单 TU 编译，文件级分母两代一致、与全量插桩**精确可比**；模块级不可比——模板头（watcher.hpp）实例化宇宙随插桩 TU 集缩放（6414→2149 行），分母变了，故模块表维持批次 18/20 全量插桩值不刷新。
+
+**门禁记录**：gate1 败于 :389 断言（如上）；修复后 **gate2 GATE_EXIT=0**——21 模块 result 全 0、**1163 用例全绿**（cstdmf_test 346、network 207、pyscript 118、script 285）；精准插桩轮 INST_EXIT=0（93 gcda、21 模块 1163 绿）；删桩恢复轮 **gate3 GATE_EXIT=0**（gcda=0、`test_fixed_sized_allocator.o`/`fixed_sized_allocator.o` nm gcov 符数=0、result 全 0 无 failed_lines）。
+
+提交范围：`lib/cstdmf/unit_test/test_fixed_sized_allocator.cpp`（新）、`lib/cstdmf/unit_test/Makefile.rules`（cxxSource 补列）、`TESTING.md`（TODO 移除 + 收口记录）、`docs/upgrade-plan/migration-status.md`、本文档。

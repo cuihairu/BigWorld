@@ -95,9 +95,13 @@ gcovr -r /home/cui/workspaces/BigWorld/programming/bigworld --txt -o /tmp/cov.tx
 | network/logger_message_forwarder.cpp | 335/335 | 0% | 维持受限登记（批次17） |
 | entitydef/method_description.cpp | 323/478 | 32% | 候选 |
 | server/python_server.cpp | 298/298 | 0% | 受限：需完整 app 装配 |
-| cstdmf/fixed_sized_allocator.cpp | 289/289 | 0% | **下批首位候选**：纯内存分配器不变量、无外部依赖（假设：池耗尽/复用/越界防护可经公有面驱动） |
 
-收口记录（不再在列）：`physics2/quad_tree.ipp` 0%→**98%**（测试 TU 视角
+收口记录（不再在列）：`cstdmf/fixed_sized_allocator.cpp` 0%→**99%**（286/289 行，批次 21；根因是既有测试组整体被
+`ENABLE_FIXED_SIZED_POOL_ALLOCATOR` 平台宏守卫——el7 服务端构建恒 0（config.hpp:123），新建
+`test_fixed_sized_allocator.cpp` 12 用例直驱类本身；残余 3 行为 findPool 排序 shift 结构性死臂
+（autoPools 单调建档下 :757 恒 false），另登记 `getNumPoolItemsForSize` 未命中即读
+`allocSizes_[-1]` 的源码级越界隐患，见台账 §7.21）；
+`physics2/quad_tree.ipp` 0%→**98%**（测试 TU 视角
 860/876，批次 20；全仓模板实例聚合口径 68%，低值来自生产 TU 从不执行的
 实例化。根因是 test_quadtree.cpp 从未进 Makefile.rules cxxSource——文件
 存在≠参编第二例；2 休眠用例复活 + 22 新用例；残余 16 行为 MF_ASSERT/
