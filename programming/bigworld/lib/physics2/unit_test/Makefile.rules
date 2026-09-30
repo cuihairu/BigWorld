@@ -7,6 +7,7 @@ cxxSource =							\
 	main							\
 	pch								\
 	test_bsptree					\
+	test_quadtree					\
 	test_worldtri
 
 dependsOn += physics2 cstdmf math resmgr zip

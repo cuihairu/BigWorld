@@ -13,13 +13,13 @@
 | 事项 | 状态 | 说明 |
 |------|------|------|
 | 嵌入式解释器 | ✅ Python 2.7 → **3.13** | 已完成并合入 dev 分支；版本从规划期的 3.12 随依赖链上调至 3.13 |
-| 全量单测门禁 | ✅ 21 模块 / 1127 用例全绿 | 2026-09-28 实测（批次19 后；physics2_test 6 → 20） |
-| 覆盖率补强工程 | ✅ 批次 1–19 已完成 | 批次19 收口 `bsp.cpp` 死门；缺口 top 清单落 [TESTING.md](../../TESTING.md) |
-| 下批首位候选 | ⏳ `physics2/quad_tree.ipp` | 299 可执行行、0%，BSP 邻接面、纯几何、依赖面同 bsp.cpp |
+| 全量单测门禁 | ✅ 21 模块 / 1151 用例全绿 | 2026-09-30 实测（批次20 后；physics2_test 20 → 44） |
+| 覆盖率补强工程 | ✅ 批次 1–20 已完成 | 批次20 收口 `quad_tree.ipp` 漏列激活；缺口 top 清单落 [TESTING.md](../../TESTING.md) |
+| 下批首位候选 | ⏳ `cstdmf/fixed_sized_allocator.cpp` | 289 可执行行、0%，纯内存分配器不变量、无外部依赖 |
 
 </div>
 
-## 模块覆盖率基线（2026-09-28 插桩实跑）
+## 模块覆盖率基线（2026-09-30 插桩实跑）
 
 gcovr 全量聚合值。客户端大件（moo / physics2 / server / chunk）接近零并非“没人测”，而是结构性的：21 个单测宿主全部来自服务端构建，这些模块的执行路径基本不在单测进程里。
 
@@ -37,13 +37,13 @@ gcovr 全量聚合值。客户端大件（moo / physics2 / server / chunk）接�
 | terrain | 34% | 地形（含 gcovr 记录异常项，见台账批次18） |
 | connection | 24% | 服务端连接面；`server_connection.cpp`（990 行 0%）维持不可测登记拖底 |
 | moo | 13% | 客户端渲染支撑，服务端单测不触 |
-| physics2 | **61%** | 客户端物理；批次19 收口 `bsp.cpp` 死门（12% → 61%，+49pp） |
+| physics2 | **76%** | 客户端物理；批次20 收口 `quad_tree.ipp` 漏列激活（61% → 76%） |
 | server | 13% | 服务端骨架，需完整 app 装配 |
 | chunk | 3% | 客户端 chunk 体系，需 ChunkSpace 装载机 |
 
 </div>
 
-文件级亮点：`physics2/bsp.cpp` 0% → 91%（批次19 死门激活）；`network/tcp_bundle.cpp` 达 100%（批次16 收口）；`network/machine_guard.cpp` 28%（bwmachined 面不可达，批次17 登记）；批次18 派测的 `event_poller.cpp` 45% → 57%（其余缺口为 Linux 死代码的 SelectPoller/PollPoller，175 行结构性登记）。
+文件级亮点：`physics2/quad_tree.ipp` 0% → 98%（测试 TU 视角 860/876，批次20 Makefile.rules 漏列修复激活）；`physics2/bsp.cpp` 0% → 91%（批次19 死门激活）；`network/tcp_bundle.cpp` 达 100%（批次16 收口）；`network/machine_guard.cpp` 28%（bwmachined 面不可达，批次17 登记）；批次18 派测的 `event_poller.cpp` 45% → 57%（其余缺口为 Linux 死代码的 SelectPoller/PollPoller，175 行结构性登记）。
 
 ## 批次时间线
 
@@ -62,10 +62,11 @@ gcovr 全量聚合值。客户端大件（moo / physics2 / server / chunk）接�
 | 17 | 2026-09-27 | machine_guard MGM 编解码面 |
 | 18 | 2026-09-28 | 全量覆盖率实跑基线 + event_poller 轮询器面 |
 | 19 | 2026-09-28 | bsp.cpp 死门激活（MF_SERVER 守卫移除 + 14 用例） |
+| 20 | 2026-09-30 | quad_tree.ipp 激活（Makefile.rules 漏列修复 + 22 用例 + 四死函数登记） |
 
 </div>
 
-用例总量演进：批次14 后 1061 → 批次15 后 1071 → 批次16 后 1083 → 批次17 后 1099 → 批次18 后 1113 → 批次19 后 **1127**（全量 21 模块门禁全绿）。
+用例总量演进：批次14 后 1061 → 批次15 后 1071 → 批次16 后 1083 → 批次17 后 1099 → 批次18 后 1113 → 批次19 后 1127 → 批次20 后 **1151**（全量 21 模块门禁全绿）。
 
 ## 不可达 / 受限登记摘要
 
@@ -79,8 +80,9 @@ gcovr 全量聚合值。客户端大件（moo / physics2 / server / chunk）接�
 - `connection/replay_controller.cpp`（495 行）— 受限：录像/回放文件管线（线格式已批次12 测）。
 - `network/logger_endpoint.cpp` / `logger_message_forwarder.cpp` / `watcher_nub.cpp` — 维持受限登记（真消息日志管线、UDP 绑 machined 标准端口，批次17）。
 - `terrain/terrain2/terrain_height_map2.cpp`（755 行）— gcovr 对该记录丢失文件名列（空名条目），未逐臂判定。
+- `physics2/quad_tree.ipp` 死函数族 — **结构性死代码**（批次20 三重取证）：`QuadTree::del`（calculateQTRange 少传 origin_）、`QuadTree::testPoint`（调不存在的 `QuadTreeNode::testPoint`）、`print`/`printQTNode`（`node.elements()` 不存在）、`countAt`（int 实参传 Quad 形参）——从未实例化，一实例化即编译错；生产侧 chunk 的 `pChunkTree_` 是 HullTree，对 ObstacleTree 只用 addToRoot。
 
-已收口（移出登记）：`physics2/bsp.cpp`（778 行，0% → **91%**，批次19 死门激活；残余 67 行为构造校验/加载错误臂，逐段登记见台账 §7.19）。缺口 top 全清单见 [TESTING.md](../../TESTING.md) TODO 段。
+已收口（移出登记）：`physics2/quad_tree.ipp`（0% → **98%** 测试 TU 视角，批次20 漏列激活；残余 16 行为断言/日志失败臂 + 上述死函数族）；`physics2/bsp.cpp`（778 行，0% → **91%**，批次19 死门激活；残余 67 行为构造校验/加载错误臂，逐段登记见台账 §7.19）。缺口 top 全清单见 [TESTING.md](../../TESTING.md) TODO 段。
 
 ## 口径与边界
 

@@ -575,3 +575,27 @@ cstdmf 334（+12）：`test_ansi_allocator.cpp` +4（allocate/reallocate 保内�
 **门禁记录**：插桩轮 18 模块绿（706 用例）+ python_install 补装后 entitydef 18/pyscript 118/script 285 补跑绿，合计 **1127**（1113+14）；无桩全量终局门禁（绝对路径 rm + pwd 自证 + 对象树 gcov 符数核验）结果见提交信息（21 模块全绿为提交前置）。
 
 提交范围：`lib/physics2/unit_test/test_bsptree.cpp`（重写）、`TESTING.md`（新）、`docs/upgrade-plan/migration-status.md`、本文档。
+
+### 7.20 覆盖率补强批次 20：quad_tree.ipp 激活 + Makefile.rules 漏列修复（2026-09-30）
+
+**根因闭环（批次 19 首位候选）**：`lib/physics2/quad_tree.ipp`（299 行 0%）的根因与 bsp.cpp 的 MF_SERVER 死门同型——"文件存在≠参编"第二例：`test_quadtree.cpp` 文件存在、CMakeLists.txt 早已列入，但 `unit_test/Makefile.rules` 的 `cxxSource` 漏列，GNU 构建链的单测二进制里它根本不存在，2 个休眠用例（QuadTreeMemPool_usage/QuadTree_usage）从未参编。补列一行后复活，另新增 22 个用例（本会话 12 + 并行 opencode 会话 10:44 追加 10，追加块逐用例审读通过后收编），physics2_test 20→44。
+
+**用例面**：QTCoord clipMin/clipMax/offset/findChild 与 QTRange fills/isValid/inQuad/clip 谓词面；越界元素 add 跳过（节点不增长）；BL 象限链 childRef 五层走查（根 0 元素、兄弟 INVALID_NODE、叶恰 1 元素、countNodes=6）；traverse 四方向扫掠（dirType 0/1/2/3 全覆盖，各恰 1 命中）；轴平行线 x/y 退化臂（isZero 分支，交叉项不串扰）；radius 半带宽（离线 43 单位：r50 中/r10 不中）；大元素跨越全树驻根；removeFromRoot 二次删除返 false；QuadTreeNode 元素池批保留量与 swapLastRemove 语义、del 桩钉死；跨四象限/两象限 addElement 递归分区（fills→直挂 else 递归四象限臂）；零长线退化（过点访链、离点 0 命中）；百元素池增长与交换删除压力。
+
+**`-Werror=float-equal` 口径**：文件级 `closeTo(a,b,eps=1e-4f)`（fabsf）；既有 `CHECK_EQUAL(static_cast<float>(i),…)` 改 int 等价比较（i<2^24 float 精确无损），比容差更严格且不损失断言力。
+
+**四处编译级死代码（登记不硬凑）**：`QuadTree::del`（calculateQTRange 少传 origin_，3 参 vs 4 参）、`QuadTree::testPoint`（公有面调不存在的 `QuadTreeNode::testPoint`）、`print`/`printQTNode`（`node.elements()` 访问器不存在，一实例化即编译错）、`countAt`（int 实参传 `getChildRef` 的 Quad 形参，且无其他调用者）——四处全部从未实例化：生产侧 chunk 的 `pChunkTree_` 是 HullTree 非 QuadTree，chunk 对 ObstacleTree 只用 addToRoot；`QuadTreeNode::del` 保留上游 "TODO: Implement this!" 桩原样，但用例钉死其 `return false` 行为防静默回归。
+
+**rmem_max 环境重置事件（非测试妥协）**：network_test 的 `test_config.cpp:20` 断言 `SO_RCVBUF` 可设 16MB——断言失败文本本身就是配置说明书；09-28→09-30 间系统 `net.core.rmem_max` 被重置回 4194304，`sudo -n sysctl -w net.core.rmem_max=16777216 net.core.wmem_max=1048576 net.core.wmem_default=1048576` 修复后 207 用例补跑全绿。这是环境修复（测试文件自带的要求），不是放宽断言。
+
+**gcovr 第三形态容错（gcc#68080 家族）**：聚合报 `SanityCheckError: Output file /home/avatar_filter_helper##<hash>.gcov.json.gz doesn't exist but no error from GCOV detected`——gcov 对个别 TU 不产出输出文件且 stderr 无错，gcovr 的存在性自检拒绝继续。read.py:934 显示 `--gcov-ignore-errors output_error` 恰好过滤"期望输出不存在"的文件集，聚合通过。至此三形态参数齐备：suspicious_hits + negative_hits（parse-errors）+ output_error（ignore-errors）。
+
+**并行会话实录（方法论教训）**：① 聚合期间并发会话重编插桩树，gcc 按 TU 删除旧 gcda，499→63→0，聚合数据残缺——单树多代理必须串行化，聚合前确认对象树静止（本批放弃自建插桩轮，改搭并行会话插桩 run 的顺风车）；② 并行会话 10:44:46 向测试文件追加 10 用例后 32 秒即重跑全套——4 空格缩进与本文件 tab 风格可辨 provenance，审读要点：断言保守、无浮点等值违规、死代码登记口径一致；③ 其 run#2 疑似工具超时被杀即起 run#3——跨代理的树占用窗口不可预期，关键轮次的结果必须自己留日志；④ 终局门禁首跑中止于多模块 `.d` 写入时目录消失（当日先归为"无人认领的瞬时干扰"，下午进程取证确认为并行会话的连环 make，见下段）；⑤ 12:02 并行会话将本会话的 `collectTraversal` 辅助模板化（意图：服务全文件实例）但漏 `typename`，被终局门禁拦下后补 1 行修复——两个等价遍历辅助模板并存，列为下批去重候选；其对账修正（用例总量 1149→1151：1127 基数里 physics2 仅 20，复活+新增后 44，Δ=+24 含 2 个休眠用例）经本会话复核采纳。
+
+**终局门禁三连败与并发 configure 互踩（新增陷阱档，2026-09-30 12:40–15:00）**：无桩门禁 #1 中止于 entitydef/db 模块 `.d` 目录写入时消失；#2 拦下 12:02 漏 typename（单行修复，单 TU 复验编译过）；#3 `chunk_overlapper.o` 在编译（日志 :28004）与归档（:43899）之间消失——三败同族，下午取证确认：并行 opencode 会话 13:26/13:56/14:04 连环拉起 `make bw-run-all-unit-tests`（各因工具超时被 SIGTERM，留下部分树），期间还向同树写入 ~201 个外来 gcda droppings。对策改"**静默探测**（无并发 make 持续 20s 才发车）→ **无 rm 续跑**（沿用当日全新无桩代的对象，四重证据替代 rm 全量）"，发车后又揭出第二类**确定性**故障：`libpython3.13.a` 三连败于 `SIZEOF_VOID_P` 未声明/`long must be 4 or 8`/`Require native threads`。取证：`config.log` 内**两个 configure 并发交错**（同名 conftest.c 被对方删除报 `No such file`、exit 77 中止与 exit 0 交错写同一日志、`config.status` 丢失全部 SIZEOF 烘焙值），第二来源为野生 `./configure --enable-optimizations` 调用——`pyconfig.h` 从被污染的 confdefs 生成全 undef 模板（60KB 与 `.in` 仅差头注释与 undef 包裹格式），`ac_cv_sizeof_long=8` 等 cache 值正常却烘不进头。处置：定向 `rm -rf build/el7/third_party/python`（BigWorld 对象树不动），make 配方单进程重配（test_symlink/test_exec 探针 → 全参数 configure → TMPNAM/LINKFORSHARED/Py_DEBUG 三段 sed）恢复。教训：**树上"没有 make"≠"没有 configure"**，第三方配置态损坏的特征是编译错误确定性复现（非文件消失类），修复入口是被撞坏的生成头而非源码。
+
+**覆盖率对账（gcovr，补测前→后）**：文件级 `quad_tree.ipp` 0%→**98%**（测试 TU 视角 860/876；全仓模板实例聚合口径 68%——总行数 299→886 是测试 TU 参编后模板实例化集合扩大的口径变化，低值来自生产 TU 从不执行的实例）；模块级 physics2 61%→**76%**（math 顺带 68→70，聚合轮差）。残余 16 行（测试 TU 视角）：MF_ASSERT 校验臂 ×4 行 ×3 实例（断言未触发即测试未失败的证明）、dprintf 越界日志臂 ×2、TestQuadTreeItem 实例的元素池扩容臂 :66、radius 法向翻转小臂 :437——全部登记不硬凑。
+
+**门禁记录**：插桩轮数据取自并行会话 run#3 全量插桩 run（gcda 全集 499，本会话即时快照聚合成功，EXIT=0）。无桩终局门禁实跑（15:08–15:24，自有日志 `/tmp/pcov20_gate4.log`）：静默探测确认无并发 make 后**无 rm 续跑** 14:04 无桩代——`cd && pwd` 自证 + 抽样对象 gcov 符数 0 + gcda 0 + mtime 代龄四重证据替代 rm 全量（三连败取证与 python 重配见上段）；**GATE_EXIT=0**：21 模块 result 全 0、**1151 用例全绿**（physics2_test **44**、network 207、pyscript 118、script 285），跑后 gcda=0、`test_quadtree.o`/`bsp.o` gcov 符数=0，窗口内无外来 make/configure 介入（inotify 全程监听仅录得本会话 configure 自身的临时文件清理）。
+
+提交范围：`lib/physics2/unit_test/test_quadtree.cpp`、`lib/physics2/unit_test/Makefile.rules`（补列 cxxSource）、`TESTING.md`、`docs/upgrade-plan/migration-status.md`、本文档。
