@@ -58,16 +58,16 @@ gcovr -r /home/cui/workspaces/BigWorld/programming/bigworld --txt -o /tmp/cov.tx
 且报 `SIZEOF_VOID_P` 未声明）时，定向 `rm -rf build/el7/third_party/python`
 重配即恢复，勿动 BigWorld 对象树。
 
-## 模块覆盖率（2026-09-30 批次 20 插桩实跑）
+## 模块覆盖率（2026-10-01 批次 22 插桩实跑；两阶段干净复测，仅 cstdmf 实质变动，其余模块与批次 18/20 值一致）
 
 | 模块 | 覆盖率 | 模块 | 覆盖率 |
 |------|--------|------|--------|
 | script | 91% | resmgr | 58% |
-| math | 70% | cstdmf | 51% |
+| math | 70% | **cstdmf** | **54%（上轮 51%）** |
 | pyscript | 68% | entitydef | 43% |
 | db | 67% | scene / sqlite / terrain | 42% / 39% / 34% |
 | network | 66% | connection | 24% |
-| **physics2** | **76%（上轮 61%）** | moo / server / chunk | 13% / 13% / 3% |
+| physics2 | 76% | moo / server / chunk | 13% / 13% / 3% |
 
 ## TODO — 缺口 top 清单（未覆盖行数降序，2026-09-28 口径）
 
@@ -75,7 +75,6 @@ gcovr -r /home/cui/workspaces/BigWorld/programming/bigworld --txt -o /tmp/cov.tx
 
 | 源文件 | 缺口/总行 | 覆盖率 | 状态 |
 |--------|-----------|--------|------|
-| cstdmf/watcher.hpp | 5471/6414 | 14% | 巨型模板 watcher 族；候选（需逐类可测性判定） |
 | chunk/chunk.cpp | 1215/1228 | 1% | 受限：需 ChunkSpace + chunk 装载机 |
 | cstdmf/profiler.cpp | 1148/1224 | 6% | 候选（profiler 开关面可测性待判定） |
 | connection/server_connection.cpp | 990/990 | 0% | **维持不可测**（真登录管线 + TCPChannel 状态机，批次14/16） |
@@ -96,7 +95,18 @@ gcovr -r /home/cui/workspaces/BigWorld/programming/bigworld --txt -o /tmp/cov.tx
 | entitydef/method_description.cpp | 323/478 | 32% | 候选 |
 | server/python_server.cpp | 298/298 | 0% | 受限：需完整 app 装配 |
 
-收口记录（不再在列）：`cstdmf/fixed_sized_allocator.cpp` 0%→**99%**（286/289 行，批次 21；根因是既有测试组整体被
+收口记录（不再在列）：`cstdmf/watcher.hpp` 14%→**22%**（943→1545 行覆盖、+602 实例行，缺口
+5471→5398，批次 22；两阶段干净全量插桩同口径，BEFORE 复测 6414/943/14% 与批次 20 快照一致——
+旧基线的混沌窗口疑点解除；总行 6414→6943 的 +529 为新测试 TU 带入的模板实例宇宙扩容，口径同
+quad_tree.ipp）。逐类判定收口：39 用例（36 本批新写 + 3 并行会话追加审读收编，其中 SafeWatcher
+用例修正非 NULL base 必崩缺陷后收编）驱动 流格式函数族/基类默认实现/Sequence/Map/Data/ReadOnly/
+Member/Func/Dereference/SmartPtrDeref/ContainerBounce/Absolute/Freeze/rootWatcher 全局面与
+makeWatcher·makeNonRefWatcher 工厂重载；残余分母为生产 TU 从不执行的模板实例 + 死臂登记：
+rootWatcher() 创建臂与 fini() removeChild 臂结构性死代码（rootWatcherInternal 恒保证
+g_pRootWatcher 非 NULL 的两步推演）、hasRootWatcher() false 臂仅进程早期/fini 后窗口可达、
+`_XBOX360` 平台宏分支、MF_ASSERT 中止臂；另登记 uint64 提取器 upcast 块缺 else 的源码级缺陷
+（size==4 先读 4 字节再无条件读 8 字节必失败，测试注释钉死现状，不修只记），见台账 §7.22；
+`cstdmf/fixed_sized_allocator.cpp` 0%→**99%**（286/289 行，批次 21；根因是既有测试组整体被
 `ENABLE_FIXED_SIZED_POOL_ALLOCATOR` 平台宏守卫——el7 服务端构建恒 0（config.hpp:123），新建
 `test_fixed_sized_allocator.cpp` 12 用例直驱类本身；残余 3 行为 findPool 排序 shift 结构性死臂
 （autoPools 单调建档下 :757 恒 false），另登记 `getNumPoolItemsForSize` 未命中即读

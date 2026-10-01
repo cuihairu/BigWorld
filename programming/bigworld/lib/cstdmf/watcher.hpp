@@ -3045,7 +3045,8 @@ WatcherPtr addReferenceWatcher( const char * path,
 			const RETURN_TYPE & (OBJECT_TYPE::*getMethod)() const,
 			const char * comment = NULL	)
 {
-	WatcherPtr pNewWatcher = makeWatcher( rObject, getMethod, NULL );
+	WatcherPtr pNewWatcher = makeWatcher( rObject, getMethod,
+		static_cast< void (OBJECT_TYPE::*)( const RETURN_TYPE & ) >( NULL ) );
 
 	if (!Watcher::rootWatcher().addChild( path, pNewWatcher ))
 	{
@@ -3242,9 +3243,9 @@ template <typename DataType>
 class FreezeWatcher
 {
 public:
-	FreezeWatcher( const char * watcherName, const char * comment ) : 
-		isFrozen_( false ),
+	FreezeWatcher( const char * watcherName, const char * comment ) :
 		name_( watcherName ),
+		isFrozen_( false ),
 		wasFrozen_( false )
 	{
 		addWatcher( watcherName, isFrozen_, Watcher::WT_READ_WRITE, comment );

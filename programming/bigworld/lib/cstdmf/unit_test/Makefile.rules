@@ -44,6 +44,7 @@ cxxSource =						\
 	test_timestamp				\
 	test_unique_id				\
 	test_watcher				\
+	test_watcher_gaps			\
 	test_ansi_allocator			\
 	test_bw_hash				\
 	test_bw_safe_allocatable	\

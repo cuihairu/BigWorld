@@ -619,3 +619,41 @@ cstdmf 334（+12）：`test_ansi_allocator.cpp` +4（allocate/reallocate 保内�
 **门禁记录**：gate1 败于 :389 断言（如上）；修复后 **gate2 GATE_EXIT=0**——21 模块 result 全 0、**1163 用例全绿**（cstdmf_test 346、network 207、pyscript 118、script 285）；精准插桩轮 INST_EXIT=0（93 gcda、21 模块 1163 绿）；删桩恢复轮 **gate3 GATE_EXIT=0**（gcda=0、`test_fixed_sized_allocator.o`/`fixed_sized_allocator.o` nm gcov 符数=0、result 全 0 无 failed_lines）。
 
 提交范围：`lib/cstdmf/unit_test/test_fixed_sized_allocator.cpp`（新）、`lib/cstdmf/unit_test/Makefile.rules`（cxxSource 补列）、`TESTING.md`（TODO 移除 + 收口记录）、`docs/upgrade-plan/migration-status.md`、本文档。
+
+### 7.22 覆盖率补强批次 22：watcher.hpp 逐类可测性判定 + 39 用例（2026-10-01）
+
+**候选背景与判定口径**：TODO 表降序首位 `lib/cstdmf/watcher.hpp`（基线 5471/6414 行、14%，批次 18/20 全量插桩口径）——巨型模板头，覆盖率的分母是**模板实例宇宙**（gcovr 按实例逐实例计数），生产 TU 中从不执行的实例化把聚合值压低，与 quad_tree.ipp 的 68% 聚合 vs 98% 测试 TU 视角同型。故本批主交付为**逐类可测性判定**：可测类补单测直驱，不可测面逐条登记；覆盖率对账用**两阶段全量插桩**（stash 本批改动 → 干净全量插桩 21 模块 + gcovr BEFORE → pop → 增量重编重跑 + gcovr AFTER）保证前后分母同口径可比，替代批次 21 的精准插桩口径（对模板头不可比，见 §7.21）。
+
+**39 个用例的可测面**（新建 `test_watcher_gaps.cpp`，cstdmf_test 346→385；既有 test_watcher.cpp 43 用例不重复合——其未触达的流协议/容器族/工厂重载/全局 root 面为本批补位）：
+
+- **流协议函数族**（头内联，11 用例）：`watcherStreamToValue` 空流/截断 mode 字节拒绝、int64 upcast downcast 往返、uint64 整型化往返、`long`/泛型值往返（重载解析：`long` 精确匹配 `const int64` 非模板重载走 INT len8，`uint64` 无精确非模板重载落泛型 STRING typed）、坏 size 拒绝、bool size≠1 拒绝、STRING fallback 拒绝、`watcherStreamToValueType` 语义；`watcherValueToStream` 泛型（STRING typed）/`WatcherDataType`（TYPE typed）双形态。
+- **基类默认实现**（2）：裸 `Watcher` 桩驱动 visitChildren/addChild 默认 false 臂与 `Watcher::visitChildren(base,path,visitor)` 便利包装的三参委托（`using Base::visit` 保持三参可见性——派生类 hiding 陷阱）。
+- **SequenceWatcher**（5）：labels 短于向量截断臂、labelSubPath 委托、自定义 index converter、streamDoc 嵌套 miss、addChild 斜杠拒绝/二次拒绝。
+- **MapWatcher**（3）：自定义 key converter（IntKeyConverter 双向）、streamDoc 嵌套 miss、addChild 同上。
+- **DataWatcher**（3+1）：NULL base/坏路径拒绝、setFromStream 无 packet 拒绝、uint64 setFromStream、（收编）非空路径四臂拒绝 + `__doc__` 路径（`isDocPath` 臂 watcher.hpp:2643）。
+- **MemberWatcher/FuncWatcher**（2+2+1）：MF_WRITE_ACCESSOR null getter 臂、坏串+双流臂、string/int get-set 双流、（收编）setFromString 格式变体（"3.14"→3 部分解析 stringstream 语义、坏串、空串，运行时验证通过）。
+- **解引用族**（3）：DereferenceWatcher ok/null base、SmartPointerDeref（`SmartPointer<uint>` 不可编译——uint 无 incRef/decRef，`FakeSmartUintHolder` 布局替身 + 单成员偏移 0 无虚表论证）、ContainerBounce changeContainer。
+- **AbsoluteWatcher/FreezeWatcher/工厂**（3）：Absolute NULL base 五方法守卫 + 透传（watcher.cpp 五臂 base==NULL 短路实证）、Freeze freeze/unfreeze 循环、makeWatcher/makeNonRefWatcher const-ref 与 bare 重载（裸 NULL 歧义需 static_cast——watcher.hpp 编译性修正之一）。
+- **全局 root 面**（1+1）：addWatcher 全重载（值/函数/注释臂）、重复 add 返 NULL、getWatcher、rootWatcher 读写往返、removeChild 清理；（收编）SafeWatcher grab/give 透传。
+
+**死臂与不可测面登记（逐条）**：
+
+1. **rootWatcher()/fini() 结构性死臂**：头内联 `rootWatcher()` 创建臂（watcher.hpp:3012-3015）与 `fini()` removeChild 臂（:3028-3030）——`rootWatcherInternal()`（watcher.cpp:61-70）惰性保证 `g_pRootWatcher` 恒非 NULL ⇒ :3012 条件恒 false；`g_pRootWatcher` 恒等于内部根本身 ⇒ fini 的 `g_pRootWatcher != &watcher` 恒 false ⇒ :3028-3030 不可达。本构建不使用 `DECLARE_WATCHER_DATA` 宏（`g_pRootWatcherPath` 默认 NULL），path≠NULL 路径整体不可达。
+2. **hasRootWatcher() false 臂** :2997-2999：仅根不存在窗口（进程早期/fini 后）可达；进程级全局态 + FiniJob 退出钩子竞争，避免全局态风险不硬凑。
+3. **`_XBOX360` 分支** :261-263：平台宏死代码，el7 不参编。
+4. **MF_ASSERT 中止臂**：断言未触发即测试通过的证明（批次 20 既有口径）。
+5. **uint64 提取器源码缺陷**（登记不修）：:483-499 upcast 块（:492-494）后缺 else——size==4 时先读 4 字节赋值，随后 :497 无条件 `stream >> value` 再读 8 字节 → 流必然下溢返回 false。`WatcherGaps_stream_uint32ToUint64Fails` 以注释钉死此现状行为；生产语义上 uint32 源到 uint64 目标的扩展读取恒失败，源码修正超出测试批次范围。
+6. **SafeWatcher MutexHolder grab 单行**：grab/give 已被用例覆盖，若聚合仍报未盖属 gcovr 实例归因疑点。
+7. **方法体在 watcher.cpp 的类**（DirectoryWatcher/RWLockWatcher/Callable 族）：头文件仅声明无执行行，归属 .cpp 批次（watcher.cpp 不在本批 TODO 行内）。
+
+**收编追加块审读（并行会话第四击，批次 20 先例续篇）**：03:01 opencode 会话向 test_watcher_gaps.cpp 追加 3 用例（4 空格缩进可辨 provenance）。逐用例审读：① `base_nonEmptyPathRejection`——API 全部核实存在（`WatcherPathRequestV2(const BW::string&)`、DataWatcher 直驱 ctor 默认 READ_ONLY、`isDocPath` 臂），原样收编；② `SafeWatcher_grabGiveCycle`——**必崩 bug**：直驱构造的 DataWatcher 其 `rValue_` 是引用成员（watcher.hpp:2686 `TYPE & rValue_`），`getAsString` 的 `&rValue_ + base` 算术下 base 必须为 NULL；用例传 `&value` ⇒ `&value + &value` 在 x86-64 上为非规范地址 ⇒ SIGSEGV 毒化整个门禁。修正 base→NULL 并改名 `grabGivePassthrough`（无 cycle 语义）+ 语义注记后收编；③ `Member_setFromString_variousFormats`——`makeNonRefWatcher` 三参形态与本文件既有用法一致，"3.14"→3 部分解析符合 stringstream 语义（运行时验证通过），原样收编。
+
+**watcher.hpp 编译性修正两处（非语义变更）**：① addReferenceWatcher RO 版 :3048-3049 裸 NULL 在 makeWatcher 重载间歧义 → `static_cast<void (OBJECT_TYPE::*)(const RETURN_TYPE &)>(NULL)`；② FreezeWatcher ctor :3246-248 成员初始化顺序对齐声明序（-Wreorder）。
+
+**共享树实录（本批三起）**：① 02:50-02:54 已死亡会话的孤儿三连（python_install/cstdmf make/全量 -j12）并发撞出 CPython 第二次 configure 互踩——`sed: can't read conftest.c: No such file` → pyconfig.h 全 undef 三连签名（§7.20/§7.21 同型），pyinstall.log 实锤，进程父会话已消亡；② 03:00 静默探测拦下测量链首发（PROBE_BUSY），03:01 同批 opencode 会话追加上述 3 用例并重试 python_install；③ 测量链 STEP0 升级为**持续静默等待**（30 分钟窗口内要求 2.5 分钟连续无 make 才发车）后成行。追加块收编与 385 用例验证的重编与 python_install（仅 third_party/python 子树）目录不相交，范围受限发车一次并注明。另：03:18 首发测量链被系统内存压力回收（51GB 总量 0 free，opencode CPython 构建高峰），环境回落后（35GB available、树静默）重启成行——共享树窗口不可控时，链式脚本的分步日志与退出码标记使中断恢复零损耗。
+
+**覆盖率对账（gcovr，两阶段全量插桩同口径）**：`watcher.hpp` 943/6414（14%）→ **1545/6943（22%）**——覆盖 +602 实例行、缺口 5471→5398；总行 +529 为新测试 TU 带入的实例宇宙扩容（quad_tree.ipp 同型口径）。模块级 cstdmf 52.4%→**54.2%**（51%→54% 表值）；其余模块与批次 18/20 值一致（network +3 行属 watcher 实例溢出）。**基线澄清**：BEFORE 干净复测 6414/943/14% 与批次 20 快照逐位一致——批次 21 台账所记 cov_batch20 混沌窗口疑点解除，旧基线有效。
+
+**门禁记录**：39 用例版本单模块实跑 `385 tests run / no test failures`（RUN_EXIT=0）；插桩 BEFORE 轮 21 模块 1163 用例全绿（GATE_EXIT=0，501 gcda）→ pop 后 AFTER 轮 21 模块 **1202 用例全绿**（GATE_EXIT=0，gcovr 两轮 EXIT=0）；删桩恢复终局门禁（gcda=0、对象 gcov 符数=0）结果见提交信息。
+
+提交范围：`lib/cstdmf/unit_test/test_watcher_gaps.cpp`（新，39 用例）、`lib/cstdmf/unit_test/Makefile.rules`（cxxSource 补列）、`lib/cstdmf/watcher.hpp`（编译性修正两处）、`TESTING.md`（TODO 移除 + 收口记录 + 模块表）、`docs/upgrade-plan/migration-status.md`、本文档。

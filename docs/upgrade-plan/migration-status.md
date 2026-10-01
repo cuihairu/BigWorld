@@ -13,13 +13,13 @@
 | 事项 | 状态 | 说明 |
 |------|------|------|
 | 嵌入式解释器 | ✅ Python 2.7 → **3.13** | 已完成并合入 dev 分支；版本从规划期的 3.12 随依赖链上调至 3.13 |
-| 全量单测门禁 | ✅ 21 模块 / 1163 用例全绿 | 2026-09-30 实测（批次21 后；cstdmf_test 334 → 346） |
-| 覆盖率补强工程 | ✅ 批次 1–21 已完成 | 批次21 收口 `fixed_sized_allocator.cpp` 平台宏死测试；缺口 top 清单落 [TESTING.md](../../TESTING.md) |
-| 下批首位候选 | ⏳ `cstdmf/watcher.hpp` | 5471 可执行行缺口、14%，候选（巨型模板 watcher 族，需逐类可测性判定） |
+| 全量单测门禁 | ✅ 21 模块 / 1202 用例全绿 | 2026-10-01 实测（批次22 后；cstdmf_test 346 → 385） |
+| 覆盖率补强工程 | ✅ 批次 1–22 已完成 | 批次22 收口 `watcher.hpp` 逐类可测性判定（14% → 22%）；缺口 top 清单落 [TESTING.md](../../TESTING.md) |
+| 下批首位候选 | ⏳ `cstdmf/profiler.cpp` | 1148 可执行行缺口、6%，候选（profiler 开关面可测性待判定） |
 
 </div>
 
-## 模块覆盖率基线（2026-09-30 插桩实跑）
+## 模块覆盖率基线（2026-10-01 插桩实跑，批次 22 两阶段复测；仅 cstdmf 实质变动）
 
 gcovr 全量聚合值。客户端大件（moo / physics2 / server / chunk）接近零并非“没人测”，而是结构性的：21 个单测宿主全部来自服务端构建，这些模块的执行路径基本不在单测进程里。
 
@@ -32,7 +32,7 @@ gcovr 全量聚合值。客户端大件（moo / physics2 / server / chunk）接�
 | pyscript | 68% | 嵌入解释器封装，批次4–9 六连批收口 |
 | network | 66% | Mercury 网络层，批次10–18 主攻区 |
 | resmgr | 58% | 资源管理器 |
-| cstdmf | 51% | 基础设施（调试、内存、流） |
+| cstdmf | **54%** | 基础设施（调试、内存、流、watcher 族；批次22 逐类判定 51% → 54%） |
 | entitydef | 43% | 类型契约；装载机依赖重 |
 | terrain | 34% | 地形（含 gcovr 记录异常项，见台账批次18） |
 | connection | 24% | 服务端连接面；`server_connection.cpp`（990 行 0%）维持不可测登记拖底 |
@@ -43,7 +43,7 @@ gcovr 全量聚合值。客户端大件（moo / physics2 / server / chunk）接�
 
 </div>
 
-文件级亮点：`cstdmf/fixed_sized_allocator.cpp` 0% → **99%**（286/289，批次21：既有测试组被 `ENABLE_FIXED_SIZED_POOL_ALLOCATOR` 平台宏守卫恒 0，新建 12 用例直驱；残余 3 行为 findPool 排序 shift 死臂）；`physics2/quad_tree.ipp` 0% → 98%（测试 TU 视角 860/876，批次20 Makefile.rules 漏列修复激活）；`physics2/bsp.cpp` 0% → 91%（批次19 死门激活）；`network/tcp_bundle.cpp` 达 100%（批次16 收口）；`network/machine_guard.cpp` 28%（bwmachined 面不可达，批次17 登记）；批次18 派测的 `event_poller.cpp` 45% → 57%（其余缺口为 Linux 死代码的 SelectPoller/PollPoller，175 行结构性登记）。
+文件级亮点：`cstdmf/watcher.hpp` 14% → **22%**（943 → 1545 行覆盖，+602 实例行；批次22 逐类可测性判定 + 39 用例，两阶段全量插桩同口径，BEFORE 干净复测与批次 20 快照一致；总行 6414→6943 为新测试 TU 实例宇宙扩容；残余为生产 TU 从不执行的实例 + 死臂登记）；`cstdmf/fixed_sized_allocator.cpp` 0% → **99%**（286/289，批次21：既有测试组被 `ENABLE_FIXED_SIZED_POOL_ALLOCATOR` 平台宏守卫恒 0，新建 12 用例直驱；残余 3 行为 findPool 排序 shift 死臂）；`physics2/quad_tree.ipp` 0% → 98%（测试 TU 视角 860/876，批次20 Makefile.rules 漏列修复激活）；`physics2/bsp.cpp` 0% → 91%（批次19 死门激活）；`network/tcp_bundle.cpp` 达 100%（批次16 收口）；`network/machine_guard.cpp` 28%（bwmachined 面不可达，批次17 登记）；批次18 派测的 `event_poller.cpp` 45% → 57%（其余缺口为 Linux 死代码的 SelectPoller/PollPoller，175 行结构性登记）。
 
 ## 批次时间线
 
@@ -64,10 +64,11 @@ gcovr 全量聚合值。客户端大件（moo / physics2 / server / chunk）接�
 | 19 | 2026-09-28 | bsp.cpp 死门激活（MF_SERVER 守卫移除 + 14 用例） |
 | 20 | 2026-09-30 | quad_tree.ipp 激活（Makefile.rules 漏列修复 + 22 用例 + 四死函数登记） |
 | 21 | 2026-09-30 | fixed_sized_allocator 直驱（平台宏死测试实证 + 12 用例，0%→99%） |
+| 22 | 2026-10-01 | watcher.hpp 逐类可测性判定（39 用例：流协议/容器族/解引用/工厂/root 全局面，14%→22%） |
 
 </div>
 
-用例总量演进：批次14 后 1061 → 批次15 后 1071 → 批次16 后 1083 → 批次17 后 1099 → 批次18 后 1113 → 批次19 后 1127 → 批次20 后 1151 → 批次21 后 **1163**（全量 21 模块门禁全绿）。
+用例总量演进：批次14 后 1061 → 批次15 后 1071 → 批次16 后 1083 → 批次17 后 1099 → 批次18 后 1113 → 批次19 后 1127 → 批次20 后 1151 → 批次21 后 1163 → 批次22 后 **1202**（全量 21 模块门禁全绿）。
 
 ## 不可达 / 受限登记摘要
 
@@ -83,7 +84,7 @@ gcovr 全量聚合值。客户端大件（moo / physics2 / server / chunk）接�
 - `terrain/terrain2/terrain_height_map2.cpp`（755 行）— gcovr 对该记录丢失文件名列（空名条目），未逐臂判定。
 - `physics2/quad_tree.ipp` 死函数族 — **结构性死代码**（批次20 三重取证）：`QuadTree::del`（calculateQTRange 少传 origin_）、`QuadTree::testPoint`（调不存在的 `QuadTreeNode::testPoint`）、`print`/`printQTNode`（`node.elements()` 不存在）、`countAt`（int 实参传 Quad 形参）——从未实例化，一实例化即编译错；生产侧 chunk 的 `pChunkTree_` 是 HullTree，对 ObstacleTree 只用 addToRoot。
 
-已收口（移出登记）：`cstdmf/fixed_sized_allocator.cpp`（289 行，0% → **99%**，批次21 平台宏死测试直驱；根因是既有 test_allocate.cpp 两组用例整体被 `ENABLE_FIXED_SIZED_POOL_ALLOCATOR` 守卫、el7 服务端构建恒 0——“有测试却 0%”第三例；残余 3 行为 findPool 排序 shift 结构性死臂，登记 `getNumPoolItemsForSize` 未命中读 `allocSizes_[-1]` 越界隐患，见台账 §7.21）；`physics2/quad_tree.ipp`（0% → **98%** 测试 TU 视角，批次20 漏列激活；残余 16 行为断言/日志失败臂 + 上述死函数族）；`physics2/bsp.cpp`（778 行，0% → **91%**，批次19 死门激活；残余 67 行为构造校验/加载错误臂，逐段登记见台账 §7.19）。缺口 top 全清单见 [TESTING.md](../../TESTING.md) TODO 段。
+已收口（移出登记）：`cstdmf/watcher.hpp`（14% → **22%**，批次22 逐类可测性判定；39 用例收编含并行会话追加 3 用例审读——SafeWatcher 用例的非 NULL base 在直驱 DataWatcher 引用成员语义下 `&value + &value` 非规范地址必 SIGSEGV，修正后收编；rootWatcher/fini 死臂、`_XBOX360` 分支与 uint64 提取器缺 else 缺陷登记，见台账 §7.22）；`cstdmf/fixed_sized_allocator.cpp`（289 行，0% → **99%**，批次21 平台宏死测试直驱；根因是既有 test_allocate.cpp 两组用例整体被 `ENABLE_FIXED_SIZED_POOL_ALLOCATOR` 守卫、el7 服务端构建恒 0——“有测试却 0%”第三例；残余 3 行为 findPool 排序 shift 结构性死臂，登记 `getNumPoolItemsForSize` 未命中读 `allocSizes_[-1]` 越界隐患，见台账 §7.21）；`physics2/quad_tree.ipp`（0% → **98%** 测试 TU 视角，批次20 漏列激活；残余 16 行为断言/日志失败臂 + 上述死函数族）；`physics2/bsp.cpp`（778 行，0% → **91%**，批次19 死门激活；残余 67 行为构造校验/加载错误臂，逐段登记见台账 §7.19）。缺口 top 全清单见 [TESTING.md](../../TESTING.md) TODO 段。
 
 ## 口径与边界
 
