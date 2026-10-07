@@ -28,7 +28,9 @@ export default {
     ["link", { rel: "icon", type: "image/svg+xml", href: "/BigWorld/logo.svg" }]
   ],
   ignoreDeadLinks: [
-    /^\/home\/cui\/workspaces\/BigWorld\//
+    /^\/home\/cui\/workspaces\/BigWorld\//,
+    // 仓库根 TESTING.md 是仓内工作台文件，不属于站点，md 里按仓内相对路径引用
+    /\.\.\/\.\.\/TESTING(\.md)?/
   ],
   markdown: {
     container: {
