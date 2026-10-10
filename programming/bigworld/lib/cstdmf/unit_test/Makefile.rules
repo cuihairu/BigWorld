@@ -49,7 +49,8 @@ cxxSource =						\
 	test_bw_hash				\
 	test_bw_safe_allocatable	\
 	test_debug_message_source	\
-	test_fixed_sized_allocator
+	test_fixed_sized_allocator	\
+	test_profiler
 
 dependsOn += cstdmf
 
