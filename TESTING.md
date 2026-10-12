@@ -27,6 +27,15 @@ cd programming/bigworld/lib/<组件>/unit_test
 cd programming && env VCPKG_ROOT=/home/cui/vcpkg make -s python_install   # sentinel 幂等
 ```
 
+测试环境陷阱：network_test 的 ConfigTest 依赖主机内核参数
+`net.core.rmem_max ≥ 16MB`（`wmem_max/wmem_default ≥ 1MB`），主机重启会回落
+4MB 并报 "Insufficient recv buffer to run tests"，用 sysctl 恢复即可（非持久）。
+
+不在构建内的测试文件（"文件存在≠参编"）：`cstdmf/unit_test/test_object_pool.cpp`
+——object_pool.hpp:343 调 `LookUpTable::reserve()`，本树 lookup_table.hpp 无此
+成员，无法编译（cstdmf Makefile.rules 内注释登记）；`scene/unit_test` 的
+`test_blend_transform`（Windows 专用，规则内注释）。
+
 ## 覆盖率口径
 
 `user_shouldBuildCodeCoverage=1` 加 `-fprofile-arcs -ftest-coverage`，
@@ -76,7 +85,6 @@ gcovr -r /home/cui/workspaces/BigWorld/programming/bigworld --txt -o /tmp/cov.tx
 | 源文件 | 缺口/总行 | 覆盖率 | 状态 |
 |--------|-----------|--------|------|
 | chunk/chunk.cpp | 1215/1228 | 1% | 受限：需 ChunkSpace + chunk 装载机 |
-| cstdmf/profiler.cpp | 1148/1224 | 6% | 候选（profiler 开关面可测性待判定） |
 | connection/server_connection.cpp | 990/990 | 0% | **维持不可测**（真登录管线 + TCPChannel 状态机，批次14/16） |
 | cstdmf/smartpointer.hpp | 679/1519 | 55% | 候选（残余为 watch/调试面） |
 | entitydef/entity_description.cpp | 665/665 | 0% | 受限：需 EntityType/EntityDef XML 装载机全套 |
@@ -120,4 +128,11 @@ dprintf 失败日志臂、池扩容臂与 radius 法向翻转小臂，登记不�
 死代码维持登记）；
 `physics2/bsp.cpp` 0%→**91%**（711/778 行，批次 19，
 MF_SERVER 死门激活 + 14 用例）；`network/tcp_bundle.cpp` 100%（批次 16）；
-`network/event_poller.cpp` 57%（批次 18，余量 175 行为 Linux 死代码登记）。
+`network/event_poller.cpp` 57%（批次 18，余量 175 行为 Linux 死代码登记）；
+`cstdmf/profiler.cpp` 6%→**94%**（1155/1222 行，批次 23；红门禁提交 `dc5cd043` 13 用例逐根因修复——
+getAsString 不驱动 statistics watcher 数据填充、EVENT_COUNTER 断言方向错、空帧字母序断言、可见性门控/守卫条目兄弟污染、counter 落在错帧、
+时序型断言在 -O2+OS 抢注下不可控（换确定性比较器与逐模式重录帧）、join 后槽位已清 等七处；
+385→398 用例全绿；文件级数字来自精准插桩口径（只重编 cstdmf TU，同批次 21），模块级全量值待下轮复测；
+残余 67 行登记为不可测臂：`SortByNamePtr` 比较器（BW_UNUSED 死代码）、HitchDetector 全族、MF_SERVER 排除族、
+ENABLE_PER_CORE_PROFILER=0 面、`processEntriesTask_` 不 delete、jsonDump else-if 停臂（force 下不可达）、
+tick stall WARNING、frameNumber 竞态、END mismatch 健康态 ASSERT、rootWatcher fini 悬垂、`doBackgroundTask` !historyFile_ 竞态，见台账 §7.23）。

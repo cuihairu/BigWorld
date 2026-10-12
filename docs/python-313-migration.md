@@ -658,3 +658,38 @@ cstdmf 334（+12）：`test_ansi_allocator.cpp` +4（allocate/reallocate 保内�
 **门禁记录**：39 用例版本单模块实跑 `385 tests run / no test failures`（RUN_EXIT=0）；插桩 BEFORE 轮 21 模块 1163 用例全绿（GATE_EXIT=0，501 gcda）→ pop 后 AFTER 轮 21 模块 **1202 用例全绿**（GATE_EXIT=0，gcovr 两轮 EXIT=0）；删桩恢复终局门禁（gcda=0、对象 gcov 符数=0）结果见提交信息。
 
 提交范围：`lib/cstdmf/unit_test/test_watcher_gaps.cpp`（新，39 用例）、`lib/cstdmf/unit_test/Makefile.rules`（cxxSource 补列）、`lib/cstdmf/watcher.hpp`（编译性修正两处）、`TESTING.md`（TODO 移除 + 收口记录 + 模块表）、`docs/upgrade-plan/migration-status.md`、本文档。
+
+### 7.23 覆盖率补强批次 23：profiler.cpp 收口 + 假绿审计 + 孤儿复活（2026-10-12）
+
+本批同时清了两类账：① 前会话遗留的**红门禁提交** `dc5cd043`（test_profiler.cpp 13 个新用例带着 13 处失败入库，违反门禁）；② 全仓**假绿审计**（"测试验了但没真验"）。cstdmf_test 385→398，全量 1202→1220。
+
+**红门禁 13 失败逐根因修复**（全部是测试侧断言错误，引擎行为以读码+实测为准）：
+
+1. **getAsString 不驱动 statistics watcher 数据填充**（5 败）：`ProfileLinesWatcher::visitChildren`（profiler.cpp:131-137）先 `g_profiler.getStatistics(&profileOutput_)` 再走 SequenceWatcher 枚举——这是 statistics watcher 数据填充的**唯一**驱动路径；`SequenceWatcher::getAsString` 只走 findChild、不填充，裸目录路径返回 `"<DIR>"` + true。旧断言直接 getAsString 后期待统计文本，读到的是空壳。修复：断言改走 `Watcher::visitChildren("profiler/statistics", visitor)`（公开 CSTDMF_DLL API）用 Batch23StatsVisitor 收集标签/值，再对单个条目 getAsString。
+2. **EVENT_COUNTER 断言方向错**：`PROFILER_EVENT_COUNTER` 声明的事件计数器**没有** statistics 文本 display entry（仅 JSON trace 的 `"ph":"C"` 路径投递），旧断言在文本里找名字必然落空。修复：反向断言文本里**不含**该名字，并以注释钉住 JSON 才是其投递面。
+3. **空帧字母序断言 + 时序型断言不可控**（2 败源）：name/numcalls 排序断言跑在无条目的帧上（npos<npos 恒真但先序断言假）；TIME 模式的时序断言依赖 busy-wait 差值，volatile 自旋虽在 -O2 存活（g++ -S 实证）但 OS 抢注/冷启动 1-in-N 翻车（实测 8 跑 1 败）。修复：删时序断言（留注释），排序行为改钉确定性比较器（`SortByNumCalls` 按计数 3:1）；**每个模式断言前重录帧**——"每个 tick 消费自上一 tick 起累积的条目"，多模式共用一帧是本测试族的结构性错误。
+4. **层级导航可见性门控**（3 败）：线程 HierEntry 初始 HIDDEN ⇒ MainThread 不可见；`toggleChildren` 对直接子做 XOR VISIBLE；next/prev 走 HIGHLIGHTED(0x2) 色位判定；prev 到 root（All Threads）有界耗尽。旧断言未先 toggle 就期待可见、并把守卫条目兄弟混进断言。修复：toggle→next 有界循环（≤Profiler::MAX_STACK_DEPTH）按色位定位 + prev-drain 回 root 全链断言。
+5. **counter 落在错帧**：`PROFILER_COUNTER` 事件加在了非 dump 帧——被读取的文件来自最终 dump 帧。修复：挪到 count=1 的最终帧。
+6. **线程槽扫描两错**：slot 名与 worker 名非同一字符串（trampoline 自动注册为 `Batch23WorkerThread`）；join 后槽位已被 removeThread 延迟删除。修复：worker 存活期断言 `: Batch23WorkerThread`、按名扫描定位槽、join 后守卫式断言（槽未定位则显式失败）。
+
+**假绿审计结果**（机械化扫描：未链接孤儿 / 宏守卫恒 0 / 同义反复 CHECK 三类）：
+
+1. **`test_fixed_sized_allocator.cpp` 析构测试 `CHECK(true)`**（批次21 遗留假绿）：换计数钩子实断言——堆上构造 allocator、装计数钩子（转发 BW::Allocator::heap* 并计数）、分配 8/16/64、快照 allocsBeforeDtor、bw_safe_delete 后断言 frees≥allocs 且 allocs 总数守恒。
+2. **孤儿测试复活**（"文件存在≠参编"，批次20 第三例续篇）：`scene/test_scene_object_flags.cpp`（+2 用例，scene 3→5）与 `network/test_piggybacks_longer_than_normal.cpp`（+3 用例，Large_piggyback 三用例）两文件从未进各自 Makefile.rules 的 cxxSource，复活后一次跑绿。
+3. **`cstdmf/test_object_pool.cpp` 确认编译坏**：object_pool.hpp:343 调 `LookUpTable::reserve()`，本树 lookup_table.hpp 从未有此成员（reserve 仅是构造参数）——上游测试与头漂移，正是其孤儿原因；cstdmf Makefile.rules 内注释登记，不硬凑。
+4. **fprintf 诊断残留清除**：红门禁期间的临时诊断打印全部删除。
+5. **环境漂移**：network_test ConfigTest "Insufficient recv buffer"——内核更新把 `net.core.rmem_max` 重置回 4MB（2026-10-01 曾设 16MB）；sysctl 恢复（非持久，TESTING.md 已登记陷阱档）。
+
+**覆盖率对账（gcovr，精准插桩口径——只重编 cstdmf TU，同批次 21）**：`profiler.cpp` 6% → **94%**（1155/1222 行）；`profiler.hpp` 100%、`profiler.ipp` 84%。残余 67 行不可测臂逐条登记：`SortByNamePtr` 比较器（BW_UNUSED 死代码）、HitchDetector 全族、MF_SERVER 排除族、`ENABLE_PER_CORE_PROFILER=0` 面、`processEntriesTask_` 不 delete（静态任务槽复用）、jsonDump else-if 停臂（force 下不可达）、tick stall WARNING、frameNumber 竞态窗口、END mismatch 健康态 ASSERT、rootWatcher fini 悬垂、`doBackgroundTask` !historyFile_ 竞态。模块级 cstdmf 表值维持批次 22 全量插桩值（54%），全量复测待下轮（与批次 21 处置同口径）。
+
+**门禁记录**：修复后 cstdmf_test 398/0 连跑 8×；全量 21 模块门禁 1220 全绿两轮（Python 3.13.15 树与 3.13.16 升级树各一轮，GATE_EXIT=0）；删桩恢复后 gcda=0、对象 gcov 符数=0、cstdmf_test 复跑 398/0。
+
+**本批确立的引擎事实（profiler 语义，测试者口径）**：
+
+1. **statistics watcher 的数据填充只发生在 visitChildren**：任何"读一眼 getAsString 就该有数据"的预期都是错的；裸目录路径返回 `"<DIR>"` + true 是 SequenceWatcher 的目录哨兵语义。
+2. **每个 tick 消费自上一 tick 起累积的条目**：跨模式共用一帧会让后位模式拿到空帧或被前位模式污染的帧。
+3. **时序型排序断言在单测里不可持有**：busy-wait 差值受 OS 抢注污染；排序行为断言一律改确定性比较器。
+4. **线程 HierEntry 初始 HIDDEN**：`internalAddThread` 设 visible_=true 的是统计表线程行，不是层级树条目；层级树要从 root 逐层 toggle。
+5. **SimpleThread trampoline 自动以线程名注册**：slot 名 ≠ 传入 worker 名；退出自动 removeThread（延迟删除），join 后槽位即刻不可靠。
+
+提交范围：`lib/cstdmf/unit_test/test_profiler.cpp`（13 用例修复）、`lib/cstdmf/unit_test/test_fixed_sized_allocator.cpp`（CHECK(true) 换计数钩子）、`lib/cstdmf/unit_test/Makefile.rules`（test_object_pool 注释登记）、`lib/scene/unit_test/Makefile.rules` + `lib/network/unit_test/Makefile.rules`（孤儿复活）、`TESTING.md`、`docs/upgrade-plan/migration-status.md`、本文档；另附 Python 3.13.16 升级（见 §6 批次 8）。
