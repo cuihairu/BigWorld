@@ -110,6 +110,34 @@ vcpkg 静态库的传递依赖在 BW 链接行内闭合：curl→ssl/crypto+zlib
   `third_party/zip`、`third_party/png`、`third_party/sqlite` 源码工程，
   与 R3 一并处理。
 
+### 3.1 Linux CMake 样板（cstdmf，与 make 双轨并存）
+
+`cmake/samples/cstdmf/CMakeLists.txt` 是第一个 Linux 侧可独立构建的组件样板
+（**不属于** `lib/*/CMakeLists.txt` 那套 BWStandardProject Windows 超级工程，
+两者互不引用）。样板构成：
+
+- 四个目标：`cstdmf`（静态库，57 TU）、`unit_test_lib`（4 TU）、
+  `CppUnitLite2`（7 TU，从 `third_party/CppUnitLite2/src` 直编）、
+  `cstdmf_test`（48 TU）。前两者与 CppUnitLite2 在 make 链里也是独立组件，
+  样板里就地源码编译，使测试二进制链接面与 make 完全一致
+  （`-lunit_test_lib -lCppUnitLite2 -lcstdmf -lm -lpthread` + `-rdynamic`）。
+- 与 make 输出对齐的保证：编译选项/宏（`-std=c++23 -O3 -g -Wall -Werror`、
+  `MF_SERVER / MF_CONFIG="hybrid" / BW_BUILD_PLATFORM="el7" / CSTDMF_EXPORT|IMPORT /
+  CODE_INLINE / MF_USE_ASSERTS / _HYBRID`、测试侧追加 `-Wno-float-equal`）逐字取自
+  `make -n unit_test_cstdmf` 实测命令行；源清单逐条对照 `Makefile.rules`
+  （排除 Windows/macOS TU 与 make 清单外的文件，如 `test_object_pool.cpp`
+  孤儿登记——`object_pool.hpp:343` 需 `LookUpTable::reserve()` 本树无此成员）。
+  依赖升级时改 `Makefile.rules` 必须同步此清单。
+- 依赖走共享 manifest：`VCPKG_MANIFEST_DIR` 默认指 `programming/bigworld`，
+  自定义 triplet `x64-linux-bw` 与 overlay 目录在 CMakeLists 内默认，首次
+  configure 时 vcpkg manifest 模式把 7 个依赖装进构建目录（binary cache
+  命中后为秒级）。
+- 本地一条命令：`scripts/build-cstdmf-cmake.sh`（configure → build → ctest，
+  缺省构建目录 `programming/bigworld/build/cmake-cstdmf/`，已进 .gitignore）。
+- 验证记录（2026-10-12）：全新构建目录冷启动（依赖从 binary cache 恢复）
+  configure/build 通过，`cstdmf_test` **398 用例全绿**，与 make 产出的
+  cstdmf_test 用例数一致；make 侧回归复跑同样 398 全绿。
+
 ## 4. 引擎源码适配
 
 - **libpng**（`lib/moo/png.cpp`）：`png/png.h` → `<png.h>`；删除私有头
