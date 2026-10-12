@@ -137,6 +137,8 @@ vcpkg 静态库的传递依赖在 BW 链接行内闭合：curl→ssl/crypto+zlib
 - 验证记录（2026-10-12）：全新构建目录冷启动（依赖从 binary cache 恢复）
   configure/build 通过，`cstdmf_test` **398 用例全绿**，与 make 产出的
   cstdmf_test 用例数一致；make 侧回归复跑同样 398 全绿。
+- CI 侧由 `.github/workflows/ci.yml` 在每次 push/PR 上以干净环境跑同一样板
+  （vcpkg 按 baseline 克隆 + binary cache + ctest），防 manifest 与样板漂移。
 
 ## 4. 引擎源码适配
 

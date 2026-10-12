@@ -99,3 +99,5 @@ mv "$RPM_TOP"/RPMS/x86_64/*.rpm "$OUT_DIR/"
 
 echo "== packages in $OUT_DIR =="
 ls -lh "$OUT_DIR"
+# consumed by .github/workflows/daily-build.yml for the artifact name
+printf '%s\n' "$DEB_VER" > "$OUT_DIR/pkg-version.txt"

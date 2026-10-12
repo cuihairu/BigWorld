@@ -50,14 +50,28 @@
 | 环节 | 设计 | 关键点 |
 |------|------|--------|
 | 触发 | `schedule: 23 21 * * *`（UTC，= 北京时间每日 05:23）+ `workflow_dispatch` | GitHub 只在**默认分支（main）**上跑 schedule——合并到 main 后自动生效；dev 分支用手动触发 |
+| 48 小时判定 | schedule 触发时 `git rev-list --count --since='48 hours ago' HEAD`，为 0 则跳过全部构建步骤（checkout 需 `fetch-depth: 0`）；`workflow_dispatch` 无条件构建 | 无提交的空转日不产包、不烧 runner；"每日构建=48 小时内有更新才发二进制更新"的语义落在这一步 |
 | 环境 | ubuntu-24.04 固定版本 + gcc-14（update-alternatives 指到 g++ 默认位） | 平台探测的 Debian 回退使其自动落在 el7 工具链配置，无需覆盖 |
 | 系统依赖 | readline/ncurses/bz2/sqlite3/gdbm/mysqlclient/ffi 等 dev 包 | `libmysqlclient-dev` 必装——`third_party_mysql.mak` 在编译链内；vendored CPython 3.13 构建需要这组头文件 |
 | UDP 缓冲 | `sysctl net.core.rmem_max=16777216` | network_test 的 ConfigTest 门禁阈值，低于它整模块红 |
-| 第三方 | 克隆官方 vcpkg + bootstrap，manifest（vcpkg.json）在 make 过程中自动物化 | `VCPKG_ROOT` 环境变量 |
+| 第三方 | 克隆官方 vcpkg 并 checkout 到 manifest 的 `builtin-baseline`（从 vcpkg.json 提取，单一事实源）+ bootstrap；vcpkg binary cache 经 `actions/cache` 跨 run 复用（`VCPKG_DEFAULT_BINARY_CACHE`，缓存键=baseline+manifest 哈希） | 依赖版本不随 vcpkg 上游漂移（钉版机制见 [第三方依赖切换到 vcpkg](/vcpkg-migration) §1.1） |
 | 门禁 | 全量构建 → `bw-run-all-unit-tests`（21 模块） | 打包只在上游两步全绿后执行 |
-| 产物 | tar.gz / deb / rpm 三格式，`upload-artifact` 保留 14 天 | **不打 tag、不发 GitHub Release**（仓库规则）；每日产物随保留期自动过期 |
+| 产物 | tar.gz / deb / rpm 三格式，artifact 名 `bigworld-daily-<version>+daily<UTC 日期>.<git 短 sha>-linux-x86_64`（读 `out/pkg-version.txt`），保留 14 天 | 包文件名同口径（见下）；**不打 tag、不发 GitHub Release**（仓库规则）；每日产物随保留期自动过期 |
 
 </div>
+
+三种包文件由 `scripts/package-daily.sh` 从 make 安装树一次性产出，命名规则：
+
+- tar.gz：`bigworld-14.4.1+daily20261012.<sha>-linux-x86_64.tar.gz`
+- deb：`bigworld_14.4.1+daily20261012.<sha>_amd64.deb`
+- rpm：`bigworld-14.4.1-1.daily20261012.<sha>.x86_64.rpm`
+
+本地一条等价命令：`bash scripts/package-daily.sh <out-dir>`（要求先完成全量
+make；脚本从 `vcpkg.json` 的 `version` 取版本基线）。**exe 缺口**：Windows
+原生构建未迁移（R3，见上文分层表），每日构建暂无 exe 产物，已在 workflow
+与本页登记为卡点，非遗漏。
+
+
 
 ### 验证口径（2026-09-28 dev 分支全链打通）
 

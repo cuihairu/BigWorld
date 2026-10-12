@@ -7,6 +7,11 @@ name: Daily Build
 #   * no GitHub releases are published — results are workflow ARTIFACTS only,
 #     kept for 14 days and gone after that.
 #
+# 48-hour rule: the scheduled run only produces packages when the branch has
+# new commits within the last 48 hours (git rev-list --count --since);
+# otherwise every build step is skipped. workflow_dispatch runs
+# unconditionally (used for manual rebuilds and dev-branch testing).
+#
 # Scheduling note: GitHub only runs `schedule` triggers from the DEFAULT
 # branch (main). On dev, run this manually via workflow_dispatch.
 
@@ -31,8 +36,29 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          # full history: the 48-hour freshness check counts commits by date
+          fetch-depth: 0
+
+      - name: Check for commits in the last 48 hours
+        id: freshness
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "stale=false" >> "$GITHUB_OUTPUT"
+            echo "Manual dispatch: build unconditionally."
+            exit 0
+          fi
+          count="$(git rev-list --count --since='48 hours ago' HEAD)"
+          echo "commits in last 48h: $count"
+          if [ "$count" -eq 0 ]; then
+            echo "stale=true" >> "$GITHUB_OUTPUT"
+            echo "No commits in the last 48 hours — skipping the daily build."
+          else
+            echo "stale=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Install system dependencies
+        if: steps.freshness.outputs.stale != 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
@@ -52,14 +78,30 @@ jobs:
           gcc --version | head -1
 
       - name: Raise UDP buffer limits
+        if: steps.freshness.outputs.stale != 'true'
         # network_test's ConfigTest gates on net.core.rmem_max >= 16777216.
         run: sudo sysctl -w net.core.rmem_max=16777216
 
-      - name: Set up vcpkg
+      - name: Read manifest baseline pin
+        if: steps.freshness.outputs.stale != 'true'
+        id: baseline
         run: |
-          git clone --depth 1 https://github.com/microsoft/vcpkg.git "$HOME/vcpkg"
+          BASE="$(sed -n 's/.*"builtin-baseline"[[:space:]]*:[[:space:]]*"\([0-9a-f]\{40\}\)".*/\1/p' \
+            programming/bigworld/vcpkg.json | head -1)"
+          [ -n "$BASE" ] || { echo "ERROR: no builtin-baseline in vcpkg.json" >&2; exit 1; }
+          echo "baseline=$BASE" >> "$GITHUB_OUTPUT"
+
+      - name: Set up vcpkg at pinned baseline
+        if: steps.freshness.outputs.stale != 'true'
+        run: |
+          git clone https://github.com/microsoft/vcpkg.git "$HOME/vcpkg"
+          git -C "$HOME/vcpkg" checkout "${{ steps.baseline.outputs.baseline }}"
           "$HOME/vcpkg/bootstrap-vcpkg.sh" -disableMetrics
           echo "VCPKG_ROOT=$HOME/vcpkg" >> "$GITHUB_ENV"
+          # vcpkg binary cache shared across runs via actions/cache below;
+          # the make chain invokes vcpkg itself and honours this env var.
+          mkdir -p "$GITHUB_WORKSPACE/vcpkg-bcache"
+          echo "VCPKG_DEFAULT_BINARY_CACHE=$GITHUB_WORKSPACE/vcpkg-bcache" >> "$GITHUB_ENV"
           # The embedded CPython stdlib is only installed into game/ when this
           # flag is set (third_party_python.mak gates python_install on it;
           # nothing in the makefiles defaults it). Without it the build passes
@@ -67,21 +109,44 @@ jobs:
           # "No module named 'encodings'" — second run failure.
           echo "user_shouldInstallPython=1" >> "$GITHUB_ENV"
 
+      - name: Restore vcpkg binary cache
+        if: steps.freshness.outputs.stale != 'true'
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/vcpkg-bcache
+          key: vcpkg-bcache-${{ runner.os }}-${{ steps.baseline.outputs.baseline }}-${{ hashFiles('programming/bigworld/vcpkg.json') }}
+          restore-keys: |
+            vcpkg-bcache-${{ runner.os }}-${{ steps.baseline.outputs.baseline }}-
+            vcpkg-bcache-${{ runner.os }}-
+
       - name: Build (third party + all components)
+        if: steps.freshness.outputs.stale != 'true'
         working-directory: programming
         run: env VCPKG_ROOT="$VCPKG_ROOT" make -s -j"$(nproc)" -rR
 
       - name: Run all unit tests (21 modules)
+        if: steps.freshness.outputs.stale != 'true'
         working-directory: programming
         run: env VCPKG_ROOT="$VCPKG_ROOT" make -s -rR bw-run-all-unit-tests
 
       - name: Package (tar.gz / deb / rpm)
-        run: bash scripts/package-daily.sh out
+        if: steps.freshness.outputs.stale != 'true'
+        id: pkg
+        run: |
+          bash scripts/package-daily.sh out
+          # version+date+commit-short-hash tag shared by the three package
+          # file names; also used for the artifact name below
+          echo "ver=$(cat out/pkg-version.txt)" >> "$GITHUB_OUTPUT"
 
       - name: Upload daily packages
+        if: steps.freshness.outputs.stale != 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: bigworld-daily-${{ github.run_id }}-linux-x86_64
+          name: bigworld-daily-${{ steps.pkg.outputs.ver }}-linux-x86_64
           path: out/*
           retention-days: 14
           if-no-files-found: error
+
+      - name: Skip notice (no commits in 48 hours)
+        if: steps.freshness.outputs.stale == 'true'
+        run: echo "Daily build skipped by the 48-hour freshness rule — nothing to do."
