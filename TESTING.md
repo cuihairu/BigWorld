@@ -87,13 +87,12 @@ gcovr -r /home/cui/workspaces/BigWorld/programming/bigworld --txt -o /tmp/cov.tx
 | chunk/chunk.cpp | 1215/1228 | 1% | 受限：需 ChunkSpace + chunk 装载机 |
 | connection/server_connection.cpp | 990/990 | 0% | **维持不可测**（真登录管线 + TCPChannel 状态机，批次14/16） |
 | entitydef/entity_description.cpp | 665/665 | 0% | 受限：需 EntityType/EntityDef XML 装载机全套 |
-| resmgr/datasection.cpp | 600/878 | 31% | 候选 |
 | moo/image.ipp | 589/589 | 0% | 受限：客户端图像合成面 |
 | network/machine_guard.cpp | 553/774 | 28% | bwmachined 面不可达部分维持登记（批次17） |
 | connection/message_handlers.hpp | 538/538 | 0% | **结构性死代码**（模板 handler 表无人实例化） |
 | chunk/chunk_space.cpp | 506/506 | 0% | 受限：需 ChunkSpace + chunk 装载机 |
 | connection/replay_controller.cpp | 495/495 | 0% | 受限：录像/回放文件管线（线格式已批次12 测） |
-| pyscript/pywatcher.cpp | 416/730 | 43% | 候选 |
+| pyscript/pywatcher.cpp | 416/730 | 43% | 候选（下批首位） |
 | chunk/chunk_boundary.cpp | 403/403 | 0% | 受限：同 chunk 体系 |
 | network/logger_endpoint.cpp | 398/398 | 0% | 维持受限登记（真消息日志管线，批次17） |
 | resmgr/bwresource.cpp | 386/746 | 48% | 候选 |
@@ -151,3 +150,20 @@ MatrixAnimation 符数 0；Vector4 半边有 Vector4Animation 触达）、3 行 
 true）、8 行死成员（pyGet_x/y/z/w 被 `PyVector::pyGetAttribute` 单字符截获取代后永不调用的历史体）、
 9 行宏归属幻影行（`PY_RW_ATTRIBUTE_DECLARE`/`PY_SCRIPT_CONVERTERS` 展开点——访问器体实际生成于
 pyobject_plus.hpp 头内行、执行归属头行，.cpp 展开点行恒 0，对应读写已由测试触达），见台账 §7.25）。
+`resmgr/datasection.cpp` 19.3%→**99.7%**（精准插桩口径 169/876 → 873/876 实例行，批次 26；此前无专属
+测试，覆盖全靠 bwresource/xml_section/zip_section 等宿主测试顺带；表值 600/878 属 2026-09-28 全量插桩
+口径、不可直接换算，撤出本表；新建 `test_datasection.cpp` 21 用例直驱：迭代器全协议（默认构造/前增/
+后增旧位拷贝/==/!=/解引用/tag）、getIndex·childSectionName·openFirstSection 双臂、openSection 空/深/
+尾斜杠/单标创建、openSections 平铺与嵌套、deleteSection/deleteSections、16 型标量读写往返+缺失默认、
+wideString/blob/binary 往返（binary 需 BinSection 宿主——XML 子持基类 setBinary 拒写，恰覆盖基类
+:1973-1976）、Vector2/3/4/Matrix34 往返、复数读 11 + 复数写 11 的缺失父守卫族（DirSection 挂不存在
+基路径使 writer 侧 newSection/makeDirectory 失败，一次驱动 20 条 `if(!pSection)` 守卫且零文件副作用）、
+基类 as* 15 式默认回显 + 基类 set* 全拒（BinSection 宿主）、createAppropriateSection 五臂（合法 XML/
+copy 保护/非法 XML 回落 BinSection/allowModifyData=true 拒绝/creator 短路）、splitSaveAsFileName 经
+BinSection::save 三臂（protected 直测不可达；zip 父臂以 purgeAll 前后包夹防缓存污染 test_zip_section）、
+setWatcherValues 空路径/成功/dot→space 重试/空值静默、copy（Bin→Bin 短路 + modifyCurrent 两义 + XML→XML
+全树 compare==0）、copySections tagged/all 合并覆盖、compare/binaryCompare 全差异臂、sanitise 族基类
+恒等；残余 3 行（:90-93）= 迭代器 operator* 空子回退臂，**登记为到达即崩的结构性死臂**——回退体调用
+`childSectionName( index_ )`，基类实现 `openChild(index)->sectionName()` 在同场景恰为 NULL 解引用
+（datasection.cpp:168，gdb SIGSEGV 实证），属源码级隐患登记不修，见台账 §7.26；
+下批首位候选 `pyscript/pywatcher.cpp`）；

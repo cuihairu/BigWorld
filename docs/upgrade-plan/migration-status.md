@@ -13,9 +13,9 @@
 | 事项 | 状态 | 说明 |
 |------|------|------|
 | 嵌入式解释器 | ✅ Python 2.7 → **3.13.16** | 3.13.15 迁移完成后，2026-10-12 同系列安全补丁升至 3.13.16（全链构建 + 冒烟 + 全量单测复验） |
-| 全量单测门禁 | ✅ 21 模块 / 1259 用例全绿 | 2026-10-13 实测（批次25 后；pyscript_test 118 → 128） |
-| 覆盖率补强工程 | ✅ 批次 1–25 已完成 | 批次25 收口 `pyscript/script_math.cpp`（精准口径 1000/1083 92.3% → 1050/1083 **97.0%**，残余 33 行全数分类：13 行 Windows-only 死区 + 3 死臂 + 8 死成员 + 9 宏幻影行）；缺口 top 清单落 [TESTING.md](../../TESTING.md) |
-| 下批首位候选 | ⏳ `resmgr/datasection.cpp` | 600/878 缺口、31%，候选池最大项（其余候选：pywatcher.cpp 43%、bwresource.cpp 48%、method_description.cpp 32%） |
+| 全量单测门禁 | ✅ 21 模块 / 1280 用例全绿 | 2026-10-13 实测（批次26 后；resmgr_test 50 → 71） |
+| 覆盖率补强工程 | ✅ 批次 1–26 已完成 | 批次26 收口 `resmgr/datasection.cpp`（精准口径 169/876 19.3% → 873/876 **99.7%**，新建 21 用例；唯一残余为迭代器 operator* 空子回退臂的到达即崩死臂）；缺口 top 清单落 [TESTING.md](../../TESTING.md) |
+| 下批首位候选 | ⏳ `pyscript/pywatcher.cpp` | 416/730 缺口、43%（其余候选：bwresource.cpp 48%、method_description.cpp 32%） |
 
 </div>
 
@@ -43,7 +43,7 @@ gcovr 全量聚合值。客户端大件（moo / physics2 / server / chunk）接�
 
 </div>
 
-文件级亮点：`pyscript/script_math.cpp` 92.3% → **97.0%**（精准插桩口径 1000/1083 → 1050/1083 实例行，批次25；新建 `test_script_math_gaps.cpp` 10 用例直驱通用 PyVector number 协议、原地运算符与富比较、参数校验回退、z/yaw/pitch 存取、单操作数 product/combiner 分支与 Vector4Shader 两拒绝臂；残余 33 行全数分类——13 行 Windows-only 构造性死区〔ProviderStore 矩阵半边，唯一 autoTick 的 MatrixProvider 子类 MatrixAnimation 整体 `#if defined( _WIN32 )`〕+ 3 行 safeSetVector 死臂 + 8 行 pyGet_x/y/z/w 死成员 + 9 行宏展开点幻影行，见台账 §7.25；表值 655/1920 属全量插桩口径撤出 TODO 表）；`cstdmf/smartpointer.hpp` 84/91 → **117/118 测试 TU 视角**（批次24；此前无专属测试，新建 `test_smartpointer.cpp` 29 用例直驱两类引用计数基类、自由函数族与 ConstSmartPointer/SmartPointer 全操作面；唯一残余 `:121` 为基析构空体结构性死臂）；`cstdmf/profiler.cpp` 6% → **94%**（1155/1222 行，批次23；红门禁提交 `dc5cd043` 的 13 失败用例逐根因修复 + 385→398 用例；残余 67 行不可测臂逐条登记，见台账 §7.23）；`cstdmf/watcher.hpp` 14% → **22%**（943 → 1545 行覆盖，+602 实例行；批次22 逐类可测性判定 + 39 用例，两阶段全量插桩同口径，BEFORE 干净复测与批次 20 快照一致；总行 6414→6943 为新测试 TU 实例宇宙扩容；残余为生产 TU 从不执行的实例 + 死臂登记）；`cstdmf/fixed_sized_allocator.cpp` 0% → **99%**（286/289，批次21：既有测试组被 `ENABLE_FIXED_SIZED_POOL_ALLOCATOR` 平台宏守卫恒 0，新建 12 用例直驱；残余 3 行为 findPool 排序 shift 死臂）；`physics2/quad_tree.ipp` 0% → 98%（测试 TU 视角 860/876，批次20 Makefile.rules 漏列修复激活）；`physics2/bsp.cpp` 0% → 91%（批次19 死门激活）；`network/tcp_bundle.cpp` 达 100%（批次16 收口）；`network/machine_guard.cpp` 28%（bwmachined 面不可达，批次17 登记）；批次18 派测的 `event_poller.cpp` 45% → 57%（其余缺口为 Linux 死代码的 SelectPoller/PollPoller，175 行结构性登记）。
+文件级亮点：`resmgr/datasection.cpp` 19.3% → **99.7%**（精准插桩口径 169/876 → 873/876 实例行，批次26；新建 `test_datasection.cpp` 21 用例直驱迭代器协议、标量/宽字符/blob/binary/向量/矩阵单复数读写、基类 as*/set* 默认与拒绝面、createAppropriateSection 五臂、经 BinSection::save 的 splitSaveAsFileName 三臂、setWatcherValues、copy/copySections/compare/binaryCompare 全差异臂与 sanitise 族；复数读写的 20 条缺失父守卫用「DirSection 挂不存在基路径」一次驱动且零文件副作用；唯一残余 :90-93 为迭代器 operator* 空子回退臂——回退体经基类 childSectionName 的 `openChild(index)->sectionName()` 在同场景 NULL 解引用，gdb SIGSEGV 实证，登记为到达即崩的结构性死臂兼源码级隐患，见台账 §7.26）；`pyscript/script_math.cpp` 92.3% → **97.0%**（精准插桩口径 1000/1083 → 1050/1083 实例行，批次25；新建 `test_script_math_gaps.cpp` 10 用例直驱通用 PyVector number 协议、原地运算符与富比较、参数校验回退、z/yaw/pitch 存取、单操作数 product/combiner 分支与 Vector4Shader 两拒绝臂；残余 33 行全数分类——13 行 Windows-only 构造性死区〔ProviderStore 矩阵半边，唯一 autoTick 的 MatrixProvider 子类 MatrixAnimation 整体 `#if defined( _WIN32 )`〕+ 3 行 safeSetVector 死臂 + 8 行 pyGet_x/y/z/w 死成员 + 9 行宏展开点幻影行，见台账 §7.25；表值 655/1920 属全量插桩口径撤出 TODO 表）；`cstdmf/smartpointer.hpp` 84/91 → **117/118 测试 TU 视角**（批次24；此前无专属测试，新建 `test_smartpointer.cpp` 29 用例直驱两类引用计数基类、自由函数族与 ConstSmartPointer/SmartPointer 全操作面；唯一残余 `:121` 为基析构空体结构性死臂）；`cstdmf/profiler.cpp` 6% → **94%**（1155/1222 行，批次23；红门禁提交 `dc5cd043` 的 13 失败用例逐根因修复 + 385→398 用例；残余 67 行不可测臂逐条登记，见台账 §7.23）；`cstdmf/watcher.hpp` 14% → **22%**（943 → 1545 行覆盖，+602 实例行；批次22 逐类可测性判定 + 39 用例，两阶段全量插桩同口径，BEFORE 干净复测与批次 20 快照一致；总行 6414→6943 为新测试 TU 实例宇宙扩容；残余为生产 TU 从不执行的实例 + 死臂登记）；`cstdmf/fixed_sized_allocator.cpp` 0% → **99%**（286/289，批次21：既有测试组被 `ENABLE_FIXED_SIZED_POOL_ALLOCATOR` 平台宏守卫恒 0，新建 12 用例直驱；残余 3 行为 findPool 排序 shift 死臂）；`physics2/quad_tree.ipp` 0% → 98%（测试 TU 视角 860/876，批次20 Makefile.rules 漏列修复激活）；`physics2/bsp.cpp` 0% → 91%（批次19 死门激活）；`network/tcp_bundle.cpp` 达 100%（批次16 收口）；`network/machine_guard.cpp` 28%（bwmachined 面不可达，批次17 登记）；批次18 派测的 `event_poller.cpp` 45% → 57%（其余缺口为 Linux 死代码的 SelectPoller/PollPoller，175 行结构性登记）。
 
 ## 批次时间线
 
@@ -68,10 +68,11 @@ gcovr 全量聚合值。客户端大件（moo / physics2 / server / chunk）接�
 | 23 | 2026-10-12 | profiler.cpp 收口（红门禁 13 用例修复 + CHECK(true) 换计数钩子实断言 + 孤儿测试复活：scene +2 / network +3，6%→94%）+ Python 3.13.15→3.13.16 |
 | 24 | 2026-10-13 | smartpointer.hpp 直驱收口（此前无专属测试，29 用例，84/91→117/118 测试 TU 视角） |
 | 25 | 2026-10-13 | script_math.cpp 收口（精准口径复判 + 10 用例，92.3%→97.0%；ProviderStore 矩阵半边 Windows-only 死区取证） |
+| 26 | 2026-10-13 | datasection.cpp 直驱收口（此前无专属测试，21 用例，19.3%→99.7%；operator* 回退臂到达即崩死臂登记） |
 
 </div>
 
-用例总量演进：批次14 后 1061 → 批次15 后 1071 → 批次16 后 1083 → 批次17 后 1099 → 批次18 后 1113 → 批次19 后 1127 → 批次20 后 1151 → 批次21 后 1163 → 批次22 后 1202 → 批次23 后 **1220**（全量 21 模块门禁全绿；批次23 净增 +18 = cstdmf profiler +13 + scene 孤儿复活 +2 + network 孤儿复活 +3；假绿修复均为原位改写断言，不增减用例数） → 批次24 后 **1249**（cstdmf smartpointer 直驱 +29） → 批次25 后 **1259**（pyscript script_math 缺口直驱 +10）。
+用例总量演进：批次14 后 1061 → 批次15 后 1071 → 批次16 后 1083 → 批次17 后 1099 → 批次18 后 1113 → 批次19 后 1127 → 批次20 后 1151 → 批次21 后 1163 → 批次22 后 1202 → 批次23 后 **1220**（全量 21 模块门禁全绿；批次23 净增 +18 = cstdmf profiler +13 + scene 孤儿复活 +2 + network 孤儿复活 +3；假绿修复均为原位改写断言，不增减用例数） → 批次24 后 **1249**（cstdmf smartpointer 直驱 +29） → 批次25 后 **1259**（pyscript script_math 缺口直驱 +10） → 批次26 后 **1280**（resmgr datasection 直驱 +21）。
 
 ## 不可达 / 受限登记摘要
 
@@ -87,7 +88,7 @@ gcovr 全量聚合值。客户端大件（moo / physics2 / server / chunk）接�
 - `terrain/terrain2/terrain_height_map2.cpp`（755 行）— gcovr 对该记录丢失文件名列（空名条目），未逐臂判定。
 - `physics2/quad_tree.ipp` 死函数族 — **结构性死代码**（批次20 三重取证）：`QuadTree::del`（calculateQTRange 少传 origin_）、`QuadTree::testPoint`（调不存在的 `QuadTreeNode::testPoint`）、`print`/`printQTNode`（`node.elements()` 不存在）、`countAt`（int 实参传 Quad 形参）——从未实例化，一实例化即编译错；生产侧 chunk 的 `pChunkTree_` 是 HullTree，对 ObstacleTree 只用 addToRoot。
 
-已收口（移出登记）：`pyscript/script_math.cpp`（92.3% → **97.0%** 精准口径，1000/1083 → 1050/1083 实例行，批次25 复判后直驱；新建 `test_script_math_gaps.cpp` 10 用例，残余 33 行全数分类：13 行 Windows-only 构造性死区〔ProviderStore 矩阵半边——唯一 autoTick 的 MatrixProvider 子类 MatrixAnimation 整体 `#if defined( _WIN32 )`，档案内符号数 0〕、3 行 safeSetVector 死臂、8 行 pyGet_x/y/z/w 死成员、9 行宏展开点幻影行，见台账 §7.25）；`cstdmf/smartpointer.hpp`（84/91 → **117/118** 测试 TU 视角，批次24 直驱收口；唯一残余 `:121` 基析构空体结构性死臂，见台账 §7.24）；`cstdmf/watcher.hpp`（14% → **22%**，批次22 逐类可测性判定；39 用例收编含并行会话追加 3 用例审读——SafeWatcher 用例的非 NULL base 在直驱 DataWatcher 引用成员语义下 `&value + &value` 非规范地址必 SIGSEGV，修正后收编；rootWatcher/fini 死臂、`_XBOX360` 分支与 uint64 提取器缺 else 缺陷登记，见台账 §7.22）；`cstdmf/fixed_sized_allocator.cpp`（289 行，0% → **99%**，批次21 平台宏死测试直驱；根因是既有 test_allocate.cpp 两组用例整体被 `ENABLE_FIXED_SIZED_POOL_ALLOCATOR` 守卫、el7 服务端构建恒 0——“有测试却 0%”第三例；残余 3 行为 findPool 排序 shift 结构性死臂，登记 `getNumPoolItemsForSize` 未命中读 `allocSizes_[-1]` 越界隐患，见台账 §7.21）；`physics2/quad_tree.ipp`（0% → **98%** 测试 TU 视角，批次20 漏列激活；残余 16 行为断言/日志失败臂 + 上述死函数族）；`physics2/bsp.cpp`（778 行，0% → **91%**，批次19 死门激活；残余 67 行为构造校验/加载错误臂，逐段登记见台账 §7.19）。缺口 top 全清单见 [TESTING.md](../../TESTING.md) TODO 段。
+已收口（移出登记）：`resmgr/datasection.cpp`（19.3% → **99.7%** 精准口径，169/876 → 873/876 实例行，批次26 直驱收口；新建 `test_datasection.cpp` 21 用例，残余 3 行为迭代器 operator* 空子回退臂——到达即崩的结构性死臂兼源码级隐患登记，见台账 §7.26）；`pyscript/script_math.cpp`（92.3% → **97.0%** 精准口径，1000/1083 → 1050/1083 实例行，批次25 复判后直驱；新建 `test_script_math_gaps.cpp` 10 用例，残余 33 行全数分类：13 行 Windows-only 构造性死区〔ProviderStore 矩阵半边——唯一 autoTick 的 MatrixProvider 子类 MatrixAnimation 整体 `#if defined( _WIN32 )`，档案内符号数 0〕、3 行 safeSetVector 死臂、8 行 pyGet_x/y/z/w 死成员、9 行宏展开点幻影行，见台账 §7.25）；`cstdmf/smartpointer.hpp`（84/91 → **117/118** 测试 TU 视角，批次24 直驱收口；唯一残余 `:121` 基析构空体结构性死臂，见台账 §7.24）；`cstdmf/watcher.hpp`（14% → **22%**，批次22 逐类可测性判定；39 用例收编含并行会话追加 3 用例审读——SafeWatcher 用例的非 NULL base 在直驱 DataWatcher 引用成员语义下 `&value + &value` 非规范地址必 SIGSEGV，修正后收编；rootWatcher/fini 死臂、`_XBOX360` 分支与 uint64 提取器缺 else 缺陷登记，见台账 §7.22）；`cstdmf/fixed_sized_allocator.cpp`（289 行，0% → **99%**，批次21 平台宏死测试直驱；根因是既有 test_allocate.cpp 两组用例整体被 `ENABLE_FIXED_SIZED_POOL_ALLOCATOR` 守卫、el7 服务端构建恒 0——“有测试却 0%”第三例；残余 3 行为 findPool 排序 shift 结构性死臂，登记 `getNumPoolItemsForSize` 未命中读 `allocSizes_[-1]` 越界隐患，见台账 §7.21）；`physics2/quad_tree.ipp`（0% → **98%** 测试 TU 视角，批次20 漏列激活；残余 16 行为断言/日志失败臂 + 上述死函数族）；`physics2/bsp.cpp`（778 行，0% → **91%**，批次19 死门激活；残余 67 行为构造校验/加载错误臂，逐段登记见台账 §7.19）。缺口 top 全清单见 [TESTING.md](../../TESTING.md) TODO 段。
 
 ## 口径与边界
 

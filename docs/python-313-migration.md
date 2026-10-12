@@ -745,3 +745,40 @@ TODO 表候选落位。`script_math.cpp` 在批次 5 已有 23 用例（`test_sc
 表值 655/1920 撤出 TESTING.md TODO 表，以精准口径 1050/1083（97.0%）登记收口。下批首位候选 `resmgr/datasection.cpp`（600/878、31%，表上剩余候选最大项）。
 
 提交范围：`lib/pyscript/unit_test/test_script_math_gaps.cpp`（新）、`lib/pyscript/unit_test/Makefile.rules`、`TESTING.md`、`docs/upgrade-plan/migration-status.md`、本文档。
+
+### 7.26 覆盖率补强批次 26：datasection.cpp 直驱收口（2026-10-13）
+
+TODO 表候选落位。`resmgr/datasection.cpp` 是 resmgr 的抽象基类层（878 行表值口径下 600 行未覆盖），此前无专属测试——覆盖全部来自 bwresource/xml_section/zip_section 等宿主测试顺带。本批先以精准插桩口径复判（只重编 resmgr TU，同批次 21/23/24/25）：**169/876（19.3%）**——表值 600/878 属 2026-09-28 全量插桩口径，不可直接换算；复判后真实暗区 707 行，几乎覆盖 read*/write*/as*/set* 全族、迭代器、copy/compare、sanitise、setWatcherValues、createAppropriateSection 回落臂。新建 `test_datasection.cpp` 21 用例。
+
+**用例覆盖面**（21 用例）：
+
+1. **迭代器全协议**：默认构造互等/对 begin 不等、前增协议、后增旧位拷贝（`old = it++` 后 old.tag()="a"、it.tag()="b"）、`==`/`!=`（含同索引异 section 不等）、`operator*`、`tag()` 经 childSectionName。
+2. **索引与首子**：getIndex 命中/异客 -1、childSectionName、openFirstSection 双臂。
+3. **openSection 路径学**：空路径→自身、深路径、尾斜杠停在命名子、缺叶拒绝/创建、单标创建。
+4. **openSections**：平铺 2、嵌套 "a/b" 2、"zz/b" 0、"missing" 0。
+5. **deleteSection/deleteSections**：深路径删叶、重复删除失败、顶层缺失失败、deleteSections 扫荡同名。
+6. **16 型标量读写往返 + 缺失默认**（bool/int/uint/long/int64/uint64/float/double/string + 深路径）。
+7. **wideString/blob/binary 往返**：binary 需 BinSection 宿主——XML 子持基类 setBinary 拒写，恰好反证基类 setBinary :1973-1976。
+8. **Vector2/3/4/Matrix34 往返 + 缺失默认**（Matrix 经 applyToOrigin 校验）。
+9-10. **复数读写 11+11**：标量族与向量/矩阵族平铺与嵌套路径；"no/parent" 读空臂。
+11-12. **基类 as\* 15 式默认回显**（BinSection 只覆写 binary 族，其余全部落到 datasection.cpp 基类体）+ **基类 set\* 全拒**（setBinary 例外为 true）。
+13. **createAppropriateSection 五臂**：合法 XML、allowModifyData=false 拷贝保护（缓冲首字节不变）、非法 XML 回落 BinSection（dynamic_cast 断言）、allowModifyData=true 拒绝（NULL）、creator 短路。
+14. **splitSaveAsFileName 三臂（经 BinSection::save）**：protected 直测不可达。缺失父拒；无斜杠臂写 "."（fopen 目录失败）——首版写 "lots_of_files" 曾把文件真实落进 game/res/bigworld/（BWResource 根为 DirSection(MultiFileSystem)，写穿搜索路径），已删并改设计；zip 父臂 "exist.zip/sub" 命中成功臂且以 purgeAll 前后包夹，防缓存内变更泄漏给同进程后跑的 test_zip_section。
+15. **setWatcherValues**：空路径早退、DataWatcher<int> 注册后驱动 77 写入、dot→space 重试臂、空值双失败静默。
+16-17. **copy**：Bin→Bin modifyCurrent=true 短路拷贝/false 不拷（须用新 dst——首版复用已拷贝的 dst 导致断言自相矛盾）；XML→XML 全树 compare==0（首版根 tag 不同被 compare 的 sectionName 检查否决，改同根名）。
+18. **copySections**：tagged 选择拷、all 合并覆盖（同 tag 后写胜）。
+19-20. **compare/binaryCompare 全差异臂**：NULL→1、名异、值异、数异、子异 break 臂、相等 0（首版 binaryCompare 的"相等树"夹具带值差被 -1 否决，改同构夹具）。
+21. **复数缺失父守卫族（19 条）+ sanitise 族**：DirSection 挂不存在基路径（`new DirSection("b26_missing_root_dir", nativeFileSystem)`）使 writer 侧 `newSection→makeDirectory` 失败、reader 侧 openSection 落空，一次性驱动全部 20 条 `if(!pSection)` 守卫且零文件副作用（mkdir 不递归建父）；sanitise/unsanitise 基类恒等、sanitiseSectionName false、isValidSectionName true（XMLSection 覆写版行为不同，宿主换 BinSection）。
+
+**陷阱与取证**：
+
+- **迭代器 operator\* 空子回退臂 = 到达即崩**（datasection.cpp:90-93，唯一残余 3 行）：`openChild(index_)` 落空时回退体调用 `dataSection_->childSectionName( index_ )`，而基类 childSectionName（:166-169）实现为 `this->openChild( index )->sectionName()`——在同场景（子已删/索引越界）恰好 NULL 解引用。测试实证：`begin()` 后 `delChildren()` 再 `*it` → SIGSEGV（gdb 栈顶 datasection.cpp:168）。该臂是防御性死代码且自身携带崩溃隐患，登记不修（批次 22/24「不修只记」先例）；实际触达需 begin() 与解引用之间子表收缩，正常协议下不可达。
+- **BWResource 根写穿**：rootSection 是 `DirSection("", MultiFileSystem)`，save 经它 writeFile 会落进搜索路径（game/res/bigworld 优先）。凡断言"写失败"的用例，写目标必须天然不可创建（"." 目录名）。
+- **BWResource 缓存跨测试文件污染**：同进程后跑的 test_zip_section 会拿到被污染的缓存 zip（test_datasection 按 link 序先跑），zip 父臂用例必须 purgeAll 包夹。
+- **测试运行 CWD 伪迹**：resmgr_test 会在 CWD 落 `xmldataresource.xml`（test_data_resource 侧行为），全量跑测试统一在仓外沙箱目录执行。
+
+**门禁记录**：resmgr_test 50→**71** 用例全绿（插桩态）；删桩复验（gcda=0、对象 gcov 符数=0）后全量 21 模块门禁 **1280** 全绿（GATE_EXIT=0）。精准口径复判 **169/876 → 873/876（99.7%）**，唯一残余即上述 :90-93。
+
+表值 600/878 撤出 TESTING.md TODO 表，以精准口径 873/876（99.7%）登记收口。下批首位候选 `pyscript/pywatcher.cpp`（416/730、43%，表上剩余候选最大项）。
+
+提交范围：`lib/resmgr/unit_test/test_datasection.cpp`（新）、`lib/resmgr/unit_test/Makefile.rules`、`lib/resmgr/unit_test/CMakeLists.txt`、`TESTING.md`、`docs/upgrade-plan/migration-status.md`、本文档。
