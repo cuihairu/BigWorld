@@ -13,9 +13,9 @@
 | 事项 | 状态 | 说明 |
 |------|------|------|
 | 嵌入式解释器 | ✅ Python 2.7 → **3.13.16** | 3.13.15 迁移完成后，2026-10-12 同系列安全补丁升至 3.13.16（全链构建 + 冒烟 + 全量单测复验） |
-| 全量单测门禁 | ✅ 21 模块 / 1220 用例全绿 | 2026-10-12 实测（批次23 后 + Python 3.13.16 树复验；cstdmf_test 385 → 398） |
-| 覆盖率补强工程 | ✅ 批次 1–23 已完成 | 批次23 收口 `cstdmf/profiler.cpp`（6% → 94%）并完成假绿审计（红门禁提交修复 + 孤儿测试复活）；缺口 top 清单落 [TESTING.md](../../TESTING.md) |
-| 下批首位候选 | ⏳ `cstdmf/smartpointer.hpp` | 679/1519 缺口、55%，候选（watch/调试面逐类判定待做） |
+| 全量单测门禁 | ✅ 21 模块 / 1249 用例全绿 | 2026-10-13 实测（批次24 后；cstdmf_test 398 → 427） |
+| 覆盖率补强工程 | ✅ 批次 1–24 已完成 | 批次24 收口 `cstdmf/smartpointer.hpp`（测试 TU 视角 84/91 → 117/118，此前无专属测试）；缺口 top 清单落 [TESTING.md](../../TESTING.md) |
+| 下批首位候选 | ⏳ `pyscript/script_math.cpp` | 655/1920 缺口、65%，候选（逐函数复判） |
 
 </div>
 
@@ -43,7 +43,7 @@ gcovr 全量聚合值。客户端大件（moo / physics2 / server / chunk）接�
 
 </div>
 
-文件级亮点：`cstdmf/profiler.cpp` 6% → **94%**（1155/1222 行，批次23；红门禁提交 `dc5cd043` 的 13 失败用例逐根因修复 + 385→398 用例；残余 67 行不可测臂逐条登记，见台账 §7.23）；`cstdmf/watcher.hpp` 14% → **22%**（943 → 1545 行覆盖，+602 实例行；批次22 逐类可测性判定 + 39 用例，两阶段全量插桩同口径，BEFORE 干净复测与批次 20 快照一致；总行 6414→6943 为新测试 TU 实例宇宙扩容；残余为生产 TU 从不执行的实例 + 死臂登记）；`cstdmf/fixed_sized_allocator.cpp` 0% → **99%**（286/289，批次21：既有测试组被 `ENABLE_FIXED_SIZED_POOL_ALLOCATOR` 平台宏守卫恒 0，新建 12 用例直驱；残余 3 行为 findPool 排序 shift 死臂）；`physics2/quad_tree.ipp` 0% → 98%（测试 TU 视角 860/876，批次20 Makefile.rules 漏列修复激活）；`physics2/bsp.cpp` 0% → 91%（批次19 死门激活）；`network/tcp_bundle.cpp` 达 100%（批次16 收口）；`network/machine_guard.cpp` 28%（bwmachined 面不可达，批次17 登记）；批次18 派测的 `event_poller.cpp` 45% → 57%（其余缺口为 Linux 死代码的 SelectPoller/PollPoller，175 行结构性登记）。
+文件级亮点：`cstdmf/smartpointer.hpp` 84/91 → **117/118 测试 TU 视角**（批次24；此前无专属测试，新建 `test_smartpointer.cpp` 29 用例直驱两类引用计数基类、自由函数族与 ConstSmartPointer/SmartPointer 全操作面；唯一残余 `:121` 为基析构空体结构性死臂）；`cstdmf/profiler.cpp` 6% → **94%**（1155/1222 行，批次23；红门禁提交 `dc5cd043` 的 13 失败用例逐根因修复 + 385→398 用例；残余 67 行不可测臂逐条登记，见台账 §7.23）；`cstdmf/watcher.hpp` 14% → **22%**（943 → 1545 行覆盖，+602 实例行；批次22 逐类可测性判定 + 39 用例，两阶段全量插桩同口径，BEFORE 干净复测与批次 20 快照一致；总行 6414→6943 为新测试 TU 实例宇宙扩容；残余为生产 TU 从不执行的实例 + 死臂登记）；`cstdmf/fixed_sized_allocator.cpp` 0% → **99%**（286/289，批次21：既有测试组被 `ENABLE_FIXED_SIZED_POOL_ALLOCATOR` 平台宏守卫恒 0，新建 12 用例直驱；残余 3 行为 findPool 排序 shift 死臂）；`physics2/quad_tree.ipp` 0% → 98%（测试 TU 视角 860/876，批次20 Makefile.rules 漏列修复激活）；`physics2/bsp.cpp` 0% → 91%（批次19 死门激活）；`network/tcp_bundle.cpp` 达 100%（批次16 收口）；`network/machine_guard.cpp` 28%（bwmachined 面不可达，批次17 登记）；批次18 派测的 `event_poller.cpp` 45% → 57%（其余缺口为 Linux 死代码的 SelectPoller/PollPoller，175 行结构性登记）。
 
 ## 批次时间线
 
@@ -69,7 +69,7 @@ gcovr 全量聚合值。客户端大件（moo / physics2 / server / chunk）接�
 
 </div>
 
-用例总量演进：批次14 后 1061 → 批次15 后 1071 → 批次16 后 1083 → 批次17 后 1099 → 批次18 后 1113 → 批次19 后 1127 → 批次20 后 1151 → 批次21 后 1163 → 批次22 后 1202 → 批次23 后 **1220**（全量 21 模块门禁全绿；批次23 净增 +18 = cstdmf profiler +13 + scene 孤儿复活 +2 + network 孤儿复活 +3；假绿修复均为原位改写断言，不增减用例数）。
+用例总量演进：批次14 后 1061 → 批次15 后 1071 → 批次16 后 1083 → 批次17 后 1099 → 批次18 后 1113 → 批次19 后 1127 → 批次20 后 1151 → 批次21 后 1163 → 批次22 后 1202 → 批次23 后 **1220**（全量 21 模块门禁全绿；批次23 净增 +18 = cstdmf profiler +13 + scene 孤儿复活 +2 + network 孤儿复活 +3；假绿修复均为原位改写断言，不增减用例数） → 批次24 后 **1249**（cstdmf smartpointer 直驱 +29）。
 
 ## 不可达 / 受限登记摘要
 

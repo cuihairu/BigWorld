@@ -86,7 +86,6 @@ gcovr -r /home/cui/workspaces/BigWorld/programming/bigworld --txt -o /tmp/cov.tx
 |--------|-----------|--------|------|
 | chunk/chunk.cpp | 1215/1228 | 1% | 受限：需 ChunkSpace + chunk 装载机 |
 | connection/server_connection.cpp | 990/990 | 0% | **维持不可测**（真登录管线 + TCPChannel 状态机，批次14/16） |
-| cstdmf/smartpointer.hpp | 679/1519 | 55% | 候选（残余为 watch/调试面） |
 | entitydef/entity_description.cpp | 665/665 | 0% | 受限：需 EntityType/EntityDef XML 装载机全套 |
 | pyscript/script_math.cpp | 655/1920 | 65% | 批次5 后残余；候选（逐函数复判） |
 | resmgr/datasection.cpp | 600/878 | 31% | 候选 |
@@ -135,4 +134,7 @@ getAsString 不驱动 statistics watcher 数据填充、EVENT_COUNTER 断言方�
 385→398 用例全绿；文件级数字来自精准插桩口径（只重编 cstdmf TU，同批次 21），模块级全量值待下轮复测；
 残余 67 行登记为不可测臂：`SortByNamePtr` 比较器（BW_UNUSED 死代码）、HitchDetector 全族、MF_SERVER 排除族、
 ENABLE_PER_CORE_PROFILER=0 面、`processEntriesTask_` 不 delete、jsonDump else-if 停臂（force 下不可达）、
-tick stall WARNING、frameNumber 竞态、END mismatch 健康态 ASSERT、rootWatcher fini 悬垂、`doBackgroundTask` !historyFile_ 竞态，见台账 §7.23）。
+tick stall WARNING、frameNumber 竞态、END mismatch 健康态 ASSERT、rootWatcher fini 悬垂、`doBackgroundTask` !historyFile_ 竞态，见台账 §7.23）；
+`cstdmf/smartpointer.hpp` 84/91→**117/118 测试 TU 视角**（批次 24；此前无专属测试，覆盖全部来自 watcher/circular_queue/memory_debug 顺带使用；新建
+`test_smartpointer.cpp` 29 用例直驱 ReferenceCount（含第二基类多继承 delete this）/SafeReferenceCount（destroy() 虚钩子恰好一次 + 4 线程原子锤击）/自由函数族/ConstSmartPointer·SmartPointer 全操作面与派生→基转换；唯一残余 :121 `~ReferenceCount()` 空体为结构性死臂——构造受保护故基析构永不为最外层析构；表值 679/1519 为 2026-09-28 全量插桩多 TU 实例事件聚合口径，精准口径不可直接换算，撤出本表；零计数偷取构造的 MF_ASSERT_DEV 臂经
+hasDevelopmentAssertions(false) 非致命覆盖；另钉死 ConstSmartPointer 在非 _XBOX 构建无模板拷贝构造（基指针只能经显式 get() 共享），见台账 §7.24）。

@@ -51,6 +51,7 @@ cxxSource =						\
 	test_debug_message_source	\
 	test_fixed_sized_allocator	\
 	test_profiler				\
+	test_smartpointer			\
 	# test_object_pool: orphaned in cxxSource (see docs/upgrade-plan/
 	# migration-status.md batch 23) - object_pool.hpp calls
 	# LookUpTable::reserve(), which this tree's lookup_table.hpp never had

@@ -183,7 +183,7 @@ target_compile_definitions(cstdmf PRIVATE CSTDMF_EXPORT) # exportFor = cstdmf
 target_compile_definitions(CppUnitLite2 PRIVATE CSTDMF_IMPORT)
 target_compile_definitions(unit_test_lib PRIVATE CSTDMF_IMPORT)
 
-# --- cstdmf_test (lib/cstdmf/unit_test/Makefile.rules cxxSource, 48 TUs) -----
+# --- cstdmf_test (lib/cstdmf/unit_test/Makefile.rules cxxSource, 49 TUs) -----
 # test_object_pool.cpp exists on disk but is NOT in the make cxxSource (does
 # not compile: object_pool.hpp:343 needs LookUpTable::reserve(), see the
 # comment in unit_test/Makefile.rules); mirrored here.
@@ -225,6 +225,7 @@ add_executable(cstdmf_test
 	${BW_LIB_DIR}/cstdmf/unit_test/test_md5.cpp
 	${BW_LIB_DIR}/cstdmf/unit_test/test_memory_debug.cpp
 	${BW_LIB_DIR}/cstdmf/unit_test/test_profiler.cpp
+	${BW_LIB_DIR}/cstdmf/unit_test/test_smartpointer.cpp
 	${BW_LIB_DIR}/cstdmf/unit_test/test_static_array.cpp
 	${BW_LIB_DIR}/cstdmf/unit_test/test_string_builder.cpp
 	${BW_LIB_DIR}/cstdmf/unit_test/test_stringmap.cpp

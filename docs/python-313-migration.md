@@ -693,3 +693,23 @@ cstdmf 334（+12）：`test_ansi_allocator.cpp` +4（allocate/reallocate 保内�
 5. **SimpleThread trampoline 自动以线程名注册**：slot 名 ≠ 传入 worker 名；退出自动 removeThread（延迟删除），join 后槽位即刻不可靠。
 
 提交范围：`lib/cstdmf/unit_test/test_profiler.cpp`（13 用例修复）、`lib/cstdmf/unit_test/test_fixed_sized_allocator.cpp`（CHECK(true) 换计数钩子）、`lib/cstdmf/unit_test/Makefile.rules`（test_object_pool 注释登记）、`lib/scene/unit_test/Makefile.rules` + `lib/network/unit_test/Makefile.rules`（孤儿复活）、`TESTING.md`、`docs/upgrade-plan/migration-status.md`、本文档；另附 Python 3.13.16 升级（见 §6 批次 8）。
+
+### 7.24 覆盖率补强批次 24：smartpointer.hpp 直驱收口（2026-10-13）
+
+TESTING.md TODO 表首位候选落位。`smartpointer.hpp` 此前**没有任何专属测试**：覆盖率全部来自 watcher（SmartPtrDerefWatcher）、circular_queue、memory_debug 等测试的顺带使用。本批新建 `test_smartpointer.cpp` 29 用例直驱，cstdmf_test 398→427。
+
+**用例覆盖面**：
+
+1. **ReferenceCount**：inc/dec/refCount 全计数序列（末次释放 `delete this`）、拷贝构造计数独立（各从 0 起）、**第二基类多继承**场景的 delete this（对应头内 `-Wfree-nonheap-object` pragma 注释的 Mercury::Channel 形状——ReferenceCount 作第二基类，经非零偏移基指针析构）。
+2. **SafeReferenceCount**：原子 inc/dec 计数、`destroy()` 虚钩子在计数归零时**恰好调用一次**（栈上实例 + 空操作 override 证明钩子可覆写且不误删）、4 线程 × 500 次 inc/dec 锤击后计数精确归零（BW_ATOMIC32 族真原子性）、默认 destroy 路径 delete this。
+3. **自由函数族**：`incrementReferenceCount`/`decrementReferenceCount`/`hasZeroReferenceCount`（decrementReferenceCount 归零即删——自由函数与成员 decRef 同义）、`null_pointer_check`（no-op 钩子直接实例化调用）。
+4. **ConstSmartPointer**：空构造/裸指针构造（自增）/已加引用偷取构造（不自增）、**零计数偷取构造的 MF_ASSERT_DEV 臂**（`hasDevelopmentAssertions(false)` 下 writeAndAssert 降级 WARNING 提前返回，臂可非致命覆盖，log_msg.cpp criticalMessageHelper 提前 return 路径）、拷贝共享、赋值三臂（换对象：旧对象归零即删/换空/同对象早退含自赋值）、解引用、`==`/`!=`/`<`/`>` 各三形态（指针序断言用与裸指针比较的等价性，不假设分配顺序）、布尔转换两臂、`hasObject`/`exists`/`getObject`。
+5. **SmartPointer**：空/裸/偷取构造、非 const 解引用与成员访问（实测改写对象）、**模板构造与模板赋值派生→基**（`SmartPointer<Base>(SmartPointer<Derived>&)`、`b = d`）、上转 ConstProxy 拷贝、`STEAL_REFERENCE`/`NEW_REFERENCE` 常量语义（偷取=接管既有引用、新建=自增）。
+
+**钉死的口径事实**：`ConstSmartPointer` 在非 `_XBOX` 构建**没有模板拷贝构造**（`_XBOX` 才有）——`ConstSmartPointer<Base>` 不能直接从 `ConstSmartPointer<Derived>` 构造，基类智能指针只能经显式 `get()` 共享同一对象；头文件注释里 `b = d` 的示例仅对 `SmartPointer` 成立（它有模板构造/赋值）。`ReferenceCount`/`SafeReferenceCount` 的 `operator=` 私有为编译期约束（无可执行行）；`ENABLE_REFERENCE_COUNT_THREADING_DEBUG` check() 块仅 `_DEBUG` 编译（config.hpp:126，el7 hybrid 恒 0）。无 weak_ptr，循环引用须手动打破（不写故意泄漏的环形引用用例）。
+
+**覆盖率对账（gcovr，精准插桩口径——只重编 cstdmf TU，同批次 21/23）**：`smartpointer.hpp` 84/91 → **117/118 实例行**（新测试 TU 带入实例宇宙 91→118 行，口径同批次 22 watcher 注记）。唯一残余 `:121` `~ReferenceCount()` 空体为**结构性死臂**：构造函数受保护，任何可实例化对象都是派生类且覆写析构，该基析构体永不为最外层析构。TESTING.md 表值 679/1519（2026-09-28 全量插桩口径）是多 TU 实例事件聚合分母，与精准口径不可直接换算，随本批撤出 TODO 表、以测试 TU 视角登记收口。
+
+**门禁记录与进程教训**：cstdmf_test 427/0 连跑 4×（含 3 轮稳定性复跑）。**插桩态只能跑受测模块**：带着插桩 libcstdmf.a 直接跑全量门禁，其余 20 个宿主链接必败（`__gcov_exit`/`__gcov_merge_add` 未定义——全量门禁在批次 22 那种全量插桩下才成立）；正确次序为插桩态取数 → 删桩重建（gcda=0、对象 gcov 符数=0 复验）→ 全量门禁以删桩态为准。删桩恢复后全量 21 模块门禁 1249 全绿（GATE_EXIT=0）。
+
+提交范围：`lib/cstdmf/unit_test/test_smartpointer.cpp`（新）、`lib/cstdmf/unit_test/Makefile.rules`、`cmake/samples/cstdmf/CMakeLists.txt`（双轨同步 48→49 TU）、`TESTING.md`、`docs/upgrade-plan/migration-status.md`、本文档。
