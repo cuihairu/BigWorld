@@ -15,7 +15,7 @@
 | zlib（目录名 `zip`） | vendored 1.2.8（`MY_ZCALLOC` 分配钩子） | **vcpkg zlib 1.3.x** | 链接名保持 `zip`；zlib 分配不再进 BW 内存统计（见 §4） |
 | libpng | vendored 1.6.2（源码组件构建） | **vcpkg 1.6.58** | `lib/moo/png.cpp` 弃用私有头，改公开 API（见 §4） |
 | sqlite3 | vendored 3.6.23.1（amalgamation 并入 libsqlite） | **vcpkg 3.53.4** | `lib/sqlite` 只保留包装层；直接消费者设 `useSQLite := 1` |
-| CPython | vendored 3.13.15（BWHooks 魔改树） | **保留 vendored** | vcpkg 的 python3 端口不带 BWHooks 内存跟踪补丁；但 `_ssl`/`_hashlib` 通过 vcpkg OpenSSL 恢复（R1） |
+| CPython | vendored 3.13.16（BWHooks 魔改树） | **保留 vendored** | vcpkg 的 python3 端口不带 BWHooks 内存跟踪补丁；但 `_ssl`/`_hashlib` 通过 vcpkg OpenSSL 恢复（R1） |
 | MongoDB C++ driver | vendored legacy 预编译 | **保留 vendored** | vcpkg 的 mongo-cxx-driver 是 3.x API，与 legacy 驱动不兼容；仅在 message_logger 使用 |
 | png/zip/sqlite 的 vendored 源码树 | — | **暂留** | Windows CMake 工程（R3 未迁移）仍引用 `third_party/png`、`third_party/zip`、`third_party/sqlite`；R3 落地后删除 |
 | CppUnitLite2 / WTL / putty / nvtt / nedalloc / recast / openautomate 等 | vendored | **保留 vendored** | 引擎自有测试框架或 Windows/客户端专用，不在 Linux 服务端构建路径 |

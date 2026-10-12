@@ -1,5 +1,5 @@
 This file lists the changes made by BigWorld to the python distribution.
-This edition tracks the CPython 3.13.15 port (see docs/python-313-migration.md
+This edition tracks the CPython 3.13.16 port (see docs/python-313-migration.md
 for the full analysis and disposition of the 2.7.3-era patches).
 
 All changes to source code should include BIGWORLD_BEGIN/BIGWORLD_END around

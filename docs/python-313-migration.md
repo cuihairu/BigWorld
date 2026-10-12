@@ -1,4 +1,4 @@
-# BigWorld 内嵌 Python 2.7.3 [3.13.15 迁移]
+# BigWorld 内嵌 Python 2.7.3 [3.13.15 迁移；2026-10-12 升 3.13.16]
 
 > 任务：把 BigWorld 集成的 Python 从 2.7.3 升级到 3.13.15（源码树整换 + 补丁重移植 + C-API/脚本全量迁移）。
 > 分支：dev（所有提交仅在 dev）。
@@ -82,10 +82,11 @@
 | 5 | R1 收尾（OpenSSL 经 vcpkg 3.6 升级后恢复 `_ssl`/`_hashlib`）+ 单测可跑通 | `make user_shouldInstallPython=1 python_install` 通过：59 个共享模块 + stdlib 安装完成，`_hashlib` 不再被重命名；`make bw-unit-tests` 22 个可执行文件全部链接通过 | 见 vcpkg-migration.md（本次未提交，见该文档 §6.1） |
 | 6 | 运行期初始化修复：补 `bw_site.py`（源码包缺失，随 pyscript 跟踪 + mak 安装规则）、`bw_platform_info.cpp` Debian→el7 回退对齐构建侧 | 全量单测（21 个模块）无失败；详见 §3.1 | `41fafefc` |
 | 7 | 覆盖率基线测量（插桩构建 + 全量单测 + gcovr，详见 §7） | 插桩套件与恢复正常构建后的复验套件均 21 模块 0 失败 | 本次提交（dev） |
+| 8 | 安全补丁升级 3.13.15 → 3.13.16（3.13 系列安全维护版本；vendored 树按 v3.13.16 git tag 重同步，裁剪面/行尾约定保持，Makefile.pre.in 与 _hashopenssl.c 补丁原样重放） | `make libbwpython3.13` 全链通过 + 全量单测 21 模块全绿 | 见本次提交（dev） |
 
 ---
 
-*命中的 C-API 统计与补丁清单复核于 2026-09-24；CPython 源码 tag v3.13.15。*
+*命中的 C-API 统计与补丁清单复核于 2026-09-24；CPython 源码 tag v3.13.15。2026-10-12 升至 tag v3.13.16（3.13 系列安全维护版，上游 .15→.16 无 C-API 变更面），vendored 树与 v3.13.16 git tag 内容逐一核对（EOL 不敏感比对 0 mismatch），BW 补丁集仅 2 文件且原样重放成功；上游本版删除了 Lib/test/memory_watchdog.py、Lib/idlelib/idle_test/test_zzdummy_user.py、Misc/mypy 部分 mypy 存根，vendored 树随之同步。*
 
 ## 7. 单测与覆盖率基线（2026-09-26）
 
