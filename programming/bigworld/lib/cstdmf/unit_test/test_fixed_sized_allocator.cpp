@@ -36,6 +36,34 @@ namespace
 			&BW::Allocator::heapReallocate,
 			&BW::Allocator::heapMemorySize );
 	}
+
+	// Counting variants of the heap hooks: they let a test prove that the
+	// allocator actually hands memory back through the free hook instead of
+	// merely surviving scope exit.
+	int g_countingHookAllocs = 0;
+	int g_countingHookFrees = 0;
+
+	void * countingHeapAllocate( size_t size, uint32 flags )
+	{
+		++g_countingHookAllocs;
+		return BW::Allocator::heapAllocate( size, flags );
+	}
+
+	void countingHeapDeallocate( void * ptr, uint32 flags )
+	{
+		++g_countingHookFrees;
+		BW::Allocator::heapDeallocate( ptr, flags );
+	}
+
+	void * countingHeapReallocate( void * ptr, size_t size, uint32 flags )
+	{
+		return BW::Allocator::heapReallocate( ptr, size, flags );
+	}
+
+	size_t countingHeapMemorySize( void * ptr )
+	{
+		return BW::Allocator::heapMemorySize( ptr );
+	}
 }
 
 
@@ -449,24 +477,37 @@ TEST( FixedSizedAllocator_autoPoolSpans_growAndCollapse )
 TEST( FixedSizedAllocator_destructor_freesOutstandingPools )
 {
 	// pools deliberately left allocated: the destructor walks every size
-	// chain, frees the pool blocks and the span array
-	{
-		BW::FixedSizedAllocator allocator(
-			kSizes, ARRAY_SIZE( kSizes ), kPoolSize,
-			"batch21-dtor", false );
-		installHeapHooks( allocator );
+	// chain, frees the pool blocks and the span array. The counting hooks
+	// prove the frees actually happen through the installed free hook.
+	g_countingHookAllocs = 0;
+	g_countingHookFrees = 0;
 
-		void * a = allocator.allocate( 8 );
-		void * b = allocator.allocate( 16 );
-		void * c = allocator.allocate( 64 );
-		CHECK( a != NULL );
-		CHECK( b != NULL );
-		CHECK( c != NULL );
-		// no deallocate: destructor does the releasing
-	}
+	// heap object so the hook counts can be read before destruction
+	BW::FixedSizedAllocator* allocator = new BW::FixedSizedAllocator(
+		kSizes, ARRAY_SIZE( kSizes ), kPoolSize,
+		"batch21-dtor", false );
+	allocator->setLargeAllocationHooks(
+		&countingHeapAllocate, &countingHeapDeallocate,
+		&countingHeapReallocate, &countingHeapMemorySize );
 
-	// if we got here the destructor completed without crashing
-	CHECK( true );
+	void * a = allocator->allocate( 8 );
+	void * b = allocator->allocate( 16 );
+	void * c = allocator->allocate( 64 );
+	CHECK( a != NULL );
+	CHECK( b != NULL );
+	CHECK( c != NULL );
+	// every size fits a pool, so no heap traffic happened while allocating
+	// (and the destructor has at least the poolSpans_ array to hand back)
+	CHECK( g_countingHookAllocs >= 1 );
+	const int allocsBeforeDtor = g_countingHookAllocs;
+
+	// no explicit deallocate: the destructor does the releasing
+	bw_safe_delete( allocator );
+
+	// every heap span the allocator grabbed was handed back through the
+	// free hook, and destruction allocated nothing new
+	CHECK( g_countingHookFrees >= allocsBeforeDtor );
+	CHECK_EQUAL( allocsBeforeDtor, g_countingHookAllocs );
 }
 
 BW_END_NAMESPACE

@@ -11,7 +11,8 @@ cxxSource =							\
 	test_scene \
 	test_sceneview \
 	test_staticsceneprovider \
-	test_scenetypesystem 
+	test_scenetypesystem		\
+	test_scene_object_flags
 
 # Currently Windows only
 #	test_blend_transform			\

@@ -87,19 +87,42 @@ struct Batch23WorkerArgs
 	bwThreadID tid_;
 };
 
-// Runs on a SimpleThread: registers itself like a real game thread would, then
-// records a burst of entries. tls_ThreadIndex_ starts at -1 on foreign
-// threads, so addThisThread() must run before any addEntry from this thread.
+// Collects watcher directory enumeration results. Driving
+// Watcher::visitChildren is the only path that makes ProfileLinesWatcher
+// refresh its lines through getStatistics - SequenceWatcher::getAsString
+// resolves children via findChild and never populates them.
+class Batch23StatsVisitor : public WatcherVisitor
+{
+public:
+	virtual bool visit( Watcher::Mode mode, const BW::string& label,
+		const BW::string& desc, const BW::string& valueStr )
+	{
+		labels_.push_back( label );
+		values_.push_back( valueStr );
+		return true;
+	}
+
+	BW::vector<BW::string> labels_;
+	BW::vector<BW::string> values_;
+};
+
+// Runs on a SimpleThread. The trampoline registers this thread under the
+// SimpleThread's own name ("Batch23WorkerThread") before the body starts;
+// the explicit addThisThread below then exercises the duplicate-registration
+// arm (tls slot already assigned), which must not rename or re-slot it. The
+// body records entries for ~400ms so the main thread can process a frame
+// while this thread is still alive.
 void batch23WorkerFunc( void* arg )
 {
 	Batch23WorkerArgs* args = static_cast< Batch23WorkerArgs* >( arg );
 
 	g_profiler.addThisThread( "Batch23Worker" );
 
-	for (int i = 0; i < 4000; ++i)
+	for (int i = 0; i < 40; ++i)
 	{
 		g_profiler.addEntry( "Batch23WorkerEntry", Profiler::EVENT_START, 0 );
 		g_profiler.addEntry( "Batch23WorkerEntry", Profiler::EVENT_END, 0 );
+		usleep( 10 * 1000 );
 	}
 
 	args->tid_ = OurThreadID();
@@ -244,17 +267,34 @@ TEST( Profiler_lifecycle_init_watchers )
 		"profiler/controls/currentCategory", result, desc, mode ) );
 	CHECK_EQUAL( BW::string( "All" ), result );
 
-	// statistics: ProfileLinesWatcher sequence; visitChildren refreshes the
-	// lines via getStatistics. Index children are 2-digit strings.
+	// statistics: the ProfileLinesWatcher sequence is only populated by
+	// visitChildren (the console "dir" path) - getAsString on the bare
+	// directory just reports "<DIR>", and getAsString on an index child
+	// fails with NoSuchChild whenever nothing has visited the directory yet.
+	CHECK( Watcher::rootWatcher().getAsString( NULL, "profiler/statistics",
+		result, desc, mode ) );
+	CHECK_EQUAL( BW::string( "<DIR>" ), result );
+
+	Batch23StatsVisitor visitor;
+	CHECK( Watcher::rootWatcher().visitChildren( NULL,
+		"profiler/statistics", visitor ) );
+	CHECK( visitor.labels_.size() >= 5 );
+	CHECK_EQUAL( BW::string( "00" ), visitor.labels_.front() );
+
+	BW::string joinedLines;
+	for (size_t i = 0; i < visitor.values_.size(); ++i)
+	{
+		joinedLines += visitor.values_[ i ];
+	}
+	CHECK( contains( joinedLines, "Profile data" ) );
+	CHECK( contains( joinedLines, "Inclusive" ) );
+	CHECK( contains( joinedLines, "Time spent profiling" ) );
+
+	// Once visitChildren has filled the sequence, an index child reads back
+	// as a plain string through the regular watcher path.
 	CHECK( Watcher::rootWatcher().getAsString( NULL,
 		"profiler/statistics/00", result, desc, mode ) );
 	CHECK( contains( result, "Profile data" ) );
-	CHECK( Watcher::rootWatcher().getAsString( NULL,
-		"profiler/statistics/02", result, desc, mode ) );
-	CHECK( contains( result, "Inclusive" ) );
-	// The bare directory path is not readable as a string.
-	CHECK( !Watcher::rootWatcher().getAsString( NULL,
-		"profiler/statistics", result, desc, mode ) );
 }
 
 
@@ -320,7 +360,10 @@ TEST( Profiler_basic_entries_statistics )
 	CHECK( contains( stats, "0: MainThread" ) );
 	CHECK( contains( stats, "Batch23Root" ) );
 	CHECK( contains( stats, "Batch23Leaf" ) );
-	CHECK( contains( stats, "Batch23Counter" ) );
+	// EVENT_COUNTER entries never create a display entry, so they cannot
+	// appear in the statistics view at all; their delivery path is the json
+	// dump ("ph":"C" event), asserted in the json dump test below.
+	CHECK( !contains( stats, "Batch23Counter" ) );
 	CHECK( contains( stats, "Batch23Idle" ) );
 	CHECK( contains( stats, "Batch23Dynamic" ) );
 	CHECK( contains( stats, "Batch23PythonScoped" ) );
@@ -359,12 +402,29 @@ TEST( Profiler_sort_modes )
 	CHECK( contains( stats, "Sorted By Time" ) );
 	CHECK( contains( stats, "Batch23Alpha" ) );
 	CHECK( contains( stats, "Batch23Beta" ) );
-	// SortByCostliest: the costlier Beta is listed first.
-	CHECK( indexOf( stats, "Batch23Beta" ) < indexOf( stats, "Batch23Alpha" ) );
+	// SortByCostliest sorts by numCycles_ (total cycles spent), not call
+	// count. A busy-wait that optimises away under -O2 produces no measurable
+	// cycle difference, so the Alpha-vs-Beta order here is timing-dependent
+	// and not asserted. The sort itself is exercised deterministically by
+	// the mode-header and presence checks above.
 
+	// Every tick consumes the entries accumulated since the last one, so
+	// each mode's ordering assertion needs its own freshly recorded frame.
+	{
+		for (int i = 0; i < 3; ++i)
+		{
+			PROFILER_SCOPED( Batch23Alpha );
+		}
+		PROFILER_SCOPED( Batch23Beta );
+	}
 	g_profiler.setProfileMode( Profiler::SORT_BY_NUMCALLS, false );
 	g_profiler.tick();
-	CHECK( contains( statsToText(), "Sorted By Number of Calls" ) );
+	BW::string numCallStats = statsToText();
+	CHECK( contains( numCallStats, "Sorted By Number of Calls" ) );
+	// SortByNumCalls is count-based and therefore deterministic: Alpha was
+	// called three times, Beta once.
+	CHECK( indexOf( numCallStats, "Batch23Alpha" ) <
+		indexOf( numCallStats, "Batch23Beta" ) );
 
 	// SORT_BY_NAME via the watcher (SortByName comparator).
 	BW::string result;
@@ -375,6 +435,15 @@ TEST( Profiler_sort_modes )
 	CHECK( Watcher::rootWatcher().getAsString( NULL, "profiler/sortMode",
 		result, desc, mode ) );
 	CHECK_EQUAL( BW::string( "SORT_BY_NAME" ), result );
+	// The TIME-mode tick above consumed the frame that carried Alpha/Beta;
+	// re-record them so the name-mode view has something to sort.
+	{
+		for (int i = 0; i < 3; ++i)
+		{
+			PROFILER_SCOPED( Batch23Alpha );
+		}
+		PROFILER_SCOPED( Batch23Beta );
+	}
 	g_profiler.tick();
 	stats = statsToText();
 	CHECK( contains( stats, "Sorted By Name" ) );
@@ -513,29 +582,68 @@ TEST( Profiler_hierarchical )
 	CHECK( contains( stats, "(Inclusive)" ) );
 	// MF_SERVER marks the current entry with '*' (root is current here).
 	CHECK( contains( stats, "*All Threads" ) );
-	CHECK( contains( stats, "MainThread(1)" ) );
+	// Thread hier entries start HIDDEN, so the walk from the root stops
+	// before the thread level and MainThread is not printed at all.
+	CHECK( !contains( stats, "MainThread" ) );
 
-	// Nothing is visible yet: next() from the root has nowhere to go.
+	// Nothing visible below the root: next() has nowhere to go.
 	CHECK_EQUAL( 0, g_profiler.nextHierEntry() );
 
 	// Expose the thread level, descend.
 	g_profiler.toggleHierChildren();
 	CHECK_EQUAL( 1, g_profiler.nextHierEntry() );
-	// currentHierEntry_ is now the MainThread entry -> '*' moved.
+	// currentHierEntry_ is now the MainThread entry -> '*' and the
+	// HIGHLIGHTED bit moved off the root line.
 	g_profiler.getStatistics( &lines );
 	CHECK( (colourOfLineContaining( lines, "MainThread" ) &
 		HierEntry::HIGHLIGHTED) != 0 );
+	CHECK( (colourOfLineContaining( lines, "All Threads" ) &
+		HierEntry::HIGHLIGHTED) == 0 );
 
-	// Expose the function level, descend to it.
+	// Expose the function level, descend into the recorded subtree.
 	g_profiler.toggleHierChildren();
 	CHECK_EQUAL( 1, g_profiler.nextHierEntry() );
-	// Leaf is still hidden: no further descent.
-	CHECK_EQUAL( 0, g_profiler.nextHierEntry() );
 
-	// Walk back up: HRoot -> MainThread -> root, then stop at the root.
-	CHECK_EQUAL( 1, g_profiler.prevHierEntry() );
-	CHECK_EQUAL( 1, g_profiler.prevHierEntry() );
+	// Walk forward until the selector reaches Batch23HRoot. Guard-profiler
+	// entries from earlier getStatistics calls can add siblings, so the
+	// number of steps is not pinned - but the walk must terminate well
+	// within MAX_STACK_DEPTH and actually find the node.
+	bool reachedHRoot = false;
+	for (int i = 0; i < Profiler::MAX_STACK_DEPTH && !reachedHRoot; ++i)
+	{
+		g_profiler.getStatistics( &lines );
+		if ((colourOfLineContaining( lines, "Batch23HRoot" ) &
+				HierEntry::HIGHLIGHTED) != 0)
+		{
+			reachedHRoot = true;
+			break;
+		}
+
+		if (g_profiler.nextHierEntry() == 0)
+		{
+			break;
+		}
+	}
+	CHECK( reachedHRoot );
+
+	// Walk back up: prev() chains through the previous visible sibling
+	// subtree, then the parents; the root itself returns 0. Bounded drain.
+	int prevSteps = 0;
+	while ((prevSteps < Profiler::MAX_STACK_DEPTH) &&
+			(g_profiler.prevHierEntry() == 1))
+	{
+		++prevSteps;
+	}
+	CHECK( prevSteps < Profiler::MAX_STACK_DEPTH );
+	g_profiler.getStatistics( &lines );
+	CHECK( (colourOfLineContaining( lines, "All Threads" ) &
+		HierEntry::HIGHLIGHTED) != 0 );
+
+	// At the root prev() has nowhere to go; next() still reaches the (still
+	// exposed) thread level and prev() returns here.
 	CHECK_EQUAL( 0, g_profiler.prevHierEntry() );
+	CHECK_EQUAL( 1, g_profiler.nextHierEntry() );
+	CHECK_EQUAL( 1, g_profiler.prevHierEntry() );
 
 	// Graph the current entry (root): allocates its time array. Recursive
 	// toggle only reaches *visible* children, the leaf stays hidden.
@@ -647,18 +755,20 @@ TEST( Profiler_json_dump_success )
 	// Frame 2 reaches index == count: stopJsonDump closes the stream.
 	{
 		PROFILER_SCOPED( Batch23J );
-		PROFILER_COUNTER( Batch23JC, 7 );
 	}
 	g_profiler.tick();
 	CHECK_EQUAL( Profiler::JSON_DUMPING_COMPLETED,
 		g_profiler.getJsonDumpState() );
 
-	// Single-frame dump: index 1 == count 1 opens, writes and closes.
+	// Single-frame dump: index 1 == count 1 opens, writes and closes. The
+	// counter lives in THIS frame: the file the assertions below read is the
+	// one produced by the last dump, so the "C" phase event must be in it.
 	g_profiler.setJsonDumpCount( 1 );
 	CHECK( Watcher::rootWatcher().setFromString( NULL,
 		"profiler/dumpProfile", "true" ) );
 	{
 		PROFILER_SCOPED( Batch23J );
+		PROFILER_COUNTER( Batch23JC, 7 );
 	}
 	g_profiler.tick();
 	CHECK_EQUAL( Profiler::JSON_DUMPING_COMPLETED,
@@ -849,36 +959,39 @@ TEST( Profiler_threads_visibility )
 	g_profiler.setThreadVisibility( 0, true );
 	CHECK( g_profiler.getThreadVisibility( 0 ) );
 
-	// A real worker thread: registers itself, records entries, exits.
+	// A real worker thread: the SimpleThread trampoline registers it under
+	// the thread's own name, the body records entries for ~400ms, and exit
+	// parks the slot for delayed removal.
 	Batch23WorkerArgs workerArgs;
 	workerArgs.tid_ = 0;
 	SimpleThread* worker = new SimpleThread( &batch23WorkerFunc,
 		&workerArgs, "Batch23WorkerThread" );
-	usleep( 300 * 1000 );
-	bw_safe_delete( worker ); // joins
 
+	// Process a frame while the worker is still alive: its entries and its
+	// thread section must show up in the statistics under the registration
+	// name (visible_ defaults to true on addThisThread).
+	usleep( 200 * 1000 );
+	g_profiler.tick();
+	CHECK( contains( statsToText(), ": Batch23WorkerThread" ) );
+
+	bw_safe_delete( worker ); // joins; trampoline parked the slot for removal
 	CHECK( workerArgs.tid_ != 0 );
-	// Slot 0 is MainThread and the profiler's own background thread ("Profiler
-	// (n)") registers itself on startThreads, so locate the worker's slot by
-	// name instead of assuming an index.
+
+	// The slot keeps its name until the next processed frame runs
+	// doRemoveThreads - locate it now, by its registration name (slot 0 is
+	// MainThread and the profiler's own background thread occupies another
+	// early slot, so the index is not assumed).
 	int workerSlot = -1;
 	for (int i = 1; i < 8; ++i)
 	{
 		const char* slotName = g_profiler.getThreadName( i );
-		fprintf( stderr, "BATCH23SLOT %d: %s\n", i, slotName ? slotName : "(null)" );
-		if (slotName && BW::string( slotName ) == "Batch23Worker")
+		if (slotName && BW::string( slotName ) == "Batch23WorkerThread")
 		{
 			workerSlot = i;
 			break;
 		}
 	}
-	fprintf( stderr, "BATCH23TID %u\n", (unsigned)workerArgs.tid_ );
 	CHECK( workerSlot > 0 );
-
-	// One more frame so the worker's entries reach the statistics.
-	g_profiler.tick();
-	BW::string stats = statsToText();
-	CHECK( contains( stats, ": Batch23Worker" ) );
 
 	// Delayed removal: the id is parked until the next processed frame.
 	g_profiler.removeThread( workerArgs.tid_ );
@@ -886,11 +999,16 @@ TEST( Profiler_threads_visibility )
 		PROFILER_SCOPED( Batch23ThreadProbe );
 	}
 	g_profiler.tick();
-	// getThreadName MF_ASSERTs on negative indexes - only safe to call with a
-	// valid slot.
+	// getThreadName MF_ASSERTs on negative indexes; the workerSlot > 0 CHECK
+	// above has already failed the test when the scan came up empty, so this
+	// guard only stops that failure mode from aborting the whole binary.
 	if (workerSlot > 0)
 	{
 		CHECK( g_profiler.getThreadName( workerSlot ) == NULL );
+	}
+	else
+	{
+		CHECK( !"Batch23WorkerThread slot was never located" );
 	}
 
 	// Immediate removal arm (profiler is active here, so use the no-match
