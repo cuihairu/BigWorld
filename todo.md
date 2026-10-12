@@ -12,7 +12,7 @@
 - [x] Python 2.7 → 3.13.16 内嵌解释器迁移（换源、补丁重移植、BWHooks 经 PyMem_SetAllocator 重接线、全链构建+冒烟） — `3260bdd9` 起批次链，安全补丁升级 `2bdfc5aa`；台账 `docs/python-313-migration.md`
 - [x] R1 vendored OpenSSL 1.0.0d 消除：第三方依赖 vcpkg manifest 化（openssl/curl/jsoncpp/zlib/libpng/sqlite3/bzip2），`_ssl/_hashlib` 恢复 — `2bdfc5aa`
 - [x] vcpkg manifest 钉 `builtin-baseline`（可复现解析） — `1180ece6`
-- [x] 单测门禁 21 模块 / 1249 用例全绿 + 覆盖率补强批次 1–24（profiler.cpp 6%→94%、watcher/fixed_sized_allocator/quad_tree/bsp 收口、假绿审计 13 处修复+孤儿测试复活；批次24 smartpointer.hpp 84/91→117/118 测试 TU 视角） — `dc5cd043`、`5338b828`、`f2c3ed23`、`4e64cf87`；现状 `TESTING.md` 与 `docs/upgrade-plan/migration-status.md`
+- [x] 单测门禁 21 模块 / 1259 用例全绿 + 覆盖率补强批次 1–25（profiler.cpp 6%→94%、watcher/fixed_sized_allocator/quad_tree/bsp 收口、假绿审计 13 处修复+孤儿测试复活；批次24 smartpointer.hpp 84/91→117/118 测试 TU 视角；批次25 script_math.cpp 92.3%→97.0% 精准口径收口） — `dc5cd043`、`5338b828`、`f2c3ed23`、`4e64cf87`；现状 `TESTING.md` 与 `docs/upgrade-plan/migration-status.md`
 - [x] 每日构建 workflow：make 全量 + 21 模块门禁 + tar.gz/deb/rpm 打包，48 小时新鲜度判定、vcpkg 按 baseline 克隆 + binary cache、产物命名版本+日期+短sha — 首建 `57c863c7`，48h+缓存+命名 `b365012e`；本机三包实跑验证
 - [x] push/PR CI workflow（cstdmf CMake 样板构建+ctest，vcpkg 缓存，失败日志按步骤定位） — `7a4ff703`
 - [x] Linux CMake 双轨样板：cstdmf 组件独立构建（398 用例与 make 同口径绿）+ 一键脚本 `scripts/build-cstdmf-cmake.sh` — `8cd23406`
@@ -23,7 +23,9 @@
 
 - [x] **覆盖率批次 24**：`cstdmf/smartpointer.hpp` 收口——此前无专属测试（覆盖全靠 watcher/circular_queue/memory_debug 顺带），新建 `test_smartpointer.cpp` 29 用例直驱两类引用计数基类（含 4 线程原子锤击与 destroy() 虚钩子）、自由函数族、ConstSmartPointer/SmartPointer 全操作面与派生→基转换；测试 TU 视角 84/91 → 117/118，唯一残余 `:121` 基析构空体为结构性死臂；表值 679/1519 属全量插桩口径撤出 TESTING.md TODO 表；下批首位候选 `pyscript/script_math.cpp`。
   验收（全达成）：cstdmf_test 398→427 全绿连跑 4×；删桩恢复后全量 21 模块门禁 1249 全绿（GATE_EXIT=0，gcda=0、gcov 符数=0 复验）；cmake 双轨同步 49 TU 同跑 427 绿；TESTING.md/migration-status/台账 §7.24 同步。 期次 **P1** — `4e64cf87`
-- [ ] **覆盖率批次 25+**：候选 `pyscript/script_math.cpp`（655/1920、65%，逐函数复判）、`resmgr/datasection.cpp`、`pyscript/pywatcher.cpp`、`resmgr/bwresource.cpp`、`entitydef/method_description.cpp`（TESTING.md TODO 表）。
+- [x] **覆盖率批次 25**：`pyscript/script_math.cpp` 收口——精准插桩复判 1000/1083（92.3%，单 TU 实例宇宙，表值 655/1920 属全量插桩口径、复判后真实暗区仅 83 行）后新建 `test_script_math_gaps.cpp` 10 用例直驱：通用 PyVector number 协议（一元负/正、标量左乘）、Vector2/4 原地运算符与 NotImplemented 臂、富比较 GT/LE/GE 与 Vector2/4 分发槽、distSqrTo/flatDistSqrTo/flatDistTo/setPitchYaw 实参校验回退、z setter 与 yaw/pitch getter、Matrix/Vector4 Product 单操作数分支、Combiner 缺操作数早退、look-at 近 +Y 上向量回退、Vector4Shader 用户寄存器上限与非临时输出寄存器两拒绝臂；**1050/1083（97.0%）**，残余 33 行全数分类（13 行 Windows-only 构造性死区——ProviderStore 矩阵半边、唯一 autoTick 的 MatrixAnimation 整体 `#if defined( _WIN32 )` 档案符号数 0；3 行 safeSetVector 死臂；8 行 pyGet_x/y/z/w 死成员；9 行宏展开点幻影行）；表值撤出 TESTING.md TODO 表；下批首位候选 `resmgr/datasection.cpp`。
+  验收（全达成）：pyscript_test 118→128 全绿连跑 3×；删桩复验后全量 21 模块门禁 1259 全绿（GATE_EXIT=0，gcda=0、gcov 符数=0 复验）；TESTING.md/migration-status/台账 §7.25 同步。 期次 **P1** — `8216684b`
+- [ ] **覆盖率批次 26+**：候选 `resmgr/datasection.cpp`（600/878、31%，最大项）、`pyscript/pywatcher.cpp`（416/730、43%）、`resmgr/bwresource.cpp`（386/746、48%）、`entitydef/method_description.cpp`（323/478、32%）（TESTING.md TODO 表）。
   验收：新用例全绿；文件级数字走精准插桩口径（模板头分母随插桩 TU 集缩放）；TESTING.md/migration-status/台账同步。 期次 **P1**
 - [x] **README 项目状态数字过期**：仍写"1113 用例、批次 1–18"，现为 1220 用例、批次 1–23（Python 3.13 亦应写明 3.13.16）。
   验收：README 与 migration-status 数字一致。 期次 **P1** — `9a9e923f`

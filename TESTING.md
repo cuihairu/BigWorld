@@ -87,7 +87,6 @@ gcovr -r /home/cui/workspaces/BigWorld/programming/bigworld --txt -o /tmp/cov.tx
 | chunk/chunk.cpp | 1215/1228 | 1% | 受限：需 ChunkSpace + chunk 装载机 |
 | connection/server_connection.cpp | 990/990 | 0% | **维持不可测**（真登录管线 + TCPChannel 状态机，批次14/16） |
 | entitydef/entity_description.cpp | 665/665 | 0% | 受限：需 EntityType/EntityDef XML 装载机全套 |
-| pyscript/script_math.cpp | 655/1920 | 65% | 批次5 后残余；候选（逐函数复判） |
 | resmgr/datasection.cpp | 600/878 | 31% | 候选 |
 | moo/image.ipp | 589/589 | 0% | 受限：客户端图像合成面 |
 | network/machine_guard.cpp | 553/774 | 28% | bwmachined 面不可达部分维持登记（批次17） |
@@ -137,4 +136,18 @@ ENABLE_PER_CORE_PROFILER=0 面、`processEntriesTask_` 不 delete、jsonDump els
 tick stall WARNING、frameNumber 竞态、END mismatch 健康态 ASSERT、rootWatcher fini 悬垂、`doBackgroundTask` !historyFile_ 竞态，见台账 §7.23）；
 `cstdmf/smartpointer.hpp` 84/91→**117/118 测试 TU 视角**（批次 24；此前无专属测试，覆盖全部来自 watcher/circular_queue/memory_debug 顺带使用；新建
 `test_smartpointer.cpp` 29 用例直驱 ReferenceCount（含第二基类多继承 delete this）/SafeReferenceCount（destroy() 虚钩子恰好一次 + 4 线程原子锤击）/自由函数族/ConstSmartPointer·SmartPointer 全操作面与派生→基转换；唯一残余 :121 `~ReferenceCount()` 空体为结构性死臂——构造受保护故基析构永不为最外层析构；表值 679/1519 为 2026-09-28 全量插桩多 TU 实例事件聚合口径，精准口径不可直接换算，撤出本表；零计数偷取构造的 MF_ASSERT_DEV 臂经
-hasDevelopmentAssertions(false) 非致命覆盖；另钉死 ConstSmartPointer 在非 _XBOX 构建无模板拷贝构造（基指针只能经显式 get() 共享），见台账 §7.24）。
+hasDevelopmentAssertions(false) 非致命覆盖；另钉死 ConstSmartPointer 在非 _XBOX 构建无模板拷贝构造（基指针只能经显式 get() 共享），见台账 §7.24）；
+`pyscript/script_math.cpp` 92.3%→**97.0%**（精准插桩口径 1000/1083 → 1050/1083 实例行，批次 25；分母为
+单 TU 实例宇宙，表值 655/1920 属 2026-09-28 全量插桩多 TU 聚合、不可直接换算，撤出本表——批次5 的
+23 用例在多 TU 分母下显示 65%，复判后真实暗区仅 83 行；新建 `test_script_math_gaps.cpp` 10 用例直驱
+原型测试从未触达的行：通用 `PyVector<V>` number 协议的一元负/正与标量左乘（Vector3 自带乘法特化，
+自家测试永不触达共享体）、Vector2/4 原地运算符与各运算符不可转换实参的 NotImplemented 臂、富比较
+GT/LE/GE 臂与 Vector2/4 分发槽、distSqrTo/flatDistSqrTo/flatDistTo/setPitchYaw 实参校验回退、z setter
+与 yaw/pitch getter（原型只写过 x/y/w、没读过 yaw/pitch）、MatrixProduct/Vector4Product 单操作数分支、
+Vector4Combiner 缺操作数早退、look-at 近 +Y 上向量回退、Vector4Shader 用户寄存器上限与非临时 provider
+作输出寄存器两拒绝臂；残余 33 行全数分类登记：13 行 Windows-only 构造性死区（ProviderStore 矩阵半边
+——唯一 autoTick 构造的 MatrixProvider 子类 MatrixAnimation 整体包在 `#if defined( _WIN32 )`，档案内
+MatrixAnimation 符数 0；Vector4 半边有 Vector4Animation 触达）、3 行 safeSetVector 死臂（setVector 恒返
+true）、8 行死成员（pyGet_x/y/z/w 被 `PyVector::pyGetAttribute` 单字符截获取代后永不调用的历史体）、
+9 行宏归属幻影行（`PY_RW_ATTRIBUTE_DECLARE`/`PY_SCRIPT_CONVERTERS` 展开点——访问器体实际生成于
+pyobject_plus.hpp 头内行、执行归属头行，.cpp 展开点行恒 0，对应读写已由测试触达），见台账 §7.25）。

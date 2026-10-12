@@ -713,3 +713,35 @@ TESTING.md TODO 表首位候选落位。`smartpointer.hpp` 此前**没有任何�
 **门禁记录与进程教训**：cstdmf_test 427/0 连跑 4×（含 3 轮稳定性复跑）。**插桩态只能跑受测模块**：带着插桩 libcstdmf.a 直接跑全量门禁，其余 20 个宿主链接必败（`__gcov_exit`/`__gcov_merge_add` 未定义——全量门禁在批次 22 那种全量插桩下才成立）；正确次序为插桩态取数 → 删桩重建（gcda=0、对象 gcov 符数=0 复验）→ 全量门禁以删桩态为准。删桩恢复后全量 21 模块门禁 1249 全绿（GATE_EXIT=0）。
 
 提交范围：`lib/cstdmf/unit_test/test_smartpointer.cpp`（新）、`lib/cstdmf/unit_test/Makefile.rules`、`cmake/samples/cstdmf/CMakeLists.txt`（双轨同步 48→49 TU）、`TESTING.md`、`docs/upgrade-plan/migration-status.md`、本文档。
+
+### 7.25 覆盖率补强批次 25：script_math.cpp 收口（2026-10-13）
+
+TODO 表候选落位。`script_math.cpp` 在批次 5 已有 23 用例（`test_script_math.cpp`），但表值 655/1920（65%）按全量插桩口径显示仍有约千行暗区。本批先以精准插桩口径复判（只重编 pyscript TU，同批次 21/23/24）：**1000/1083（92.3%）**——分母 1083 是单 TU 实例宇宙，与表值 1920 不可直接换算，复判后真实暗区仅 83 行。新建 `test_script_math_gaps.cpp` 10 用例，全部直驱原型测试从未触达的行。
+
+**用例覆盖面**（10 用例）：
+
+1. **一元负/正与标量左乘**（`-v`/`+v`/`2.5 * v`，Vector2/Vector4）：只挂在通用 `PyVector<V>` number 协议上；Vector3 自带 `_py_multiply` 特化，故原型测试（全是 Vector3）永不触达共享体。
+2. **原地运算符**：Vector2/Vector4 的 `*=`、Vector3 的 `*=`（叉积特化），及 `+=`/`-=`/`*=`/`/=` 对不可转换实参抛 TypeError 的 NotImplemented 臂。
+3. **富比较**：GT/LE/GE 三臂（原型只测了 LT/GE/==/!= 中的部分组合）+ Vector2/Vector4 的 `tp_richcompare` 分发槽。
+4. **实参校验回退**：`distSqrTo('x')`、`flatDistSqrTo()` 无参/四元组误喂、`flatDistTo()`/`flatDistTo('x')`（原型完全没碰这个方法）、`setPitchYaw` 单参与错型参。
+5. **z setter 与 yaw/pitch getter**：原型只写过 x/y/w、从没读过 yaw/pitch——`v3.z = 7.0` 回读、`Vector3(1,0,1).yaw` ≈ 0.7854、`pitch` ≈ 0。
+6. **MatrixProduct 单操作数**：只设第二操作数（`second.b = ta`、`a` 缺省）走 `b_->matrix( m )` 分支而非后乘分支；另补一个双边 `flip`。
+7. **Vector4Product 单操作数 + getRegister 回读**：`second.b = (1,2,3,4)` 缺 `a`；`Math.getRegister( 0 ).value.x`。
+8. **Vector4Combiner 缺操作数早退**：`Vector4Combiner().value` 与操作数置 None 后取值。
+9. **look-at 上向量回退**：视线近 +Y 时 LOOKAT / LOOKAT_SCALEZ 姿态的上向量回退臂（up.source=(0,2,0,0)，断言行列式非零）。
+10. **Vector4Shader 两拒绝臂**：用户寄存器上限（65 个 `addInputVector` 后 shader 仍健康）；非临时 provider 被要求充当输出寄存器的 `addOp( 6, 常量, 常量 )` 形态。
+
+**平台边界发现（Windows-only）**：ProviderStore 的矩阵半边在本平台不可达——`MatrixProvider` 只在 autoTick 构造时注册进 store（ctor :40 / dtor :49），而唯一这么构造的子类 `MatrixAnimation` 整体包在 `#if defined( _WIN32 )` 内（script_math.cpp:1016 起），`nm libpyscript.a` 取证 MatrixAnimation 符数为 **0**。Linux 侧 store 的 `add`/`del` 矩阵重载与 `tick` 矩阵循环体是**构造性死区**，非缺测试；Vector4 半边（`Vector4Animation` autoTick=true）有测试触达。测试文件以代码注释钉死该结论，不硬凑。
+
+**覆盖率对账（gcovr，精准插桩口径）**：1000/1083（92.3%）→ **1050/1083（97.0%）**，+50 实例行。残余 33 行全数分类登记：
+
+- **Windows-only 构造性死区（13 行）**：40/49（autoTick ctor/dtor 臂）、5269/5271/5272（store add 矩阵重载）、5281/5283/5284/5286/5288/5290（store del 矩阵重载）、5322/5323（tick 矩阵循环体）；
+- **死臂（3 行）**：1241-1243 `safeSetVector` 失败分支（`setVector` 恒返 true）；
+- **死成员（8 行）**：2231/2233/2238/2240/2245/2248/2253/2256——`pyGet_x/y/z/w` 单字符 getter 体，被 `PyVector::pyGetAttribute` 的单字符截获取代后永不调用的历史接口（属性表仍注册但先被拦截）；
+- **宏归属幻影行（9 行）**：796、3258、4329/4330、4512/4513/4514、4657/4658——`PY_RW_ATTRIBUTE_DECLARE`/`PY_SCRIPT_CONVERTERS` 在 .cpp 的展开点：访问器体实际生成于 pyobject_plus.hpp 头内行（pyGet :430-431 / pySet :467-468），执行归属头行，.cpp 展开点行恒 0，而对应读写已被测试触达（如 Vector4Swizzle 的 y/z/w 读写）。
+
+**门禁记录**：pyscript_test 118→**128** 用例全绿连跑 3×（插桩态）；删桩复验（gcda=0、对象 gcov 符数=0）后全量 21 模块门禁 **1259** 全绿（GATE_EXIT=0）。插桩态只跑受测模块、删桩后才能全量的纪律同批次 24。
+
+表值 655/1920 撤出 TESTING.md TODO 表，以精准口径 1050/1083（97.0%）登记收口。下批首位候选 `resmgr/datasection.cpp`（600/878、31%，表上剩余候选最大项）。
+
+提交范围：`lib/pyscript/unit_test/test_script_math_gaps.cpp`（新）、`lib/pyscript/unit_test/Makefile.rules`、`TESTING.md`、`docs/upgrade-plan/migration-status.md`、本文档。
