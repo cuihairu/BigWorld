@@ -6,6 +6,7 @@ INCLUDE( BWStandardProject )
 SET( ALL_SRCS
 	test_bdiff.cpp
 	test_bwresource.cpp
+	test_datasection.cpp
 	test_file_system.cpp
 	test_xml_section.cpp
 	test_xml_special_chars.cpp
