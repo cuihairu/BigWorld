@@ -31,6 +31,18 @@ BW_PYTHON_TARGET := bwpython$(BW_PYTHON_VERSION)
 sourcePythonFile   := libpython$(BW_PYTHON_VERSION).a
 sourcePythonTarget := $(PYTHON_BUILD_DIR)/$(sourcePythonFile)
 sourcePythonDependencies := $(PYTHON_BUILD_DIR)/pyconfig.h $(PYTHON_BUILD_DIR)/Makefile
+# BIGWORLD_BEGIN(3.13 migration)
+# Track the vendored CPython sources: without this the out-of-tree build dir
+# never goes stale when the vendored tree changes (syncing third_party/python
+# used to leave `make libbwpython3.13` reporting "Nothing to be done"). The
+# inner CPython make does its own precise dependency tracking, so this list
+# only decides when the inner make gets re-invoked; a no-op inner pass is
+# cheap. Configure inputs are included so build-system edits (Makefile.pre.in,
+# configure) also retrigger.
+sourcePythonDependencies += $(shell find $(PYTHON_DIR)/Python $(PYTHON_DIR)/Objects $(PYTHON_DIR)/Modules -type f 2>/dev/null)
+sourcePythonDependencies += $(shell find $(PYTHON_DIR)/Include -type f 2>/dev/null)
+sourcePythonDependencies += $(PYTHON_DIR)/configure $(PYTHON_DIR)/Makefile.pre.in
+# BIGWORLD_END
 
 # Extra things for LINKFORSHARED, affecting the built Python interpreter's link
 # stage
@@ -90,6 +102,7 @@ endif
 $(sourcePythonTarget): cFlags_python := EXTRA_CFLAGS="$(bwPython_flags)"
 $(sourcePythonTarget): $(sourcePythonDependencies)
 	$(MAKE_WITHOUT_JOBSERVER) -C $(PYTHON_BUILD_DIR) $(@F) $(cFlags_python)
+	@touch -c $@
 
 $(PYTHON_BUILD_DIR)/pyconfig.h: $(PYTHON_BUILD_DIR)/Makefile
 
