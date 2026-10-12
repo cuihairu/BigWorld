@@ -20,6 +20,23 @@
 | png/zip/sqlite 的 vendored 源码树 | — | **暂留** | Windows CMake 工程（R3 未迁移）仍引用 `third_party/png`、`third_party/zip`、`third_party/sqlite`；R3 落地后删除 |
 | CppUnitLite2 / WTL / putty / nvtt / nedalloc / recast / openautomate 等 | vendored | **保留 vendored** | 引擎自有测试框架或 Windows/客户端专用，不在 Linux 服务端构建路径 |
 
+### 1.1 manifest 钉版（builtin-baseline）
+
+`programming/bigworld/vcpkg.json` 补了 `"builtin-baseline": "10541e317a660f4165ba4ac2851ab54a8d4577b1"`
+（vcpkg 仓库 2026-09-25 的 HEAD）。作用：
+
+- 依赖版本不再随 `VCPKG_ROOT` 里 vcpkg 的克隆时点漂移——manifest 解析固定到该
+  baseline 的 ports 树（实测解析出 openssl 3.6.4 / curl 8.22.0 / sqlite3 3.53.4 等，
+  与 §1 表一致）。
+- 未钉 baseline 时 vcpkg 按 `VCPKG_ROOT` 当前 HEAD 解析版本，"同一份 vcpkg.json
+  两台机器装出不同 openssl" 就是这么来的。
+- **不建 `vcpkg-configuration.json`**：该文件用于 registry 覆盖 / overlay 登记
+  （第三方 registry、default-registry 换轨）。本仓只用 builtin registry，无覆盖
+  需求；自定义 triplet（`build/vcpkg-triplets/x64-linux-bw.cmake`）走
+  `--overlay-triplets` 按 build 传入，不属于 manifest 层。空配置文件徒增解析面。
+- 升级依赖 = 改 baseline（连同本机 `VCPKG_ROOT` 一起 `git -C ~/vcpkg checkout`
+  到新 commit）再 `vcpkg upgrade`，锁定后再推。
+
 ## 2. 构建系统改动（Make 链）
 
 - 新增 `vcpkg.json`（BigWorld 源根，`programming/bigworld/`）：声明 openssl、
