@@ -1,0 +1,100 @@
+name: CI
+
+# Linux CI for the CMake track (docs/vcpkg-migration.md §3.1): configure +
+# build the cstdmf CMake sample and run its unit tests on every push/PR.
+# The full make build + 21-module test gate stays on the daily build workflow
+# (.github/workflows/daily-build.yml); this job keeps the CMake sample and the
+# vcpkg manifest from drifting.
+#
+# Dependency versions are pinned by the manifest builtin-baseline: vcpkg is
+# cloned AT that commit, and the binary cache key contains it.
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cstdmf-cmake:
+    name: cstdmf cmake sample (linux)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/vcpkg-bcache
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Read manifest baseline pin
+        id: baseline
+        run: |
+          BASE="$(sed -n 's/.*"builtin-baseline"[[:space:]]*:[[:space:]]*"\([0-9a-f]\{40\}\)".*/\1/p' \
+            programming/bigworld/vcpkg.json | head -1)"
+          [ -n "$BASE" ] || { echo "ERROR: no builtin-baseline in vcpkg.json" >&2; exit 1; }
+          echo "baseline=$BASE" >> "$GITHUB_OUTPUT"
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            gcc-14 g++-14 pkg-config zip unzip tar \
+            autoconf automake libtool nasm
+          # the sample enforces C++23; point cc/g++ at gcc-14
+          sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-14 200 \
+            --slave /usr/bin/g++ g++ /usr/bin/g++-14
+          gcc --version | head -1
+
+      - name: Set up vcpkg at pinned baseline
+        run: |
+          git clone https://github.com/microsoft/vcpkg.git "$HOME/vcpkg"
+          git -C "$HOME/vcpkg" checkout "${{ steps.baseline.outputs.baseline }}"
+          "$HOME/vcpkg/bootstrap-vcpkg.sh" -disableMetrics
+
+      - name: Restore vcpkg binary cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/vcpkg-bcache
+          key: vcpkg-bcache-${{ runner.os }}-${{ steps.baseline.outputs.baseline }}-${{ hashFiles('programming/bigworld/vcpkg.json') }}
+          restore-keys: |
+            vcpkg-bcache-${{ runner.os }}-${{ steps.baseline.outputs.baseline }}-
+            vcpkg-bcache-${{ runner.os }}-
+
+      - name: Configure (vcpkg manifest mode)
+        shell: bash
+        run: |
+          mkdir -p "$VCPKG_DEFAULT_BINARY_CACHE"
+          cmake -S programming/bigworld/cmake/samples/cstdmf \
+                -B programming/bigworld/build/cmake-cstdmf \
+                -DCMAKE_TOOLCHAIN_FILE="$HOME/vcpkg/scripts/buildsystems/vcpkg.cmake" \
+                -DCMAKE_BUILD_TYPE=Release 2>&1 | tee cmake-configure.log
+
+      - name: Build
+        shell: bash
+        run: |
+          cmake --build programming/bigworld/build/cmake-cstdmf \
+            -j"$(nproc)" 2>&1 | tee cmake-build.log
+
+      - name: Test (cstdmf_test, 398 cases)
+        shell: bash
+        run: |
+          ctest --test-dir programming/bigworld/build/cmake-cstdmf \
+            --output-on-failure 2>&1 | tee ctest.log
+
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-logs-${{ github.run_id }}
+          path: |
+            cmake-configure.log
+            cmake-build.log
+            ctest.log
+          if-no-files-found: ignore
+          retention-days: 7
