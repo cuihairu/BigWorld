@@ -12,7 +12,7 @@
 - [x] Python 2.7 → 3.13.16 内嵌解释器迁移（换源、补丁重移植、BWHooks 经 PyMem_SetAllocator 重接线、全链构建+冒烟） — `3260bdd9` 起批次链，安全补丁升级 `2bdfc5aa`；台账 `docs/python-313-migration.md`
 - [x] R1 vendored OpenSSL 1.0.0d 消除：第三方依赖 vcpkg manifest 化（openssl/curl/jsoncpp/zlib/libpng/sqlite3/bzip2），`_ssl/_hashlib` 恢复 — `2bdfc5aa`
 - [x] vcpkg manifest 钉 `builtin-baseline`（可复现解析） — `1180ece6`
-- [x] 单测门禁 21 模块 / 1220 用例全绿 + 覆盖率补强批次 1–23（profiler.cpp 6%→94%、watcher/fixed_sized_allocator/quad_tree/bsp 收口、假绿审计 13 处修复+孤儿测试复活） — `dc5cd043`、`5338b828`、`f2c3ed23`；现状 `TESTING.md` 与 `docs/upgrade-plan/migration-status.md`
+- [x] 单测门禁 21 模块 / 1249 用例全绿 + 覆盖率补强批次 1–24（profiler.cpp 6%→94%、watcher/fixed_sized_allocator/quad_tree/bsp 收口、假绿审计 13 处修复+孤儿测试复活；批次24 smartpointer.hpp 84/91→117/118 测试 TU 视角） — `dc5cd043`、`5338b828`、`f2c3ed23`、`4e64cf87`；现状 `TESTING.md` 与 `docs/upgrade-plan/migration-status.md`
 - [x] 每日构建 workflow：make 全量 + 21 模块门禁 + tar.gz/deb/rpm 打包，48 小时新鲜度判定、vcpkg 按 baseline 克隆 + binary cache、产物命名版本+日期+短sha — 首建 `57c863c7`，48h+缓存+命名 `b365012e`；本机三包实跑验证
 - [x] push/PR CI workflow（cstdmf CMake 样板构建+ctest，vcpkg 缓存，失败日志按步骤定位） — `7a4ff703`
 - [x] Linux CMake 双轨样板：cstdmf 组件独立构建（398 用例与 make 同口径绿）+ 一键脚本 `scripts/build-cstdmf-cmake.sh` — `8cd23406`
@@ -21,10 +21,12 @@
 
 ## B. 只有设计（有登记/方案，未落地）
 
-- [ ] **覆盖率批次 24+**：首位 `cstdmf/smartpointer.hpp`（679/1519 行 55%）；候选 `resmgr/datasection.cpp`、`pyscript/script_math.cpp`、`pyscript/pywatcher.cpp`、`resmgr/bwresource.cpp`、`entitydef/method_description.cpp`（TESTING.md TODO 表）。
-  验收：新用例全绿；模块级数字走全量插桩复测口径；TESTING.md/migration-status/台账同步。 期次 **P1**
-- [ ] **README 项目状态数字过期**：仍写"1113 用例、批次 1–18"，现为 1220 用例、批次 1–23（Python 3.13 亦应写明 3.13.16）。
-  验收：README 与 migration-status 数字一致。 期次 **P1**
+- [x] **覆盖率批次 24**：`cstdmf/smartpointer.hpp` 收口——此前无专属测试（覆盖全靠 watcher/circular_queue/memory_debug 顺带），新建 `test_smartpointer.cpp` 29 用例直驱两类引用计数基类（含 4 线程原子锤击与 destroy() 虚钩子）、自由函数族、ConstSmartPointer/SmartPointer 全操作面与派生→基转换；测试 TU 视角 84/91 → 117/118，唯一残余 `:121` 基析构空体为结构性死臂；表值 679/1519 属全量插桩口径撤出 TESTING.md TODO 表；下批首位候选 `pyscript/script_math.cpp`。
+  验收（全达成）：cstdmf_test 398→427 全绿连跑 4×；删桩恢复后全量 21 模块门禁 1249 全绿（GATE_EXIT=0，gcda=0、gcov 符数=0 复验）；cmake 双轨同步 49 TU 同跑 427 绿；TESTING.md/migration-status/台账 §7.24 同步。 期次 **P1** — `4e64cf87`
+- [ ] **覆盖率批次 25+**：候选 `pyscript/script_math.cpp`（655/1920、65%，逐函数复判）、`resmgr/datasection.cpp`、`pyscript/pywatcher.cpp`、`resmgr/bwresource.cpp`、`entitydef/method_description.cpp`（TESTING.md TODO 表）。
+  验收：新用例全绿；文件级数字走精准插桩口径（模板头分母随插桩 TU 集缩放）；TESTING.md/migration-status/台账同步。 期次 **P1**
+- [x] **README 项目状态数字过期**：仍写"1113 用例、批次 1–18"，现为 1220 用例、批次 1–23（Python 3.13 亦应写明 3.13.16）。
+  验收：README 与 migration-status 数字一致。 期次 **P1** — `9a9e923f`
 - [ ] **R2 `third_party/python_modules` Py2 生态包**（Twisted 11、SQLAlchemy 0.6、Zope 2.11、oursql 等）：集群监控/日志类运行时 Python 服务不可用（python-313-migration.md 风险表）。
   验收：所列包换 Py3 兼容版；对应 mak 重新启用；依赖工具 import 冒烟通过；全量门禁绿。 期次 **P2**（不在编译关键路径）
 - [ ] **组件 CMake 样板推广**：network / entitydef / connection 等按 `cmake/samples/cstdmf` 模式逐个复制（vcpkg-migration.md §3.1）。
@@ -50,8 +52,8 @@
 
 ## C. 完全没有（无设计无承载物）
 
-- [ ] `docs/implementation-plan.md`：不存在（指令引用落空）。规划散落 `docs/upgrade-plan/*` 与本台账。
-  验收：要么建单页规划索引，要么在 README 文档站段把本 todo.md 登记为规划入口（二选一）。 期次 **P1**
+- [x] `docs/implementation-plan.md`：不存在（指令引用落空）。规划散落 `docs/upgrade-plan/*` 与本台账。
+  验收：要么建单页规划索引，要么在 README 文档站段把本 todo.md 登记为规划入口（二选一）。 期次 **P1** — 已选后者：README 项目状态段登记 todo.md 为规划入口，`9a9e923f`
 - [ ] **集群级黑盒回归链**（testing 章"最小 cluster 回归"）：login → 实体创建 → Cell 切换 → BaseApp 崩溃恢复 → DB digest 的端到端一键冒烟，现无任何脚本/框架。
   验收：最小链可在 CI 或本机一键运行并断言终态。 期次 **P3**
 - [ ] **Windows CI runner**：无（依赖 R3）。 期次 **P3**
