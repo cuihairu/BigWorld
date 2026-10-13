@@ -69,3 +69,15 @@ Instructions on _how_ to contribute can be found in [CONTRIBUTING](CONTRIBUTING.
 <a href="https://drive.google.com/file/d/1hLm_Ox0v-xIen8c4MvwRHQhkutf9bIpK/view?usp=share_link" target="_blank">Full resources link</a>
 
 <a href="https://blog.csdn.net/antsmall/article/details/139781143" target="_blank">Fantasydemo Server&Client tutorial</a>
+
+## 本地测试口径
+
+CI 与本地开发按改动面三路分流——改一行文档不该全量编译。
+
+1. **文档改动**（`*.md`、`docs/**`、图片）：不编译。主 CI workflow 的
+   `paths-ignore` 已跳过这些路径。
+2. **代码改动**：只跑改动子集，不全量。
+   - `ctest --test-dir build -R '<改动测试>'`
+3. **全量**（`ctest --test-dir programming/bigworld/build/cmake-cstdmf`）：仅以下情形触发——CMakeLists.txt / cmake/**、
+   `.github/**`、Docker/Compose 配置、发布前。
+
