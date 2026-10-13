@@ -782,3 +782,31 @@ TODO 表候选落位。`resmgr/datasection.cpp` 是 resmgr 的抽象基类层（
 表值 600/878 撤出 TESTING.md TODO 表，以精准口径 873/876（99.7%）登记收口。下批首位候选 `pyscript/pywatcher.cpp`（416/730、43%，表上剩余候选最大项）。
 
 提交范围：`lib/resmgr/unit_test/test_datasection.cpp`（新）、`lib/resmgr/unit_test/Makefile.rules`、`lib/resmgr/unit_test/CMakeLists.txt`、`TESTING.md`、`docs/upgrade-plan/migration-status.md`、本文档。
+
+### 7.27 覆盖率补强批次 27：pywatcher.cpp 直驱收口（2026-10-13）
+
+TODO 表首位候选落位。`pyscript/pywatcher.cpp` 是 BigWorld.addWatcher/addFunctionWatcher 的承载层与 watcher↔Python 双向转换层（730 行表值口径下 416 行未覆盖，表上剩余候选最大项）。原型 test_pywatcher.cpp 只走 Happy-Path 往返。本批先以精准插桩口径复判（只重编 pyscript TU，同批次 21/23/24/25/26）：**312/717（43.5%）**——表值 416/730 属 2026-09-28 全量插桩口径，不可直接换算；复判后真实暗区 405 行。新建 `test_pywatcher_gaps.cpp` 22 用例（pyscript_test 128→150）。
+
+**用例覆盖面**（22 用例）：
+
+1. **PyObjectWatcher 特化分发**：mapping/sequence 特化 watcher 的 getAsString/setFromString/getAsStream/setFromStream 非空路径四臂、visitChildren 计数与标签、恒假 addChild（字符串名经 MapWatcher 指针解析必 miss——watcher.hpp :115 通用指针解析器，测试断言干净失败面）。
+2-9. **SimplePythonWatcher 全操作面**（公共类但生产树零实例化，只能测试 TU 直驱）：getAsString 标量族（NULL/bytes/str/孤代理/int/BadStrNoDict）、getAsString 目录与路径（dict/Widget/list `<DIR>`、递归取子、缺子空串）、setFromString/setFromStream 恒 true 桩、getAsStream 标量族与目录路径族（孤代理编外失败臂、缺子流空串）、visitChildren dict/实例/递归/stopper 语义（addWatcherPath 返回 false 截断但计数回调仍报全量）/NULL base。
+10-11. **PyAccessorWatcher 流路径**：getAsStream 全臂（正常值、`__doc__` 注释臂、getter 抛错、str() 抛错、孤代理 str 三错误族、setFromStream NULL 流/坏载荷 UNKNOWN/setter 抛错/置后重取失败四拒绝臂）。
+12-17. **PyFunctionWatcher**：INT/UINT/FLOAT/BOOL/UNKNOWN 实参提取与混合元组、四类坏载荷尺寸拒绝臂（int64 拒 3、uint64 拒 3〔避批次 22 登记的 size-4 缺 else 缺陷〕、double 拒 3〔收 8/4〕、bool 拒 2）、返回值编码（int/超 int64 大整数失败臂/float/bool/bytes/plain object）、stdio 钩子收集与调用失败、deferred 三态（callback/errback 带 value/errback 无 value）、BadDeferred 接线失败 printError 臂（:1445）。
+18-22. **模块级错误臂**：py_setWatcher 的 str() 抛错与孤代理两臂、py_addWatcher setter 不可调用、py_addFunctionWatcher 的非 callable/坏实参表/坏实参元组/重路径四臂（全部带 comment——comment 形参"可选"实不可省，见下）。
+
+**陷阱与取证**：
+
+- **pending Python 异常毒化 = 假绿新形态（本批最重要教训）**：SimplePythonWatcher 缺子路径（pythonChildBase :1698 末段 `PyObject_GetAttrString` 在 mapping miss 后补一枪属性查找）会把 KeyError/AttributeError 遗留在错误指示器上；孤代理 encode 失败的 traceback 打印（:893/:1732 PyErr_PrintEx）写含 U+D800 的文本到被捕获的 stderr 时自身再抛 UnicodeEncodeError 也可能遗留。指示器非空期间所有 `PyImport_ImportModule`（fixture 模块导入）静默失败，而测试里 `if (pModule == NULL) return;` 让用例静默跳过、整体照样报绿。对策三件套：每个此类用例后 `PyErr_Clear()`、fixture 取回全部 CHECK 化（29 处）、fixtureModule() 失败即 PyErr_Print 并清除。**批次前段一度把 :1775-1791 判为 gcov 内联归属怪癖（批次 18 族），实为该毒化的静默跳过——结论撤回**；毒化修复后该块 17 行与 getAsStream 孤代理臂 :1834-1835 自然转绿，最终 670/717。
+- **gcov 断点双证伪**：gdb 断点 :1831（AsUTF8String 调用行）无法绑定（行表合并到 :1829），:1834 断点绑定成功但全程不命中；PyErr_PrintEx 函数入口断点 47 次命中、栈内无 getAsStream 帧——孤代理 getAsStream 臂此前确实从未执行。结论靠断言逻辑闭包（CHECK(!getAsStream(surro)) 绿 + 该分支唯一 false 出口）+ 毒化根因闭环。
+- **三处源码级隐患登记（不修只记，批次 22/24/26 先例）**：
+  1. `SimplePythonWatcher::visitChildren` 映射臂对一切 `PyMapping_Check` 为真的对象先走 `PyMapping_Keys`——list/tuple/str/range 全部命中，keys 为 NULL 后 `PySequence_Fast(NULL)` 仍 NULL，`Py_DECREF(NULL)`（:1934-1938）崩溃（gdb SIGSEGV 栈顶 :1936 实证）；纯序列臂 :1943-1946 与索引标签臂 :1971-1975 因 `PySequence_Check` 内建全部同时过 `PyMapping_Check` 而结构性不可达。
+  2. `getPyObjectWatcherData` 的 PyUnicode 分支对 `PyUnicode_AsUTF8String` 结果 MF_ASSERT（:757-763）——函数 watcher 返回孤代理 str 即进程中止；只有先做 NULL 检查的 PyAccessorWatcher 路径可携带孤代理载荷。
+  3. `py_addFunctionWatcher` 的 comment 形参声明可选（"sOOi|s"）实不可省：PyFunctionWatcher 在 init() 校验前构造，`Watcher::Watcher(comment)` 于 watcher.cpp :546 `std::string(NULL)` 抛 logic_error——省略 comment 的注册必败（20 处 "Unhandled exception" 假失败经 gdb catch-throw 定位）。
+- **Script::ask NULL 实参静默**：`pArgs == NULL` 时不调用直接返 NULL（script.cpp :1115 起）——无参函数 watcher 必须显式传 `PyTuple_New(0)`，否则 deferred 回调永不接线（'cb' 不落地）。
+
+**门禁记录**：pyscript_test 128→**150** 用例全绿（插桩态与无桩态双验）；删桩复验（gcda=0、对象 gcov 符数=0）后全量 21 模块门禁 **1302** 全绿（GATE_EXIT=0；network_test 首跑 1 失败为 TESTING.md 已登记的主机 sysctl 回落陷阱，恢复 rmem_max 后复跑绿）。精准口径复判 **312/717 → 670/717（93.4%）**，残余 47 行全数分类：putPyObjectOnStream FLOAT/BOOL/STRING 失败臂+default+getPyObjectWatcherData NULL 臂（唯一调用方 finishSetFromStream :1252-1268 忽略返回值，结构性死代码）、STRING 提取器 break :616（自描述不可失败）、GetItem/PyTuple_New 边界臂 :1186/:1191/:1207/:1338/:1340（长度同包刚读出）、Py3 迁移死臂 :1766/:1870（PyObject_Str 恒返 str 或 NULL）、序列分支不可达 :1683-1696/:1943-1946/:1971-1975、需活 stdout 钩子臂 :1300/:1393/:1395-1396、fini 后窗口臂 :845/:847。
+
+表值 416/730 撤出 TESTING.md TODO 表，以精准口径 670/717（93.4%）登记收口。下批首位候选 `resmgr/bwresource.cpp`（386/746、48%），次选 `entitydef/method_description.cpp`（323/478、32%）。
+
+提交范围：`lib/pyscript/unit_test/test_pywatcher_gaps.cpp`（新）、`lib/pyscript/unit_test/Makefile.rules`、`lib/pyscript/unit_test/res/test_pywatcher.py`、`TESTING.md`、`docs/upgrade-plan/migration-status.md`、本文档。（pyscript 的 CMakeLists.txt 为本仓 cmake 双轨未覆盖的滞留目标——缺 test_pywatcher.cpp 等 10+ 个已参编 TU，批次 23-25 均未触碰，本批同此，留待组件 CMake 推广事项统一处理。）

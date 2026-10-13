@@ -92,7 +92,6 @@ gcovr -r /home/cui/workspaces/BigWorld/programming/bigworld --txt -o /tmp/cov.tx
 | connection/message_handlers.hpp | 538/538 | 0% | **结构性死代码**（模板 handler 表无人实例化） |
 | chunk/chunk_space.cpp | 506/506 | 0% | 受限：需 ChunkSpace + chunk 装载机 |
 | connection/replay_controller.cpp | 495/495 | 0% | 受限：录像/回放文件管线（线格式已批次12 测） |
-| pyscript/pywatcher.cpp | 416/730 | 43% | 候选（下批首位） |
 | chunk/chunk_boundary.cpp | 403/403 | 0% | 受限：同 chunk 体系 |
 | network/logger_endpoint.cpp | 398/398 | 0% | 维持受限登记（真消息日志管线，批次17） |
 | resmgr/bwresource.cpp | 386/746 | 48% | 候选 |
@@ -167,3 +166,29 @@ setWatcherValues 空路径/成功/dot→space 重试/空值静默、copy（Bin�
 `childSectionName( index_ )`，基类实现 `openChild(index)->sectionName()` 在同场景恰为 NULL 解引用
 （datasection.cpp:168，gdb SIGSEGV 实证），属源码级隐患登记不修，见台账 §7.26；
 下批首位候选 `pyscript/pywatcher.cpp`）；
+`pyscript/pywatcher.cpp` 43.5%→**93.4%**（精准插桩口径 312/717 → 670/717 实例行，批次 27；表值
+416/730 属 2026-09-28 全量插桩口径、不可直接换算，撤出本表；新建 `test_pywatcher_gaps.cpp` 22 用例
+直驱原型测试从未触达的面：PyObjectWatcher 的 mapping/sequence 特化 watcher 非空路径分发与恒假
+addChild、SimplePythonWatcher 全操作面（dict/实例/bytes/str/int/缺子/递归/visitChildren 与
+stopper 语义，公共类但生产树零实例化）、PyAccessorWatcher 流路径（getAsStream __doc__ 臂、getter
+抛错/str() 抛错/str() 孤代理三错误族、setFromStream 载荷拒绝与 setter 失败/置后重取失败臂）、
+PyFunctionWatcher（INT/UINT/FLOAT/BOOL/UNKNOWN 实参提取、四类坏载荷尺寸拒绝臂、返回值编码
+int/大整数/float/bool/bytes/对象/deferred 三态、BadDeferred 接线失败打印臂、stdio 钩子与调用失败）、
+py_setWatcher/py_addWatcher/py_addFunctionWatcher 错误臂（含 comment 省略即 logic_error 的
+不可省略面）；残余 47 行全数分类登记：putPyObjectOnStream 的 FLOAT/BOOL/STRING 失败臂+default 臂+
+getPyObjectWatcherData NULL 臂（:629-739 唯一调用方 finishSetFromStream :1252-1268 忽略返回值，
+失败臂结构性死代码）、STRING 提取器 break 臂 :616（提取器自描述不可失败）、GetItem/PyTuple_New
+边界臂（:1186/:1191/:1207/:1338/:1340，序列长度同包刚读出）、Py3 迁移死臂（:1766/:1870 非 unicode
+str() 回退——PyObject_Str 在 Py3 恒返 str 或 NULL，NULL 则在未检查的 PyUnicode_Check 即崩）、
+结构性不可达序列分支（:1683-1696 pythonChildBase、:1943-1946 visitChildren、:1971-1975 索引标签——
+PySequence_Check 内建全部同时过 PyMapping_Check）、需活 stdout 钩子的臂（:1300/:1393/:1395-1396）、
+fini 后窗口臂（:845/:847）；登记源码级隐患三处不修只记：SimplePythonWatcher::visitChildren 映射臂
+对 list/tuple/str/range 必走 PyMapping_Keys→NULL→Py_DECREF(NULL)（:1934-1938，gdb SIGSEGV :1936
+实证）、getPyObjectWatcherData 的 PyUnicode 分支 MF_ASSERT 孤代理 str 即中止（:757-763）、
+py_addFunctionWatcher 的 comment 形参"可选"实不可省（PyFunctionWatcher 先于 init() 构造，
+watcher.cpp :546 std::string(NULL) 抛 logic_error）；**本批方法论教训**：SimplePythonWatcher 的缺子
+路径（pythonChildBase 末段 PyObject_GetAttrString）与孤代理 traceback 打印会遗留 pending
+Python 异常，之后所有 PyImport_ImportModule 静默失败——假绿形态之一（用例静默跳过仍报绿），
+对策=每个此类用例后 PyErr_Clear + fixture 取回全部 CHECK 化 + fixtureModule 失败即打印并清除；
+批次前段一度把 :1775-1791 判为"gcov 内联归属怪癖"，实为该毒化所致的静默跳过，结论已撤回，
+见台账 §7.27；下批首位候选 `resmgr/bwresource.cpp`，次选 `entitydef/method_description.cpp`）；
