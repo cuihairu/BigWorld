@@ -65,7 +65,7 @@ make -s -j64 -rR -C programming
 | 目标 | 说明 |
 |---|---|
 | `all` | 构建源码组件 |
-| `everything` | 构建更多非源码产物，例如 RPM |
+| `everything` | 仅顶层 Makefile 注释提及（`build/make/Makefile:5`："build absolutely everything, even non-source stuff (eg: rpms)"）；当前 `build/make/*.mak` 中**无对应规则**，`make everything` 不会执行任何操作 |
 | `clean` | 清理中间文件 |
 | `bw-run-all-unit-tests` | 运行全部单元测试 |
 | `bw-run-unit-tests` | 运行单元测试，失败时尽早停止 |
@@ -119,7 +119,7 @@ docker run --rm -it \
 make -s -j"$(nproc)" -rR -C programming
 ```
 
-Dockerfile 注释明确提示：初次 third_party 构建可能不适合并行构建，某些 Python 相关 patch/output 问题可能导致需要重跑。这是构建链现实，不应在文档中隐藏。
+顶层 Makefile 的 Known issues 注释明确提示：初次 third_party 构建可能不适合并行构建（`build/make/Makefile:13`："initial third party library builds may not like parallel jobs"）。Dockerfile 另有注释指出构建可能因 Python 构建系统输出混淆而提前停止、需要重跑（`build/docker/Dockerfile:48`）。这是构建链现实，不应在文档中隐藏。
 
 ## CMake 工程边界
 

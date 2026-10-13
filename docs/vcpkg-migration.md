@@ -17,7 +17,7 @@
 | sqlite3 | vendored 3.6.23.1（amalgamation 并入 libsqlite） | **vcpkg 3.53.4** | `lib/sqlite` 只保留包装层；直接消费者设 `useSQLite := 1` |
 | CPython | vendored 3.13.16（BWHooks 魔改树） | **保留 vendored** | vcpkg 的 python3 端口不带 BWHooks 内存跟踪补丁；但 `_ssl`/`_hashlib` 通过 vcpkg OpenSSL 恢复（R1） |
 | MongoDB C++ driver | vendored legacy 预编译 | **保留 vendored** | vcpkg 的 mongo-cxx-driver 是 3.x API，与 legacy 驱动不兼容；仅在 message_logger 使用 |
-| png/zip/sqlite 的 vendored 源码树 | — | **暂留** | Windows CMake 工程（R3 未迁移）仍引用 `third_party/png`、`third_party/zip`、`third_party/sqlite`；R3 落地后删除 |
+| png/zip 的 vendored 源码树 | — | **暂留** | Windows CMake 工程（R3 未迁移）仍引用 `third_party/png`、`third_party/zip`（sqlite 走 `lib/sqlite`）；R3 落地后删除 |
 | CppUnitLite2 / WTL / putty / nvtt / nedalloc / recast / openautomate 等 | vendored | **保留 vendored** | 引擎自有测试框架或 Windows/客户端专用，不在 Linux 服务端构建路径 |
 
 ### 1.1 manifest 钉版（builtin-baseline）
@@ -40,10 +40,11 @@
 ## 2. 构建系统改动（Make 链）
 
 - 新增 `vcpkg.json`（BigWorld 源根，`programming/bigworld/`）：声明 openssl、
-  curl(openssl)、jsoncpp、zlib、libpng、sqlite3。
+  curl(openssl)、jsoncpp、zlib、libpng、sqlite3、bzip2（后者仅供 CPython
+  `_bz2` 扩展）。
 - 新增自定义 triplet `build/vcpkg-triplets/x64-linux-bw.cmake`：
   静态库、仅 Release（`VCPKG_BUILD_TYPE release`）。
-  该目录**刻意不放在** `build/vcpkg/` 下——`.gitignore:37` 排除了
+  该目录**刻意不放在** `build/vcpkg/` 下——`.gitignore:41` 排除了
   `programming/bigworld/build/vcpkg/`，而 triplet 是要入库的构建输入，
   放在那里会让全新 clone 既拿不到它、也无法把它作为 make 前置依赖
   （`--overlay-triplets` 目录同样失效）。
@@ -107,8 +108,8 @@ vcpkg 静态库的传递依赖在 BW 链接行内闭合：curl→ssl/crypto+zlib
   BW 前缀变量；MSVC 分支保留原 `third_party/openssl-vsXXXX`、预编译 curl
   路径（Windows 迁移 = python-313-migration.md R3，后续批次）。
 - Windows 客户端/工具配置（`BWConfiguration_*.cmake`）仍引用
-  `third_party/zip`、`third_party/png`、`third_party/sqlite` 源码工程，
-  与 R3 一并处理。
+  `third_party/zip`、`third_party/png` 源码工程（sqlite 走 `lib/sqlite`，
+  见 `BWConfiguration_server.cmake:71`），与 R3 一并处理。
 
 ### 3.1 Linux CMake 样板（cstdmf，与 make 双轨并存）
 
@@ -121,7 +122,7 @@ vcpkg 静态库的传递依赖在 BW 链接行内闭合：curl→ssl/crypto+zlib
   `cstdmf_test`（48 TU）。前两者与 CppUnitLite2 在 make 链里也是独立组件，
   样板里就地源码编译，使测试二进制链接面与 make 完全一致
   （`-lunit_test_lib -lCppUnitLite2 -lcstdmf -lm -lpthread` + `-rdynamic`）。
-- 与 make 输出对齐的保证：编译选项/宏（`-std=c++23 -O3 -g -Wall -Werror`、
+- 与 make 输出对齐的保证：编译选项/宏（`-std=c++23 -O3 -g -Wall -Wextra -Werror`、
   `MF_SERVER / MF_CONFIG="hybrid" / BW_BUILD_PLATFORM="el7" / CSTDMF_EXPORT|IMPORT /
   CODE_INLINE / MF_USE_ASSERTS / _HYBRID`、测试侧追加 `-Wno-float-equal`）逐字取自
   `make -n unit_test_cstdmf` 实测命令行；源清单逐条对照 `Makefile.rules`

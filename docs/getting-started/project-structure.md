@@ -12,13 +12,16 @@ BigWorld 是一个大型 C/C++ MMO 引擎，本文档说明项目的目录布局
 BigWorld/
 ├── programming/          # 源代码 (核心)
 ├── docs/                 # 文档 (VitePress)
+├── game/                 # 构建输出根 (Makefile 默认安装目录)
+├── scripts/              # 辅助脚本 (CMake 样板构建/每日打包)
 ├── .github/              # GitHub 配置
-├── .spec-workflow/       # 规范工作流
-├── logo.png              # 项目 Logo
+├── logo.svg              # 项目 Logo
 ├── package.json          # Node.js 配置 (文档)
 ├── README.md             # 项目说明
 ├── CONTRIBUTING.md       # 贡献指南
 ├── MAINTAINTERS.md       # 维护者
+├── TESTING.md            # 测试口径与陷阱登记
+├── todo.md               # 巡检待办账本
 ├── LICENSE               # 许可证
 └── THIRD-PARTY-NOTICES   # 第三方声明
 ```
@@ -116,18 +119,22 @@ programming/
 
 ### `programming/bigworld/third_party/`
 
-第三方依赖 (24 个)：
+第三方依赖：22 个 vendored 目录（另有 7 个依赖走 vcpkg，见下）。
 
 | 依赖 | 用途 |
 |------|------|
-| `python` | Python 解释器 |
-| `openssl` | 加密库 |
-| `curl` | HTTP 客户端 |
-| `mongodb` | MongoDB 驱动 |
-| `sqlite` | SQLite 数据库 |
-| `jsoncpp` | JSON 解析 |
+| `python` | 内嵌 Python 3.13 解释器（BigWorld 补丁版，不走 vcpkg） |
+| `mongodb` | legacy MongoDB C++ 驱动（vcpkg mongo-cxx-driver 3.x API 不兼容，保留） |
+| `CppUnitLite2` | 单元测试框架 |
 | `re2` | 正则表达式 |
 | `recastnavigation` | 导航网格 |
+| `nedalloc` / `nvtt` / `nvmeshmender` | 内存分配 / 纹理压缩 / 网格修正 |
+| `png` / `zip` / `sqlite` / `curl` | 历史 vendored 副本（平台相关） |
+| `openssl-vs2010` … `openssl-vs2015` / `openssl_android` | 历史平台构建副本 |
+| `putty` / `WTL` / `openautomate` / `cmake-win32-x86` / `python_modules` | 工具库与构建支持 |
+
+el7 构建路径的 vcpkg 端口（`programming/bigworld/vcpkg.json`）：
+`openssl`、`curl`（openssl feature）、`jsoncpp`、`zlib`、`libpng`、`sqlite3`、`bzip2`（后者仅供 CPython `_bz2` 扩展）。
 
 ### `programming/bigworld/build/`
 
@@ -154,12 +161,16 @@ build/
 docs/
 ├── index.md              # 首页
 ├── .vitepress/           # VitePress 配置
-├── public/               # 静态资源
+├── public/               # 静态资源 (logo.svg、pdf/)
 ├── getting-started/      # 快速开始
 ├── architecture/         # 架构研究 (28 章)
 ├── analysis/             # 项目分析
-├── migration/            # 迁移专题
-└── references/           # 参考资料
+├── upgrade-plan/         # 迁移与升级专题 (6 篇)
+├── references/           # 参考资料
+├── pdf/                  # 原始 PDF（服务端白皮书/构建指南/安装指南，3 份）
+├── python-313-migration.md  # Python 3.13 迁移全量台账
+├── vcpkg-migration.md    # vcpkg 迁移专题
+└── cpp23-migration.md    # C++23 迁移专题
 ```
 
 ## 依赖关系

@@ -130,8 +130,8 @@ PacketReceiver
 阅读链：
 
 ```
-scripts/entities.xml
-  -> scripts/entity_defs/<Entity>.def
+examples/client_integration/python/simple/res/scripts/entities.xml
+  -> examples/client_integration/python/simple/res/scripts/entity_defs/<Entity>.def
   -> EntityDescriptionMap::parse()
   -> EntityDescriptionMap::parseInternal()
   -> EntityDescription
@@ -157,7 +157,7 @@ scripts/entities.xml
 | 只写持久化属性 | `EntityDescription::ONLY_PERSISTENT_DATA`, `Base::addToStream()` |
 | 协议一致性 | `EntityDescriptionMap::addPersistentPropertiesToMD5()` |
 | 数据库字段映射 | `PropertyMappingsPerType`, `PropertyMapping::create()` |
-| 方法参数序列化 | `MethodDescription::addToStream()`, `MethodDescription::createFromStream()` |
+| 方法参数序列化 | `MethodDescription::addToStream()`, `MethodDescription::createArgsFromStream()` |
 
 详见 [序列化与 EntityDef](/architecture/serialization-entitydef) 和 [EntityDef 契约与协议生成](/architecture/entitydef-contract-generation)。
 
@@ -224,7 +224,7 @@ EntityDescriptionMap
   -> DataDescription
   -> PropertyMappingsPerType
   -> PropertyMapping::create()
-  -> PrimitiveMapping / StringLikeMapping / SequenceMapping / FixedDictMapping / UserTypeMapping ...
+  -> NumMapping<T> / StringMapping / SequenceMapping / ClassMapping / BlobMapping / StringLikeMapping / UserTypeMapping ...
 ```
 
 与 ORM 的区别：

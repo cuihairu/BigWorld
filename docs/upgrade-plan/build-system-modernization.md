@@ -14,18 +14,21 @@ BigWorld 的构建系统混合了 Make、CMake 和平台脚本，版本老旧。
 |------|------|------|
 | `programming/Makefile` | Linux | 主要 |
 | `programming/bigworld/CMakeLists.txt` | Windows | 主要 |
-| `build/docker/Dockerfile` | Docker | 辅助 |
-| `build/*.bat` | Windows | 辅助 |
+| `programming/bigworld/build/docker/Dockerfile` | Docker | 辅助 |
+| `programming/bigworld/build/*.bat` | Windows | 辅助 |
 
 ### 版本基线
 
 | 工具 | 当前版本 | 推荐版本 |
 |------|----------|----------|
 | CMake | 2.8.12 | 3.20+ |
-| GCC | 4.8.x | 11+ |
+| GCC | 14（CI 样板）/ 15（el7 镜像），C++23 已生效 | 保持 |
 | Clang | - | 14+ (可选) |
 | Make | GNU Make | 保持 |
 | Docker | CentOS 7 | Ubuntu 22.04 |
+
+> C++23 已在 make 主链生效（`programming/bigworld/build/make/platform_el7.mak:6`），
+> 详见 [C++23 迁移](/cpp23-migration)。
 
 ## 升级路径
 
@@ -104,7 +107,8 @@ RUN apt-get update && apt-get install -y \
 
 ### 第三阶段：编译器升级
 
-**目标**: 支持 C++17/20
+**目标**: 支持 C++17/20（该阶段目标已达成并超越：make 主链已切 C++23，
+见 `platform_el7.mak:6` 与 [C++23 迁移](/cpp23-migration)；以下配置为升级路径存档）
 
 **CMake 配置**:
 
@@ -128,12 +132,13 @@ add_compile_options(-fstack-protector-strong -D_FORTIFY_SOURCE=2)
 
 ### GitHub Actions（已落地，2026-10-12）
 
-实际生效的是两条 workflow：
+实际生效的是两条构建 workflow（另有 `deploy-docs.yml` 文档发布）：
 
 - `.github/workflows/ci.yml` —— **push/PR 门禁**：vcpkg manifest 钉版
   baseline 克隆 + binary cache（键=baseline+manifest 哈希）→ 配置/构建
   cstdmf CMake 样板（[vcpkg-migration §3.1](/vcpkg-migration)）→ ctest。
-  每个步骤带命名与失败日志 artifact，失败可按步骤定位。
+  步骤具名，失败时上传一个含 configure/build/ctest 三日志的 artifact
+  （`ci.yml:90-100`），失败可按步骤定位。
 - `.github/workflows/daily-build.yml` —— **每日构建**：48 小时新鲜度判定 →
   全量 make + 21 模块单测门禁 → tar.gz/deb/rpm 三格式打包，artifact 交付。
   详见[打包与每日构建](/upgrade-plan/packaging-and-daily-build)。
@@ -144,8 +149,9 @@ add_compile_options(-fstack-protector-strong -D_FORTIFY_SOURCE=2)
 ### Docker 构建
 
 ```bash
-# 构建镜像
-docker build -t bigworld-build -f build/docker/Dockerfile .
+# 构建镜像（路径相对仓库根；Dockerfile 头注释同此形式）
+docker buildx build -t bigworld-build \
+  -f programming/bigworld/build/docker/Dockerfile .
 
 # 运行构建
 docker run --rm -v $(pwd):/src bigworld-build \

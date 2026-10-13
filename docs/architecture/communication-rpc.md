@@ -231,7 +231,7 @@ BigWorld 里很多实体实例都“支持通信”，但含义并不是“每�
 
 比如脚本里调用 `otherEntity.base.someMethod()`，底层会走 `BaseEntityMailBox::getStreamEx()`，包装成 `BaseAppIntInterface::callBaseMethod`，见 [mailbox.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/baseapp/mailbox.cpp:1054)。
 
-同理，`self.base`、`self.cell`、`self.client` 等通信对象，本质上都是 `PyEntityMailBox` 的不同实现，见 [mailbox_base.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/entitydef/mailbox_base.hpp:35)。
+同理，`self.base`、`self.cell`、`self.client` 等通信对象，本质上都是 `PyEntityMailBox` 的不同实现，见 [mailbox_base.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/entitydef/mailbox_base.hpp:55)。
 
 ### 前端拿到的不是 ORM 对象，而是连接模型
 
@@ -297,7 +297,7 @@ BigWorld 实体和 Actor 确实有几处明显相似：
 
 BigWorld 里这种“可寻址实例引用”就是 mailbox：
 
-- `PyEntityMailBox` 表示一个远端实体目标，见 [mailbox_base.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/entitydef/mailbox_base.hpp:35)。
+- `PyEntityMailBox` 表示一个远端实体目标，见 [mailbox_base.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/entitydef/mailbox_base.hpp:55)。
 - 调脚本方法时，`PyEntityMailBox::callMethod()` 会校验参数、申请流、编码参数并发送，见 [mailbox_base.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/entitydef/mailbox_base.cpp:125)。
 
 从使用体验看，`entity.base.foo()`、`entity.cell.bar()`、`entity.client.baz()` 确实很像在给某个 Actor 发消息。

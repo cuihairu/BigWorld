@@ -73,21 +73,25 @@ BigWorld 的测试体系不是空白，尤其网络层有不少针对可靠 UDP�
 
 ```cpp
 // event_dispatcher.cpp:264 - Timer 添加
-int EventDispatcher::addTimerCommon( int microseconds, 
-    TimerHandler * pHandler, void * pUser, const char * name,
-    bool isRepeating )
+TimerHandle EventDispatcher::addTimerCommon( int64 microseconds,
+    TimerHandler * handler, void * arg, bool recurrent,
+    const char * name )
 {
-    // 1. 微秒转换为 timestamp interval
-    uint64 interval = uint64(microseconds) * 1000;
-    
-    // 2. 计算到期时间（使用真实时间）
-    uint64 startTime = timestamp() + interval;
-    
-    // 3. 插入 TimeQueue64
-    TimeQueue64::iterator iter = pTimeQueue_->add( startTime, 
-        pHandler, pUser, interval );
-    
-    return iter->id();
+    MF_ASSERT( handler );
+
+    if (microseconds <= 0)
+        return TimerHandle();
+
+    // 1. 微秒转换为 timestamp interval（经 TimeStamp::fromSeconds）
+    uint64 interval = TimeStamp::fromSeconds(
+            ((double)microseconds) / 1000000.0 );
+
+    // 2. 计算到期时间（timestamp() 为真实时间）并插入时间队列
+    TimerHandle handle = pTimeQueue_->add( timestamp() + interval,
+            recurrent ? interval : 0,
+            handler, arg, name );
+
+    return handle;
 }
 ```
 

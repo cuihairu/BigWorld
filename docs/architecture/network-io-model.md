@@ -51,27 +51,39 @@ flowchart TD
 **源码入口：** [event_poller.cpp:1079](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/event_poller.cpp:1079)
 
 ```cpp
-// event_poller.cpp:1079 - EPoller 注册 FD
-int EPoller::registerFileDescriptor( int fd, InputNotificationHandler * pHandler,
-    bool isRead )
+// event_poller.cpp:1059 - EPoller 注册/注销 FD（含双向升级）
+bool EPoller::doRegister( int fd, bool isRead, bool isRegister,
+    const char * name )
 {
-    // 创建 epoll_event
     struct epoll_event ev;
+    memset( &ev, 0, sizeof( ev ) ); // stop valgrind warning
+    int op;
+
     ev.data.fd = fd;
-    ev.data.ptr = pHandler;
-    
-    // TODO: Could be good to use EPOLLET (leave like select for now).
-    ev.events = isRead ? EPOLLIN : EPOLLOUT;
-    
-    // 注册到 epoll
-    if (epoll_ctl( epfd_, EPOLL_CTL_ADD, fd, &ev ) == -1)
+
+    // Handle the case where the file is already registered for the opposite
+    // action.
+    if (this->isRegistered( fd, !isRead ))
     {
-        ERROR_MSG( "EPoller::registerFileDescriptor: "
-            "epoll_ctl failed for fd %d: %s\n", fd, strerror(errno) );
-        return -1;
+        op = EPOLL_CTL_MOD;
+
+        ev.events = isRegister ? EPOLLIN | EPOLLOUT :
+                    isRead ? EPOLLOUT : EPOLLIN;
     }
-    
-    return 0;
+    else
+    {
+        // TODO: Could be good to use EPOLLET (leave like select for now).
+        ev.events = isRead ? EPOLLIN : EPOLLOUT;
+        op = isRegister ? EPOLL_CTL_ADD : EPOLL_CTL_DEL;
+    }
+
+    if (epoll_ctl( epfd_, op, fd, &ev ) < 0)
+    {
+        // bw_snprintf 组装 "EPoller::doRegister: Failed to add/remove ..." 报错
+        ...
+    }
+
+    return true;
 }
 ```
 

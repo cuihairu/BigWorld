@@ -76,7 +76,7 @@ Watcher 不只是本地 `Watcher::rootWatcher()`。服务进程可以通过 `Wat
 关键源码事实：
 
 - `WatcherNub::init()` 同时创建 UDP socket 和 TCP socket，并尝试把两者绑定到同一个端口，见 [watcher_nub.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/watcher_nub.cpp:47) 和 [watcher_nub.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/watcher_nub.cpp:121)。
-- `WatcherNub::attachTo()` 把 UDP/TCP fd 注册到 `EventDispatcher`，名字分别是 `WatcherUDP` 和 `WatcherTCP`，见 [watcher_nub.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/watcher_nub.cpp:212)。
+- `WatcherNub::attachTo()` 把 UDP/TCP fd 注册到 `EventDispatcher`，名字分别是 `WatcherUDP` 和 `WatcherTCP`，见 [watcher_nub.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/watcher_nub.cpp:256)。
 - `WatcherNub::notifyMachineGuard()` 会向本机 machined 注册 watcher nub 的端口、进程 ID、简称和版本号，见 [watcher_nub.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/watcher_nub.cpp:222)。
 
 Watcher 协议本身支持 GET/SET/TELL 两代消息：
@@ -324,30 +324,30 @@ flowchart TD
 
 源码证据：
 
-- `DebugFilter::handleMessage()` 会把消息交给注册的 `DebugMessageCallback`，见 [debug_filter.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/cstdmf/debug_filter.cpp:138)。
-- `LoggerMessageForwarder` 构造时调用 `DebugFilter::instance().addMessageCallback(this)`，把自己挂到日志回调链，见 [logger_message_forwarder.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/logger_message_forwarder.cpp:165)。
-- `FindLoggerHandler` 通过 machined 的 `ProcessStatsMessage` 找到 MessageLogger 地址并添加 logger endpoint，见 [logger_message_forwarder.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/logger_message_forwarder.cpp:96)。
+- `DebugFilter::handleMessage()` 会把消息交给注册的 `DebugMessageCallback`，见 [debug_filter.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/cstdmf/debug_filter.cpp:189)。
+- `LoggerMessageForwarder` 构造时调用 `DebugFilter::instance().addMessageCallback(this)`，把自己挂到日志回调链，见 [logger_message_forwarder.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/logger_message_forwarder.cpp:254)。
+- `FindLoggerHandler` 通过 machined 的 `ProcessStatsMessage` 找到 MessageLogger 地址并添加 logger endpoint，见 [logger_message_forwarder.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/logger_message_forwarder.cpp:163)。
 - `LoggerEndpoint` 负责连到远端 MessageLogger，并维护 TCP/UDP、重连、缓冲队列和 dropped message 计数，见 [logger_endpoint.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/logger_endpoint.hpp:18)。
 - `Logger` 是 `message_logger` 进程主体，负责接收组件日志、注册组件、处理断开和写入存储，见 [logger.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/tools/message_logger/logger.hpp:18)。
 
 这条链路体现了几个取舍：
 
 - 业务进程不直接写集中日志文件，而是把日志作为网络消息转发。
-- MessageLogger 可以按 UID、组件名、LoggerID、优先级过滤，见 [logger.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/tools/message_logger/logger.cpp:42)。
-- Logger 进程自己也暴露 watcher，例如 `size`、`reattachAll`、`filter/TRACE` 到 `filter/CRITICAL`，见 [logger.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/tools/message_logger/logger.cpp:141)。
+- MessageLogger 可以按 UID、组件名、LoggerID、优先级过滤，见 [logger.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/tools/message_logger/logger.cpp:164)。
+- Logger 进程自己也暴露 watcher，例如 `size`、`reattachAll`、`filter/TRACE` 到 `filter/CRITICAL`，见 [logger.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/tools/message_logger/logger.cpp:164)。
 
 ## MessageLogger 存储模型
 
 `message_logger` 不是一个单一文本文件 writer。它有抽象存储层：
 
 - `LogStorage` 定义 `addLogMessage()`、`writeLogToDB()`、`roll()`、`validateNextHostname()`、`setAppInstanceID()` 等接口，见 [log_storage.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/tools/message_logger/log_storage.hpp:19)。
-- `LogStorage::addLogMessage()` 会读取网络 header、消息来源、优先级、格式串，再解析 host、category，最后交给后端写入，见 [log_storage.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/tools/message_logger/log_storage.cpp:43)。
+- `LogStorage::addLogMessage()` 会读取网络 header、消息来源、优先级、格式串，再解析 host、category，最后交给后端写入，见 [log_storage.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/tools/message_logger/log_storage.cpp:71)。
 - `mldb` 是本地文件型存储后端，目录在 [mldb/log_storage.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/tools/message_logger/mldb/log_storage.hpp:1)。
 - MongoDB 后端由 `LogStorageMongoDB` 实现，支持缓冲、后台 TaskManager、重连、roll、过期清理和 BSON 构造，见 [mongodb/log_storage.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/tools/message_logger/mongodb/log_storage.hpp:32)。
 
 MongoDB 后端还有一个重要运行时边界：
 
-- 如果连接断开，`LogStorageMongoDB::addLogMessage()` 会暂停写日志并排入 `ReconnectTask`，连接恢复后再恢复 logging，见 [mongodb/log_storage.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/tools/message_logger/mongodb/log_storage.cpp:220)。
+- 如果连接断开，`LogStorageMongoDB::addLogMessage()` 会暂停写日志并排入 `ReconnectTask`，连接恢复后再恢复 logging，见 [mongodb/log_storage.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/tools/message_logger/mongodb/log_storage.cpp:268)。
 
 这说明 MessageLogger 是一个独立的日志数据库服务，而不是“每个进程 printf 到文件”。它可以集中查询，但也引入了自己的可靠性问题：
 
@@ -360,9 +360,9 @@ MongoDB 后端还有一个重要运行时边界：
 
 BigWorld 的日志已经有一些结构化雏形：
 
-- `LoggerMessageHeader` 包含 component priority、message priority、message source、category，见 [logger_message_forwarder.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/logger_message_forwarder.cpp:67)。
-- `LoggerComponentMessage` 包含 version、loggerID、uid、pid、componentName，见 [logger_message_forwarder.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/logger_message_forwarder.cpp:84)。
-- `LogStorage::resolveUID()` 会通过 machined 把 uid 解析成 username，见 [log_storage.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/tools/message_logger/log_storage.cpp:107)。
+- `LoggerMessageHeader` 包含 component priority、message priority、message source、category，见 [logger_message_forwarder.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/logger_message_forwarder.hpp:114)。
+- `LoggerComponentMessage` 包含 version、loggerID、uid、pid、componentName，见 [logger_message_forwarder.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/logger_message_forwarder.hpp:131)。
+- `LogStorage::resolveUID()` 会通过 machined 把 uid 解析成 username，见 [log_storage.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/tools/message_logger/log_storage.cpp:159)。
 
 但它还不是现代意义上的完整结构化日志：
 

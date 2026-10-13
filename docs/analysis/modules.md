@@ -18,7 +18,7 @@ BigWorld 的目录结构不能只按“库名含义”理解。更可靠的方�
 | `db_storage` | DB 后端抽象接口 | `idatabase.hpp` |
 | `db_storage_mysql` | MySQL 后端、表映射、后台任务 | `mysql_database.cpp`, `mappings/property_mapping.cpp`, `tasks/put_entity_task.hpp` |
 | `db_storage_xml` | XML DB 后端实现 | `xml_database.cpp` |
-| `script`, `pyscript`, `entitydef_script` | 脚本对象、嵌入式解释器桥接、EntityDef 脚本包装 | `script_object.hpp`, `py_script_object.hpp`, `py_entitydef.cpp` |
+| `script`, `pyscript`, `entitydef_script` | 脚本对象、嵌入式解释器桥接、EntityDef 脚本包装 | `script_object.hpp`, `py_script_object.hpp`, `py_component.cpp` |
 
 渲染、场景和工具共享库也在 `lib` 下，例如 `moo`、`chunk`、`scene`、`terrain`、`asset_pipeline`、`ual`。它们对客户端和编辑器很重要，但理解服务端 MMO 状态模型时应先读上表中的模块。
 
@@ -51,7 +51,7 @@ BigWorld 的目录结构不能只按“库名含义”理解。更可靠的方�
 | `server/baseappmgr/baseappmgr_interface.hpp` | BaseAppMgr | BaseApp 注册、全局 base、负载与恢复 |
 | `server/cellappmgr/cellappmgr_interface.hpp` | CellAppMgr | CellApp 注册、Cell/Space 管理、offload 控制 |
 | `lib/db/dbapp_interface.hpp` | DBApp | 登录、实体读写、space 持久化 |
-| `server/dbappmgr/dbappmgr_interface.hpp` | DBAppMgr | DBApp 注册与 hash 更新 |
+| `lib/db/dbappmgr_interface.hpp` | DBAppMgr | DBApp 注册与 hash 更新 |
 | `lib/connection/login_interface.hpp` | LoginApp external interface | 登录、probe、挑战响应 |
 | `server/loginapp/login_int_interface.hpp` | LoginApp internal interface | 内部关闭和状态协调 |
 | `server/reviver/reviver_interface.hpp` | Reviver | 组件监控和恢复 |

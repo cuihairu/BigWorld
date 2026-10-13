@@ -62,30 +62,22 @@ class BinaryOStream
 {
 public:
     virtual ~BinaryOStream() {}
-    
+
     // 核心方法：预留 n 字节空间，返回可写指针
     virtual void * reserve( int nBytes ) = 0;
-    
-    // 添加单个值
-    virtual int addBlob( const void * data, int size )
-    {
-        void * dest = this->reserve( size );
-        if (dest)
-        {
-            memcpy( dest, data, size );
-        }
-        return size;
-    }
-    
-    // 从输入流搬运数据
-    int transfer( BinaryIStream & bs, int nBytes );
-    
-    // 写入压缩整数
-    void writePackedInt( int32 value );
-    
-    // 写入字符串长度
-    void writeStringLength( uint32 length );
-    
+
+    // 添加一块数据（纯声明，binary_stream.hpp:41）
+    virtual void addBlob( const void * pBlob, int size );
+
+    // 从输入流搬运数据（:40）
+    void transfer( BinaryIStream & from, int length );
+
+    // 写入压缩整数（:47，实现在 :254）
+    inline void writePackedInt( int len );
+
+    // 写入字符串长度（:48，内部即 writePackedInt）
+    void writeStringLength( int len )	{ this->writePackedInt( len ); }
+
     // 添加基本类型
     BinaryOStream & operator<<( bool value );
     BinaryOStream & operator<<( int8 value );
@@ -107,20 +99,20 @@ class BinaryIStream
 {
 public:
     virtual ~BinaryIStream() {}
-    
+
     // 核心方法：取出 n 字节数据
     virtual const void * retrieve( int nBytes ) = 0;
-    
+
     // 剩余长度
     virtual int remainingLength() const = 0;
-    
-    // 读取压缩整数
-    int32 readPackedInt();
-    
-    // 错误状态
-    virtual bool error() const { return error_; }
-    
-    // 读取基本类型
+
+    // 读取压缩整数（:89）
+    inline int readPackedInt();
+
+    // 错误状态（:92，非虚）
+    bool error() const { return error_; }
+
+    // 读取基本类型（operator>> 为自由 inline 函数与宏，:309/:329/:407）
     BinaryIStream & operator>>( bool & value );
     BinaryIStream & operator>>( int8 & value );
     BinaryIStream & operator>>( uint8 & value );
@@ -183,39 +175,42 @@ sequenceDiagram
 
 ### MemoryStream 层
 
-**概述：** `MemoryOStream` 同时继承 `BinaryOStream` 和 `BinaryIStream`，可以先写入内存，再作为输入流读出。这是进程内消息传递的基础。
+**概述：** `MemoryOStream` 同时继承 `BinaryOStream`、`BinaryIStream` 和 `SafeAllocatable`，可以先写入内存，再作为输入流读出。这是进程内消息传递的基础。
 
 **源码入口：** [memory_stream.hpp:27](/home/cui/workspaces/BigWorld/programming/bigworld/lib/cstdmf/memory_stream.hpp:27)
 
 ```cpp
 // memory_stream.hpp:27 - MemoryOStream 实现
-class MemoryOStream : public BinaryOStream, public BinaryIStream
+class MemoryOStream : public BinaryOStream, public BinaryIStream,
+    public SafeAllocatable
 {
 public:
-    MemoryOStream( int size = 0 );
+    MemoryOStream( int size = 64 );
     virtual ~MemoryOStream();
-    
+
     // 写入实现
     virtual void * reserve( int nBytes );
-    
+
     // 读取实现
     virtual const void * retrieve( int nBytes );
-    
+
     // 剩余长度
     virtual int remainingLength() const;
-    
+
     // 重置
     void reset();
-    
+
     // 获取数据指针
-    const void * data() const;
+    void * data();
     int size() const;
-    
-private:
-    char * buffer_;
-    int size_;
-    int capacity_;
-    int cursor_;
+
+protected:
+    char * pBegin_;
+    char * pCurr_;
+    char * pEnd_;
+    char * pRead_;
+    bool shouldDelete_;
+    bool canRewind_;
 };
 ```
 
@@ -400,10 +395,10 @@ Entity 属性序列化到客户端的完整调用链：
 
 客户端属性反序列化的完整调用链：
 
-源码入口：[entity_description.cpp:1472](/home/cui/workspaces/BigWorld/programming/bigworld/lib/entitydef/entity_description.cpp:1472)
+源码入口：[entity_description.cpp:1567](/home/cui/workspaces/BigWorld/programming/bigworld/lib/entitydef/entity_description.cpp:1567)（另见 `readTaggedClientStreamToDict` :1622）
 
 <div class="flow-strip">
-  <span class="flow-node">EntityDescription::createFromStream()</span>
+  <span class="flow-node">EntityDescription::readStreamToDict()</span>
   <span class="flow-arrow">-></span>
   <span class="flow-node">遍历 DataDescription</span>
   <span class="flow-arrow">-></span>

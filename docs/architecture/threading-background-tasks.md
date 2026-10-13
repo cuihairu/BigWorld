@@ -26,7 +26,7 @@ BigWorld 服务端线程模型可以分成四类：
 - `TaskManager::tick()` 在 owning thread 处理 foreground task，见 [bgtask_manager.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/cstdmf/bgtask_manager.cpp:744)。
 - `BackgroundTaskThread::run()` 拉取并执行后台任务，见 [bgtask_manager.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/cstdmf/bgtask_manager.cpp:137)。
 - `WorkerThread::run()` 按时间调度 `WorkerJob`，见 [worker_thread.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/baseapp/worker_thread.cpp:66)。
-- `Script::initThread()` 初始化后台线程的脚本 thread state，见 [script.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/pyscript/script.cpp:661)。
+- `Script::initThread()` 初始化后台线程的脚本 thread state，见 [script.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/pyscript/script.cpp:815)。
 
 ## 主线程边界
 
@@ -158,7 +158,7 @@ BigWorld 的脚本层通过嵌入式解释器运行。源码中线程进入脚�
 | `Script::releaseLock()` | 通过解释器 API 释放脚本锁 |
 | `Script::acquireLock()` | 恢复脚本 thread state 并重新进入脚本执行上下文 |
 
-源码见 [script.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/pyscript/script.cpp:334)、[script.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/pyscript/script.cpp:661)、[script.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/pyscript/script.cpp:748)。
+源码见 [script.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/pyscript/script.cpp:411)、[script.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/pyscript/script.cpp:815)、[script.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/pyscript/script.cpp:935)。
 
 这条链的结论是：后台线程可以进入脚本相关代码，但不能把脚本逻辑当成无约束并行执行。每个进入脚本层的线程都必须遵守解释器锁和 thread state 管理。
 

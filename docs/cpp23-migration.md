@@ -8,6 +8,9 @@
 
 ### 1.1 语言标准设置点（全仓扫描）
 
+> 本小节为**切档前快照**（迁移启动时点）。make 主链现已切至 C++23
+> （`platform_el7.mak:6`），见 §6.3 执行结果。
+
 | 位置 | 设置 | 说明 |
 |---|---|---|
 | `programming/bigworld/build/make/platform_el7.mak:4` | `CXX11_CXXFLAGS := -std=c++11`，并 `CXXFLAGS += $(CXX11_CXXFLAGS)` | **Linux 当前实际生效档位** |
@@ -27,7 +30,7 @@
 
 ### 1.3 本机构建环境注意点
 
-- `/usr/bin/g++` = 15.2.0 可用；但 **`~/.local/bin/g++` 是一个损坏的自装符号链接**（缺 libstdc++ 头文件），且它在 PATH 中优先。编译验证时必须显式 `CXX=/usr/bin/g++` 或调整 PATH。
+- `/usr/bin/g++` = 15.2.0 可用；写作时点曾发现 `~/.local/bin/g++` 是一个损坏的自装符号链接（缺 libstdc++ 头文件）且在 PATH 中优先，该机器特定现象现已不存在（该路径无文件），如复现需显式 `CXX=/usr/bin/g++` 或调整 PATH。
 - 本机为 Ubuntu（`platform_info.py` 已加 Debian→el7 等效映射，属 Python 迁移任务的提交）。
 
 ## 2. 分档废弃/删除特性命中量化

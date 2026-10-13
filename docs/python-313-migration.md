@@ -764,7 +764,7 @@ TODO 表候选落位。`resmgr/datasection.cpp` 是 resmgr 的抽象基类层（
 11-12. **基类 as\* 15 式默认回显**（BinSection 只覆写 binary 族，其余全部落到 datasection.cpp 基类体）+ **基类 set\* 全拒**（setBinary 例外为 true）。
 13. **createAppropriateSection 五臂**：合法 XML、allowModifyData=false 拷贝保护（缓冲首字节不变）、非法 XML 回落 BinSection（dynamic_cast 断言）、allowModifyData=true 拒绝（NULL）、creator 短路。
 14. **splitSaveAsFileName 三臂（经 BinSection::save）**：protected 直测不可达。缺失父拒；无斜杠臂写 "."（fopen 目录失败）——首版写 "lots_of_files" 曾把文件真实落进 game/res/bigworld/（BWResource 根为 DirSection(MultiFileSystem)，写穿搜索路径），已删并改设计；zip 父臂 "exist.zip/sub" 命中成功臂且以 purgeAll 前后包夹，防缓存内变更泄漏给同进程后跑的 test_zip_section。
-15. **setWatcherValues**：空路径早退、DataWatcher<int> 注册后驱动 77 写入、dot→space 重试臂、空值双失败静默。
+15. **setWatcherValues**：空路径早退、`DataWatcher<int>` 注册后驱动 77 写入、dot→space 重试臂、空值双失败静默。
 16-17. **copy**：Bin→Bin modifyCurrent=true 短路拷贝/false 不拷（须用新 dst——首版复用已拷贝的 dst 导致断言自相矛盾）；XML→XML 全树 compare==0（首版根 tag 不同被 compare 的 sectionName 检查否决，改同根名）。
 18. **copySections**：tagged 选择拷、all 合并覆盖（同 tag 后写胜）。
 19-20. **compare/binaryCompare 全差异臂**：NULL→1、名异、值异、数异、子异 break 臂、相等 0（首版 binaryCompare 的"相等树"夹具带值差被 -1 否决，改同构夹具）。

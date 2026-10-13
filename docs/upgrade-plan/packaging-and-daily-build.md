@@ -83,7 +83,7 @@ workflow 在 dev 分支经**五轮 `workflow_dispatch` 实跑迭代**后全链�
 |------|--------|------|------|
 | 1 | Build | runner 缺 `liblzma-dev`，`_lzma` 落出 CPython 模块集，`bwsentinel` 的逐模块存在性检查断裂 | 补 `liblzma-dev` / `libgdbm-compat-dev` / `tk-dev` |
 | 2 | 单测 | `python_install` 被 `user_shouldInstallPython=1` 门控且全构建系统无默认值——标准库从未安装，嵌 Python 测试死于 `No module named 'encodings'` | workflow 注入该环境变量 |
-| 3 | 单测 1 用例 | `test_py_traceback` 硬编码 `/tmp/opencode`（本地会话临时目录），干净机器 `mkfifo ENOENT` | 测试路径挪 `/tmp` 根（`876561a4`） |
+| 3 | 单测 1 用例 | `test_py_traceback` 硬编码 `/tmp/opencode`（本地会话临时目录），干净机器 `mkfifo ENOENT`（现为 `/tmp/pyscript_py_traceback_fifo.py`，`test_py_traceback.cpp:350`） | 测试路径挪 `/tmp` 根（`876561a4`） |
 | 4 | Package.rpm | 打包脚本 rpm 段中转拷贝错层寻址（本机无 rpmbuild 恰好从未执行到该行） | `bwsrc` 宏直连暂存树（`f74985bb`） |
 
 </div>

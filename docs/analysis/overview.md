@@ -68,7 +68,7 @@ entities.xml / .def
 | `programming/bigworld/lib` | 57 | 共享库数量多，跨模块依赖明显 |
 | `programming/bigworld/server` | 12 | 服务端进程与扩展目录并存 |
 | `programming/bigworld/server/tools` | 10 | 运维、日志、数据处理工具是服务端生态的一部分 |
-| `programming/bigworld/third_party` | 24 | 仓库采用内置第三方依赖策略 |
+| `programming/bigworld/third_party` | 22 | 仓库采用内置第三方依赖策略（另有 7 个依赖走 vcpkg，见 `vcpkg.json`） |
 
 这些数字只能说明规模，不能直接说明架构。架构判断必须回到源码调用链：接口在哪里注册、消息在哪里发出、handler 修改了什么状态、状态最终是否进入客户端或数据库。
 

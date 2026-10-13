@@ -7,7 +7,7 @@ BigWorld 内嵌了大量第三方库，版本普遍老旧。本文档盘点当�
 </div>
 
 ::: tip 状态更新（2026-09-28）
-下表的 Python 行已落地：嵌入式解释器现运行 **Python 3.13**（原计划 3.12，随依赖链上调），过程见 [迁移全量台账](/python-313-migration)。其余行仍为迁移启动前的盘点，尚未逐一处理。
+下表的 Python 行已落地：嵌入式解释器现运行 **Python 3.13**（原计划 3.12，随依赖链上调），过程见 [迁移全量台账](/python-313-migration)。C/C++ 行中 OpenSSL、curl、jsoncpp、zlib、libpng、sqlite3、bzip2 已切换到 **vcpkg manifest**（实测装出 OpenSSL 3.6.4 / curl 8.22.0 / sqlite3 3.53.4，见 `vcpkg.json` 与 [vcpkg 迁移](/vcpkg-migration)），仅 CPython（BWHooks 魔改树）与 MongoDB legacy 驱动保留 vendored。
 :::
 
 ## 依赖现状
@@ -26,11 +26,11 @@ BigWorld 内嵌了大量第三方库，版本普遍老旧。本文档盘点当�
 
 | 依赖 | 当前版本 | 状态 | 建议 |
 |------|----------|------|------|
-| OpenSSL | 1.0.x | ⚠️ EOL | 升级到 3.x |
-| curl | 7.x | ✅ | 保持或升级 |
-| SQLite | 3.x | ✅ | 保持 |
-| MongoDB C Driver | 旧版 | ⚠️ | 评估是否需要 |
-| jsoncpp | 旧版 | ✅ | 可选升级 |
+| OpenSSL | **3.6.4（vcpkg）**，原 1.0.x | ✅ | 已完成（R1，`vcpkg.json`） |
+| curl | **8.22.0（vcpkg，openssl 特性）**，原 7.x | ✅ | 已完成 |
+| SQLite | **3.53.4（vcpkg）** | ✅ | 已完成 |
+| MongoDB C Driver | 旧版（vendored 保留） | ⚠️ | 评估是否需要 |
+| jsoncpp | vcpkg 提供（`vcpkg.json`） | ✅ | 已完成 |
 | re2 | 旧版 | ✅ | 可选升级 |
 | recastnavigation | 旧版 | ✅ | 保持 |
 
@@ -46,7 +46,7 @@ BigWorld 内嵌了大量第三方库，版本普遍老旧。本文档盘点当�
 
 ### P0 - 必须升级
 
-1. **Python 2.7 → 3.12**
+1. **Python 2.7 → 3.13（已完成，3.13.16）**
    - 影响范围：全仓库
    - 详见 [Python 升级路线图](/upgrade-plan/python-upgrade-plan)
 
@@ -90,7 +90,8 @@ BigWorld 内嵌了大量第三方库，版本普遍老旧。本文档盘点当�
 import oursql
 conn = oursql.connect(host='localhost', user='root', passwd='')
 
-# 新代码
+# 新代码（示例用的是 mysql-connector-python；若选 mysqlclient，
+# API 为 MySQLdb.connect，包名与 API 二选一保持一致）
 import mysql.connector
 conn = mysql.connector.connect(host='localhost', user='root', password='')
 ```
@@ -128,7 +129,7 @@ SSL_CTX_new(TLS_method());
 
 ## 兼容性矩阵
 
-| 依赖 | Python 2.7 | Python 3.8 | Python 3.12 |
+| 依赖 | Python 2.7 | Python 3.8 | Python 3.13 |
 |------|------------|------------|-------------|
 | SQLAlchemy 0.6 | ✅ | ❌ | ❌ |
 | SQLAlchemy 2.0 | ❌ | ✅ | ✅ |

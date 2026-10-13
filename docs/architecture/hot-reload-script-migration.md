@@ -25,8 +25,8 @@ BigWorld 的 `reloadScript` 不是现代意义上的安全生产热更新，而�
 
 关键源码：
 
-- `Script::createInterpreter()` 创建新解释器，见 [script.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/pyscript/script.cpp:593)。
-- `Script::swapInterpreter()` 切换当前解释器，见 [script.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/pyscript/script.cpp:644)。
+- `Script::createInterpreter()` 创建新解释器，见 [script.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/pyscript/script.cpp:747)。
+- `Script::swapInterpreter()` 切换当前解释器，见 [script.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/pyscript/script.cpp:798)。
 - `BaseApp` 侧 `reloadScript()` 在 [script_bigworld.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/baseapp/script_bigworld.cpp:1483)。
 - `CellApp` 侧 `reloadScript()` 在 [cellapp.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/cellapp.cpp:2322)。
 - `Entity::migrate()` 修改 `__class__` 并调用 `onMigrate`，见 [entity.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity.cpp:4245)。

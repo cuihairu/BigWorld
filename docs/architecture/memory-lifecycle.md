@@ -21,9 +21,9 @@ BigWorld 的生命周期管理有明显的工程体系：
 
 关键源码：
 
-- `ReferenceCount` 在 [smartpointer.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/cstdmf/smartpointer.hpp:31)。
-- `SafeReferenceCount` 在 [smartpointer.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/cstdmf/smartpointer.hpp:157)。
-- `ConstSmartPointer` 在 [smartpointer.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/cstdmf/smartpointer.hpp:307)。
+- `ReferenceCount` 在 [smartpointer.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/cstdmf/smartpointer.hpp:50)。
+- `SafeReferenceCount` 在 [smartpointer.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/cstdmf/smartpointer.hpp:176)。
+- `ConstSmartPointer` 在 [smartpointer.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/cstdmf/smartpointer.hpp:343)。
 - `Channel` 继承 `ReferenceCount`，见 [channel.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/channel.hpp:35)。
 - `PacketFilter` 继承 `SafeReferenceCount`，见 [packet_filter.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/packet_filter.hpp:21)。
 - `BackgroundTask` 继承 `SafeReferenceCount`，见 [bgtask_manager.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/cstdmf/bgtask_manager.hpp:25)。
@@ -152,10 +152,10 @@ sequenceDiagram
 
 **概述：** 非线程安全引用计数的完整调用链，从对象创建到销毁。
 
-**源码入口：** [smartpointer.hpp:117](/home/cui/workspaces/BigWorld/programming/bigworld/lib/cstdmf/smartpointer.hpp:117)
+**源码入口：** [smartpointer.hpp:610](/home/cui/workspaces/BigWorld/programming/bigworld/lib/cstdmf/smartpointer.hpp:610)
 
 ```cpp
-// smartpointer.hpp:117 - SmartPointer 构造和析构
+// smartpointer.hpp:610 - SmartPointer 构造和析构
 template<class T>
 class SmartPointer
 {

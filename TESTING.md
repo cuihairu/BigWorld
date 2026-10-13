@@ -33,8 +33,8 @@ cd programming && env VCPKG_ROOT=/home/cui/vcpkg make -s python_install   # sent
 
 不在构建内的测试文件（"文件存在≠参编"）：`cstdmf/unit_test/test_object_pool.cpp`
 ——object_pool.hpp:343 调 `LookUpTable::reserve()`，本树 lookup_table.hpp 无此
-成员，无法编译（cstdmf Makefile.rules 内注释登记）；`scene/unit_test` 的
-`test_blend_transform`（Windows 专用，规则内注释）。
+成员，无法编译（`lib/cstdmf/unit_test/Makefile.rules` 内注释登记）；
+`lib/math/unit_test/test_blend_transform.cpp`（Windows 专用，规则内注释）。
 
 ## 覆盖率口径
 

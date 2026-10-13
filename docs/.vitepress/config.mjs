@@ -9,6 +9,7 @@ const upgradePlanSidebar = [
       { text: "Python C API 迁移", link: "/upgrade-plan/python-c-api-guide" },
       { text: "第三方依赖升级", link: "/upgrade-plan/third-party-deps" },
       { text: "第三方依赖切换到 vcpkg", link: "/vcpkg-migration" },
+      { text: "C++23 迁移", link: "/cpp23-migration" },
       { text: "构建系统现代化", link: "/upgrade-plan/build-system-modernization" },
       { text: "打包与每日构建分析", link: "/upgrade-plan/packaging-and-daily-build" },
       { text: "Python 3.13 迁移全量台账", link: "/python-313-migration" }
@@ -158,6 +159,14 @@ export default {
           text: "参考资料",
           items: [
             { text: "原始 PDF 文档", link: "/references/original-docs" }
+          ]
+        }
+      ],
+      "/审计-文档一致性": [
+        {
+          text: "审计",
+          items: [
+            { text: "文档-代码一致性审计", link: "/审计-文档一致性" }
           ]
         }
       ]
