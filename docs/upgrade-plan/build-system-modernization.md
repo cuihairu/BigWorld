@@ -136,15 +136,16 @@ add_compile_options(-fstack-protector-strong -D_FORTIFY_SOURCE=2)
 
 - `.github/workflows/ci.yml` —— **push/PR 门禁**：vcpkg manifest 钉版
   baseline 克隆 + binary cache（键=baseline+manifest 哈希）→ 配置/构建
-  cstdmf CMake 样板（[vcpkg-migration §3.1](/vcpkg-migration)）→ ctest。
-  步骤具名，失败时上传一个含 configure/build/ctest 三日志的 artifact
-  （`ci.yml:90-100`），失败可按步骤定位。
+  CMake 样板 matrix（`[cstdmf, resmgr]`，`fail-fast: false`；
+  [vcpkg-migration §3.1/§3.2](/vcpkg-migration)）→ ctest。
+  步骤具名，失败时上传一个含 configure/build/ctest 三日志的 artifact，
+  失败可按步骤定位。
 - `.github/workflows/daily-build.yml` —— **每日构建**：48 小时新鲜度判定 →
   全量 make + 21 模块单测门禁 → tar.gz/deb/rpm 三格式打包，artifact 交付。
   详见[打包与每日构建](/upgrade-plan/packaging-and-daily-build)。
 
-本地等价命令：CMake 样板一条命令 `scripts/build-cstdmf-cmake.sh`；
-打包一条命令 `bash scripts/package-daily.sh <out-dir>`。
+本地等价命令：CMake 样板各一条命令（`scripts/build-cstdmf-cmake.sh` /
+`scripts/build-resmgr-cmake.sh`）；打包一条命令 `bash scripts/package-daily.sh <out-dir>`。
 
 ### Docker 构建
 

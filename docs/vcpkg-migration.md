@@ -141,6 +141,38 @@ vcpkg 静态库的传递依赖在 BW 链接行内闭合：curl→ssl/crypto+zlib
 - CI 侧由 `.github/workflows/ci.yml` 在每次 push/PR 上以干净环境跑同一样板
   （vcpkg 按 baseline 克隆 + binary cache + ctest），防 manifest 与样板漂移。
 
+### 3.2 resmgr 样板（自下而上第二块，2026-10-13）
+
+`cmake/samples/resmgr/CMakeLists.txt` 是第二个样板，复用 3.1 的
+`CppUnitLite2` + `unit_test_lib` + `cstdmf` 源码清单，自下而上叠加
+`math`（12 TU）、`zip`（vcpkg zlib，make 里 staged 成 `libzip.a`）、
+`resmgr`（25 TU，`HAVE_ZIP` + `BWENTITY_DLL_EXPORT`）与 `resmgr_test`
+（12 TU）。编译选项/宏逐字取自 `make -n -B bw-run-test-resmgr` 实测命令行
+（含 `-fPIC`、`-Wfloat-equal`，测试侧**不**加 `-Wno-float-equal`——与 3.1
+不同，以 make 为准）；`-rdynamic -Wl,--export-dynamic` 与链接序
+（`unit_test_lib CppUnitLite2 resmgr cstdmf math ZLIB::ZLIB m pthread`）与
+make 链接行一致。本地一条命令 `scripts/build-resmgr-cmake.sh`。
+
+两个样板级要点：
+
+- `unit_test_lib` 的 `base_resmgr_unit_test_harness.cpp` 引用 `BWResource`
+  符号，但静态库成员仅在最终链接需要时才会被拉入——所以 3.1 的 cstdmf
+  样板不带 resmgr 也能链，而 resmgr 样板必须带 resmgr（与 make 的
+  `--start-group` 同构）。
+- resmgr 测试基类（`test_harness.hpp`）把 `--root` 直接拼成
+  `<repo>/programming/bigworld/lib/resmgr/unit_test/res` 与
+  `<repo>/game/res/bigworld`，因此样板的 `--root` 必须精确指向仓库根；
+  3.1 的 `get_filename_component(BW_REPO_ROOT ...)` 原写 6 段 `..`（多一级，
+  指向 `workspaces/`）——cstdmf 测试基类不读 `--root` 故一直无感，resmgr
+  样板把两个样板一并修正为 5 段（仓库根），cstdmf 侧同步修正。
+
+验证（2026-10-13）：两个样板各自 configure/build 通过；`ctest` 全绿，
+`cstdmf_test` **427** 用例、`resmgr_test` **88** 用例，与 make 链同口径
+（make 侧 `bw-run-test-cstdmf` 427 / `bw-run-test-resmgr` 88）。CI 的
+`cmake-samples` job 改为 matrix（`[cstdmf, resmgr]`，`fail-fast: false`），
+每组件独立步骤与日志。后续 network/connection/entitydef 按同一模式叠加
+（connection 目前**无** unit_test，entitydef 依赖 8 个库，均需单独处理）。
+
 ## 4. 引擎源码适配
 
 - **libpng**（`lib/moo/png.cpp`）：`png/png.h` → `<png.h>`；删除私有头
