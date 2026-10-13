@@ -94,9 +94,9 @@ gcovr -r /home/cui/workspaces/BigWorld/programming/bigworld --txt -o /tmp/cov.tx
 | connection/replay_controller.cpp | 495/495 | 0% | 受限：录像/回放文件管线（线格式已批次12 测） |
 | chunk/chunk_boundary.cpp | 403/403 | 0% | 受限：同 chunk 体系 |
 | network/logger_endpoint.cpp | 398/398 | 0% | 维持受限登记（真消息日志管线，批次17） |
-| resmgr/bwresource.cpp | 386/746 | 48% | 候选 |
+| resmgr/bwresource.cpp | 282/746 | 62% | 批次 28 实测（精准插桩 464/746；386/746 为 09-28 全量口径） |
 | network/logger_message_forwarder.cpp | 335/335 | 0% | 维持受限登记（批次17） |
-| entitydef/method_description.cpp | 323/478 | 32% | 候选 |
+| entitydef/method_description.cpp | 137/466 | 70% | 批次 28 实测（精准插桩 329/466；323/478 为 09-28 全量口径） |
 | server/python_server.cpp | 298/298 | 0% | 受限：需完整 app 装配 |
 
 收口记录（不再在列）：`cstdmf/watcher.hpp` 14%→**22%**（943→1545 行覆盖、+602 实例行，缺口
@@ -192,3 +192,51 @@ Python 异常，之后所有 PyImport_ImportModule 静默失败——假绿形�
 对策=每个此类用例后 PyErr_Clear + fixture 取回全部 CHECK 化 + fixtureModule 失败即打印并清除；
 批次前段一度把 :1775-1791 判为"gcov 内联归属怪癖"，实为该毒化所致的静默跳过，结论已撤回，
 见台账 §7.27；下批首位候选 `resmgr/bwresource.cpp`，次选 `entitydef/method_description.cpp`）；
+`resmgr/bwresource.cpp` 43%→**62%**（精准插桩口径 322/746 → 464/746 实例行，批次 28；表值
+386/746 48% 属 2026-09-28 全量插桩口径、不可直接换算；新建 `test_bwresource_paths.cpp` 17 用例直驱：
+路径格式化族（getFilename/getExtension/removeExtension/changeExtension/pathIsRelative、formatPath
+空串臂、getFilePath 的 dirname 平台语义 #ifdef 双臂、getCurrentDirectory 非 Windows TODO 空串臂）、
+路径列表（getDefaultPath/越界空串臂/getPathAsCommandLine/path 缓冲区出入参）、addPath 默认追加 +
+index 0 头插 + delPath 三连还原、purge/purgeAll 与 DataSectionCensus 联动、save 非 census 拒绝臂、
+watchAccessFromCallingThread 与 RAII holder 双向、modification monitor 族（监听器增删/使能/flush/
+ignoreFileModification 一次性与永久两臂）、文件类型查询（res 相对名 vs fileAbsolutelyExists 原生
+绝对路径双轨）、modifiedTime/isFileOlder 用 utime 回拨做确定性比较、resolveToAbsolutePath
+FT_FILE/FT_DIRECTORY/FT_NOT_FOUND 与 res 相对解析）；平台行为经测试注释钉死四件：addPath(-1)
+默认追加而非前置（-1 转 size_t 后越过范围检查落到 size()）、addSubPaths 的
+`STRINGVECTOR newPaths( paths.size() )` 预分配空串污染路径列表（源码级隐患登记不修）、
+ensurePathExists/ensureAbsolutePathExists 先把 '/'→'\\' 再 mkdir（Windows-only 行为）、
+isFileOlder 把 mustBeOlderThanSecs 乘 1e7（Windows 100ns 单位）而 unix_file_system.cpp:119 存的
+是 st_mtime 秒 → 非零阈值在 Unix 恒 inert（用例只测 0 阈值并注释说明）；残余 282 行分类登记：
+impl 初始化族（188-484）、purge 递归（551-564）、searchPathsForFile/searchForFile（1179-1378）、
+EDITOR_ENABLED 死区（1389-1392/1493-1579）、ensurePathExists 族（1886-1974）、addPaths/addSubPaths
+族（2054-2213）、fixCommonRootPath（2285-2353）、monitor 包装（2558-2640）、
+overrideAppDirectory/dissolveFilename（2702-2883），以 el7 服务端构建的结构性不可达面为主；
+见台账 §7.28）；
+`entitydef/method_description.cpp` 32%→**70%**（精准插桩口径 153/466 → 329/466 实例行，批次 28；
+表值 323/478 属 2026-09-28 全量插桩口径、不可直接换算；新建 `test_method_description_gaps.cpp`
+33 用例直驱：parse 默认值（replayExposureLevel OTHER_CLIENTS、priority FLT_MAX 哨兵）、exposed
+组件位（OWN/ALL/BASE/CLIENT/BOGUS 各臂）、replay 暴露三级、detailDistance 平方换算、old-style
+`<Arg>` 子节点、returnValues 与 NOT_A_TYPE 失败臂、arg 失败回卷、exposure 访问器与 internalIndex、
+exposed msgID（NULL range → index 2 且 msgID uint8 回绕 255 注释；range(10,19)：5 exposed 且
+exposedID 3 → msgID 13 sub -1、12 exposed 且 exposedID 10 → msgID 19 sub 1 的
+ExposedMethodMessageRange 算术）、addSubMessageID 0 vs 1 字节、流尺寸（定长 4 / exposed
++sizeof(EntityID) / STRING 与子索引 -1）、add_to_stream/server/client（exposed 前置 EntityID 42；
+client 面需先 setExposedMsgID）、returnValues 流往返、md5（同 parse 同摘要、异 args、异 legacy
+index）、clientSafety（INT32 → 0、MAILBOX → CLIENT_UNUSABLE 位）、shouldRecord、toString
+（MemberDescription protected / MethodDescription private → 经 VariableLengthHeaderSize≠default
++ setExposedMsgID 的唯一可达警告点驱动）、components、is_signature_equal、p_watcher 单例、
+createErrorObject（环境无关 exists 断言——无 BWTwoWay 模块恒返 null）、areValidArgs（exposed CELL
+firstOrdinaryArg=1 / None source 合法 / 字符串 source 非法）、areValidReturnValues、
+extractSourceEntityID（plain 不变 / exposed 剥 123 / None → NULL_ENTITY_ID / 空 tuple → null）、
+convertKeywordArgs、createDictFromTuple、getArgsAsTuple（valid / 空 → null / 多余数据 CHEAT null /
+exposed：流只含 args、sourceID 作形参 42 → (42,5)——消息头在上游已剥）、
+createReturnValuesFromStream、returnValuesOrFailure（成功 uint8 0 / 失败 uint8 1 + 错误名 + 空串 /
+pickled 分支以 !pickled.empty() 守卫）、callMethod 与 isMethodHandledBy（exec 定义类 + eval 建实例
+——Py_file_input 返 None，须 exec-then-eval）；登记五件不修只记：returnValuesStreamSize 在
+method_description.hpp:257 声明但全仓无定义（死声明）、全仓无 BWTwoWay 模块 → staticInitTwoWay
+失败、Mercury::MessageID 为 uint8 故 -1 哨兵读作 255、DEFAULT_VARIABLE_LENGTH_HEADER_SIZE = 1
+（network/interface_element.hpp:75）、MAILBOX → UNSUPPORTED_TYPE → clientSafety
+CLIENT_UNUSABLE(0x2)；残余 137 行分类登记：PyDeferredResponse 族（58-135）、copy/赋值（254-268）、
+createErrorObject 带 func 臂（288-298）、parse 缺 name（347-348）、object-with-id 分支（636-646）、
+handleException 族（747-798）、callMethod 错误/returnValues 分支（850-923）、网络发送路径
+（970-1071）、2 参 createArgsFromStream（1163/1166）、:1216；见台账 §7.28）；

@@ -810,3 +810,47 @@ TODO 表首位候选落位。`pyscript/pywatcher.cpp` 是 BigWorld.addWatcher/ad
 表值 416/730 撤出 TESTING.md TODO 表，以精准口径 670/717（93.4%）登记收口。下批首位候选 `resmgr/bwresource.cpp`（386/746、48%），次选 `entitydef/method_description.cpp`（323/478、32%）。
 
 提交范围：`lib/pyscript/unit_test/test_pywatcher_gaps.cpp`（新）、`lib/pyscript/unit_test/Makefile.rules`、`lib/pyscript/unit_test/res/test_pywatcher.py`、`TESTING.md`、`docs/upgrade-plan/migration-status.md`、本文档。（pyscript 的 CMakeLists.txt 为本仓 cmake 双轨未覆盖的滞留目标——缺 test_pywatcher.cpp 等 10+ 个已参编 TU，批次 23-25 均未触碰，本批同此，留待组件 CMake 推广事项统一处理。）
+
+### 7.28 覆盖率补强批次 28：bwresource.cpp + method_description.cpp 双收口（2026-10-13）
+
+TODO 表两个候选同时落位（bwresource 386/746 48%、method_description 323/478 32% 均为 2026-09-28 全量插桩表值口径）。两文件都走精准插桩口径复判（只重编 resmgr / entitydef TU，同批次 21/23-27）：**bwresource 322/746（43%）**、**method_description 153/466（32%）**——method_description 表值与精准值差一倍，因宿主测试分布在 entitydef 之外的模块，全量口径下被分摊。新建 `test_bwresource_paths.cpp` 17 用例（resmgr_test 71→88）+ `test_method_description_gaps.cpp` 33 用例（entitydef_test 285→318），合计 50 用例，门禁 1302→**1352**。
+
+**bwresource.cpp 43% → 62%（322/746 → 464/746）用例覆盖面**（17 用例）：
+
+1. **路径格式化族**：getFilename（正/反斜杠/空串/尾斜杠）、getExtension（含点前缀/无扩展/目录内）、removeExtension、changeExtension、pathIsRelative（相对/绝对/反斜杠/盘符）、formatPath（补尾斜杠/空串臂——空串不补成 "/"）。
+2. **getFilePath 平台语义 #ifdef 双臂**：非 Windows 走 dirname（"a/b/c.txt"→"a/b"、"c.txt"→"."、反斜杠视为普通字符）；Windows 臂登记不测。
+3. **getCurrentDirectory 非 Windows TODO 空串臂**（源码内 TODO stub）。
+4. **路径列表**：getPathNum/getDefaultPath/getPath 越界空串臂（-1、size()、size()+100）/getPathAsCommandLine（引号包裹）/isValid/path 缓冲区出入参。
+5. **addPath/delPath**：默认追加（-1 转 size_t 越过范围检查落到 size()，测试注释钉死）、index 0 头插、delPath 三连还原。
+6. **purge/purgeAll/save**：DataSectionCensus::find 联动、非 census save 拒绝臂。
+7. **watchAccessFromCallingThread + RAII holder 双向**、checkAccessFromCallingThread 两种状态下安全。
+8. **modification monitor 族**：监听器增删、enableModificationMonitor、flushModificationMonitor、hasPendingModification、ignoreFileModification 一次性（ACTION_MODIFIED）与永久（ACTION_DELETED）两臂。
+9. **文件类型查询**：isDir/isFile/fileExists（res 相对名）vs fileAbsolutelyExists（原生绝对路径）双轨、getFileType FT_FILE/FT_DIRECTORY。
+10. **modifiedTime/isFileOlder**：utime 回拨 36000s 做确定性比较；只测 0 阈值（见隐患 4）。
+11. **resolveToAbsolutePath**：FT_FILE/FT_DIRECTORY/FT_NOT_FOUND 与 res 相对解析（返回值带前缀）。
+
+**method_description.cpp 32% → 70%（153/466 → 329/466）用例覆盖面**（33 用例）：
+
+1. **parse 默认值/选项**：replayExposureLevel 默认 OTHER_CLIENTS、priority 默认 FLT_MAX 哨兵、exposed 组件位（CELL+OWN/ALL 合法、BASE+ALL 拒绝、Exposed on CLIENT 拒绝、BOGUS 拒绝）、replay 暴露三级+BOGUS 拒绝、detailDistance 平方换算（100→10000）。
+2. **old-style 解析**：`<Arg>` 子节点族、空名臂、returnValues 与 NOT_A_TYPE 失败臂、arg 失败回卷。
+3. **exposed 索引/msgID**：setExposedIndex 组件位、internalIndex 直读、NULL range → index 2 且 msgID uint8 回绕 255（Mercury::MessageID 为 uint8，-1 哨兵读作 255，注释钉死）、range(10,19) 两例算术（5 exposed & exposedID 3 → msgID 13 sub -1；12 exposed & exposedID 10 → msgID 19 sub 1）。
+4. **流协议**：addSubMessageID 0 vs 1 字节、streamSize（定长 4、exposed CELL true 4+sizeof(EntityID)、STRING 与子索引 -1）、add_to_stream/server/client（exposed 前置 EntityID 42 往返；client 面需先 setExposedMsgID）、returnValues 流往返（uint8 0 + int32 7）。
+5. **md5**：同 parse 同摘要、异 args、异 legacy index。
+6. **clientSafety**：INT32 → 0、MAILBOX → CLIENT_UNUSABLE 位（UNSUPPORTED_TYPE）、shouldRecord。
+7. **toString 唯一可达警告点**：MemberDescription protected / MethodDescription private（子类直调被编译器两次拒绝）→ 经 VariableLengthHeaderSize≠default + setExposedMsgID 触发 WARNING 分支驱动，oversizeWarnLevelAsString()=="log"。
+8. **杂项**：components、is_signature_equal、p_watcher 单例非空、createErrorObject（环境无关 exists 断言）、areValidArgs（exposed CELL firstOrdinaryArg=1 / None source 合法 / 字符串 source 非法）、areValidReturnValues、extractSourceEntityID（plain 不变 / exposed 剥 123 / None → NULL_ENTITY_ID / 空 tuple → null）、convertKeywordArgs、createDictFromTuple。
+9. **getArgsAsTuple 四臂**：valid、空 → null、多余数据 CHEAT null、exposed（**流只含 args、sourceID 作形参**——消息头在上游已剥，故测试只写 int32 实参、以 42 作 sourceID 实参 → (42,5)）。
+10. **returnValuesOrFailure**：成功 uint8 0、失败 uint8 1 + 错误名 + 空串 → 1 + null、pickled 分支以 !pickled.empty() 守卫。
+11. **callMethod/isMethodHandledBy**：exec 定义类 + eval 建实例（**Py_file_input 返 None，须 exec-then-eval**——批次 27 毒化教训的应用：每步后 clearPendingError + 取回全部 CHECK 化 + get() != Py_None 守卫）。
+
+**登记不修只记（五件）**：
+
+1. `addSubPaths` 的 `STRINGVECTOR newPaths( paths.size() )` 预分配 size 个空串污染路径列表。
+2. `ensurePathExists`/`ensureAbsolutePathExists` 先把 '/'→'\\' 再 mkdir——非 Windows 下恒建不了目录（Windows-only 行为）。
+3. `isFileOlder` 把 mustBeOlderThanSecs 乘 1e7（Windows 100ns 单位）而 unix_file_system.cpp:119 存 st_mtime（秒）→ 非零阈值在 Unix 恒 inert；getCurrentDirectory() 非 Windows 返 ""（TODO stub）。
+4. `returnValuesStreamSize` 在 method_description.hpp:257 声明但**全仓无定义**（死声明，不调用只记）。
+5. 全仓无 BWTwoWay 模块 → staticInitTwoWay() 失败、createErrorObject 返 null ScriptObject；Mercury::MessageID 为 uint8 故 -1 哨兵读作 255；DEFAULT_VARIABLE_LENGTH_HEADER_SIZE = 1（network/interface_element.hpp:75）；MAILBOX → UNSUPPORTED_TYPE（data_types.cpp:114）→ clientSafety CLIENT_UNUSABLE(0x2)。
+
+**门禁记录**：精准口径 **bwresource 322/746 → 464/746（62%）**、**method_description 153/466 → 329/466（70%）**；残余 bwresource 282 行（impl 初始化 188-484、purge 递归 551-564、searchPathsForFile/searchForFile 1179-1378、EDITOR_ENABLED 死区 1389-1392/1493-1579、ensurePathExists 族 1886-1974、addPaths/addSubPaths 族 2054-2213、fixCommonRootPath 2285-2353、monitor 包装 2558-2640、overrideAppDirectory/dissolveFilename 2702-2883，以 el7 服务端构建结构性不可达面为主）与 method_description 137 行（PyDeferredResponse 58-135、copy/赋值 254-268、createErrorObject 带 func 288-298、parse 缺 name 347-348、object-with-id 636-646、handleException 族 747-798、callMethod 错误/returnValues 分支 850-923、网络发送路径 970-1071、2 参 createArgsFromStream 1163/1166、:1216）全数分类登记。删桩复验（gcda=0、4 个对象 gcov 符数=0）后全量 21 模块门禁 **1352** 全绿。下批首位候选 `network/machine_guard.cpp`（28%，bwmachined 面之外仍有可测面；受限大件 entitydef/entity_description.cpp 665 行、moo/image.ipp 589 行维持候选）。
+
+提交范围：`lib/resmgr/unit_test/test_bwresource_paths.cpp`（新）、`lib/resmgr/unit_test/Makefile.rules`、`lib/entitydef/unit_test/test_method_description_gaps.cpp`（新）、`lib/entitydef/unit_test/Makefile.rules`、`TESTING.md`、`docs/upgrade-plan/migration-status.md`、`README.md`、`todo.md`、本文档。
