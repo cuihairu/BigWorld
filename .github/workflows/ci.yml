@@ -28,7 +28,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        sample: [cstdmf, resmgr]
+        sample: [cstdmf, resmgr, network]
     env:
       VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/vcpkg-bcache
 

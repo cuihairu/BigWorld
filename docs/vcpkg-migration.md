@@ -173,6 +173,51 @@ make 链接行一致。本地一条命令 `scripts/build-resmgr-cmake.sh`。
 每组件独立步骤与日志。后续 network/connection/entitydef 按同一模式叠加
 （connection 目前**无** unit_test，entitydef 依赖 8 个库，均需单独处理）。
 
+### 3.3 network 样板（自下而上第三块，2026-10-14）
+
+`cmake/samples/network/CMakeLists.txt` 是第三个样板，复用 3.1/3.2 的
+`CppUnitLite2` + `unit_test_lib` + `cstdmf` + `math` + `resmgr` 源码清单，
+再叠加三块：`connection`（26 TU——CMake 轨首次纳入；它**无** unit_test，
+此前只能靠 network 的链接面间接覆盖）、`network`（78 TU）、
+`network_test`（49 TU）。编译选项/宏逐字取自 `make -n -B bw-run-test-network`
+实测命令行；本地一条命令 `scripts/build-network-cmake.sh`。
+
+与 3.1/3.2 的三处差异（均以 make 实测为准，不是"顺手统一"）：
+
+- **`USE_OPENSSL`**：`lib/connection` 与 `lib/network` 两个 Makefile.rules
+  都是 `useOpenSSL = 1`，所以它进了全局宏面（其余样板没有）。make 把 vcpkg
+  OpenSSL staged 成 `libbwssl.a`/`libbwcrypto.a`，样板侧等价映射为
+  `find_package(OpenSSL REQUIRED)` + `OpenSSL::SSL`/`OpenSSL::Crypto`
+  ——同一份 vcpkg 产物，只是链接名不同。
+- **`-Wno-float-equal` 在库侧也有**：3.2 记录的是 resmgr 测试侧**不**加；
+  network 则是**库与测试两侧都加**——`lib/network/Makefile.rules` 的
+  `cxxFlags_$(binName) += -Wno-float-equal` 针对库本身（`bsd_snprintf.cpp`
+  有浮点 `==` 比较），漏掉会让 `-Werror=float-equal` 直接红门禁。
+  connection 侧没有该旗标（`client_interface.cpp` 之外的 26 TU 无浮点比较），
+  保持不加。
+- **静态库单次扫描链接序**：make 的链接行用
+  `-Wl,--start-group ... -Wl,--end-group` 包住整个库组
+  （`unit_test_lib CppUnitLite2 network connection resmgr math cstdmf zip
+  bwssl bwcrypto`），因为 `connection` 引用 `network` 符号
+  （`DeferredBundle`、`CompressionIStream`）而 `network` 引用 `resmgr` 符号
+  （`DataSection::readInt`）——两种引用同时存在时**任何线性序都解不开**。
+  样板侧不能用 `$<LINK_GROUP>`（CMake 3.24+ 才引入，且不接受普通目标），
+  改为在 `target_link_libraries` 里写原始链接旗标项 `-Wl,--start-group` /
+  `-Wl,--end-group`（CMake 对以 `-` 开头的项按字面透传，位置与库项一致），
+  与 make 的拼法逐字对应。`connection` 在 CMake 里仍显式依赖 `network`，
+  保证依赖图记录正确。
+
+排除面（与 make 清单逐条对照）：`network` 排除 `net_360.cpp`（Xbox 360）
+与 `pch.cpp`；`connection` 排除 `client_interface.cpp`（Windows/MFC 客户端
+连接）与 `pch.cpp`；测试侧排除 `pch.cpp`。
+
+验证（2026-10-14）：configure/build 通过，`ctest` 全绿，`network_test`
+**210** 用例，与 make 侧同口径（make 产出的 `network_test` 同为 **210**
+用例全绿）。network 用例耗时较重（单跑约 200 s，含真实 socket 与定时
+时序），CI job 的 120 分钟超时留有充足余量。CI matrix 扩展为
+`[cstdmf, resmgr, network]`。后续仅剩 entitydef（依赖 8 个库，单独评估）。
+
+
 ## 4. 引擎源码适配
 
 - **libpng**（`lib/moo/png.cpp`）：`png/png.h` → `<png.h>`；删除私有头

@@ -1,6 +1,6 @@
 # ADR-0003：make 主链 + 按组件 CMake 样板双轨并存
 
-- **状态**：已接受（2026-10-12 cstdmf 样板落地，2026-10-14 resmgr + CI matrix）
+- **状态**：已接受（2026-10-12 cstdmf 样板落地，2026-10-14 resmgr + network + CI matrix）
 - **范围**：`programming/bigworld/build/make/`、`cmake/samples/`、
   `scripts/build-*-cmake.sh`、`.github/workflows/ci.yml`、
   `lib/*/CMakeLists.txt`（Windows 超级工程）
@@ -23,7 +23,7 @@
   `Makefile.rules`（Windows/macOS TU 与清单外文件显式排除并注释）；
   依赖走共享 vcpkg manifest（见 [ADR-0002](adr-0002-vcpkg-third-party-deps)）；
 - 每组件一条命令（`scripts/build-<组件>-cmake.sh`：configure → build →
-  ctest），用例数与 make 链一致才收（cstdmf 427、resmgr 88）；
+  ctest），用例数与 make 链一致才收（cstdmf 427、resmgr 88、network 210）；
 - CI（`ci.yml`）以 matrix 跑全部样板，防 manifest 与样板漂移；
 - Windows 超级工程保持原样，归 R3 统一处理。
 
@@ -39,11 +39,11 @@
 ## 后果
 
 - **正面**：双轨互相校验（样板用例数对 make 链是持续断言）；组件可按需
-  现代化；新组件接入模板可复制（cstdmf → resmgr 已验证）。
+  现代化；新组件接入模板可复制（cstdmf → resmgr → network 已验证）。
 - **代价/风险**：`Makefile.rules` 改源清单必须同步样板清单（样板头部已
   注明"keep in sync"）；两套构建语义长期并存，需 CI matrix 兜漂移；
   每样板 ~300 行显式清单是刻意为之的"翻译透明性"，不是债。
-- **后续**：network/connection/entitydef 样板按同一模式叠加
+- **后续**：connection/entitydef 样板按同一模式叠加
   （connection 无 unit_test 需先建测试面、entitydef 依赖 8 库，单独评估）；
   R3 时 Windows 超级工程与 Linux 样板合流或分工再立 ADR。
 
