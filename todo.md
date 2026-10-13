@@ -23,10 +23,10 @@
 ## B. 只有设计（有登记/方案，未落地）
 
 - [x] 覆盖率批次 28：resmgr/bwresource.cpp（精准插桩 322/746 43% → 464/746 62%，17 用例）+ entitydef/method_description.cpp（精准插桩 153/466 32% → 329/466 70%，33 用例）。新用例全绿（21 模块 1352），TESTING.md/migration-status/台账已同步 — `e4872402`
-- [ ] R2 third_party/python_modules Py2 生态包（Twisted 11、SQLAlchemy 0.6、Zope 2.11、oursql 等）换 Py3 兼容版并重新启用。验收：依赖工具 import 冒烟通过，全量门禁绿。期次 P2
-- [ ] 组件 CMake 样板推广（network/entitydef/connection 等按 cmake/samples/cstdmf 模式逐个复制）。验收：每组件一条命令构建+单测绿，CI 纳入，用例数与 make 链一致。期次 P2
+- [ ] R2 third_party/python_modules Py2 生态包（Twisted 11、SQLAlchemy 0.6、Zope 2.11、oursql 等）换 Py3 兼容版并重新启用。验收：依赖工具 import 冒烟通过，全量门禁绿。期次 P2（2026-10-13 复核为卡点：安装目标树 `game/res` 被 .gitignore:17 整目录排除、源包目录未纳入 git，产物无处落地无从验收；in-repo 唯一消费方 `libpython_tools`→`tools/worldeditor` 属 R3 Windows 范围；需先定依赖获取方式〔pip/vcpkg 取代 vendored tarball〕才能开工）
+- [ ] 组件 CMake 样板推广（network/entitydef/connection 等按 cmake/samples/cstdmf 模式逐个复制）。验收：每组件一条命令构建+单测绿，CI 纳入，用例数与 make 链一致。期次 P2（2026-10-14 进度：resmgr 样板落地 `cmake/samples/resmgr` + `scripts/build-resmgr-cmake.sh`，88 用例与 make 同口径绿，CI job 改 matrix `[cstdmf, resmgr]`；两样板 `--root` 多一级 latent 错位修正；复核剩余：connection 无 unit_test 需先建测试面、entitydef 依赖 8 库、network 待做）
 - [ ] 网络故障注入扩展（DBApp 卡死/慢查询注入、跨进程网络分区、clock jump、GIL 饥饿/后台线程长阻塞）。验收：四场景可在单测/MultiProcTestCase 框架内复现并可断言。期次 P2
-- [ ] ADR 体系（重大决策散落各长文）。验收：建 docs/adr/ + 补记首批 3 篇（Python 3.13、vcpkg 切换、make/cmake 双轨，一决策一页含背景/取舍/后果）。期次 P2
+- [x] ADR 体系（重大决策散落各长文）。验收：建 docs/adr/ + 补记首批 3 篇（Python 3.13、vcpkg 切换、make/cmake 双轨，一决策一页含背景/取舍/后果）。期次 P2 — 已建 docs/adr/（索引 + 0001/0002/0003）并挂 VitePress 侧栏，文档站构建绿
 - [ ] R3 Windows 构建（PCbuild/VS 工程迁移，MSVC 未验证）。验收：平台无关库（cstdmf/math）过 MSVC 编译门禁，vendored png/zip/sqlite 三树删除。期次 P3
 - [ ] exe 打包（依赖 R3）。验收：Windows 产物进入每日构建或独立 workflow，干净环境可复现。期次 P3
 - [ ] 虚拟时钟注入（核心 timer 无 IClock/TimeProvider，timestamp() 全局内联）。验收：EventDispatcher/TimeQueue 可注入时钟且默认行为不变，sleep 型时序测试改造。期次 P3
