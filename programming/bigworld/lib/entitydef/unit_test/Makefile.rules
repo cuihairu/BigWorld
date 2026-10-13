@@ -10,6 +10,7 @@ cxxSource =											\
 	unittest_mailbox								\
 	test_datasection								\
 	test_method_description							\
+	test_method_description_gaps					\
 	test_script_data_sink							\
 	test_script_data_source							\
 	test_single_data_sink							\
