@@ -431,6 +431,7 @@ add_executable(network_test
 	${BW_LIB_DIR}/network/unit_test/test_replay_header.cpp
 	${BW_LIB_DIR}/network/unit_test/test_replay_tick_loader.cpp
 	${BW_LIB_DIR}/network/unit_test/test_network_checksum_schemes.cpp
+	${BW_LIB_DIR}/network/unit_test/test_request_failure.cpp
 	${BW_LIB_DIR}/network/unit_test/test_server_finder.cpp
 	${BW_LIB_DIR}/network/unit_test/test_snprintf.cpp
 	${BW_LIB_DIR}/network/unit_test/test_stream.cpp

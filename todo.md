@@ -1,6 +1,6 @@
 # todo.md — 巡检建账
 
-- 账期：patrol-20261014-R1（2026-10-14）
+- 账期：patrol-20261014-R2（2026-10-14）
 - 盘点来源：README.md、docs/architecture/*、docs/upgrade-plan/*、docs/python-313-migration.md、docs/vcpkg-migration.md、docs/cpp23-migration.md、TESTING.md、git 历史
 - 口径：已实现 = 代码/工作流已落地且可给 commit 或运行证据；只有设计 = 有方案/登记但无承载物；完全没有 = 连设计都没有。架构章是逆向源码分析，其「源码验证重点」属验收建议，不据此记为已验收。
 - 期次：P1 = 下批立即；P2 = 近期；P3 = 远期或条件触发。
@@ -10,22 +10,22 @@
 - [x] Python 2.7 → 3.13.16 内嵌解释器迁移（换源、补丁重移植、BWHooks 经 PyMem_SetAllocator 重接线、全链构建+冒烟） — `3260bdd9` 起批次链，安全补丁升级 `2bdfc5aa`；台账 docs/python-313-migration.md
 - [x] vendored OpenSSL 1.0.0d 消除，第三方依赖 vcpkg manifest 化（openssl/curl/jsoncpp/zlib/libpng/sqlite3/bzip2） — `2bdfc5aa`
 - [x] vcpkg manifest 钉 builtin-baseline（可复现解析） — `1180ece6`
-- [x] 单测门禁 21 模块 / 1352 用例全绿（2026-10-13 实测，批次 28 后） — `dc5cd043`、`5338b828`、`f2c3ed23`、`4e64cf87`、`8216684b`、`6db1b3e3`、`a93fcecf`；TESTING.md 与 docs/upgrade-plan/migration-status.md
+- [x] 单测门禁 21 模块 / 1355 用例全绿（2026-10-14 实测，网络故障注入批次后；批次 28 时为 1352） — `dc5cd043`、`5338b828`、`f2c3ed23`、`4e64cf87`、`8216684b`、`6db1b3e3`、`a93fcecf`；TESTING.md 与 docs/upgrade-plan/migration-status.md
 - [x] 覆盖率补强批次 1–28 完成（profiler 6%→94%、watcher 14%→22%、fixed_sized_allocator 0%→99%、quad_tree 0%→98%、bsp 0%→91%、smartpointer 84/91→117/118、script_math 92.3%→97.0%、datasection 19.3%→99.7%、pywatcher 43.5%→93.4%、bwresource 43%→62%、method_description 32%→70%） — 各批 hash 见上
 - [x] 每日构建 workflow（make 全量 + 21 模块门禁 + tar.gz/deb/rpm 打包，48 小时新鲜度判定、vcpkg 按 baseline 克隆 + binary cache、产物命名版本+日期+短sha） — `57c863c7`、`b365012e`
 - [x] push/PR CI workflow（cstdmf CMake 样板构建 + ctest，vcpkg 缓存，失败日志按步骤定位） — `7a4ff703`
 - [x] Linux CMake 双轨样板（cstdmf 组件独立构建 427 用例与 make 同口径绿 + 一键脚本 scripts/build-cstdmf-cmake.sh） — `8cd23406`、`c6bfaf74`（427 口径复核；398 为首次落地时的旧数）
 - [x] libbwpython3.13 源码依赖缺口修复（vendored 源码变更触发 libpython.a → python.exe → 共享模块重建链） — `9877dd65`
 - [x] 架构研究文档集 28 篇（docs/architecture/，逐章 file:line 源码证据）+ VitePress 文档站 — 以 docs/ 现存内容为证
-- [x] README 项目状态数字与门禁实测一致 — `9a9e923f`；2026-10-13 审计同步为 1352 用例 / 批次 1–28
+- [x] README 项目状态数字与门禁实测一致 — `9a9e923f`；2026-10-13 审计同步为 1352 用例 / 批次 1–28；2026-10-14 同步为 1355（network_test 210 → 213，故障注入 +3）
 - [x] 规划入口缺失（docs/implementation-plan.md 与 docs/adr/ 不存在，指令引用落空） — README 项目状态段登记本 todo.md 为规划入口 — `9a9e923f`；2026-10-14 复核：docs/adr/ 已建（索引 + ADR 0001/0002/0003）并挂 VitePress 侧栏，规划入口已落地 — `642e5cd5`
 
 ## B. 只有设计（有登记/方案，未落地）
 
 - [x] 覆盖率批次 28：resmgr/bwresource.cpp（精准插桩 322/746 43% → 464/746 62%，17 用例）+ entitydef/method_description.cpp（精准插桩 153/466 32% → 329/466 70%，33 用例）。新用例全绿（21 模块 1352），TESTING.md/migration-status/台账已同步 — `e4872402`
 - [ ] R2 third_party/python_modules Py2 生态包（Twisted 11、SQLAlchemy 0.6、Zope 2.11、oursql 等）换 Py3 兼容版并重新启用。验收：依赖工具 import 冒烟通过，全量门禁绿。期次 P2（2026-10-14 复核，过期前提核销一条、真卡点两条：① 2026-10-13 记的「源包目录未纳入 git」**已不成立**——`third_party/python_modules` 15 个源文件已 tracked（Twisted 11 / SQLAlchemy 0.6.6 / Zope 2.11.4 / Imaging 1.1.7 / Pympler 0.3.0 / msgpack 0.4.2 / ours 0.9.2 / pika 0.9.13 / jpegsrc v6b + AsyncSQLAlchemy.py + tools/ + patches），源包面不再阻塞；② `.gitignore:17` 仍排除整个 `game/`，安装目标 `$(BW_SUFFIX_RES_BIGWORLD)/scripts/*/site-packages` 产物无 git 落地验收面，需先定验收口径；③ 纯 Python 生态包获取方式未定——vcpkg（ADR-0002）不覆盖 Twisted/SQLAlchemy/Zope，需 pip 或重新 vendor 的拍板。另：in-repo 无 Makefile 消费方（`Makefile:351` include 已注释），唯一消费面属游戏客户端/R3，属现状背景。卡点②③需拍板）
-- [ ] 组件 CMake 样板推广（network/entitydef/connection 等按 cmake/samples/cstdmf 模式逐个复制）。验收：每组件一条命令构建+单测绿，CI 纳入，用例数与 make 链一致。期次 P2（2026-10-14 进度：resmgr 样板落地 `cmake/samples/resmgr` + `scripts/build-resmgr-cmake.sh`，88 用例与 make 同口径绿；同日 network 样板落地 `cmake/samples/network` + `scripts/build-network-cmake.sh`，210 用例与 make 同口径绿（network 侧首次纳入 `connection` 26 TU——它无 unit_test，此前只能靠 network 链接面间接覆盖）；CI matrix `[cstdmf, resmgr, network]`；复核剩余：entitydef 依赖 8 库需单独评估，connection 无 unit_test 需先建测试面）
-- [ ] 网络故障注入扩展（DBApp 卡死/慢查询注入、跨进程网络分区、clock jump、GIL 饥饿/后台线程长阻塞）。验收：四场景可在单测/MultiProcTestCase 框架内复现并可断言。期次 P2
+- [ ] 组件 CMake 样板推广（剩余 entitydef）。验收：每组件一条命令构建+单测绿，CI 纳入，用例数与 make 链一致。期次 P2（2026-10-14 进度：resmgr 样板落地 `cmake/samples/resmgr` + `scripts/build-resmgr-cmake.sh`，88 用例与 make 同口径绿；同日 network 样板落地 `cmake/samples/network` + `scripts/build-network-cmake.sh`，210 用例与 make 同口径绿，CI matrix `[cstdmf, resmgr, network]`。R2 复核：① connection 前提核销——「无 unit_test 需先建测试面」不成立：`bw-run-test-network` 链接行含 `-lconnection`，connection 26 TU 全部编入 network_test，其中 11 TU 有同名直测（avatar_filter_helper、data_download、filter_helper、log_on_params、login_challenge_task、login_request_protocol、movement_filter、replay_header、replay_metadata、replay_tick_loader、server_finder），登录状态机另经 test_login_challenge_task 驱动，loginapp/baseapp 协议序列化对经 test_login_challenge_factories/test_cuckoo_cycle_login_challenge 覆盖；单独建 connection/unit_test 属重复建设。② entitydef 真卡点核实——entitydef_test 依赖 14 库，其中 8 库不在 CMake 轨（pyscript、script、chunk、scene、terrain、moo、png、physics2），而 pyscript/script 均 `usePython=1`，需 vendored CPython 3.13 静态库（third_party/python 源码树 + BWHooks），CMake 侧零 Python 支持；须先立「libpython3.13 CMake 样板」前置工程，单独评估）
+- [ ] 网络故障注入扩展（DBApp 卡死/慢查询注入、跨进程网络分区、clock jump、GIL 饥饿/后台线程长阻塞）。验收：四场景可在单测/MultiProcTestCase 框架内复现并可断言。期次 P2（2026-10-14 R2 进度：① DBApp 卡死/慢查询注入已落地——新建 `lib/network/unit_test/test_request_failure.cpp` 3 用例（network_test 210→213）：hang peer 一次一发请求超时断言 `REASON_TIMER_EXPIRED`、通道被拆断言 `REASON_CHANNEL_LOST`、正控用例证明同一进程内消息双向可达。此前全仓请求失败路径零断言（既有测试 handleException 仅记日志）。工程要点：channel 上请求按设计不超时（UDPBundle::startRequest 有 WARNING_MSG），超时场景须走一次一发请求，与 `DBAppInterfaceUtils::executeRawDatabaseCommand` 同形状；通道丢失用 Channel::destroy()（同步触发 onChannelGone→cancelRequestsFor），condemn() 会推迟到 CondemnedChannels 的 60s AGE_LIMIT。② clock jump 真卡：核心 timer 无 IClock/TimeProvider，timestamp() 全局内联（与 P3 虚拟时钟注入同源）。③ GIL 饥饿真卡：仓内无后台线程阻塞度量。②③各依赖一条 P3 前置，两条卡点等做前置后再收口本条）
 - [x] ADR 体系（重大决策散落各长文）。验收：建 docs/adr/ + 补记首批 3 篇（Python 3.13、vcpkg 切换、make/cmake 双轨，一决策一页含背景/取舍/后果）。期次 P2 — 已建 docs/adr/（索引 + 0001/0002/0003）并挂 VitePress 侧栏，文档站构建绿
 - [ ] R3 Windows 构建（PCbuild/VS 工程迁移，MSVC 未验证）。验收：平台无关库（cstdmf/math）过 MSVC 编译门禁，vendored png/zip/sqlite 三树删除。期次 P3
 - [ ] exe 打包（依赖 R3）。验收：Windows 产物进入每日构建或独立 workflow，干净环境可复现。期次 P3

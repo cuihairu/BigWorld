@@ -13,7 +13,7 @@
 | 事项 | 状态 | 说明 |
 |------|------|------|
 | 嵌入式解释器 | ✅ Python 2.7 → **3.13.16** | 3.13.15 迁移完成后，2026-10-12 同系列安全补丁升至 3.13.16（全链构建 + 冒烟 + 全量单测复验） |
-| 全量单测门禁 | ✅ 21 模块 / 1352 用例全绿 | 2026-10-13 实测（批次28 后；resmgr_test 71 → 88、entitydef_test 285 → 318） |
+| 全量单测门禁 | ✅ 21 模块 / 1355 用例全绿 | 2026-10-14 实测（批次28 时 1352：resmgr_test 71→88、entitydef_test 285→318；网络故障注入批次 network_test 210→213，`test_request_failure.cpp` 3 用例断言请求超时与通道丢失两条故障路径） |
 | 覆盖率补强工程 | ✅ 批次 1–28 已完成 | 批次28 双收口 `resmgr/bwresource.cpp`（精准口径 322/746 43% → 464/746 **62%**，新建 17 用例）与 `entitydef/method_description.cpp`（精准口径 153/466 32% → 329/466 **70%**，新建 33 用例）；平台行为四件与源码级隐患五件登记不修；缺口 top 清单落 [TESTING.md](../../TESTING.md) |
 | 下批首位候选 | ⏳ `network/machine_guard.cpp` | 28%（bwmachined 不可达面之外仍有可测面；受限大件 entitydef/entity_description.cpp 665 行、moo/image.ipp 589 行维持候选） |
 
@@ -74,7 +74,7 @@ gcovr 全量聚合值。客户端大件（moo / physics2 / server / chunk）接�
 
 </div>
 
-用例总量演进：批次14 后 1061 → 批次15 后 1071 → 批次16 后 1083 → 批次17 后 1099 → 批次18 后 1113 → 批次19 后 1127 → 批次20 后 1151 → 批次21 后 1163 → 批次22 后 1202 → 批次23 后 **1220**（全量 21 模块门禁全绿；批次23 净增 +18 = cstdmf profiler +13 + scene 孤儿复活 +2 + network 孤儿复活 +3；假绿修复均为原位改写断言，不增减用例数） → 批次24 后 **1249**（cstdmf smartpointer 直驱 +29） → 批次25 后 **1259**（pyscript script_math 缺口直驱 +10） → 批次26 后 **1280**（resmgr datasection 直驱 +21） → 批次27 后 **1302**（pyscript pywatcher 缺口直驱 +22） → 批次28 后 **1352**（resmgr bwresource 路径面 +17 + entitydef method_description 缺口直驱 +33；全量 21 模块门禁全绿）。
+用例总量演进：批次14 后 1061 → 批次15 后 1071 → 批次16 后 1083 → 批次17 后 1099 → 批次18 后 1113 → 批次19 后 1127 → 批次20 后 1151 → 批次21 后 1163 → 批次22 后 1202 → 批次23 后 **1220**（全量 21 模块门禁全绿；批次23 净增 +18 = cstdmf profiler +13 + scene 孤儿复活 +2 + network 孤儿复活 +3；假绿修复均为原位改写断言，不增减用例数） → 批次24 后 **1249**（cstdmf smartpointer 直驱 +29） → 批次25 后 **1259**（pyscript script_math 缺口直驱 +10） → 批次26 后 **1280**（resmgr datasection 直驱 +21） → 批次27 后 **1302**（pyscript pywatcher 缺口直驱 +22） → 批次28 后 **1352**（resmgr bwresource 路径面 +17 + entitydef method_description 缺口直驱 +33；全量 21 模块门禁全绿） → 2026-10-14 故障注入批次后 **1355**（network/unit_test/test_request_failure.cpp +3：hang peer 请求超时 REASON_TIMER_EXPIRED、通道丢失 REASON_CHANNEL_LOST、正控回声；请求失败路径首次断言级覆盖，此前 handleException 仅记日志）。
 
 ## 不可达 / 受限登记摘要
 
