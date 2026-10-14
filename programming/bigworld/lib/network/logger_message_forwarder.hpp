@@ -18,6 +18,7 @@
 #include "cstdmf/debug_message_callbacks.hpp"
 #include "cstdmf/debug_message_source.hpp"
 #include "cstdmf/log_meta_data.hpp"
+#include "cstdmf/memory_stream.hpp"
 #include "cstdmf/singleton.hpp"
 
 #include <memory>
@@ -148,6 +149,61 @@ class LoggerEndpoint;
 
 // This class is defined in the .cpp
 class FindLoggerHandler;
+
+
+/**
+ *	Builds the two metadata-carrying variants of a log record for the loggers
+ *	that understand metadata. Neither variant re-serialises the record: both
+ *	start with an unmodified copy of the plain record, since message loggers
+ *	stream every unparsed trailing byte as metadata. The BW 2.9 variant
+ *	appends the raw JSON string, the 14.4 variant appends the metadata
+ *	argument stream.
+ *
+ *	@param pMetaData		The metadata of the record. May be NULL.
+ *	@param os	The plain record, already holding the header and the parsed
+ *			format string arguments.
+ *	@param pOsWithMetaDataV2_9	Receives the BW 2.9 variant, or is left NULL.
+ *	@param pOsWithMetaDataV14_4	Receives the 14.4 variant, or is left NULL.
+ *
+ *	@return	True if both variants were built, false if the record has no
+ *			metadata stream at all and every logger gets the plain record.
+ */
+inline bool buildLoggerMetadataStreams( const LogMetaData * pMetaData,
+		MemoryOStream & os,
+		std::unique_ptr< MemoryOStream > & pOsWithMetaDataV2_9,
+		std::unique_ptr< MemoryOStream > & pOsWithMetaDataV14_4 )
+{
+	if (!pMetaData || !pMetaData->pData())
+	{
+		return false;
+	}
+
+	const int metaDataReserveSize = 128;
+
+	pOsWithMetaDataV2_9.reset( new MemoryOStream( os.remainingLength() +
+		metaDataReserveSize ) );
+	pOsWithMetaDataV2_9->addBlob( os.retrieve( 0 ), os.remainingLength() );
+
+	pOsWithMetaDataV14_4.reset( new MemoryOStream( os.remainingLength() +
+		metaDataReserveSize ) );
+	pOsWithMetaDataV14_4->addBlob( os.retrieve( 0 ), os.remainingLength() );
+
+	if (pMetaData->getRawJSON())
+	{
+		*pOsWithMetaDataV2_9 << pMetaData->getRawJSON();
+	}
+
+	MemoryOStream * pMetaDataStream = const_cast< MemoryOStream * >(
+		pMetaData->pData() );
+
+	if (pMetaDataStream->size())
+	{
+		pOsWithMetaDataV14_4->addBlob( pMetaDataStream->retrieve( 0 ),
+			pMetaDataStream->remainingLength() );
+	}
+
+	return true;
+}
 
 
 /**

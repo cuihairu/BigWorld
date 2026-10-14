@@ -21,6 +21,7 @@ SET( ALL_SRCS
 	test_filter_interfaces.hpp
 	test_interface.cpp
 	test_log_on_params.cpp
+	test_logger_message_forwarder.cpp
 	test_login_challenge_task.cpp
 	test_login_request_protocol.cpp
 	test_login_challenge_factories.cpp

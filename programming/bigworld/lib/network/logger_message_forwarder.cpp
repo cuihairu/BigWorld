@@ -835,42 +835,16 @@ void LoggerMessageForwarder::parseAndSend(
 
 	pHandler->parseArgs( argPtr, os );
 
-	// Two output streams: One with a raw JSON metadata string, one with a
+	// Two output streams: one with a raw JSON metadata string, one with a
 	// stream of metadata arguments. Pointers because there's no need for them
-	// unless there's metadata in the message.
+	// unless the message carries a metadata stream.
 	std::unique_ptr<MemoryOStream> pOsWithMetaDataV2_9;
 	std::unique_ptr<MemoryOStream> pOsWithMetaDataV14_4;
 
 	// pMetaData may be nonexistent (NULL) from sources that have no use for
-	// it. Only write it if we have a non-NULL pointer.
-	//
-	// NOTE: This only works because metadata is the last value on the stream
-	// and MessageLogger treats all remaining/unprocessed data as metadata.
-	bool anyMetadata = pMetaData && pMetaData->pData();
-	if (anyMetadata)
-	{
-		const int metaDataReserveSize = 128;
-		pOsWithMetaDataV2_9.reset( new MemoryOStream( os.remainingLength() +
-													metaDataReserveSize ) );
-		pOsWithMetaDataV2_9->addBlob( os.retrieve( 0 ), os.remainingLength() );
-		pOsWithMetaDataV14_4.reset( new MemoryOStream( os.remainingLength() +
-													metaDataReserveSize ) );
-		pOsWithMetaDataV14_4->addBlob( os.retrieve( 0 ), os.remainingLength() );
-
-		if (pMetaData->getRawJSON())
-		{
-			*pOsWithMetaDataV2_9 << pMetaData->getRawJSON();
-		}
-
-		MemoryOStream * pMetaDataStream = const_cast< MemoryOStream * >(
-			pMetaData->pData() );
-
-		if (pMetaDataStream->size())
-		{
-			pOsWithMetaDataV14_4->addBlob( pMetaDataStream->retrieve( 0 ),
-				pMetaDataStream->remainingLength() );
-		}
-	}
+	// it. Only build the variants when the record carries a metadata stream.
+	bool anyMetadata = buildLoggerMetadataStreams( pMetaData, os,
+		pOsWithMetaDataV2_9, pOsWithMetaDataV14_4 );
 
 	{
 		ReadWriteLock::ReadGuard readGuard( loggersReadWriteLock_ );
