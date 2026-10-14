@@ -77,7 +77,7 @@
 | 期 | 内容 | 测试承载 | 状态 |
 |----|------|----------|------|
 | P0 | 模块换窗语义可测（`swapInModules` 提取） | cellapp/unit_test（已落地，2 用例） | 2026-10-15 完成 |
-| P1 | dry-run 模式 + digest 可查询 + `expectedDigest` | cellapp/unit_test 承载 prepare 阶段拆分；digest 为纯函数可测 | 待做 |
+| P1 | dry-run 模式 + digest 可查询 + `expectedDigest` | prepare 阶段要跑 `EntityType::init`（BWResource + entity defs + 脚本导入），现 cellapp/unit_test harness 不可达——与 P2 同源承载缺口，需 C 档先行或集群物料 | 待做（承载缺口） |
 | P2 | 失败收集-决策 + 实体级回滚 | 需 Entity 运行时承载（C 档缺口，见下） | 待做 |
 | P3 | 双版本兼容窗口 | 需 cellapp tick 级承载 | 待做 |
 | P4 | 引擎侧屏障（P2 期） | 需集群黑盒链（C 档） | 待做 |
