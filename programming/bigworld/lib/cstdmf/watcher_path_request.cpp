@@ -109,6 +109,13 @@ bool WatcherPathRequestV2::setWatcherValue()
 	bool status = Watcher::rootWatcher().setFromStream( NULL,
 				requestPath_.c_str(), *this );
 
+	// Audit point, as in WatcherPathRequestV1::setWatcherValue(): the
+	// requested value travels packed in the stream, so the record carries the
+	// path and the outcome.
+	NOTICE_MSG( "Watcher write audit: '%s' set from stream: %s\n",
+			requestPath_.c_str(),
+			status ? "accepted" : "rejected" );
+
 	if (!status)
 	{
 		WARNING_MSG( "WatcherPathRequestV2::setWatcherValue: "
@@ -321,8 +328,17 @@ void WatcherPathRequestV1::setValueData( const char *valueStr )
 // Overidden from WatcherPathRequest
 bool WatcherPathRequestV1::setWatcherValue()
 {
-	if (!Watcher::rootWatcher().setFromString( NULL, requestPath_.c_str(),
-			setValue_.c_str() ) )
+	bool status = Watcher::rootWatcher().setFromString( NULL,
+			requestPath_.c_str(), setValue_.c_str() );
+
+	// Audit point: writes that arrive over the wire all funnel through here,
+	// so log the path, the requested value and the outcome before anything
+	// else happens.
+	NOTICE_MSG( "Watcher write audit: '%s' set to '%s': %s\n",
+			requestPath_.c_str(), setValue_.c_str(),
+			status ? "accepted" : "rejected" );
+
+	if (!status)
 	{
 		WARNING_MSG( "WatcherPathRequestV1::setWatcherValue: "
 							"Failed to set '%s'\n",
