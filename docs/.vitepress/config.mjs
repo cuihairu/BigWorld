@@ -11,6 +11,7 @@ const upgradePlanSidebar = [
       { text: "第三方依赖切换到 vcpkg", link: "/vcpkg-migration" },
       { text: "C++23 迁移", link: "/cpp23-migration" },
       { text: "构建系统现代化", link: "/upgrade-plan/build-system-modernization" },
+      { text: "热重载生产化设计", link: "/upgrade-plan/hot-reload-productionization" },
       { text: "打包与每日构建分析", link: "/upgrade-plan/packaging-and-daily-build" },
       { text: "Python 3.13 迁移全量台账", link: "/python-313-migration" }
     ]
