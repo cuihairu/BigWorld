@@ -12,6 +12,13 @@ name: CI
 on:
   push:
   pull_request:
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "LICENSE"
+      - ".gitignore"
+      - "*.svg"
+      - ".editorconfig"
 
 permissions:
   contents: read
@@ -28,7 +35,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        sample: [cstdmf, resmgr, network]
+        sample: [cstdmf, resmgr, network, entitydef]
     env:
       VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/vcpkg-bcache
 

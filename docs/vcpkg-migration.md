@@ -215,7 +215,83 @@ make 链接行一致。本地一条命令 `scripts/build-resmgr-cmake.sh`。
 **210** 用例，与 make 侧同口径（make 产出的 `network_test` 同为 **210**
 用例全绿）。network 用例耗时较重（单跑约 200 s，含真实 socket 与定时
 时序），CI job 的 120 分钟超时留有充足余量。CI matrix 扩展为
-`[cstdmf, resmgr, network]`。后续仅剩 entitydef（依赖 8 个库，单独评估）。
+`[cstdmf, resmgr, network]`。剩余 entitydef 依赖 14 个库，其中 Python 一腿
+（vendored CPython 无 CMake 构建系统）先由 §3.4 铺路，见 §3.5。
+
+### 3.4 vendored CPython 3.13 样板（entitydef 的前置，2026-10-14）
+
+`cmake/samples/python/CMakeLists.txt` 是 CMake 轨第一块**非 BW 库**样板，
+也是 3.1–3.3 与 §3.5 的共同地基。CPython 上游只提供 PCbuild（Windows）与
+autotools（Unix），没有 CMake 构建系统，所以这里用 `ExternalProject` 包住
+make 链本来就在跑的 configure+make，而不是手抄约 250 个 `.c`：
+
+- configure 选项逐字取自 `build/make/third_party_python.mak` 的
+  `pythonConfigureOpts`（`--with-openssl=` / `--with-bz2=` 指向 vcpkg manifest
+  安装目录、`--with-suffix=.exe`、`--disable-test-modules`、`CPPFLAGS`），
+  两者只有一个权威来源：改 make 侧选项必须同步此清单。
+- 只构建 `libpython3.13.a EXTRA_CFLAGS="-m64 -fPIC"`。make 链在 archive 之外
+  还有一段 sed 后处理（`pyconfig.h` 的 TERNAM undef、
+  共享扩展模块的 `LINKFORSHARED` whole-archive + `-u,BW_Py_*`）——那些只影响
+  `python.exe` 与扩展模块，样板两者都不建，因此整段跳过。
+- **`INSTALL_COMMAND` 拷 stdlib**：`Py_Initialize` 按可执行文件前缀解析
+  标准库，只出 archive 时嵌入解释器会在 `encodings` 处直接中止。样板把
+  vendored `Lib/` 拷到 `<build>/bwpython-sample/python3.13/lib/python3.13`，
+  等价于 make 链 `make install` 提供的同一棵树（entitydef_test 不 dlopen
+  `lib-dynload`，故不需要共享模块）。
+- **`BWPython::Python` 必须是 `IMPORTED GLOBAL`**：CMake 的 IMPORTED 目标默认
+  只在创建它的目录可见，被 entitydef 样板 `add_subdirectory` 引入后会解析成
+  未知目标——这一处不带 GLOBAL 就是 configure 期硬错。
+- `check_symbols.cmake`（`-P` 脚本模式）作为构建门禁核对 8 个 BWHooks 符号
+  （`BW_Py_malloc/free/calloc/realloc/getHooks/setHooks/memoryTrackingIgnoreBegin/End`）
+  仍是归档内的定义符号。它们来自归档成员 `bwhooks.o`（`Python/bwhooks.c`），
+  正是 vcpkg `python3` port 无法替代 vendored 解释器的唯一原因；一旦消失
+  entitydef 样板就失去 Python，构建即失败。
+
+本地一条命令：`scripts/build-python-cmake.sh`（并额外校验归档存在与
+`bwhooks.o` 在内）。
+
+### 3.5 entitydef 样板（自下而上第四块，2026-10-14）
+
+`cmake/samples/entitydef/CMakeLists.txt` 是第四个样板，复用 3.1–3.3 已验证的
+`CppUnitLite2` + `unit_test_lib` + `cstdmf` + `math` + `resmgr` + `network` +
+`connection` 清单，`add_subdirectory` 纳入 3.4，再叠加 8 个新库：`physics2`
+（7 TU）、`moo`（2 TU，`usePNG=1`）、`terrain`（18 TU）、`scene`（14 TU，
+`pch.cpp` 在 make 清单内故保留）、`chunk`（34 TU，`usePython=1`）、`script`
+（4 TU）、`pyscript`（18 TU）、`entitydef`（55 TU），以及 `entitydef_test`
+（15 TU）。本地一条命令：`scripts/build-entitydef-cmake.sh`。
+
+四样板共有的导出面（Linux 上不是装饰：`bwentity_api.hpp` 按这些宏在
+`template class` 与 `extern template class` 之间分叉，取错会得到重复实例化
+或缺失符号）。宏面逐个照 `Makefile.rules` 的 `exportFor` 推导：
+`cstdmf`（`exportFor = cstdmf`）用 `CSTDMF_EXPORT`；
+`entitydef` / `script` / `pyscript` / `network` / `connection` / `resmgr` /
+`math`（`exportFor := bwentity`）用 `BWENTITY_DLL_EXPORT` + `CSTDMF_IMPORT`；
+`chunk` / `scene` / `terrain` / `moo` / `physics2` / `unit_test_lib` /
+`CppUnitLite2`（无 `exportFor`）两侧都 IMPORT；测试侧只 `CSTDMF_IMPORT`。
+
+其余样板级要点：
+
+- **vendored `png` / `zip` 两棵树已不在构建面**：`third_party/Makefile.rules`
+  只递归 `CppUnitLite2/src`，所以 `third_party/png`、`third_party/zip` 的
+  `Makefile.rules` 是死清单，`lib/moo/png.cpp` 与 `lib/resmgr/zip_*.cpp`
+  实际链接的是 make 链 staging 的 `libpng.a`/`libzip.a`（vcpkg 产物）。
+  样板侧等价映射为 `find_package(PNG REQUIRED)` +
+  `find_package(ZLIB REQUIRED)`，与 3.2/3.3 一致。
+- **链接组跨全部 14 个 BW 库**：3.3 记录了 `--start-group` 的原因（`connection`
+  与 `network` 互相引用）。entitydef 侧引用面更宽——`chunk` 引用 `entitydef`
+  的 vtable、`pyscript` 引用 `resmgr`/`math`、测试面同时触及两侧，所以整组
+  包在 `--start-group` 内，`BWPython::Python` + `dl`/`m`/`pthread`/`util`
+  放组外，与 `common_footer_config.mak` 的链接行同形。
+- `-rdynamic -Wl,--export-dynamic`（`callstack.cpp` 的 `backtrace()` 符号名
+  依赖它）、`-Wno-float-equal`（`pyscript` 与 `network` 库侧、测试侧）照 3.3
+  的做法以 make 实测为准，不做"顺手统一"。
+
+验证（2026-10-14）：`scripts/build-entitydef-cmake.sh` 一条命令 configure /
+build / ctest 全通过，`entitydef_test` **318 用例全绿**，与 make 侧同口径
+（`bw-run-test-entitydef` 同为 **318** 用例 0 失败）；make 侧全量门禁同步复跑
+21 模块 / 1355 用例 / 0 失败。CI matrix 扩展为
+`[cstdmf, resmgr, network, entitydef]`。至此 CMake 轨已覆盖
+cstdmf/resmgr/network/entitydef 四条自下而上的链。
 
 
 ## 4. 引擎源码适配

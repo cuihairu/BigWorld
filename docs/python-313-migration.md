@@ -84,6 +84,7 @@
 | 7 | 覆盖率基线测量（插桩构建 + 全量单测 + gcovr，详见 §7） | 插桩套件与恢复正常构建后的复验套件均 21 模块 0 失败 | 本次提交（dev） |
 | 8 | 安全补丁升级 3.13.15 → 3.13.16（3.13 系列安全维护版本；vendored 树按 v3.13.16 git tag 重同步，裁剪面/行尾约定保持，Makefile.pre.in 与 _hashopenssl.c 补丁原样重放） | `make libbwpython3.13` 全链通过 + 全量单测 21 模块全绿 | 见本次提交（dev） |
 | 9 | `third_party/python_modules` 整体换 Py3 兼容版本并重新启用安装规则（R2 收尾）：删 7 个 Py2 包，vendor 14 个 Py3 源（Twisted 24.7 / SQLAlchemy 1.4.54 / zope.interface 7 / Pympler 1.0 / pika 1.3.2 / msgpack 1.1.0 + setuptools / typing_extensions / attrs / constantly / incremental / Automat / hyperlink / idna）；`third_party_python_modules.mak` 重写为每包单规则（tar 解包 → cp 到 site-packages → .pth 标记）；`Makefile:351` include 恢复启用；新增验收脚本 `scripts/python-modules-smoke-import.py` | ① 14 个包 tar 解包后逐一 import 全通过；② `make -rR python_*` 安装后 `game/res/bigworld/scripts/{common,server_common}/site-packages` 下 15 个模块逐一 import 全通过（内嵌 3.13.16）；③ 全量单测 21 模块 / 1355 用例 / 0 失败 | 见本次提交（dev） |
+| 10 | vendored CPython 3.13 的 CMake 样板 `cmake/samples/python`（CMake 轨前置，见 vcpkg-migration §3.4）：`ExternalProject` 包住 configure+make（选项逐字取自 `third_party_python.mak`），只出 `libpython3.13.a`，拷 `Lib/` 作 stdlib，导出 `BWPython::Python`（GLOBAL），构建门禁核对 8 个 BWHooks 符号 | ① `scripts/build-python-cmake.sh` 构建通过（`libpython3.13.a` 66M）；② `check_symbols.cmake` 确认 8 个 `BW_Py_*` 符号齐全、归档含 `bwhooks.o`；③ 作为 entitydef CMake 样板的子目录被实际拉起并跑出 318 用例全绿 | 见本次提交（dev） |
 
 ---
 
