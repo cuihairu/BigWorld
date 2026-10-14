@@ -6,6 +6,7 @@
 #include "process_socket_stats_helper.hpp"
 #include "udp_channel.hpp"
 
+#include "cstdmf/log_meta_data.hpp"
 #include "cstdmf/memory_stream.hpp"
 #include "cstdmf/profiler.hpp"
 
@@ -147,6 +148,16 @@ Reason UDPBundleProcessor::dispatchMessages( InterfaceTable & interfaceTable,
 
 		{
 			PROFILER_SCOPED_DYNAMIC_STRING( ie.c_str() );
+
+			// Every log written while dispatching this message carries the
+			// channel it arrived on, so cross-process logs can be correlated
+			// back to the peer's channel (and, higher up, the entity on it).
+			ScopedLogCorrelation correlationScope;
+			if (pChannel)
+			{
+				LogCorrelation::set( "channelID", pChannel->id() );
+			}
+
 			if (!pMessageFilter)
 			{
 				// and call the handler
