@@ -102,7 +102,12 @@ NetworkInterface::NetworkInterface( Mercury::EventDispatcher * pMainDispatcher,
 	pChannelFinder_( nullptr ),
 	isExternal_( networkInterfaceType == NETWORK_INTERFACE_EXTERNAL ),
 	verbosityLevel_( VERBOSITY_LEVEL_DEBUG ),
-	pDispatcher_( new EventDispatcher ),
+	// Follow the main dispatcher's clock source: in production both are the
+	// real-time clock so this is a no-op, and in tests it lets one injected
+	// clock drive the whole stack (see unit_test/test_request_failure.cpp).
+	pDispatcher_( new EventDispatcher( pMainDispatcher ?
+		pMainDispatcher->clock() :
+		EventDispatcher::ClockFn( &EventDispatcher::realClock ) ) ),
 	pMainDispatcher_( NULL ),
 	pInterfaceTable_( new InterfaceTable( *pDispatcher_ ) ),
 	pOffChannelFilter_(),

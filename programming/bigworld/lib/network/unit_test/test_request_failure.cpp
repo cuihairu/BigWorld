@@ -21,12 +21,12 @@
 // rather than a channel request, which is also the shape
 // DBAppInterfaceUtils::executeRawDatabaseCommand() uses.
 //
-// The channel-loss scenario runs on a ManualClock (see test_virtual_clock.cpp)
-// so the clock stands still while loopback packets are delivered. The timeout
-// scenario cannot: a request's timeout timer is owned by NetworkInterface's
-// internal dispatcher (see network_interface.cpp), which always runs on the
-// real clock, so that one test pumps wall time via processUntilBreak() with a
-// SafetyTimer bound.
+// All three scenarios run on a ManualClock (see test_virtual_clock.cpp): the
+// clock stands still while loopback packets are delivered, and expiry is
+// driven by advancing it. NetworkInterface's internal dispatcher follows the
+// main dispatcher's clock source (see network_interface.cpp), so the request
+// timeout timer sits on the same injected clock. Nothing in this file waits
+// in wall time.
 
 #include "pch.hpp"
 #include "CppUnitLite2/src/CppUnitLite2.h"
@@ -42,8 +42,6 @@
 
 #include "manual_clock.hpp"
 
-#include "cstdmf/timer_handler.hpp"
-
 #include "unit_test_lib/unit_test.hpp"
 
 BW_BEGIN_NAMESPACE
@@ -57,14 +55,13 @@ const Mercury::ChannelID CHANNEL_ID = 1;
 // to keep the suite fast.
 const int SHORT_REQUEST_TIMEOUT = 100000;
 
+// The timeout in ManualClock::advanceMs() units (milliseconds).
+const int SHORT_REQUEST_TIMEOUT_MS = SHORT_REQUEST_TIMEOUT / 1000;
+
 // Bound for the non-idling delivery pumps below. Loopback delivery takes a
 // handful of polls; this only has to stop a wedged endpoint from hanging
 // the suite.
 const int MAX_DELIVERY_PUMPS = 10000;
-
-// Bound for the wall-time pump in RequestFail_hungPeerTimesOut, set at 4x the
-// request timeout so a wedged endpoint can never hang the suite.
-const int SAFETY_TIMEOUT = 4 * SHORT_REQUEST_TIMEOUT;
 
 
 /**
@@ -101,35 +98,6 @@ private:
 	int numMessages_;
 	int numExceptions_;
 	Mercury::Reason lastReason_;
-};
-
-
-/**
- *	Breaks the dispatcher out of processUntilBreak() once the request has had
- *	time to fail, so a test can never hang the suite.
- */
-class SafetyTimer : public TimerHandler
-{
-public:
-	SafetyTimer( Mercury::EventDispatcher & dispatcher, int delay ) :
-		dispatcher_( dispatcher )
-	{
-		timerHandle_ = dispatcher.addTimer( delay, this, NULL );
-	}
-
-	~SafetyTimer()
-	{
-		timerHandle_.cancel();
-	}
-
-private:
-	virtual void handleTimeout( TimerHandle /*handle*/, void * /*arg*/ )
-	{
-		dispatcher_.breakProcessing();
-	}
-
-	Mercury::EventDispatcher & dispatcher_;
-	TimerHandle timerHandle_;
 };
 
 
@@ -265,14 +233,11 @@ private:
 /**
  *	A one-off request that is never answered must fail with
  *	REASON_TIMER_EXPIRED rather than hanging the caller.
- *
- *	This one stays on the real clock: the request's timeout timer lives on
- *	NetworkInterface's internal dispatcher, so a ManualClock on the test
- *	dispatcher cannot drive it (see the file header note).
  */
 TEST( RequestFail_hungPeerTimesOut )
 {
-	Mercury::EventDispatcher dispatcher;
+	ManualClock clock;
+	Mercury::EventDispatcher dispatcher( [&clock]() { return clock(); } );
 	Endpoint dbApp( dispatcher, /*shouldEcho: */false );
 	Endpoint client( dispatcher, /*shouldEcho: */false );
 
@@ -283,13 +248,85 @@ TEST( RequestFail_hungPeerTimesOut )
 		SHORT_REQUEST_TIMEOUT );
 	client.interface().send( dbApp.address(), bundle );
 
-	SafetyTimer timer( dispatcher, SAFETY_TIMEOUT );
-	dispatcher.processUntilBreak();
-
-	// The hung DBApp received the query but never answered.
+	// The query travels over loopback while the clock stands still.
+	pumpUntil( dispatcher, [&]() { return dbApp.numReceived() == 1; } );
 	CHECK( dbApp.numReceived() == 1 );
 
-	// The caller was told, instead of blocking forever.
+	// Advance past the request timeout and the caller is told, instead of
+	// blocking forever.
+	clock.advanceMs( SHORT_REQUEST_TIMEOUT_MS + 1 );
+	pumpUntil( dispatcher, [&]() { return probe.numExceptions() == 1; } );
+
+	CHECK( probe.numMessages() == 0 );
+	CHECK( probe.numExceptions() == 1 );
+	CHECK( probe.lastReason() == Mercury::REASON_TIMER_EXPIRED );
+}
+
+
+/**
+ *	A clock jump far past the request deadline must deliver the one-off
+ *	expiry exactly once - the queue must not spin over the skipped span.
+ */
+TEST( RequestFail_clockJumpForwardTimesOutOnce )
+{
+	ManualClock clock;
+	Mercury::EventDispatcher dispatcher( [&clock]() { return clock(); } );
+	Endpoint dbApp( dispatcher, /*shouldEcho: */false );
+	Endpoint client( dispatcher, /*shouldEcho: */false );
+
+	RequestProbe probe;
+
+	Mercury::UDPBundle bundle;
+	CommonInterface::msg1Args::startRequest( bundle, &probe, NULL,
+		SHORT_REQUEST_TIMEOUT );
+	client.interface().send( dbApp.address(), bundle );
+
+	pumpUntil( dispatcher, [&]() { return dbApp.numReceived() == 1; } );
+	CHECK( dbApp.numReceived() == 1 );
+
+	// One huge jump, then the expiry arrives exactly once.
+	clock.advanceMs( 10 * SHORT_REQUEST_TIMEOUT_MS );
+	pumpUntil( dispatcher, [&]() { return probe.numExceptions() == 1; } );
+
+	CHECK( probe.numMessages() == 0 );
+	CHECK( probe.numExceptions() == 1 );
+	CHECK( probe.lastReason() == Mercury::REASON_TIMER_EXPIRED );
+}
+
+
+/**
+ *	A backward clock jump must not fire a pending request early, and the
+ *	request must still expire once the clock crosses its deadline again.
+ */
+TEST( RequestFail_clockBackwardJumpHoldsDeadline )
+{
+	ManualClock clock;
+	Mercury::EventDispatcher dispatcher( [&clock]() { return clock(); } );
+	Endpoint dbApp( dispatcher, /*shouldEcho: */false );
+	Endpoint client( dispatcher, /*shouldEcho: */false );
+
+	RequestProbe probe;
+
+	Mercury::UDPBundle bundle;
+	CommonInterface::msg1Args::startRequest( bundle, &probe, NULL,
+		SHORT_REQUEST_TIMEOUT );
+	client.interface().send( dbApp.address(), bundle );
+
+	pumpUntil( dispatcher, [&]() { return dbApp.numReceived() == 1; } );
+	CHECK( dbApp.numReceived() == 1 );
+
+	// Jump behind the deadline and pump a little: nothing may fire early.
+	clock.rewindMs( 5000 );
+	for (int i = 0; i < 10; ++i)
+	{
+		dispatcher.processOnce( /*shouldIdle:*/ false );
+	}
+	CHECK( probe.numExceptions() == 0 );
+
+	// Cross the deadline again and the expiry arrives.
+	clock.advanceMs( 5000 + SHORT_REQUEST_TIMEOUT_MS + 1 );
+	pumpUntil( dispatcher, [&]() { return probe.numExceptions() == 1; } );
+
 	CHECK( probe.numMessages() == 0 );
 	CHECK( probe.numExceptions() == 1 );
 	CHECK( probe.lastReason() == Mercury::REASON_TIMER_EXPIRED );

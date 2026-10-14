@@ -52,6 +52,9 @@ public:
 	/// The default clock source: the real-time stamps of timestamp().
 	static uint64 realClock();
 
+	/// The clock source driving this dispatcher (see ClockFn).
+	const ClockFn & clock() const	{ return clock_; }
+
 	EventDispatcher();
 	explicit EventDispatcher( const ClockFn & clock );
 	~EventDispatcher();

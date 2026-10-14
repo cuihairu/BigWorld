@@ -28,6 +28,14 @@ public:
 		now_ += TimeStamp::fromSeconds( milliseconds / 1000.0 );
 	}
 
+	// Moves the clock backwards. Subtraction on the unsigned stamp is
+	// well-defined where a negative advanceMs() would not be (negative
+	// double-to-uint64 conversion is undefined).
+	void rewindMs( int64 milliseconds )
+	{
+		now_ -= TimeStamp::fromSeconds( milliseconds / 1000.0 );
+	}
+
 private:
 	uint64 now_;
 };
