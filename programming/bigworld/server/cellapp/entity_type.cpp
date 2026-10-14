@@ -397,26 +397,8 @@ void EntityType::migrate( bool isFullReload )
 	PyObject * pModules = PySys_GetObject( "modules" );
 	if (pModules != s_pNewModules_)
 	{
-		PyObjectPtr pSysModule = PyDict_GetItemString( pModules, "sys" );
+		swapInModules( pModules, s_pNewModules_ );
 
-		PyDict_Clear( pModules );
-		PyDict_Update( pModules, s_pNewModules_ );
-
-		/* BIGWORLD(3.13 migration): PyInterpreterState is opaque in 3.x, so
-		 * interp->builtins can no longer be reassigned here (it used to be
-		 * pointed at the __builtin__ module's dict). Nothing else needs it:
-		 * executed code picks builtins up from its globals, and the
-		 * builtins module itself has just been restored into sys.modules by
-		 * the update above. */
-
-		PyObject * pBigWorld = PyDict_GetItemString( pModules, "BigWorld" );
-		Py_INCREF( pBigWorld ); // AddObject steals a reference
-		PyModule_AddObject( PyDict_GetItemString( pModules, "__main__" ),
-							"BigWorld", pBigWorld );
-
-		// Restore original sys module since it has remapped stdout/stderr.
-		if (pSysModule)
-			PyDict_SetItemString( pModules, "sys", pSysModule.get() );
 		// note this migration is still a bit dodgy but a lot better than it was
 		// probably should migrate the whole interpreter state from the
 		// reloading thread... although currently it is missing some stuff done

@@ -98,6 +98,18 @@ public:
 	static void migrate( bool isFullReload = true );
 	static void cleanupAfterReload( bool isFullReload = true );
 
+	/**
+	 *	This static method swaps a reloaded set of Python modules into the given
+	 *	sys.modules dictionary: the dictionary is replaced by the reloaded one,
+	 *	the sys module is kept (it has remapped stdout/stderr) and BigWorld is
+	 *	re-exposed on __main__. Extracted from migrate() so that the module
+	 *	swap semantics can be asserted without a running CellApp.
+	 *
+	 *	@param pModules		The sys.modules dictionary to update in place.
+	 *	@param pNewModules	The modules dictionary of the reloaded scripts.
+	 */
+	static void swapInModules( PyObject * pModules, PyObject * pNewModules );
+
 	static void clearStatics();
 
 	static EntityTypePtr getType( EntityTypeID typeID );
