@@ -9,6 +9,7 @@
 
 #include "cstdmf/bw_map.hpp"
 #include "cstdmf/bw_vector.hpp"
+#include "cstdmf/timestamp.hpp"
 
 BW_BEGIN_NAMESPACE
 
@@ -227,6 +228,11 @@ void DebugFilter::setCategoryFilter( const BW::string & categoryName,
 
 	ReadWriteLock::WriteGuard writeGuard( suppressedCategoriesLock_ );
 	suppressedCategories_[ categoryName ] = minAcceptedPriorityLevel;
+
+	// Keep the sampling map in step so the category is tunable through the
+	// "logger/categorySampling" watcher too. The insert keeps any ratio that
+	// is already configured.
+	sampleRatios_.insert( SamplingMap::value_type( categoryName, 0 ) );
 }
 
 
@@ -249,8 +255,25 @@ bool DebugFilter::shouldAcceptCategory( const char * pCategoryName,
 				categoryAsString );
 
 		if (it != suppressedCategories_.end())
-		{ 
-			return messagePriority >= it->second;
+		{
+			if (messagePriority < it->second)
+			{
+				return false;
+			}
+
+			// Sampling: when the category has a ratio, keep one message in
+			// every N. The stamp is read without holding any extra state, so
+			// this stays wait-free; a ratio written concurrently just changes
+			// what the next message sees.
+			SamplingMap::const_iterator sampleIt = sampleRatios_.find(
+					categoryAsString );
+
+			if (sampleIt != sampleRatios_.end())
+			{
+				return isSampled( timestamp(), sampleIt->second );
+			}
+
+			return true;
 		}
 	}
 
@@ -258,6 +281,13 @@ bool DebugFilter::shouldAcceptCategory( const char * pCategoryName,
 		// NOTE: Unfortunately we can't use the iterator as a hint due
 		// as we would have to keep the read lock to keep the iterator valid
 		ReadWriteLock::WriteGuard writeGuard( suppressedCategoriesLock_ );
+
+		// Register the category for sampling configuration as well: the
+		// sampling watcher can only retune entries that exist, and a category
+		// that has logged once is exactly the one that may need tuning. The
+		// insert keeps any ratio that is already configured.
+		sampleRatios_.insert( SamplingMap::value_type( categoryAsString, 0 ) );
+
 		return messagePriority >= suppressedCategories_[ categoryAsString ];
 	}
 }
@@ -286,11 +316,32 @@ void DebugFilter::addWatchers()
 
 	pCategorySuppressionWatcher->addChild( "*", pChildWatcher );
 
-	WatcherPtr pReadWriteWatcher = new ReadWriteLockWatcher( 
+	WatcherPtr pReadWriteWatcher = new ReadWriteLockWatcher(
 		pCategorySuppressionWatcher, suppressedCategoriesLock_ );
 
 	MF_VERIFY( Watcher::rootWatcher().addChild( "logger/categorySupression",
 		pReadWriteWatcher ) );
+
+	// Per-category sampling: one message in every N, 0 or 1 disables.
+	MapWatcher< DebugFilter::SamplingMap > * pSamplingWatcher =
+		new MapWatcher< DebugFilter::SamplingMap >( sampleRatios_ );
+
+	pSamplingWatcher->setComment( "Keep one message in every N for a "
+		"category; 0 or 1 disables sampling" );
+
+	DataWatcher< int > * pSamplingChildWatcher =
+		new DataWatcher< int >( *(int*)NULL, Watcher::WT_READ_WRITE );
+
+	pSamplingChildWatcher->setComment( "sampling ratio: keep one message "
+		"in every N stamps" );
+
+	pSamplingWatcher->addChild( "*", pSamplingChildWatcher );
+
+	WatcherPtr pSamplingLockWatcher = new ReadWriteLockWatcher(
+		pSamplingWatcher, suppressedCategoriesLock_ );
+
+	MF_VERIFY( Watcher::rootWatcher().addChild( "logger/categorySampling",
+		pSamplingLockWatcher ) );
 
 	// The threshold below which no message at all is accepted. Like the
 	// per-category levels above, it stays writable so a running process
@@ -331,6 +382,9 @@ void DebugFilter::removeWatchers() const
 
 	MF_VERIFY( Watcher::rootWatcher().removeChild(
 		"logger/categorySupression" ) );
+
+	MF_VERIFY( Watcher::rootWatcher().removeChild(
+		"logger/categorySampling" ) );
 
 	MF_VERIFY( Watcher::rootWatcher().removeChild(
 		"logger/filterThreshold" ) );

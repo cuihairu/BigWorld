@@ -244,6 +244,78 @@ TEST( DebugFilter_filterThresholdWatcher )
 
 #endif // ENABLE_WATCHERS
 
+/**
+ *	Sampling keeps one message in every N stamps; ratios of 0 and 1 keep
+ *	everything. The stamp residue is the whole sampling decision.
+ */
+TEST( DebugFilter_isSampled )
+{
+	// disabled ratios keep everything
+	CHECK( DebugFilter::isSampled( 0, 0 ) );
+	CHECK( DebugFilter::isSampled( 12345, 1 ) );
+	CHECK( DebugFilter::isSampled( 999999, 1 ) );
+
+	// one in two
+	CHECK( DebugFilter::isSampled( 0, 2 ) );
+	CHECK( !DebugFilter::isSampled( 1, 2 ) );
+	CHECK( DebugFilter::isSampled( 4, 2 ) );
+	CHECK( !DebugFilter::isSampled( 3, 2 ) );
+
+	// one in ten
+	CHECK( DebugFilter::isSampled( 10, 10 ) );
+	CHECK( !DebugFilter::isSampled( 11, 10 ) );
+	CHECK( DebugFilter::isSampled( 90, 10 ) );
+	CHECK( !DebugFilter::isSampled( 91, 10 ) );
+}
+
+#if ENABLE_WATCHERS
+
+/**
+ *	Per-category sampling ratios are writable through the root watcher, and
+ *	category level filters still win over sampling.
+ */
+TEST( DebugFilter_categorySamplingWatcher )
+{
+	Watcher & root = Watcher::rootWatcher();
+	BW::string desc;
+	BW::string value;
+	Watcher::Mode mode = Watcher::WT_INVALID;
+
+	// A category registers itself on first use, which is what makes its
+	// sampling ratio writable: the sampling watcher retunes entries rather
+	// than creating them.
+	CHECK( DebugFilter::instance().shouldAcceptCategory( "UnitTestSampling",
+		MESSAGE_PRIORITY_TRACE ) );
+
+	// a ratio written through the watcher reads back
+	CHECK( root.setFromString( NULL, "logger/categorySampling/UnitTestSampling", "3" ) );
+	CHECK( root.getAsString( NULL, "logger/categorySampling/UnitTestSampling",
+		value, desc, mode ) );
+	CHECK_EQUAL( BW::string( "3" ), value );
+
+	// ratio 1 disables sampling: everything passes (the clock dependent
+	// residue itself is covered by DebugFilter_isSampled)
+	CHECK( root.setFromString( NULL, "logger/categorySampling/UnitTestSampling", "1" ) );
+	CHECK( DebugFilter::instance().shouldAcceptCategory( "UnitTestSampling",
+		MESSAGE_PRIORITY_TRACE ) );
+
+	// level filters still win: INFO is under the category's WARNING level
+	// no matter what the sampler says
+	CHECK( root.setFromString( NULL,
+		"logger/categorySupression/UnitTestSampling", "4" ) );
+	CHECK( !DebugFilter::instance().shouldAcceptCategory( "UnitTestSampling",
+		MESSAGE_PRIORITY_INFO ) );
+
+	// restore: sampling off, category level back to trace
+	CHECK( root.setFromString( NULL, "logger/categorySampling/UnitTestSampling", "0" ) );
+	CHECK( root.setFromString( NULL,
+		"logger/categorySupression/UnitTestSampling", "0" ) );
+	CHECK( DebugFilter::instance().shouldAcceptCategory( "UnitTestSampling",
+		MESSAGE_PRIORITY_INFO ) );
+}
+
+#endif // ENABLE_WATCHERS
+
 #endif // ENABLE_MSG_LOGGING
 
 BW_END_NAMESPACE
