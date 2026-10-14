@@ -20,6 +20,13 @@
 // channels."). The timeout scenario below therefore issues a one-off request
 // rather than a channel request, which is also the shape
 // DBAppInterfaceUtils::executeRawDatabaseCommand() uses.
+//
+// The channel-loss scenario runs on a ManualClock (see test_virtual_clock.cpp)
+// so the clock stands still while loopback packets are delivered. The timeout
+// scenario cannot: a request's timeout timer is owned by NetworkInterface's
+// internal dispatcher (see network_interface.cpp), which always runs on the
+// real clock, so that one test pumps wall time via processUntilBreak() with a
+// SafetyTimer bound.
 
 #include "pch.hpp"
 #include "CppUnitLite2/src/CppUnitLite2.h"
@@ -32,6 +39,8 @@
 #include "network/interfaces.hpp"
 
 #include "common_interface.hpp"
+
+#include "manual_clock.hpp"
 
 #include "cstdmf/timer_handler.hpp"
 
@@ -48,6 +57,13 @@ const Mercury::ChannelID CHANNEL_ID = 1;
 // to keep the suite fast.
 const int SHORT_REQUEST_TIMEOUT = 100000;
 
+// Bound for the non-idling delivery pumps below. Loopback delivery takes a
+// handful of polls; this only has to stop a wedged endpoint from hanging
+// the suite.
+const int MAX_DELIVERY_PUMPS = 10000;
+
+// Bound for the wall-time pump in RequestFail_hungPeerTimesOut, set at 4x the
+// request timeout so a wedged endpoint can never hang the suite.
 const int SAFETY_TIMEOUT = 4 * SHORT_REQUEST_TIMEOUT;
 
 
@@ -115,6 +131,21 @@ private:
 	Mercury::EventDispatcher & dispatcher_;
 	TimerHandle timerHandle_;
 };
+
+
+/**
+ *	Pumps the dispatcher without idling until the predicate holds or the
+ *	delivery budget runs out. Every pump is a non-blocking poll, so no
+ *	clock - real or injected - moves during delivery.
+ */
+template< class PREDICATE >
+void pumpUntil( Mercury::EventDispatcher & dispatcher, PREDICATE predicate )
+{
+	for (int i = 0; i < MAX_DELIVERY_PUMPS && !predicate(); ++i)
+	{
+		dispatcher.processOnce( /*shouldIdle:*/ false );
+	}
+}
 
 
 /**
@@ -234,6 +265,10 @@ private:
 /**
  *	A one-off request that is never answered must fail with
  *	REASON_TIMER_EXPIRED rather than hanging the caller.
+ *
+ *	This one stays on the real clock: the request's timeout timer lives on
+ *	NetworkInterface's internal dispatcher, so a ManualClock on the test
+ *	dispatcher cannot drive it (see the file header note).
  */
 TEST( RequestFail_hungPeerTimesOut )
 {
@@ -278,8 +313,8 @@ TEST( RequestFail_responsivePeerEchoes )
 	CommonInterface::msg1Args::start( bundle );
 	client.interface().send( dbApp.address(), bundle );
 
-	SafetyTimer timer( dispatcher, SAFETY_TIMEOUT );
-	dispatcher.processUntilBreak();
+	pumpUntil( dispatcher, [&]()
+		{ return dbApp.numReceived() == 1 && client.numReceived() == 1; } );
 
 	CHECK( dbApp.numReceived() == 1 );
 	CHECK( client.numReceived() == 1 );
@@ -293,7 +328,8 @@ TEST( RequestFail_responsivePeerEchoes )
  */
 TEST( RequestFail_channelLost )
 {
-	Mercury::EventDispatcher dispatcher;
+	ManualClock clock;
+	Mercury::EventDispatcher dispatcher( [&clock]() { return clock(); } );
 	Endpoint dbApp( dispatcher, /*shouldEcho: */false );
 	Endpoint client( dispatcher, /*shouldEcho: */false );
 
@@ -307,9 +343,9 @@ TEST( RequestFail_channelLost )
 	CommonInterface::msg1Args::startRequest( bundle, &probe, NULL );
 	client.sendOnChannel();
 
-	// Give the query time to reach DBApp before the partition.
-	SafetyTimer timer( dispatcher, SHORT_REQUEST_TIMEOUT );
-	dispatcher.processUntilBreak();
+	// Wait for the query to reach DBApp before the partition. The frozen
+	// clock keeps the channel's resend timers out of the picture.
+	pumpUntil( dispatcher, [&]() { return dbApp.numReceived() == 1; } );
 	CHECK( dbApp.numReceived() == 1 );
 
 	// Tear the channel out from under the pending request. This runs

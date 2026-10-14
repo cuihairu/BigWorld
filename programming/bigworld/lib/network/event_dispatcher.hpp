@@ -15,6 +15,8 @@
 #include "cstdmf/timestamp.hpp"
 #include "cstdmf/watcher.hpp"
 
+#include <functional>
+
 // #include "cstdmf/time_queue.hpp"
 
 BW_BEGIN_NAMESPACE
@@ -39,7 +41,19 @@ class FrequentTasks;
 class EventDispatcher
 {
 public:
+	/**
+	 *	A source of TimeStamp values driving this dispatcher's timers and
+	 *	wait computations. The default is the real-time clock (timestamp());
+	 *	tests can inject a manual clock to drive timers without sleeping
+	 *	(see unit_test/test_virtual_clock.cpp).
+	 */
+	typedef std::function< uint64() > ClockFn;
+
+	/// The default clock source: the real-time stamps of timestamp().
+	static uint64 realClock();
+
 	EventDispatcher();
+	explicit EventDispatcher( const ClockFn & clock );
 	~EventDispatcher();
 
 	void prepareForShutdown();
@@ -117,6 +131,13 @@ private:
 	void detachFrom( EventDispatcher & parentDispatcher );
 
 	bool breakProcessing_;
+
+	/**
+	 *	Clock source driving processTimers(), processStats(), timer
+	 *	registration and calculateWait(). prepareForShutdown() deliberately
+	 *	stays on the real clock so shutdown always drains in wall time.
+	 */
+	ClockFn clock_;
 
 	TimeQueue64 * pTimeQueue_;
 

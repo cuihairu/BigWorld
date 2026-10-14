@@ -39,10 +39,21 @@ namespace Mercury
 #endif // _MSC_VER
 
 /**
- *	Constructor.
+ *	Constructor. Uses the real-time clock.
  */
 EventDispatcher::EventDispatcher() :
+	EventDispatcher( ClockFn( &EventDispatcher::realClock ) )
+{
+}
+
+
+/**
+ *	Constructor with an injectable clock source, for driving timers in tests
+ *	without sleeping.
+ */
+EventDispatcher::EventDispatcher( const ClockFn & clock ) :
 	breakProcessing_( false ),
+	clock_( clock ),
 	pTimeQueue_( new TimeQueue64 ),
 	pFrequentTasks_( new FrequentTasks ),
 	accSpareTime_( 0 ),
@@ -55,6 +66,16 @@ EventDispatcher::EventDispatcher() :
 	pPoller_( EventPoller::create() ),
 	pErrorReporter_( new ErrorReporter( *this ) )
 {
+	MF_ASSERT( clock_ );
+}
+
+
+/**
+ *	The default clock source: real-time stamps.
+ */
+/*static*/ uint64 EventDispatcher::realClock()
+{
+	return timestamp();
 }
 
 #ifdef _MSC_VER
@@ -96,6 +117,8 @@ void EventDispatcher::prepareForShutdown()
 {
 	const uint64 SECONDS_TO_ATTEMPT_SEND = 2;
 
+	// Real clock on purpose: this bound is the last-resort drain guard, it
+	// must elapse in wall time even if an injected clock stands still.
 	const uint64 startTime = timestamp();
 	uint64 timePeriod = (stampsPerSecond() * SECONDS_TO_ATTEMPT_SEND);
 
@@ -276,7 +299,7 @@ TimerHandle EventDispatcher::addTimerCommon( int64 microseconds,
 			((double)microseconds) / 1000000.0 );
 
 	// TODO: Does not handle time wrap-around.
-	TimerHandle handle = pTimeQueue_->add( timestamp() + interval,
+	TimerHandle handle = pTimeQueue_->add( clock_() + interval,
 			recurrent ? interval : 0,
 			handler, arg, name );
 
@@ -340,7 +363,7 @@ void EventDispatcher::processFrequentTasks()
 void EventDispatcher::processTimers()
 {
 	PROFILER_SCOPED( processTimers );
-	numTimerCalls_ += pTimeQueue_->process( timestamp() );
+	numTimerCalls_ += pTimeQueue_->process( clock_() );
 }
 
 
@@ -348,12 +371,12 @@ void EventDispatcher::processStats()
 {
 	PROFILER_SCOPED( processStats );
 	// gather statistics if we haven't for a while
-	if (timestamp() - lastStatisticsGathered_ >= stampsPerSecond())
+	if (clock_() - lastStatisticsGathered_ >= stampsPerSecond())
 	{
 		oldSpareTime_ = totSpareTime_;
 		totSpareTime_ = accSpareTime_ + pPoller_->spareTime();
 
-		lastStatisticsGathered_ = timestamp();
+		lastStatisticsGathered_ = clock_();
 	}
 }
 
@@ -385,7 +408,7 @@ double EventDispatcher::calculateWait() const
 	if (!pTimeQueue_->empty())
 	{
 		maxWait = std::min( maxWait,
-			pTimeQueue_->nextExp( timestamp() ) / stampsPerSecondD() );
+			pTimeQueue_->nextExp( clock_() ) / stampsPerSecondD() );
 	}
 
 	ChildDispatchers::const_iterator iter = childDispatchers_.begin();

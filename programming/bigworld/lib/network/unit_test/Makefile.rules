@@ -54,6 +54,7 @@ cxxSource =							\
 	test_cuckoo_cycle_login_challenge	\
 	test_replay_metadata			\
 	test_piggybacks_longer_than_normal	\
+	test_virtual_clock				\
 
 useOpenSSL = 1
 
