@@ -10,6 +10,11 @@
 
 BW_BEGIN_NAMESPACE
 
+// The path of the watcher that toggles write permission; writes to it are
+// exempt from the permission check so the switch can be flipped back
+// remotely.
+static const char * WRITES_TOGGLE_PATH = "watcherWrites/allowed";
+
 /*
  * WATCHER PATH REQUEST BASE CLASS
  */
@@ -19,6 +24,62 @@ void WatcherPathRequest::notifyParent( int32 replies )
 	{
 		pParent_->notifyComplete( *this, replies );
 	}
+}
+
+
+/**
+ *	Process-wide watcher write permission; see WatcherPathRequest.
+ */
+bool WatcherPathRequest::s_writesEnabled_ = true;
+
+
+/**
+ *	This method returns whether watcher writes that arrive over the wire are
+ *	permitted (see setWatcherValue()).
+ */
+/*static*/ bool WatcherPathRequest::writesEnabled()
+{
+	return s_writesEnabled_;
+}
+
+
+/**
+ *	This method sets the watcher write permission for this process. The
+ *	"watcherWrites/allowed" watcher (see addWatchers()) writes straight into
+ *	this value and is always permitted, so the switch can be flipped back.
+ */
+/*static*/ void WatcherPathRequest::writesEnabled( bool enabled )
+{
+	s_writesEnabled_ = enabled;
+}
+
+
+/**
+ *	This method mounts the watcher write permission controls on the root
+ *	watcher. It is called lazily on the first watcher write, so every app
+ *	serving watcher writes gets the toggle without wiring it up itself.
+ */
+/*static*/ void WatcherPathRequest::addWatchers()
+{
+	static bool s_areWatchersAdded = false;
+
+	if (s_areWatchersAdded)
+	{
+		return;
+	}
+	s_areWatchersAdded = true;
+
+	DirectoryWatcherPtr pToggleDirectory = new DirectoryWatcher();
+
+	DataWatcher< bool > * pAllowed =
+		new DataWatcher< bool >( s_writesEnabled_, Watcher::WT_READ_WRITE );
+	pAllowed->setComment( "When false, watcher writes that arrive over the "
+		"network are rejected. This toggle itself always stays writable" );
+
+	pToggleDirectory->addChild( "allowed", pAllowed );
+
+	MF_VERIFY( Watcher::rootWatcher().addChild( "watcherWrites",
+		pToggleDirectory ) );
 }
 
 
@@ -106,45 +167,65 @@ bool WatcherPathRequestV2::setWatcherValue()
 	if (!setStream_)
 		return false;
 
-	bool status = Watcher::rootWatcher().setFromStream( NULL,
+	WatcherPathRequest::addWatchers();
+
+	const bool blocked = !WatcherPathRequest::writesEnabled() &&
+			(requestPath_ != WRITES_TOGGLE_PATH);
+
+	bool status = !blocked && Watcher::rootWatcher().setFromStream( NULL,
 				requestPath_.c_str(), *this );
 
 	// Audit point, as in WatcherPathRequestV1::setWatcherValue(): the
 	// requested value travels packed in the stream, so the record carries the
-	// path and the outcome.
+	// path and the outcome. A write the permission toggle stopped is audited
+	// as "blocked".
 	NOTICE_MSG( "Watcher write audit: '%s' set from stream: %s\n",
 			requestPath_.c_str(),
-			status ? "accepted" : "rejected" );
+			blocked ? "blocked" : (status ? "accepted" : "rejected") );
 
 	if (!status)
 	{
-		WARNING_MSG( "WatcherPathRequestV2::setWatcherValue: "
-					"Failed to set '%s'\n",
-				requestPath_.c_str() );
-
-		if (setStream_)
+		if (!blocked)
 		{
-			setStream_->finish();
+			WARNING_MSG( "WatcherPathRequestV2::setWatcherValue: "
+						"Failed to set '%s'\n",
+					requestPath_.c_str() );
 		}
 
-		// NB: The sequence number should have already been pushed onto
-		// the stream here, so we must check that we have only that
-		// much data on the stream before attempting to fill it out with
-		// a default result.
-		if ((uint32)result_.size() <= sizeof(int32))
-		{
-			result_ << (uchar)WATCHER_TYPE_UNKNOWN;
-			result_ << (uchar)Watcher::WT_READ_ONLY;
-			result_.writeStringLength( 0 );
-			result_ << status;
-		}
-
-		// We're pretty much done setting watcher value (failed)
-		// Ready to fill in the packet now
-		this->notifyParent();
+		this->completeFailedSet();
 	}
 
 	return true;
+}
+
+
+/**
+ *	This method completes a rejected set operation: the reply stream is
+ *	filled in with the default result and the parent is notified. Shared by
+ *	the permission-blocked and the set-failure paths.
+ */
+void WatcherPathRequestV2::completeFailedSet()
+{
+	if (setStream_)
+	{
+		setStream_->finish();
+	}
+
+	// NB: The sequence number should have already been pushed onto
+	// the stream here, so we must check that we have only that
+	// much data on the stream before attempting to fill it out with
+	// a default result.
+	if ((uint32)result_.size() <= sizeof(int32))
+	{
+		result_ << (uchar)WATCHER_TYPE_UNKNOWN;
+		result_ << (uchar)Watcher::WT_READ_ONLY;
+		result_.writeStringLength( 0 );
+		result_ << false;
+	}
+
+	// We're pretty much done setting watcher value (failed)
+	// Ready to fill in the packet now
+	this->notifyParent();
 }
 
 
@@ -328,7 +409,12 @@ void WatcherPathRequestV1::setValueData( const char *valueStr )
 // Overidden from WatcherPathRequest
 bool WatcherPathRequestV1::setWatcherValue()
 {
-	bool status = Watcher::rootWatcher().setFromString( NULL,
+	WatcherPathRequest::addWatchers();
+
+	const bool blocked = !WatcherPathRequest::writesEnabled() &&
+			(requestPath_ != WRITES_TOGGLE_PATH);
+
+	bool status = !blocked && Watcher::rootWatcher().setFromString( NULL,
 			requestPath_.c_str(), setValue_.c_str() );
 
 	// Audit point: writes that arrive over the wire all funnel through here,
@@ -336,13 +422,16 @@ bool WatcherPathRequestV1::setWatcherValue()
 	// else happens.
 	NOTICE_MSG( "Watcher write audit: '%s' set to '%s': %s\n",
 			requestPath_.c_str(), setValue_.c_str(),
-			status ? "accepted" : "rejected" );
+			blocked ? "blocked" : (status ? "accepted" : "rejected") );
 
 	if (!status)
 	{
-		WARNING_MSG( "WatcherPathRequestV1::setWatcherValue: "
-							"Failed to set '%s'\n",
-						requestPath_.c_str() );
+		if (!blocked)
+		{
+			WARNING_MSG( "WatcherPathRequestV1::setWatcherValue: "
+								"Failed to set '%s'\n",
+							requestPath_.c_str() );
+		}
 		// error out + notify our parent we have nothing
 		this->notifyParent( 0 );
 		return false;

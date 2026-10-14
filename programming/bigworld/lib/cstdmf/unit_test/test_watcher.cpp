@@ -1232,6 +1232,116 @@ TEST( WatcherPathRequest_V2WriteIsAudited )
 }
 
 
+/**
+ *	With writes disabled, a V1 wire write is rejected before it reaches any
+ *	watcher and audited as blocked. Writes go through again once re-enabled.
+ */
+TEST( WatcherPathRequest_writePermissionBlocksV1 )
+{
+	int value = 0;
+	CHECK( Watcher::rootWatcher().addChild( "permProbeV1",
+		new DataWatcher< int >( value, Watcher::WT_READ_WRITE ) ) );
+
+	AuditCaptureCallback capture;
+	DebugFilter::instance().addMessageCallback( &capture );
+	const DebugMessagePriority prevThreshold =
+		DebugFilter::instance().filterThreshold();
+	DebugFilter::instance().filterThreshold( MESSAGE_PRIORITY_TRACE );
+
+	WatcherPathRequest::writesEnabled( false );
+
+	WatcherPathRequestV1 request( "permProbeV1" );
+	request.setValueData( "42" );
+
+	CHECK( !request.setWatcherValue() );
+	CHECK_EQUAL( 0, value );	// the write never reached the watcher
+
+	CHECK( strstr( capture.lastLine(), "permProbeV1" ) != NULL );
+	CHECK( strstr( capture.lastLine(), "blocked" ) != NULL );
+
+	// Re-enabled writes go through again.
+	WatcherPathRequest::writesEnabled( true );
+	WatcherPathRequestV1 retry( "permProbeV1" );
+	retry.setValueData( "42" );
+	CHECK( retry.setWatcherValue() );
+	CHECK_EQUAL( 42, value );
+
+	DebugFilter::instance().filterThreshold( prevThreshold );
+	DebugFilter::instance().deleteMessageCallback( &capture );
+	CHECK( Watcher::rootWatcher().removeChild( "permProbeV1" ) );
+}
+
+
+/**
+ *	With writes disabled, a V2 stream write is rejected (audited as blocked)
+ *	without reaching the watcher; the reply still completes.
+ */
+TEST( WatcherPathRequest_writePermissionBlocksV2 )
+{
+	int value = 0;
+	CHECK( Watcher::rootWatcher().addChild( "permProbeV2",
+		new DataWatcher< int >( value, Watcher::WT_READ_WRITE ) ) );
+
+	AuditCaptureCallback capture;
+	DebugFilter::instance().addMessageCallback( &capture );
+	const DebugMessagePriority prevThreshold =
+		DebugFilter::instance().filterThreshold();
+	DebugFilter::instance().filterThreshold( MESSAGE_PRIORITY_TRACE );
+
+	MemoryOStream valueStream;
+	watcherValueToStream( valueStream, 21, Watcher::WT_READ_WRITE );
+
+	WatcherPathRequest::writesEnabled( false );
+
+	WatcherPathRequestV2 request( "permProbeV2" );
+	CHECK( request.setPacketData( valueStream ) );
+
+	// V2 reports the request was handled; the set itself did not happen.
+	CHECK( request.setWatcherValue() );
+	CHECK_EQUAL( 0, value );
+
+	CHECK( strstr( capture.lastLine(), "permProbeV2" ) != NULL );
+	CHECK( strstr( capture.lastLine(), "blocked" ) != NULL );
+
+	WatcherPathRequest::writesEnabled( true );
+	DebugFilter::instance().filterThreshold( prevThreshold );
+	DebugFilter::instance().deleteMessageCallback( &capture );
+	CHECK( Watcher::rootWatcher().removeChild( "permProbeV2" ) );
+}
+
+
+/**
+ *	The permission toggle is itself exposed as a watcher ("watcherWrites/
+ *	allowed") and stays writable while writes are blocked, so the switch can
+ *	always be flipped back remotely.
+ */
+TEST( WatcherPathRequest_writePermissionToggleIsAlwaysWritable )
+{
+	AuditCaptureCallback capture;
+	DebugFilter::instance().addMessageCallback( &capture );
+	const DebugMessagePriority prevThreshold =
+		DebugFilter::instance().filterThreshold();
+	DebugFilter::instance().filterThreshold( MESSAGE_PRIORITY_TRACE );
+
+	// Arm the block (also mounts the toggle on the next write).
+	WatcherPathRequest::writesEnabled( false );
+	CHECK( !WatcherPathRequest::writesEnabled() );
+
+	// A wire write to the toggle path goes through despite the block ...
+	WatcherPathRequestV1 toggleOn( "watcherWrites/allowed" );
+	toggleOn.setValueData( "true" );
+	CHECK( toggleOn.setWatcherValue() );
+	CHECK( WatcherPathRequest::writesEnabled() );
+
+	// ... and it is audited like any other write.
+	CHECK( strstr( capture.lastLine(), "watcherWrites/allowed" ) != NULL );
+	CHECK( strstr( capture.lastLine(), "accepted" ) != NULL );
+
+	DebugFilter::instance().filterThreshold( prevThreshold );
+	DebugFilter::instance().deleteMessageCallback( &capture );
+}
+
+
 BW_END_NAMESPACE
 
 // test_watcher.cpp
