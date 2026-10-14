@@ -64,6 +64,12 @@ static MainThreadTracker s_mainThreadTracker;
 
 LogMsg & addMessageMetadataForScope( LogMsg & msg )
 {
+	// Attach this thread's correlation context, if any, so messages written
+	// while servicing an entity, space or channel carry those fields through
+	// to message callbacks and the message logger. An empty context leaves
+	// the message untouched.
+	LogCorrelation::appendTo( msg.metaData_ );
+
 	return msg;
 }
 

@@ -162,10 +162,14 @@ private:
 	void xbox360Stack( const char stackTrace[] );
 #endif // defined( _XBOX360 )
 
+	/// addMessageMetadataForScope attaches this thread's correlation context
+	/// to messages written through the logging macros.
+	friend LogMsg & addMessageMetadataForScope( LogMsg & msg );
+
 	DebugMessagePriority priority_;
 	DebugMessageSource source_;
 	const char * pCategory_;
-	LogMetaData metaData_; 
+	LogMetaData metaData_;
 };
 
 
