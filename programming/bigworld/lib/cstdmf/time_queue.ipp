@@ -10,7 +10,9 @@ TimeQueueT< TIME_STAMP >::TimeQueueT() :
 	timeQueue_(),
 	pProcessingNode_( NULL ),
 	lastProcessTime_( 0 ),
-	numCancelled_( 0 )
+	numCancelled_( 0 ),
+	maxLateness_( 0 ),
+	numLateTimers_( 0 )
 {
 }
 
@@ -156,6 +158,9 @@ void TimeQueueT< TIME_STAMP >::purgeCancelledNodes()
  *	All events with a timestamp earlier than the given one are
  *	processed.
  *
+ *	Timers that run later than their deadline update the queue's lateness
+ *	record; see maxLateness().
+ *
  *	@param now		Process events earlier than or exactly on this.
  *
  *	@return The number of timers that fired.
@@ -175,6 +180,23 @@ int TimeQueueT< TIME_STAMP >::process( TimeStamp now )
 		if (!pNode->isCancelled())
 		{
 			++numFired;
+
+			// How far past its deadline this timer is about to run. A timer
+			//	that is already due ('time() <= now') is never negative, and
+			//	the gap is exactly the stall the owner of this queue took
+			//	getting back to it.
+			if (now > pNode->time())
+			{
+				const TIME_STAMP lateness = now - pNode->time();
+
+				if (lateness > maxLateness_)
+				{
+					maxLateness_ = lateness;
+				}
+
+				++numLateTimers_;
+			}
+
 			pNode->triggerTimer();
 		}
 

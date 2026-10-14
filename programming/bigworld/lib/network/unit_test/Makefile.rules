@@ -55,6 +55,7 @@ cxxSource =							\
 	test_replay_metadata			\
 	test_piggybacks_longer_than_normal	\
 	test_virtual_clock				\
+	test_event_stall				\
 
 useOpenSSL = 1
 

@@ -16,7 +16,7 @@
 #
 # This sample is the bottom-up next step after cmake/samples/resmgr: it adds
 # connection (network's link dependency), the OpenSSL link, and the network
-# unit-test surface (51 TUs). entitydef can then be layered on top the same way.
+# unit-test surface (52 TUs). entitydef can then be layered on top the same way.
 #
 # One-command build + test: scripts/build-network-cmake.sh
 # Manual configure:
@@ -391,7 +391,7 @@ target_compile_definitions(connection PRIVATE
 # -lconnection), mirrored in the network_test link line below.
 target_link_libraries(connection PRIVATE network OpenSSL::SSL OpenSSL::Crypto)
 
-# --- network_test (lib/network/unit_test/Makefile.rules cxxSource, 51 TUs) --
+# --- network_test (lib/network/unit_test/Makefile.rules cxxSource, 52 TUs) --
 # pch.cpp is not in the make cxxSource (the pch is applied by the make build
 # itself); every test TU includes pch.hpp directly, so it is not listed here.
 add_executable(network_test
@@ -446,6 +446,7 @@ add_executable(network_test
 	${BW_LIB_DIR}/network/unit_test/test_replay_metadata.cpp
 	${BW_LIB_DIR}/network/unit_test/test_piggybacks_longer_than_normal.cpp
 	${BW_LIB_DIR}/network/unit_test/test_virtual_clock.cpp
+	${BW_LIB_DIR}/network/unit_test/test_event_stall.cpp
 )
 target_compile_definitions(network_test PRIVATE CSTDMF_IMPORT)
 # BWT-25539: network's unit_test profile disables -Wfloat-equal

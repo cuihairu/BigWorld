@@ -100,6 +100,38 @@ public:
 	void clearSpareTime();
 	double proportionalSpareTime() const;
 
+	/**
+	 *	The greatest lateness this dispatcher's timer queue has seen, in
+	 *	stamps: how far past its deadline the worst late timer actually ran.
+	 *	Zero means every timer so far has been delivered on time.
+	 *
+	 *	This is the event loop stall signal for a dispatcher: a background
+	 *	task that hogs the thread (a long script callback, a blocking I/O
+	 *	call, a starved thread) delays this dispatcher's timers, and the
+	 *	delay shows up here. It is what todo.md's GIL starvation scenario
+	 *	asserts on - see unit_test/test_event_stall.cpp.
+	 */
+	TimeStamp maxTimerLateness() const;
+
+	/**
+	 *	How many timers this dispatcher has run late, since construction or
+	 *	since the last resetTimerLateness().
+	 */
+	uint32 numLateTimers() const;
+
+	/**
+	 *	Discards the accumulated lateness so the next reading covers only
+	 *	what happens from here on. Pending timers are unaffected.
+	 */
+	void resetTimerLateness();
+
+	/**
+	 *	The dispatcher's clock source. Lets a caller see the same stamps the
+	 *	dispatcher's timers are being scheduled against, whether that is the
+	 *	real clock or one a test injected.
+	 */
+	INLINE TimeStamp now() const;
+
 	INLINE double maxWait() const;
 	INLINE void maxWait( double seconds );
 
@@ -114,6 +146,16 @@ public:
 #if ENABLE_WATCHERS
 	static WatcherPtr pTimingWatcher();
 	static WatcherPtr pWatcher();
+
+	/**
+	 *	Watchable form of maxTimerLateness(), in seconds.
+	 */
+	double maxTimerLatenessSeconds() const;
+
+	/**
+	 *	Watchable form of numLateTimers().
+	 */
+	uint32 lateTimerCount() const;
 #endif
 
 private:

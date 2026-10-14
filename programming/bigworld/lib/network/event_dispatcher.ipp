@@ -73,6 +73,15 @@ INLINE void EventDispatcher::maxWait( double seconds )
 	maxWait_ = seconds;
 }
 
+/**
+ *	This method returns the dispatcher's current time, from whichever clock
+ *	source it was built with.
+ */
+INLINE TimeStamp EventDispatcher::now() const
+{
+	return clock_();
+}
+
 } // namespace Mercury
 
 // event_dispatcher.ipp

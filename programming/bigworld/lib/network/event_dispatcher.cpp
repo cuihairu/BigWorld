@@ -505,6 +505,35 @@ uint64 EventDispatcher::timerDeliveryTime( TimerHandle handle ) const
 
 
 /**
+ *	This method returns the worst timer lateness this dispatcher's queue has
+ *	seen, in stamps. Not inline: it reaches through pTimeQueue_, which is
+ *	only forward declared in this header.
+ */
+TimeStamp EventDispatcher::maxTimerLateness() const
+{
+	return pTimeQueue_->maxLateness();
+}
+
+
+/**
+ *	This method returns how many timers this dispatcher has run late.
+ */
+uint32 EventDispatcher::numLateTimers() const
+{
+	return pTimeQueue_->numLateTimers();
+}
+
+
+/**
+ *	This method discards the accumulated timer lateness.
+ */
+void EventDispatcher::resetTimerLateness()
+{
+	pTimeQueue_->resetLateness();
+}
+
+
+/**
  *	This method returns the time between deliveries of the given timer handle.
  */
 uint64 EventDispatcher::timerIntervalTime( TimerHandle handle ) const
@@ -563,9 +592,35 @@ WatcherPtr EventDispatcher::pTimingWatcher()
 			makeWatcher( &EventDispatcher::totSpareTime_ ) );
 		watchMe->addChild( "numTimerCalls",
 			makeWatcher( &EventDispatcher::numTimerCalls_ ) );
+
+		// Event loop stall signal, in seconds since the last reset.
+		watchMe->addChild( "maxTimerLateness",
+			makeWatcher( &EventDispatcher::maxTimerLatenessSeconds ) );
+		watchMe->addChild( "numLateTimers",
+			makeWatcher( &EventDispatcher::lateTimerCount ) );
 	}
 
 	return watchMe;
+}
+
+
+/**
+ *	This method returns maxTimerLateness() expressed in seconds, so this
+ *	watcher reads in the same units as the other timing entries above.
+ */
+double EventDispatcher::maxTimerLatenessSeconds() const
+{
+	return static_cast<double>( pTimeQueue_->maxLateness() ) /
+		stampsPerSecondD();
+}
+
+
+/**
+ *	This method returns numLateTimers() for the watcher.
+ */
+uint32 EventDispatcher::lateTimerCount() const
+{
+	return pTimeQueue_->numLateTimers();
 }
 
 /**
