@@ -135,6 +135,30 @@ public:
 	INLINE double maxWait() const;
 	INLINE void maxWait( double seconds );
 
+	/**
+	 *	The worst wall-clock cost of a single network tick, in stamps: the
+	 *	real time processNetwork() took, minus the idle wait the poller
+	 *	counts as spare time. A tick that spends too long handling packets
+	 *	or socket events shows up here.
+	 */
+	uint64 maxNetworkTime() const;
+
+	/**
+	 *	How many network ticks have run past the network time budget since
+	 *	construction or the last resetNetworkTimeStats().
+	 */
+	uint32 numOverBudgetTicks() const;
+
+	/**
+	 *	Discards the accumulated network time record so the next reading
+	 *	covers only what happens from here on.
+	 */
+	void resetNetworkTimeStats();
+
+	/// The per-tick network processing budget, in seconds.
+	double networkTimeBudget() const;
+	void networkTimeBudget( double seconds );
+
 	ErrorReporter & errorReporter()	{ return *pErrorReporter_; }
 	
 	
@@ -156,6 +180,16 @@ public:
 	 *	Watchable form of numLateTimers().
 	 */
 	uint32 lateTimerCount() const;
+
+	/**
+	 *	Watchable form of maxNetworkTime(), in seconds.
+	 */
+	double maxNetworkTimeSeconds() const;
+
+	/**
+	 *	Watchable form of numOverBudgetTicks().
+	 */
+	uint32 overBudgetTickCount() const;
 #endif
 
 private:
@@ -197,6 +231,11 @@ private:
 	uint32 numTimerCalls_;
 
 	double maxWait_;
+
+	// Per-tick network processing record; see maxNetworkTime().
+	uint64			maxNetworkTime_;
+	uint64			networkTimeBudget_;
+	uint32			numOverBudgetTicks_;
 
 	DispatcherCoupling * pCouplingToParent_;
 

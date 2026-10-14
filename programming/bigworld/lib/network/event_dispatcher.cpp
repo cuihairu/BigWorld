@@ -62,6 +62,9 @@ EventDispatcher::EventDispatcher( const ClockFn & clock ) :
 	lastStatisticsGathered_( 0 ),
 	numTimerCalls_( 0 ),
 	maxWait_( 0.1 ),
+	maxNetworkTime_( 0 ),
+	networkTimeBudget_( uint64( TimeStamp::fromSeconds( 0.01 ) ) ),
+	numOverBudgetTicks_( 0 ),
 	pCouplingToParent_( NULL ),
 	pPoller_( EventPoller::create() ),
 	pErrorReporter_( new ErrorReporter( *this ) )
@@ -393,7 +396,30 @@ int EventDispatcher::processNetwork( bool shouldIdle )
 	// select for network activity until earliest timer
 	double maxWait = shouldIdle ? this->calculateWait() : 0.0;
 
-	return pPoller_->processPendingEvents( maxWait );
+	// Real clock on purpose: this measures what a network tick costs in wall
+	// time, so an injected test clock must not distort it.
+	const uint64 startSpare = pPoller_->spareTime();
+	const uint64 start = timestamp();
+	const int numEvents = pPoller_->processPendingEvents( maxWait );
+
+	// The poller charges its idle select wait to spare time, and that wait is
+	// not work: subtract it out so only the packet and socket-event handling
+	// time is left. An idle tick therefore stays inside any budget.
+	const uint64 idle = pPoller_->spareTime() - startSpare;
+	const uint64 elapsed = timestamp() - start;
+	const uint64 processingTime = (elapsed > idle) ? (elapsed - idle) : 0;
+
+	if (processingTime > maxNetworkTime_)
+	{
+		maxNetworkTime_ = processingTime;
+	}
+
+	if (processingTime > networkTimeBudget_)
+	{
+		++numOverBudgetTicks_;
+	}
+
+	return numEvents;
 }
 
 
@@ -534,6 +560,54 @@ void EventDispatcher::resetTimerLateness()
 
 
 /**
+ *	This method returns the worst wall-clock cost of a single network tick,
+ *	in stamps. See processNetwork() for how the idle wait is excluded.
+ */
+uint64 EventDispatcher::maxNetworkTime() const
+{
+	return maxNetworkTime_;
+}
+
+
+/**
+ *	This method returns how many network ticks have run past the network time
+ *	budget.
+ */
+uint32 EventDispatcher::numOverBudgetTicks() const
+{
+	return numOverBudgetTicks_;
+}
+
+
+/**
+ *	This method discards the accumulated network time record.
+ */
+void EventDispatcher::resetNetworkTimeStats()
+{
+	maxNetworkTime_ = 0;
+	numOverBudgetTicks_ = 0;
+}
+
+
+/**
+ *	This method returns the per-tick network processing budget, in seconds.
+ */
+double EventDispatcher::networkTimeBudget() const
+{
+	return static_cast<double>( networkTimeBudget_ ) / stampsPerSecondD();
+}
+
+
+/**
+ *	This method sets the per-tick network processing budget, in seconds.
+ */
+void EventDispatcher::networkTimeBudget( double seconds )
+{
+	networkTimeBudget_ = uint64( seconds * stampsPerSecond() );
+}
+
+
+/**
  *	This method returns the time between deliveries of the given timer handle.
  */
 uint64 EventDispatcher::timerIntervalTime( TimerHandle handle ) const
@@ -598,6 +672,12 @@ WatcherPtr EventDispatcher::pTimingWatcher()
 			makeWatcher( &EventDispatcher::maxTimerLatenessSeconds ) );
 		watchMe->addChild( "numLateTimers",
 			makeWatcher( &EventDispatcher::lateTimerCount ) );
+
+		// Per-tick network processing cost, in seconds since the last reset.
+		watchMe->addChild( "maxNetworkTime",
+			makeWatcher( &EventDispatcher::maxNetworkTimeSeconds ) );
+		watchMe->addChild( "numOverBudgetTicks",
+			makeWatcher( &EventDispatcher::overBudgetTickCount ) );
 	}
 
 	return watchMe;
@@ -621,6 +701,25 @@ double EventDispatcher::maxTimerLatenessSeconds() const
 uint32 EventDispatcher::lateTimerCount() const
 {
 	return pTimeQueue_->numLateTimers();
+}
+
+
+/**
+ *	This method returns maxNetworkTime() expressed in seconds, so this
+ *	watcher reads in the same units as the other timing entries above.
+ */
+double EventDispatcher::maxNetworkTimeSeconds() const
+{
+	return static_cast<double>( maxNetworkTime_ ) / stampsPerSecondD();
+}
+
+
+/**
+ *	This method returns numOverBudgetTicks() for the watcher.
+ */
+uint32 EventDispatcher::overBudgetTickCount() const
+{
+	return numOverBudgetTicks_;
 }
 
 /**

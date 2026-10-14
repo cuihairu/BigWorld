@@ -33,7 +33,7 @@
 - [ ] 观测面现代化（结构化日志字段/trace-correlation id、日志采样与动态级别、watcher 拆只读观测 vs 可写控制）。验收：跨进程日志带 EntityID/SpaceID/Channel 关联字段，watcher 写操作权限可配置并有审计点。期次 P3
 - [ ] 热重载生产化（版本化 schema、双版本兼容窗口、dry-run、失败回滚、跨进程一致性屏障）。验收：迁移路径测试覆盖 Entity::migrate 语义保持 + 失败无半迁移状态。期次 P3
 - [ ] R4 客户端/FantasyDemo 资源 Linux 验证。验收：fantasydemo 资产在 Linux 全量构建下可加载冒烟。期次 P3
-- [ ] io_uring / 批量 UDP 评估（条件触发：定位到 per-packet syscall 瓶颈才做）。验收：先落 per-tick 网络耗时/超预算计数指标，凭数据决定。期次 P3
+- [ ] io_uring / 批量 UDP 评估（条件触发：定位到 per-packet syscall 瓶颈才做）。验收：先落 per-tick 网络耗时/超预算计数指标，凭数据决定。期次 P3 — 2026-10-14 R3 进度：per-tick 网络耗时/超预算计数指标已落地——`EventDispatcher::processNetwork` 用真实时钟测墙钟耗时并扣除 poller spareTime 里的空闲 select 等待（空闲 tick 不记超支），暴露 maxNetworkTime/numOverBudgetTicks/resetNetworkTimeStats/networkTimeBudget（默认 10ms），并挂 timing watcher（maxNetworkTime 按秒读出）；test_event_stall 加 2 用例（socketpair 数据报 tick 记入 max 与超预算计数、idle tick 不记 + reset 保预算）。network_test 223→225。是否引入 io_uring/批量 UDP 仍凭该指标在生产侧的数据决定，不预设。
 
 ## C. 完全没有（无设计无承载物）
 
