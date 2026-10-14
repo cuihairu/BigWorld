@@ -33,7 +33,7 @@
   - libpython 的 OpenSSL 依赖与解释器 whole-archive `-lbwssl -lbwcrypto` 注入暂时摘除（无 _ssl 时无意义且 OpenSSL 1.0.0d 在 gcc15/C23 下无法编译），OpenSSL 升级后恢复
 - `build/make/discover_python.sh`：python2.4 → python3（优先 `python3.13-config`）
 - `build/xcode/build-python.sh`：版本 3.13、去 ucs4、`make all` 替代失效的 `make sharedmods`
-- `build/make/Makefile`：`third_party_python_modules.mak`（Twisted 11 / SQLAlchemy 0.6 / Zope 2.11 等 Py2 时代包安装）暂缓启用，包升级后恢复
+- `build/make/Makefile`：`third_party_python_modules.mak` 重新启用——包已整体换成 Py3 兼容版本（Twisted 24.7 / SQLAlchemy 1.4.54 / zope.interface 7 / Pympler 1.0 / pika 1.3.2 / msgpack 1.1.0，另含 setuptools、typing_extensions、attrs、constantly、incremental、Automat、hyperlink、idna），安装目标改为 `game/res/bigworld/scripts/{common,server_common}/site-packages`；验收脚本 `scripts/python-modules-smoke-import.py`（tarball 源树 + 安装后目录两相 import 冒烟）。oursql 无 Py3 移植、目标暂缓（见剩余风险 R2）
 - 构建工具脚本 Py3 化：`platform_info.py`（print + Debian→el7 平台等效映射）、`invoke_without_jobserver.py`（print/iteritems）、`check_eol_style.py`（print/except 语法）
 - 补齐 git 执行位：`build/make/*.sh *.py`、`third_party/openssl/Configure`
 - `build/make/third_party_openssl.mak`：拷贝后 `chmod -R +w` → `u+rwX`（保留脚本执行位）
@@ -67,7 +67,7 @@
 | # | 风险 | 影响 | 计划 |
 |---|---|---|---|
 | R1 | vendored OpenSSL 1.0.0d：低于 3.13 最低要求（1.1.1），且在 gcc 15（默认 C23）下无法编译（`bool` 关键字冲突） | `_ssl/_hashlib` 缺席 lib-dynload；依赖 py ssl 的工具受限 | **已解决**（见 [vcpkg-migration.md](vcpkg-migration.md)）：OpenSSL 3.6 经 vcpkg 引入后恢复 `--with-openssl`、共享模块列表、symbols 采集与 libpython 依赖。落地时另发现两个必须一并处理的点：① CPython 用 `-fvisibility=hidden` 编译自身对象，`BW_Py_*` 钩子符号在 `python.exe` 里是 STB_LOCAL，`-export-dynamic` 导不出去，`_hashlib.so` 导入失败并被 3.12+ 的 `check_extension_modules.py` 重命名成 `_hashlib_failed*.so` —— 已给 `bwhooks.h` 的声明加 `visibility("default")`，并用 `-Wl,-u,...` 强制把 `Python/bwhooks.o` 拉进解释器；② 2.7 靠 `obmalloc.c` 里的 `#define malloc` 引用钩子从而把 `bwhooks.o` 拉进链接，3.13 改用官方 `PyMem_SetAllocator` 后 libpython 内部不再引用钩子，这个引用关系没有了。 |
-| R2 | `third_party/python_modules` 全部为 Py2 生态包（Twisted 11、SQLAlchemy 0.6、Zope 2.11、oursql 等） | 集群监控/日志工具等运行时 Python 服务不可用 | 单独升级各包到 Py3 兼容版本后再启用 mak；不在编译验证关键路径 |
+| R2 | `third_party/python_modules` 全部为 Py2 生态包（Twisted 11、SQLAlchemy 0.6、Zope 2.11、oursql 等） | 集群监控/日志工具等运行时 Python 服务不可用 | **已解决**：14 个包换成 Py3 兼容版（Twisted 24.7 / SQLAlchemy 1.4.54 / zope.interface 7 / Pympler 1.0 / pika 1.3.2 / msgpack 1.1.0 + setuptools / typing_extensions / attrs / constantly / incremental / Automat / hyperlink / idna），`Makefile:351` 的 include 已恢复启用。遗留子项：oursql 是 Py2 C 扩展、无 Py3 移植，需另选 Py3 MySQL 连接器后才能恢复其目标；`Imaging-1.1.7`/`jpegsrc.v6b` 是 C 扩展树，服务 Windows `tools/` 轨，不在本次替换范围 |
 | R3 | Windows 构建（PCbuild/VS 工程）未迁移 | Windows 侧无法构建 | 后续批次 |
 | R4 | 客户端/大文件资源（FantasyDemo 等）未在 Linux 验证范围 | — | 按批次推进 |
 
@@ -83,6 +83,7 @@
 | 6 | 运行期初始化修复：补 `bw_site.py`（源码包缺失，随 pyscript 跟踪 + mak 安装规则）、`bw_platform_info.cpp` Debian→el7 回退对齐构建侧 | 全量单测（21 个模块）无失败；详见 §3.1 | `41fafefc` |
 | 7 | 覆盖率基线测量（插桩构建 + 全量单测 + gcovr，详见 §7） | 插桩套件与恢复正常构建后的复验套件均 21 模块 0 失败 | 本次提交（dev） |
 | 8 | 安全补丁升级 3.13.15 → 3.13.16（3.13 系列安全维护版本；vendored 树按 v3.13.16 git tag 重同步，裁剪面/行尾约定保持，Makefile.pre.in 与 _hashopenssl.c 补丁原样重放） | `make libbwpython3.13` 全链通过 + 全量单测 21 模块全绿 | 见本次提交（dev） |
+| 9 | `third_party/python_modules` 整体换 Py3 兼容版本并重新启用安装规则（R2 收尾）：删 7 个 Py2 包，vendor 14 个 Py3 源（Twisted 24.7 / SQLAlchemy 1.4.54 / zope.interface 7 / Pympler 1.0 / pika 1.3.2 / msgpack 1.1.0 + setuptools / typing_extensions / attrs / constantly / incremental / Automat / hyperlink / idna）；`third_party_python_modules.mak` 重写为每包单规则（tar 解包 → cp 到 site-packages → .pth 标记）；`Makefile:351` include 恢复启用；新增验收脚本 `scripts/python-modules-smoke-import.py` | ① 14 个包 tar 解包后逐一 import 全通过；② `make -rR python_*` 安装后 `game/res/bigworld/scripts/{common,server_common}/site-packages` 下 15 个模块逐一 import 全通过（内嵌 3.13.16）；③ 全量单测 21 模块 / 1355 用例 / 0 失败 | 见本次提交（dev） |
 
 ---
 
