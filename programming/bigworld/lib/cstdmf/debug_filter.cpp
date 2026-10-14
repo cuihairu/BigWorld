@@ -291,7 +291,23 @@ void DebugFilter::addWatchers()
 
 	MF_VERIFY( Watcher::rootWatcher().addChild( "logger/categorySupression",
 		pReadWriteWatcher ) );
-		
+
+	// The threshold below which no message at all is accepted. Like the
+	// per-category levels above, it stays writable so a running process
+	// can be re-leveled without a restart.
+	//
+	// NB: "this", not DebugFilter::instance(). The instance pointer is only
+	// published once this constructor returns, so instance() here would build
+	// another DebugFilter, whose addWatchers collides with these mounts, logs,
+	// and re-enters instance() forever.
+	WatcherPtr pThresholdWatcher = makeNonRefWatcher( *this,
+		&DebugFilter::filterThreshold, &DebugFilter::filterThreshold,
+		"0:TRACE; 1:DEBUG; 2:INFO; 3:NOTICE; 4:WARNING; 5:ERROR; "
+		"6:CRITICAL; 7:HACK; 9:ASSET; 10:NOTHING" );
+
+	MF_VERIFY( Watcher::rootWatcher().addChild( "logger/filterThreshold",
+		pThresholdWatcher ) );
+
 	MF_WATCH( "logger/shouldOutputErrorBackTrace",
 		DebugFilter::s_shouldOutputErrorBackTrace_ );
 
@@ -315,6 +331,9 @@ void DebugFilter::removeWatchers() const
 
 	MF_VERIFY( Watcher::rootWatcher().removeChild(
 		"logger/categorySupression" ) );
+
+	MF_VERIFY( Watcher::rootWatcher().removeChild(
+		"logger/filterThreshold" ) );
 
 	MF_VERIFY( Watcher::rootWatcher().removeChild(
 		"logger/shouldOutputErrorBackTrace" ) );

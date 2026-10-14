@@ -3,6 +3,7 @@
 #include "cstdmf/debug.hpp"
 #include "cstdmf/debug_filter.hpp"
 #include "cstdmf/memory_stream.hpp"
+#include "cstdmf/watcher.hpp"
 
 BW_BEGIN_NAMESPACE
 
@@ -208,6 +209,40 @@ TEST( ImplicitBacktraceMacros )
 
 
 }
+
+#if ENABLE_WATCHERS
+
+/**
+ *	The global filter threshold is writable through the root watcher, so a
+ *	running process can be re-leveled at runtime without a restart.
+ */
+TEST( DebugFilter_filterThresholdWatcher )
+{
+	DebugFilter::shouldWriteToConsole( shouldWriteToConsole );
+
+	const DebugMessagePriority previous = DebugFilter::instance().filterThreshold();
+	DebugFilter::instance().filterThreshold( MESSAGE_PRIORITY_TRACE );
+
+	Watcher & root = Watcher::rootWatcher();
+	BW::string desc;
+	BW::string value;
+	Watcher::Mode mode = Watcher::WT_INVALID;
+
+	CHECK( root.getAsString( NULL, "logger/filterThreshold", value, desc, mode ) );
+	CHECK_EQUAL( BW::string( "0" ), value );
+
+	CHECK( root.setFromString( NULL, "logger/filterThreshold", "4" ) );
+	CHECK_EQUAL( MESSAGE_PRIORITY_WARNING,
+		DebugFilter::instance().filterThreshold() );
+
+	CHECK( root.getAsString( NULL, "logger/filterThreshold", value, desc, mode ) );
+	CHECK_EQUAL( BW::string( "4" ), value );
+
+	DebugFilter::instance().filterThreshold( previous );
+	DebugFilter::shouldWriteToConsole( false );
+}
+
+#endif // ENABLE_WATCHERS
 
 #endif // ENABLE_MSG_LOGGING
 
