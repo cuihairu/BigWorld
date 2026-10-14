@@ -86,7 +86,6 @@ gcovr -r /home/cui/workspaces/BigWorld/programming/bigworld --txt -o /tmp/cov.tx
 |--------|-----------|--------|------|
 | chunk/chunk.cpp | 1215/1228 | 1% | 受限：需 ChunkSpace + chunk 装载机 |
 | connection/server_connection.cpp | 990/990 | 0% | **维持不可测**（真登录管线 + TCPChannel 状态机，批次14/16） |
-| entitydef/entity_description.cpp | 665/665 | 0% | 受限：需 EntityType/EntityDef XML 装载机全套 |
 | moo/image.ipp | 589/589 | 0% | 受限：客户端图像合成面 |
 | network/machine_guard.cpp | 553/774 | 28% | bwmachined 面不可达部分维持登记（批次17） |
 | connection/message_handlers.hpp | 538/538 | 0% | **结构性死代码**（模板 handler 表无人实例化） |
@@ -95,6 +94,7 @@ gcovr -r /home/cui/workspaces/BigWorld/programming/bigworld --txt -o /tmp/cov.tx
 | chunk/chunk_boundary.cpp | 403/403 | 0% | 受限：同 chunk 体系 |
 | network/logger_endpoint.cpp | 398/398 | 0% | 维持受限登记（真消息日志管线，批次17） |
 | resmgr/bwresource.cpp | 282/746 | 62% | 批次 28 实测（精准插桩 464/746；386/746 为 09-28 全量口径） |
+| entitydef/entity_description.cpp | 239/663 | 64% | 批次 29 实测（精准插桩 424/663；0% 为 09-28 全量口径，受限判定推翻） |
 | network/logger_message_forwarder.cpp | 335/335 | 0% | 维持受限登记（批次17） |
 | entitydef/method_description.cpp | 137/466 | 70% | 批次 28 实测（精准插桩 329/466；323/478 为 09-28 全量口径） |
 | server/python_server.cpp | 298/298 | 0% | 受限：需完整 app 装配 |
@@ -240,3 +240,28 @@ CLIENT_UNUSABLE(0x2)；残余 137 行分类登记：PyDeferredResponse 族（58-
 createErrorObject 带 func 臂（288-298）、parse 缺 name（347-348）、object-with-id 分支（636-646）、
 handleException 族（747-798）、callMethod 错误/returnValues 分支（850-923）、网络发送路径
 （970-1071）、2 参 createArgsFromStream（1163/1166）、:1216；见台账 §7.28）；
+
+`entitydef/entity_description.cpp` 0%→**64%**（精准插桩口径 424/663 实例行，批次 29；表值
+665/665 0% 的受限判定「需 EntityType/EntityDef XML 装载机全套」**推翻**——`EntityDescription::parse`
+全程仅依赖 BWResource 单例与 scripts/entity_defs 下 fixture .def 树，从不触 EntityType；entitydef
+harness 每 TEST_F 重建 BWResource/Script，故 `BWResource::addPath` 须每用例调用、fixture 文件按
+pid 唯一目录 /tmp/bwentitydef_<pid> 写入一次；新建 `test_entity_description.cpp` 30 用例直驱：
+parse 最小形态、标量属性 Flags 各位（CELL_PUBLIC 幽灵掉/OWN_CLIENT+Persistent/ALL_CLIENTS
+other-client 事件戳索引）、缺 .def 与坏 Flags 失败、BaseMethods/CellMethods/ClientMethods 三
+列表与 `<Exposed/>`（空 `<Exposed/>` 恒 OWN_CLIENT、ClientMethods 带 Exposed 恒拒绝）、Parent
+递归继承与缺父失败、Volatile 优先级平方与 yaw≥pitch≥roll 校验、LoDLevels 标签匹配 detailLevel
+与失败臂、Distribution 三 decider 位、ClientName 弃用告警、无 Client 脚本时 ClientMethods 拒绝、
+TempProperties、Components 装载/缺 def/重名失败（实体自有属性先于组件属性）、parseService 的
+Methods→base 列表映射与属性拒绝、Implements 接口属性、checkExposedMethods 的 proxy/非 proxy
+四象限、getDataDomains 全映射、shouldSkipPass 的 EXACT_MATCH 精确匹配矩阵与非精确按位臂、
+shouldConsiderData 各 pass 过滤、addSectionToStream→readStreamToDict 流往返、
+addSectionToDictionary 直写 dict；**实测坑位**：`parse` 第二参 componentName 生产恒传空串
+（entity_description_map.cpp:362），传实体名会把全部属性标记为 componentised、fullName 带前缀
+「实体名.属性名」，addSectionToStream 按 fullName 找值落默认值 0、getItem("属性名") 必空——
+流往返用例用 gdb+PyObject_Print 实证后修正传参；方法 fixture 的 `<baseExposed/>` 是名为
+baseExposed 的非暴露方法，暴露须 `<baseExposed><Exposed/></baseExposed>`；残余 239 行分类登记：
+readStreamToSection/readTaggedClientStreamToDict/addAttributesToStream/addDictionaryToStream
+网络流读侧、MD5 族（addToMD5/addPersistentPropertiesToMD5）、setExposedMsgIDs、checkMethods、
+pIdentifier/isTempProperty/clientServerProperty 族访问器、getDataDomains 两个 CRITICAL_MSG
+不可达臂（CLIENT_ENTITY_CELL_CREATION/CLIENT_ENTITY_LOD_DATA）、parseProperties 属性覆盖臂与
+ClientServerPropertiesSortHelper 模板实例暗区，见台账 §7.29）；
