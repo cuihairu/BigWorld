@@ -11,8 +11,21 @@ name: CI
 
 on:
   push:
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - '.gitignore'
+      - '*.svg'
+      - '.editorconfig'
   pull_request:
-
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - '.gitignore'
+      - '*.svg'
+      - '.editorconfig'
 permissions:
   contents: read
 
