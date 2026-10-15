@@ -101,13 +101,16 @@ jobs:
     name: ${{ matrix.library }} (MSVC x64)
     runs-on: windows-latest
     timeout-minutes: 60
-    # Job-level groups, no workflow-level group: a manual root-build probe
-    # dispatch and a push gate run share a ref but not a purpose - a single
-    # workflow-level group made the dispatch cancel the in-progress gate legs
-    # (observed on the first probe dispatch). Each job keeps its own
-    # cancel-in-progress lane; the ~1h build probe cancels nothing and is
-    # itself never cancelled mid-build by a newer dispatch (a second dispatch
-    # queues behind it instead).
+    # Gate legs run on push/pull_request only: a manual dispatch is a
+    # probe-only run, so its job set never shares a concurrency group with a
+    # push run and one can never cancel the other (the same-group
+    # cancel-in-progress below kept doing exactly that while dispatch also
+    # ran these legs - observed on two consecutive dispatches).
+    if: github.event_name != 'workflow_dispatch'
+    # Job-level groups, no workflow-level group: each lane cancels only
+    # itself on a newer same-ref run. The build probe lane (below) keeps
+    # cancel-in-progress false, so a manual build is never killed mid-flight
+    # and a second dispatch queues behind it instead.
     concurrency:
       group: ci-windows-msvc-${{ github.ref }}
       cancel-in-progress: true
@@ -215,6 +218,8 @@ jobs:
     name: root configure (R3 probe)
     runs-on: windows-latest
     timeout-minutes: 30
+    # Push/pull_request only, same reasoning as the gate legs above.
+    if: github.event_name != 'workflow_dispatch'
     continue-on-error: true
     concurrency:
       group: ci-windows-configure-probe-${{ github.ref }}
