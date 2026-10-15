@@ -19,6 +19,16 @@ name: CI Windows (MSVC compile gate)
 #   CMAKE_PROJECT_INCLUDE : build/cmake/BWMacros.cmake (root-only otherwise;
 #                           supplies BW_ADD_LIBRARY / BW_TARGET_LINK_LIBRARIES)
 #   CMAKE_MODULE_PATH     : build/cmake (supplies BWStandardProject)
+#   PCH_SUPPORT           : the historical VS-project define that makes every
+#                           module's pch.hpp (41 of them, cstdmf first) actually
+#                           carry its includes - notably cstdmf_windows.hpp,
+#                           which supplies <windows.h> to TUs like
+#                           critical_error_handler.cpp. The CMake root's
+#                           server config turns it OFF
+#                           (BWConfiguration_server.cmake), but every cpp
+#                           still does '#include "pch.hpp"' and relies on it
+#                           textually, so the gate mirrors the canonical
+#                           VS-project build instead.
 # Every -D path is passed with forward slashes: CMake copies them verbatim
 # into the generated try_compile project, where a Windows backslash is an
 # invalid escape.
@@ -126,7 +136,7 @@ jobs:
                 -DCMAKE_MODULE_PATH="$repo/build/cmake" `
                 -DBW_SOURCE_DIR="$repo" `
                 -DBW_PLATFORM_WINDOWS=ON -DBW_PLATFORM=win64 -DBW_ARCH_64=ON `
-                -DBW_COMPILER_TOKEN=msvc `
+                -DBW_COMPILER_TOKEN=msvc -DPCH_SUPPORT=1 `
                 -DCMAKE_CONFIGURATION_TYPES="Debug;Release" `
                 '-DCMAKE_CXX_FLAGS=/DWIN32 /D_WINDOWS /W3 /Zi /MP /Gy /w34302 /d2Zi+ /WX-' 2>&1 | Tee-Object -FilePath cmake-configure.log
 
