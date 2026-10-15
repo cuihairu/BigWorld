@@ -195,3 +195,45 @@ jobs:
             cmake-build.log
           if-no-files-found: ignore
           retention-days: 7
+
+  # R3 probe, not a gate: the root superproject configure (the CMake entry
+  # the Windows track is documented to use) is expected to fail today. The
+  # job exists to surface WHERE it fails, in order, on the same runner the
+  # gate proved out - expected first blockers per todo R3: libpython (the
+  # vendored CPython tree has no CMake build system) and the vendored
+  # png/zip/sqlite references in BWConfiguration_server.cmake. Each push
+  # records the current head of that blocker list. continue-on-error keeps
+  # the verified-green compile gate above as this workflow's verdict; the
+  # probe's own step status stays visible in the job log and the artifact.
+  root-configure-probe:
+    name: root configure (R3 probe, expected red)
+    runs-on: windows-latest
+    timeout-minutes: 30
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Configure root superproject (server target)
+        shell: pwsh
+        env:
+          CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+        run: |
+          $repo = ((Resolve-Path programming/bigworld).Path -replace '\\','/')
+          # The root sets BW_SOURCE_DIR / CMAKE_MODULE_PATH itself and pulls
+          # BWCompilerAndLinkerOptions (so no flag mirroring here, unlike the
+          # module-standalone legs). Configure only - nothing is built and no
+          # artifacts leave this job.
+          cmake -S "$repo" -B "build/win_root_probe" `
+                -G "Visual Studio 18 2026" -A x64 `
+                -DBW_CMAKE_TARGET=server 2>&1 | `
+                Tee-Object -FilePath cmake-configure-root.log
+
+      - name: Upload probe log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-windows-root-probe-${{ github.run_id }}
+          path: cmake-configure-root.log
+          if-no-files-found: ignore
+          retention-days: 7
