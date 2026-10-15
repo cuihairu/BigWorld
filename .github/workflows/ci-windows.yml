@@ -282,6 +282,25 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      - name: Fetch legacy D3DX SDK
+        shell: pwsh
+        run: |
+          # lib/math's Windows vector types are D3DX typedefs and server
+          # modules compile them through math headers
+          # (bwengine_mysql/xml: "d3dx9math.h: No such file or directory",
+          # second dispatch). Same fetch as the math gate leg above.
+          $root = "build/dxsdk"
+          New-Item -ItemType Directory -Force $root | Out-Null
+          Invoke-WebRequest `
+            -Uri "https://www.nuget.org/api/v2/package/Microsoft.DXSDK.D3DX/9.29.952.8" `
+            -OutFile "$root/pkg.zip"
+          Expand-Archive -Path "$root/pkg.zip" -DestinationPath "$root/pkg" -Force
+          New-Item -ItemType Directory -Force "$root/Include", "$root/Lib/x64" | Out-Null
+          Copy-Item "$root/pkg/build/native/include/*" "$root/Include/" -Recurse -Force
+          Copy-Item "$root/pkg/build/native/release/lib/x64/*" "$root/Lib/x64/" -Force
+          $dir = ($PWD.ProviderPath -replace '\\','/') + "/$root"
+          "DXSDK_DIR=$dir" | Out-File -FilePath $env:GITHUB_ENV -Append
+
       - name: Configure root superproject (server target)
         shell: pwsh
         env:

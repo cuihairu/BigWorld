@@ -475,6 +475,30 @@ entityID + spaceID 占 3 个，余量充足。见台账 §7.35。
    ——example 目标（`BW_ADD_LIBRARY ... MODULE`，自身无 INCLUDE_DIRS）没把 `server/` 父目录
    带上（`cellapp/xxx.hpp` 形态依赖 `programming/bigworld/server` 在 include 路径），根
    include 布局如何供给是构建系统设计件，记录为下一个阻塞头。
+7. 三轮 dispatch（run 38747050836）实证：首轮的 critical_message_box 修复在 superproject
+   模式**生效**（HWND/WNDPROC 错误消失），阻塞清单推进为四类：
+   ① cstdmf 残余 PCH 文本依赖（已修其二）：`message_box.hpp`（自用 HWND/WNDPROC/CALLBACK，
+   与 critical_message_box 同款修法）与 `callstack_windows.cpp`（`<DbgHelp.h>` 前补
+   `cstdmf_windows.hpp`）；**仍未修**：`memory_debug.hpp:169` `timeval firstTime`（MSVC 无
+   `<sys/time.h>`，timeval 载体须在 MSVC 侧验证后定）与 `launch_windows_process.cpp`
+   （GetCurrentThreadId + Profiler::EntryBuffer 成员级联，需 MSVC 侧复核根因）；
+   ② `examples/cellapp_extension` include 布局（同上，未动）；
+   ③ `dbapp_extensions/bwengine_mysql+xml` `C1083: d3dx9math.h`——math 头的 D3DX 类型经
+   server 模块传递编译，根构建同样需要 DXSDK：探针 job 补了与 math 门禁腿相同的
+   `Microsoft.DXSDK.D3DX` 9.29.952.8 拉取步（DXSDK_DIR → GITHUB_ENV）；
+   ④ **libpython ExternalProject 首次真实执行并走得很远**：`get_externals.bat` 网络克隆、
+   `_freeze_module.exe` 构建、AST/ frozen 模块再生成全部通过，倒在
+   `regen.targets:69`——`generate_token.py rst` 读 `Doc/library/token.rst` 报
+   `FileNotFoundError`（vendored CPython 3.13.16 树不带 `Doc/`，而
+   `_TokenOutputs` 含 `Doc\library\token-list.inc`，缺输出即触发再生成）。
+   **已修**：从上游 cpython 3.13 分支 vendor `Doc/library/token.rst` + `token-list.inc`
+   两文件进 `third_party/python/`，本地用仓内脚本实跑
+   `generate_token.py rst Grammar/Tokens Doc/library/token-list.inc` 通过且
+   token-list.inc 无 diff（证明 vendored `Grammar/Tokens` 与上游一致）；MSVC 侧证明由
+   下一轮 dispatch 出。
+门禁：`critical_message_box.hpp` / `message_box.hpp` / `callstack_windows.cpp` 为
+include-only 改动 → 选择性 `bw-run-test-cstdmf` 451 用例 0 失败（两轮同结果）；
+third_party/python 两文件为本轮新增非测试改动。
 门禁：CI 配置改动 → 全量套件 `make -s -rR bw-run-all-unit-tests`，
 21 模块 / 1505 用例 / 0 失败（与批次 36 同数——本轮无测试改动），
 YAML 经解析校验（3 jobs / 各自 steps 与 job 级 if 正确）。见台账 §7.37。
