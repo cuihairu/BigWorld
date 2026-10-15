@@ -496,6 +496,21 @@ entityID + spaceID 占 3 个，余量充足。见台账 §7.35。
    `generate_token.py rst Grammar/Tokens Doc/library/token-list.inc` 通过且
    token-list.inc 无 diff（证明 vendored `Grammar/Tokens` 与上游一致）；MSVC 侧证明由
    下一轮 dispatch 出。
+8. 四轮 dispatch（run 38749824237）实证：②d3dx9math C1083 **消失**（DXSDK 步生效，但
+   bwengine_mysql/xml 倒在更深的 C2059/C2332 `'struct': missing tag name` 解析错 +
+   C2220 warning-as-error——根构建带 /WX，是新的下一层阻塞头）；①的 message_box 与
+   callstack_windows 修复**生效**（错误表消失），cstdmf 残余仍是 `memory_debug.hpp
+   timeval` 与 `launch_windows_process.cpp`（`profiler.hpp:729/736` 的
+   `level_`/EntryBuffer 级联）。**libpython 大步前进**：token.rst vendoring 生效
+   （regen 过），CPython 3.13.16 在 MSVC 19.51 上编完 pythoncore 与扩展模块
+   （`_sqlite3.pyd` 等），倒在 `_hashlib.pyd` 链接：
+   `BW_Py_memoryTrackingIgnoreBegin/End` LNK2001——**根因是载体设计缺陷**：BW 钩子
+   编在 libpython CMake 目标的独立 obj 里，而 PCbuild 的扩展模块只链 `python313.lib`
+   （pythoncore 不含 bwhooks.c，钩子也不在导入库里）；Linux 轨用
+   `-u,BW_Py_memoryTrackingIgnore*` 把钩子强制拉进每个消费方，Windows 侧没有等价物。
+   修法属设计件（pythoncore 打进钩子并导出 / Directory.Build.targets 注入 ClCompile /
+   给 PCbuild 扩展补链），下一轮定。**这是本探针首轮系列最深的一手数据：解释器本体在
+   MSVC 19.51 上是可编译的。**
 门禁：`critical_message_box.hpp` / `message_box.hpp` / `callstack_windows.cpp` 为
 include-only 改动 → 选择性 `bw-run-test-cstdmf` 451 用例 0 失败（两轮同结果）；
 third_party/python 两文件为本轮新增非测试改动。
