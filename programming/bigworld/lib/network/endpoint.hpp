@@ -32,6 +32,10 @@
 	#include <xtl.h>
 	#include <winsockx.h>
 #else
+	// Lean windows.h before Winsock2.h - same reasoning as event_dispatcher.hpp:
+	// a full windows.h brings ole2/objbase's `#define interface struct`, which
+	// mangles later interface()-named declarations. A no-op outside Windows.
+	#include "cstdmf/cstdmf_windows.hpp"
 	#include <Winsock2.h>
 #endif
 #include <errno.h>

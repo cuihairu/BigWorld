@@ -18,19 +18,24 @@
 # CMake: it drives upstream's own entry point, PCbuild\build.bat, so there is
 # one authority for the interpreter's ~250 translation units.
 #
-# bwhooks.c is compiled here instead of by pythoncore
-# --------------------------------------------------
+# bwhooks.c is compiled by pythoncore, not here
+# ---------------------------------------------
 # lib/pyscript/script.cpp needs BW_Py_malloc/free/calloc/realloc,
 # BW_Py_getHooks/setHooks and BW_Py_memoryTrackingIgnoreBegin/End, all of
 # which live in the vendored Python/bwhooks.c. Linux builds it into the
 # interpreter archive (build/make/third_party_python.mak notes the archive
 # carries Python/bwhooks.o and pulls it in with -u,BW_Py_memoryTrackingIgnore*).
-# Windows pythoncore.vcxproj does not: its 234 <ClCompile> entries omit
-# Python/bwhooks.c, so a plain pythoncore build produces an archive with no
-# BW hooks and pyscript would fail to link. Compiling bwhooks.c inside this
-# target closes that gap without forking the vendored vcxproj - the file is
-# upstream's, and the gap is closed by adding a build step rather than by
-# patching their project.
+# On Windows the hooks must be resolvable by BOTH kinds of consumer:
+# lib/pyscript/script.cpp in the embedder, and PCbuild extension modules
+# (_hashlib.pyd et al) that link only python313.lib. This target used to
+# compile bwhooks.c itself, which satisfied pyscript but left every extension
+# module with LNK2001 on BW_Py_memoryTrackingIgnoreBegin/End (first root
+# build probe) - and compiling it in both places would create two independent
+# s_hooks states in one process. PCbuild/Directory.Build.targets now injects
+# bwhooks.c into pythoncore (with BW_PY_BUILDING_PYTHONCORE, which makes
+# Include/bwhooks.h dllexport the entry points), so python313.dll is the
+# single carrier, python313.lib carries the symbols, and this target is a
+# pure link-through to that import library.
 #
 # Configurations
 # --------------
@@ -126,8 +131,12 @@ add_dependencies(bwpython313_core bwpython313)
 set_target_properties(bwpython313_core PROPERTIES
 	IMPORTED_LOCATION "${BW_PYTHONCORE_ARCHIVE}")
 
-# The target the root superproject and lib/pyscript expect by name.
-add_library(libpython STATIC "${BW_PYTHON_SRC}/Python/bwhooks.c")
+# The target the root superproject and lib/pyscript expect by name. No sources:
+# the BW hooks are compiled into pythoncore by PCbuild/Directory.Build.targets
+# (see the header comment), so the only thing to hand consumers is the import
+# library below. An empty STATIC archive is legal and keeps the target name
+# contract while python313.lib does the work.
+add_library(libpython STATIC)
 add_dependencies(libpython bwpython313)
 target_include_directories(libpython PUBLIC
 	"${BW_PYTHON_SRC}/Include"
@@ -136,10 +145,11 @@ target_include_directories(libpython PUBLIC
 target_link_libraries(libpython PUBLIC bwpython313_core)
 
 message(STATUS "libpython: pythoncore ${BW_PYTHONCORE_ARCHIVE}, "
-	"bwhooks.c compiled by this target")
+	"bwhooks.c carried by python313.dll via Directory.Build.targets")
 
 # No /INCLUDE: or -u equivalent is needed here, unlike the Linux carrier: there
 # the hooks live inside the interpreter archive and nothing in it references
 # them, so build/make/third_party_python.mak has to force them in. Here
-# bwhooks.c is this target's only object and lib/pyscript/script.cpp calls the
-# BW_Py_* entry points directly, so the linker pulls the object in on its own.
+# lib/pyscript/script.cpp calls the BW_Py_* entry points directly, and
+# python313.lib satisfies every such reference from python313.dll - the one
+# copy of s_hooks in the process.

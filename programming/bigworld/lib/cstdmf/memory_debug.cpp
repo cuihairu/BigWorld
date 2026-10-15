@@ -849,9 +849,9 @@ std::pair< const MemoryDebug::CallstackHeader * const,
 		memcpy( newHdr, tempHdr, totalSize );
 		CallstackStats stats;
 		stats.allocCount = 0;
-#ifdef MF_SERVER
+#if defined( MF_SERVER ) && !defined( _WIN32 )
 		gettimeofday( &stats.firstTime, NULL );
-#endif // MF_SERVER
+#endif // defined( MF_SERVER ) && !defined( _WIN32 )
 		std::pair< CallstackMap::iterator, bool > insert = 
 			callstacks_->insert( std::make_pair( newHdr, stats ) );
 		MF_ASSERT_NOALLOC( insert.second );
@@ -978,9 +978,9 @@ struct CallstackReport
 	uint32 leakSize;
 	uint32 numAllocations;
 	uint32 numIgnoredAllocations;
-#ifdef MF_SERVER
+#if defined( MF_SERVER ) && !defined( _WIN32 )
 		timeval firstTime;	// first time the allocation was performed
-#endif // MF_SERVER
+#endif // defined( MF_SERVER ) && !defined( _WIN32 )
 };
 
 //-----------------------------------------------------------------------------
@@ -1523,9 +1523,9 @@ size_t MemoryDebug::printLiveAllocations()
 			CallstackReport report;
 			report.callstack = csHdr;
 			report.leakSize = info.sizeUsed;
-#ifdef MF_SERVER
+#if defined( MF_SERVER ) && !defined( _WIN32 )
 			report.firstTime = csItr->second.firstTime;
-#endif // MF_SERVER
+#endif // defined( MF_SERVER ) && !defined( _WIN32 )
 
 			if ((info.flags & AF_ALLOCATION_IGNORELEAK) == 0)
 			{
@@ -1628,11 +1628,11 @@ size_t MemoryDebug::printLiveAllocations()
 				builder.appendf( " (%d ignored)", report.numIgnoredAllocations );
 			}
 
-#ifdef MF_SERVER
+#if defined( MF_SERVER ) && !defined( _WIN32 )
 			char timebuff[32];
 			convertTime( timebuff, sizeof( timebuff ), &report.firstTime );
 			builder.appendf( ", first time allocated %s", timebuff );
-#endif // MF_SERVER
+#endif // defined( MF_SERVER ) && !defined( _WIN32 )
 			builder.appendf( "\n\n" );
 			dprintf( builder.string() );
 		}

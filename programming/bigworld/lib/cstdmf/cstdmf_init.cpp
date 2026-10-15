@@ -58,8 +58,11 @@ CStdMf::CStdMf()
 	DebugFilter::instance();
 	DogWatchManager::instance();
 
-	// redirect any bad parameters to our debug function
-#ifdef _WIN32
+	// redirect any bad parameters to our debug function.
+	// !MF_SERVER to match the handler's definition above: the root
+	// superproject defines MF_SERVER for every module, so the bare _WIN32
+	// guard leaves the call without a declaration there (MSVC C2065).
+#if defined( _WIN32 ) && !defined( MF_SERVER )
 	_set_invalid_parameter_handler( CStdmfInvalidParameterHandler );
 	_CrtSetReportMode( _CRT_ASSERT, _CRTDBG_MODE_DEBUG ); // disable the error dialog box, but still send output to the debugger output window.
 #endif

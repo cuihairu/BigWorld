@@ -121,8 +121,8 @@ public:
 		prime_ = other.prime_;
 		other.prime_ = temp;
 
-		this->handleSizeChange( this->addrs_.size() );
-		other.handleSizeChange( other.addrs_.size() );
+		this->handleSizeChange( static_cast< uint32 >( this->addrs_.size() ) );
+		other.handleSizeChange( static_cast< uint32 >( other.addrs_.size() ) );
 	}
 
 	void push_back( const Mercury::Address & addr );
@@ -172,7 +172,7 @@ inline BinaryOStream & operator<<( BinaryOStream & b, const BackupHash & hash )
 inline BinaryIStream & operator>>( BinaryIStream & b, BackupHash & hash )
 {
 	b >> hash.prime_ >> hash.addrs_;
-	hash.handleSizeChange( hash.addrs_.size() );
+	hash.handleSizeChange( static_cast< uint32 >( hash.addrs_.size() ) );
 	return b;
 }
 

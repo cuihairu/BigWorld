@@ -4,6 +4,19 @@
 #include "bw_namespace.hpp"
 #include "cstdmf/bw_string.hpp"
 
+// windows.h has to be included at GLOBAL scope, before BW_BEGIN_NAMESPACE
+// below. This include used to sit inside the namespace, which pulls the whole
+// of windows.h into namespace BW - HANDLE and friends then exist only as
+// BW::HANDLE, and every global-scope use (LONG in concurrency.hpp's
+// bw_atomic32_t, ::GetCurrentThreadId) fails. The legacy VS projects never
+// saw this because pch.hpp had already included windows.h at global scope, so
+// the namespaced include was a no-op there. A no-op outside Windows.
+#if defined _WIN32
+
+#include "cstdmf_windows.hpp"
+
+#endif
+
 
 BW_BEGIN_NAMESPACE
 
@@ -11,9 +24,7 @@ BW_BEGIN_NAMESPACE
 
 #if defined _WIN32
 
-#include "cstdmf_windows.hpp"
-
-typedef struct  
+typedef struct
 {
 	HANDLE process;
 	HANDLE stdOutProcess;

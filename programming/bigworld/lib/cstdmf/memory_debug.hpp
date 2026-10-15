@@ -165,9 +165,11 @@ public:
 	struct CallstackStats
 	{
 		int32 allocCount;	///< number of allocations that came from this callstack
-#ifdef MF_SERVER
+		// First-allocation timing is POSIX-only (gettimeofday/convertTime,
+		// same split as dprintf.hpp) - MSVC has no <sys/time.h>.
+#if defined( MF_SERVER ) && !defined( _WIN32 )
 		timeval firstTime;	///< first time the allocation was performed
-#endif // MF_SERVER
+#endif // defined( MF_SERVER ) && !defined( _WIN32 )
 	};
 
 public:

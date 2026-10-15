@@ -5,6 +5,15 @@
 	#ifdef _XBOX360
 		#include <winsockx.h>
 	#else
+		// Pull windows.h lean BEFORE Winsock2.h: this is the first
+		// windows-bearing include in much of the Mercury chain, and a full
+		// windows.h drags in ole2/objbase, whose `#define interface struct`
+		// rewrites every later interface()-named declaration into a syntax
+		// error (observed as MSVC C2059/C2332 on db_engine_creator.hpp in
+		// the root superproject build). Lean windows.h skips ole2 and skips
+		// winsock.h, so Winsock2.h after it is the documented order-safe
+		// combination. A no-op outside Windows.
+		#include "cstdmf/cstdmf_windows.hpp"
 		#include <Winsock2.h> // for fdset
 	#endif
 #endif
