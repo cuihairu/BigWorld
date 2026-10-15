@@ -897,3 +897,31 @@ TODO 表下批首位候选 `network/machine_guard.cpp`（批次17 登记的 28% 
 **残余登记（96 行）**：sendto / sendAndRecv(Endpoint&) / sendAndRecv(srcip,destaddr) / sendAndRecvFromEndpointAddr 的 UDP 套接字面 83 行（需活 socket + 绑 PORT_MACHINED=20018 回环，引入环境依赖，登记不测）；typeStr 的 `** UNKNOWN **` 默认臂 12 行；seq ticker 回绕臂（s_seqTicker_ 达 0xffff 后 ++）1 行。
 
 提交范围：`lib/network/unit_test/test_machine_guard_messages.cpp`（新）、`lib/network/unit_test/Makefile.rules`、`lib/network/unit_test/CMakeLists.txt`、`TESTING.md`、`docs/upgrade-plan/migration-status.md`、`README.md`、`todo.md`、本文档（§7.29 补记 + §7.30）。
+
+### 7.31 覆盖率补强批次 31：entitydef/entity_description.cpp MD5 族直驱（2026-10-15）
+
+§7.29 残余登记中的 **MD5 族**（addToMD5 / addPersistentPropertiesToMD5，entity_description.cpp:1740-1822）本批直驱——这是 L36 热重载设计指定的 schema 版本原语（.def 变更检测以实体摘要为准）。既有 TU `test_entity_description.cpp` 追加 11 用例（entitydef_test 348→359），精准插桩口径 **64% → 70%（424/663 → 468/663 实例行）**，门禁 1454→**1465**。
+
+**摘要规则（从源码钉死）**：`addToMD5` = 名称 + 逐属性（仅 `isClientServerData()` 者：`clientServerFullIndex()` 原生序 int + `DataDescription::addToMD5`）+ client 方法**全部**（`method->addToMD5(md5, count++)`）+ base/cell 方法**仅 `isExposed()` 者**（且 count 只对入选者递增，非暴露方法不挤位）；`addPersistentPropertiesToMD5` = 名称 + 逐属性（仅 `isPersistent()` 者）。CELL_PUBLIC（DATA_GHOSTED）与 BASE（DATA_BASE）均不含 OTHER_CLIENT/OWN_CLIENT/REPLAY 位，`isClientServerData()` 为假——三分区：hp(CELL_PUBLIC) 双摘要零贡献、owner(BASE+Persistent) 只进持久摘要、nick(ALL_CLIENTS) 只进全量摘要。
+
+**entity_description.cpp MD5 族用例覆盖面**（11 用例）：
+
+1. **确定性**：同字节重解析，双摘要相等（回归守卫：摘要只依赖 schema 内容，无指针/解析顺序噪声）。
+2. **CELL_PUBLIC 零贡献**：hp 的类型 UINT16→FLOAT32 整体替换，双摘要均不动。
+3. **client-server 属性只进全量摘要**：加 nick(ALL_CLIENTS) → 全量摘要动、持久摘要不动。
+4. **BASE+Persistent 属性只进持久摘要**：hp 改 BASE+Persistent → 持久摘要动、全量摘要不动。
+5. **非持久属性对持久摘要零贡献**：加 nick(ALL_CLIENTS) 后持久摘要与空 def 相同（全量摘要不同作对照）。
+6. **未暴露 base 方法零贡献**：带非暴露 basePing 的摘要与无 BaseMethods 的摘要相等。
+7. **暴露 base 方法即入摘要**：`<Exposed/>` 使摘要变化（flags_ 暴露位 + 摘要收录双重效应）。
+8. **cell 方法同一暴露门控**：cellTick 非暴露不动、暴露即动。
+9. **client 方法无暴露门控**：`<Exposed/>` 在 ClientMethods 恒拒绝（parse 失败），方法一旦存在即进摘要。
+10. **暴露方法顺序敏感**：交换两个暴露 base 方法 → legacyExposedIndex 对调 → 摘要变化。
+11. **client-server 属性顺序敏感**：交换两个 ALL_CLIENTS 属性 → clientServerFullIndex 对调（parseProperties 按 def 顺序编号，entity_description.cpp:664-671）→ 全量摘要变化而持久摘要不动（持久摘要无 index）。
+
+**实测坑位**：① `BWResource::openSection` **先查 `DataSectionCensus` 再碰文件系统**（bwresource.cpp:614-625）——同一路径重写 .def 后重解析必须先 `BWResource::instance().purgeAll()` 驱逐，否则读到旧段（before/after 同名实体 fixture 的前置条件）；② CppUnitLite2 的 `CHECK` 宏展开为 `result_`/`m_name` 测试体成员，**自由助手函数里不可用**，用 `MF_VERIFY` 替代；③ `MD5::Digest` 默认构造不初始化字节（md5.hpp:29 `Digest() { }`），必须走 `Digest(MD5&)` 或 `operator=`；④ `BWResource::purgeAll()` 是成员函数非静态。
+
+**精准插桩补遗**：`make -n` 对**已存在且最新**的 obj 静默无输出（"is up to date"），须加 `-B` 强制重算才吐编译行。
+
+**残余登记（195 行）**：parseProperties 属性覆盖/override 臂、LoDLevels/Volatile/Implements/Components 解析面、addSectionToStream 流写侧、supersede 迁移面、watcher 面等。
+
+提交范围：`lib/entitydef/unit_test/test_entity_description.cpp`（既有 TU 追加）、`TESTING.md`、`docs/upgrade-plan/migration-status.md`、`README.md`、`todo.md`、本文档（§7.31）。

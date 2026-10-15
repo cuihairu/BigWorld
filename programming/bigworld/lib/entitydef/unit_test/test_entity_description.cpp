@@ -32,6 +32,7 @@
 
 #include "cstdmf/bw_string.hpp"
 #include "cstdmf/bw_util.hpp"
+#include "cstdmf/md5.hpp"
 
 #include <sys/stat.h>
 #include <unistd.h>
@@ -147,6 +148,65 @@ void installFixtures()
 	}
 
 	BWResource::addPath( g_fixtureRoot );
+}
+
+
+/**
+ *	Fills both schema digests of a description: the full entity digest
+ *	(addToMD5) and the persistent-property digest
+ *	(addPersistentPropertiesToMD5). The two cover different member subsets,
+ *	which the MD5 section below pins down through before/after fixtures.
+ */
+void digestsOf( const EntityDescription & description,
+	MD5::Digest & full, MD5::Digest & persistent )
+{
+	MD5 md5;
+
+	description.addToMD5( md5 );
+	full = MD5::Digest( md5 );
+
+	MD5 persistentMd5;
+
+	description.addPersistentPropertiesToMD5( persistentMd5 );
+	persistent = MD5::Digest( persistentMd5 );
+}
+
+
+/**
+ *	Writes a def, parses it and fills both schema digests. Returns the parse
+ *	result so callers can CHECK it.
+ */
+bool parseAndDigest( const char * entityName, const char * defXml,
+	MD5::Digest & full, MD5::Digest & persistent )
+{
+	writeFixtureFile( BW::string( FIXTURE_DIR ) + "/" + entityName + ".def",
+		defXml );
+
+	EntityDescription description;
+	const bool parsed = description.parse( entityName, "", NULL );
+
+	if (parsed)
+	{
+		digestsOf( description, full, persistent );
+	}
+
+	return parsed;
+}
+
+
+/**
+ *	Re-parses a def whose bytes were replaced since the previous parse.
+ *	BWResource::openSection answers from DataSectionCensus before the
+ *	filesystem, so the rewritten def has to be evicted first.
+ */
+void reparseAndDigest( const char * entityName, const char * defXml,
+	MD5::Digest & full, MD5::Digest & persistent )
+{
+	BWResource::instance().purgeAll();
+
+	const bool parsed = parseAndDigest( entityName, defXml,
+		full, persistent );
+	MF_VERIFY( parsed );
 }
 
 
@@ -1178,6 +1238,464 @@ TEST_F( EntityDefUnitTestHarness, EntityDescription_supersedeSmoke )
 
 	CHECK_EQUAL( 1, description.base().size() );
 	CHECK_EQUAL( 1, description.cell().size() );
+}
+
+
+/**
+ *	Reparsing identical def bytes yields identical digests on both surfaces:
+ *	nothing pointer- or parse-order dependent may leak into a schema id.
+ */
+TEST_F( EntityDefUnitTestHarness, EntityDescription_md5DeterministicAcrossReparse )
+{
+	installFixtures();
+
+	const char xml[] =
+		"<root>\n"
+		"	<Properties>\n"
+		"		<hp>\n"
+		"			<Type>UINT16</Type>\n"
+		"			<Flags>CELL_PUBLIC</Flags>\n"
+		"		</hp>\n"
+		"	</Properties>\n"
+		"	<BaseMethods>\n"
+		"		<basePing>\n"
+		"			<Arg>INT32</Arg>\n"
+		"		</basePing>\n"
+		"	</BaseMethods>\n"
+		"</root>\n";
+
+	MD5::Digest fullA, persistentA;
+
+	CHECK( parseAndDigest( "batch31Md5Same", xml, fullA, persistentA ) );
+
+	MD5::Digest fullB, persistentB;
+
+	reparseAndDigest( "batch31Md5Same", xml, fullB, persistentB );
+
+	CHECK( fullA == fullB );
+	CHECK( persistentA == persistentB );
+}
+
+
+/**
+ *	CELL_PUBLIC is neither client-server data nor persistent, so it feeds
+ *	neither digest: even replacing its whole type must not move either id.
+ */
+TEST_F( EntityDefUnitTestHarness, EntityDescription_md5IgnoresCellPublicProperty )
+{
+	installFixtures();
+
+	const char beforeXml[] =
+		"<root>\n"
+		"	<Properties>\n"
+		"		<hp>\n"
+		"			<Type>UINT16</Type>\n"
+		"			<Flags>CELL_PUBLIC</Flags>\n"
+		"		</hp>\n"
+		"	</Properties>\n"
+		"</root>\n";
+
+	const char afterXml[] =
+		"<root>\n"
+		"	<Properties>\n"
+		"		<hp>\n"
+		"			<Type>FLOAT32</Type>\n"
+		"			<Flags>CELL_PUBLIC</Flags>\n"
+		"		</hp>\n"
+		"	</Properties>\n"
+		"</root>\n";
+
+	MD5::Digest fullBefore, persistentBefore;
+
+	CHECK( parseAndDigest( "batch31Md5Scope", beforeXml,
+		fullBefore, persistentBefore ) );
+
+	MD5::Digest fullAfter, persistentAfter;
+
+	reparseAndDigest( "batch31Md5Scope", afterXml, fullAfter, persistentAfter );
+
+	CHECK( fullBefore == fullAfter );
+	CHECK( persistentBefore == persistentAfter );
+}
+
+
+/**
+ *	A client-server property enters the full digest only: adding one moves
+ *	addToMD5 while addPersistentPropertiesToMD5 stays put.
+ */
+TEST_F( EntityDefUnitTestHarness, EntityDescription_md5TracksClientServerProperty )
+{
+	installFixtures();
+
+	const char beforeXml[] =
+		"<root>\n"
+		"	<Properties>\n"
+		"		<hp>\n"
+		"			<Type>UINT16</Type>\n"
+		"			<Flags>CELL_PUBLIC</Flags>\n"
+		"		</hp>\n"
+		"	</Properties>\n"
+		"</root>\n";
+
+	const char afterXml[] =
+		"<root>\n"
+		"	<Properties>\n"
+		"		<hp>\n"
+		"			<Type>UINT16</Type>\n"
+		"			<Flags>CELL_PUBLIC</Flags>\n"
+		"		</hp>\n"
+		"		<nick>\n"
+		"			<Type>STRING</Type>\n"
+		"			<Flags>ALL_CLIENTS</Flags>\n"
+		"		</nick>\n"
+		"	</Properties>\n"
+		"</root>\n";
+
+	MD5::Digest fullBefore, persistentBefore;
+
+	CHECK( parseAndDigest( "batch31Md5CServer", beforeXml,
+		fullBefore, persistentBefore ) );
+
+	MD5::Digest fullAfter, persistentAfter;
+
+	reparseAndDigest( "batch31Md5CServer", afterXml, fullAfter, persistentAfter );
+
+	CHECK( fullBefore != fullAfter );
+	CHECK( persistentBefore == persistentAfter );
+}
+
+
+/**
+ *	A BASE + Persistent property enters the persistent digest only: adding
+ *	one moves addPersistentPropertiesToMD5 while addToMD5 stays put.
+ */
+TEST_F( EntityDefUnitTestHarness, EntityDescription_persistentMd5TracksServerOnlyProperty )
+{
+	installFixtures();
+
+	const char beforeXml[] =
+		"<root>\n"
+		"	<Properties>\n"
+		"		<hp>\n"
+		"			<Type>UINT16</Type>\n"
+		"			<Flags>CELL_PUBLIC</Flags>\n"
+		"		</hp>\n"
+		"	</Properties>\n"
+		"</root>\n";
+
+	const char afterXml[] =
+		"<root>\n"
+		"	<Properties>\n"
+		"		<hp>\n"
+		"			<Type>UINT16</Type>\n"
+		"			<Flags>BASE</Flags>\n"
+		"			<Persistent>true</Persistent>\n"
+		"		</hp>\n"
+		"	</Properties>\n"
+		"</root>\n";
+
+	MD5::Digest fullBefore, persistentBefore;
+
+	CHECK( parseAndDigest( "batch31Md5ServOnly", beforeXml,
+		fullBefore, persistentBefore ) );
+
+	MD5::Digest fullAfter, persistentAfter;
+
+	reparseAndDigest( "batch31Md5ServOnly", afterXml, fullAfter, persistentAfter );
+
+	CHECK( fullBefore == fullAfter );
+	CHECK( persistentBefore != persistentAfter );
+}
+
+
+/**
+ *	The persistent digest has no gate of its own beyond isPersistent(): a
+ *	def with only client-server properties digests exactly like an empty one.
+ */
+TEST_F( EntityDefUnitTestHarness, EntityDescription_persistentMd5SkipsNonPersistentProperties )
+{
+	installFixtures();
+
+	const char beforeXml[] = "<root/>\n";
+
+	const char afterXml[] =
+		"<root>\n"
+		"	<Properties>\n"
+		"		<nick>\n"
+		"			<Type>STRING</Type>\n"
+		"			<Flags>ALL_CLIENTS</Flags>\n"
+		"		</nick>\n"
+		"	</Properties>\n"
+		"</root>\n";
+
+	MD5::Digest fullBefore, persistentBefore;
+
+	CHECK( parseAndDigest( "batch31Md5NonPersist", beforeXml,
+		fullBefore, persistentBefore ) );
+
+	MD5::Digest fullAfter, persistentAfter;
+
+	reparseAndDigest( "batch31Md5NonPersist", afterXml,
+		fullAfter, persistentAfter );
+
+	CHECK( fullBefore != fullAfter );
+	CHECK( persistentBefore == persistentAfter );
+}
+
+
+/**
+ *	Base methods without <Exposed/> are invisible to addToMD5: a def with an
+ *	unexposed base method digests exactly like one without any base method.
+ */
+TEST_F( EntityDefUnitTestHarness, EntityDescription_md5SkipsNonExposedBaseMethod )
+{
+	installFixtures();
+
+	const char beforeXml[] =
+		"<root>\n"
+		"	<BaseMethods>\n"
+		"		<basePing>\n"
+		"			<Arg>INT32</Arg>\n"
+		"		</basePing>\n"
+		"	</BaseMethods>\n"
+		"</root>\n";
+
+	const char afterXml[] = "<root/>\n";
+
+	MD5::Digest fullBefore, persistentBefore;
+
+	CHECK( parseAndDigest( "batch31Md5UnexpBase", beforeXml,
+		fullBefore, persistentBefore ) );
+
+	MD5::Digest fullAfter, persistentAfter;
+
+	reparseAndDigest( "batch31Md5UnexpBase", afterXml,
+		fullAfter, persistentAfter );
+
+	CHECK( fullBefore == fullAfter );
+	CHECK( persistentBefore == persistentAfter );
+}
+
+
+/**
+ *	Exposing a base method pulls it into addToMD5, so the digest moves even
+ *	though the method set itself did not change.
+ */
+TEST_F( EntityDefUnitTestHarness, EntityDescription_md5TracksExposedBaseMethod )
+{
+	installFixtures();
+
+	const char beforeXml[] =
+		"<root>\n"
+		"	<BaseMethods>\n"
+		"		<basePing>\n"
+		"			<Arg>INT32</Arg>\n"
+		"		</basePing>\n"
+		"	</BaseMethods>\n"
+		"</root>\n";
+
+	const char afterXml[] =
+		"<root>\n"
+		"	<BaseMethods>\n"
+		"		<basePing>\n"
+		"			<Arg>INT32</Arg>\n"
+		"			<Exposed/>\n"
+		"		</basePing>\n"
+		"	</BaseMethods>\n"
+		"</root>\n";
+
+	MD5::Digest fullBefore, persistentBefore;
+
+	CHECK( parseAndDigest( "batch31Md5ExpBase", beforeXml,
+		fullBefore, persistentBefore ) );
+
+	MD5::Digest fullAfter, persistentAfter;
+
+	reparseAndDigest( "batch31Md5ExpBase", afterXml, fullAfter, persistentAfter );
+
+	CHECK( fullBefore != fullAfter );
+	CHECK( persistentBefore == persistentAfter );
+}
+
+
+/**
+ *	Cell methods sit behind the same exposure gate as base methods: an
+ *	unexposed cell method does not move the digest, an exposed one does.
+ */
+TEST_F( EntityDefUnitTestHarness, EntityDescription_md5CellMethodExposureGate )
+{
+	installFixtures();
+
+	const char beforeXml[] =
+		"<root>\n"
+		"	<CellMethods>\n"
+		"		<cellTick>\n"
+		"			<Arg>UINT32</Arg>\n"
+		"		</cellTick>\n"
+		"	</CellMethods>\n"
+		"</root>\n";
+
+	const char afterXml[] =
+		"<root>\n"
+		"	<CellMethods>\n"
+		"		<cellTick>\n"
+		"			<Arg>UINT32</Arg>\n"
+		"			<Exposed/>\n"
+		"		</cellTick>\n"
+		"	</CellMethods>\n"
+		"</root>\n";
+
+	MD5::Digest fullBefore, persistentBefore;
+
+	CHECK( parseAndDigest( "batch31Md5CellGate", beforeXml,
+		fullBefore, persistentBefore ) );
+
+	MD5::Digest fullAfter, persistentAfter;
+
+	reparseAndDigest( "batch31Md5CellGate", afterXml,
+		fullAfter, persistentAfter );
+
+	CHECK( fullBefore != fullAfter );
+	CHECK( persistentBefore == persistentAfter );
+}
+
+
+/**
+ *	Client methods carry no exposure gate - <Exposed/> is not even legal
+ *	there - so a plain client method moves the digest as soon as it exists.
+ */
+TEST_F( EntityDefUnitTestHarness, EntityDescription_md5ClientMethodAlwaysTracked )
+{
+	installFixtures();
+
+	const char beforeXml[] = "<root/>\n";
+
+	const char afterXml[] =
+		"<root>\n"
+		"	<ClientMethods>\n"
+		"		<clientNotify>\n"
+		"			<Arg>FLOAT32</Arg>\n"
+		"		</clientNotify>\n"
+		"	</ClientMethods>\n"
+		"</root>\n";
+
+	MD5::Digest fullBefore, persistentBefore;
+
+	CHECK( parseAndDigest( "batch31Md5ClientAlways", beforeXml,
+		fullBefore, persistentBefore ) );
+
+	MD5::Digest fullAfter, persistentAfter;
+
+	reparseAndDigest( "batch31Md5ClientAlways", afterXml,
+		fullAfter, persistentAfter );
+
+	CHECK( fullBefore != fullAfter );
+	CHECK( persistentBefore == persistentAfter );
+}
+
+
+/**
+ *	Exposed methods digest with their position counter, so swapping two
+ *	exposed base methods changes the schema id even though the method set
+ *	is identical.
+ */
+TEST_F( EntityDefUnitTestHarness, EntityDescription_md5ExposedMethodOrderSensitivity )
+{
+	installFixtures();
+
+	const char beforeXml[] =
+		"<root>\n"
+		"	<BaseMethods>\n"
+		"		<basePing>\n"
+		"			<Arg>INT32</Arg>\n"
+		"			<Exposed/>\n"
+		"		</basePing>\n"
+		"		<baseHeal>\n"
+		"			<Arg>UINT32</Arg>\n"
+		"			<Exposed/>\n"
+		"		</baseHeal>\n"
+		"	</BaseMethods>\n"
+		"</root>\n";
+
+	const char afterXml[] =
+		"<root>\n"
+		"	<BaseMethods>\n"
+		"		<baseHeal>\n"
+		"			<Arg>UINT32</Arg>\n"
+		"			<Exposed/>\n"
+		"		</baseHeal>\n"
+		"		<basePing>\n"
+		"			<Arg>INT32</Arg>\n"
+		"			<Exposed/>\n"
+		"		</basePing>\n"
+		"	</BaseMethods>\n"
+		"</root>\n";
+
+	MD5::Digest fullBefore, persistentBefore;
+
+	CHECK( parseAndDigest( "batch31Md5MethOrder", beforeXml,
+		fullBefore, persistentBefore ) );
+
+	MD5::Digest fullAfter, persistentAfter;
+
+	reparseAndDigest( "batch31Md5MethOrder", afterXml,
+		fullAfter, persistentAfter );
+
+	CHECK( fullBefore != fullAfter );
+	CHECK( persistentBefore == persistentAfter );
+}
+
+
+/**
+ *	Client-server properties digest with their clientServerFullIndex, which
+ *	parseProperties numbers in def order, so swapping two client-server
+ *	properties changes the schema id. Their order is also member order in
+ *	addToMD5 itself. The persistent digest, which has no index, stays put.
+ */
+TEST_F( EntityDefUnitTestHarness, EntityDescription_md5ClientServerPropertyOrderSensitivity )
+{
+	installFixtures();
+
+	const char beforeXml[] =
+		"<root>\n"
+		"	<Properties>\n"
+		"		<nick>\n"
+		"			<Type>STRING</Type>\n"
+		"			<Flags>ALL_CLIENTS</Flags>\n"
+		"		</nick>\n"
+		"		<score>\n"
+		"			<Type>UINT16</Type>\n"
+		"			<Flags>ALL_CLIENTS</Flags>\n"
+		"		</score>\n"
+		"	</Properties>\n"
+		"</root>\n";
+
+	const char afterXml[] =
+		"<root>\n"
+		"	<Properties>\n"
+		"		<score>\n"
+		"			<Type>UINT16</Type>\n"
+		"			<Flags>ALL_CLIENTS</Flags>\n"
+		"		</score>\n"
+		"		<nick>\n"
+		"			<Type>STRING</Type>\n"
+		"			<Flags>ALL_CLIENTS</Flags>\n"
+		"		</nick>\n"
+		"	</Properties>\n"
+		"</root>\n";
+
+	MD5::Digest fullBefore, persistentBefore;
+
+	CHECK( parseAndDigest( "batch31Md5PropOrder", beforeXml,
+		fullBefore, persistentBefore ) );
+
+	MD5::Digest fullAfter, persistentAfter;
+
+	reparseAndDigest( "batch31Md5PropOrder", afterXml,
+		fullAfter, persistentAfter );
+
+	CHECK( fullBefore != fullAfter );
+	CHECK( persistentBefore == persistentAfter );
 }
 
 

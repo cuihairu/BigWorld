@@ -94,7 +94,7 @@ gcovr -r /home/cui/workspaces/BigWorld/programming/bigworld --txt -o /tmp/cov.tx
 | chunk/chunk_boundary.cpp | 403/403 | 0% | 受限：同 chunk 体系 |
 | network/logger_endpoint.cpp | 398/398 | 0% | 维持受限登记（真消息日志管线，批次17） |
 | resmgr/bwresource.cpp | 282/746 | 62% | 批次 28 实测（精准插桩 464/746；386/746 为 09-28 全量口径） |
-| entitydef/entity_description.cpp | 239/663 | 64% | 批次 29 实测（精准插桩 424/663；0% 为 09-28 全量口径，受限判定推翻） |
+| entitydef/entity_description.cpp | 195/663 | 70% | 批次 31 实测（精准插桩 468/663；239/663 为批次 29 口径） |
 | network/logger_message_forwarder.cpp | 335/335 | 0% | 维持受限登记（批次17） |
 | entitydef/method_description.cpp | 137/466 | 70% | 批次 28 实测（精准插桩 329/466；323/478 为 09-28 全量口径） |
 | server/python_server.cpp | 298/298 | 0% | 受限：需完整 app 装配 |
@@ -291,3 +291,20 @@ gcovr 以该目录为根。残余 96 行分类登记：sendto / sendAndRecv(Endp
 destaddr) / sendAndRecvFromEndpointAddr 的 UDP 套接字面 83 行（需活 socket + 绑 PORT_MACHINED=
 20018 回环，引入环境依赖故登记不测）、typeStr 的 `** UNKNOWN **` 默认臂 12 行、seq ticker 回绕臂
 （s_seqTicker_ 达 0xffff 后 ++）1 行；见台账 §7.30。
+
+`entitydef/entity_description.cpp` 64%→**70%**（精准插桩口径 424/663→468/663 实例行，批次 31；
+表值 239/663→195/663）。批次 29 的「需 EntityType/EntityType XML 套件」判定已推翻（EntityDescription
+默认构造 + parse 仅需 BWResource 打开 .def 段），本批直驱其 **MD5 族**——addToMD5 与
+addPersistentPropertiesToMD5 两个 schema 摘要面，正是 L36 热重载设计指定的 schema 版本原语。
+既有 TU `test_entity_description.cpp` 追加 11 用例（entitydef_test 348→359）：确定性（同字节
+重解析双摘要相等）、CELL_PUBLIC 属性对双摘要零贡献（连类型替换都不动）、client-server 属性只进
+全量摘要、BASE+Persistent 属性只进持久摘要、非持久属性对持久摘要零贡献（与空 def 同摘要）、
+未暴露 base 方法零贡献（与无 base 方法同摘要）、`<Exposed/>` 暴露 base/cell 方法即入摘要、
+client 方法无暴露门控（`<Exposed/>` 在 ClientMethods 恒拒绝）、暴露方法顺序敏感（legacyExposedIndex
+随位置计数）、client-server 属性顺序敏感（clientServerFullIndex 按 def 顺序编号）。**实测坑位**：
+`BWResource::openSection` 先查 `DataSectionCensus` 再碰文件系统（bwresource.cpp:614-625），同一路径
+重写 .def 后重解析**必须**先 `BWResource::instance().purgeAll()` 驱逐，否则读到旧段；
+`CHECK` 宏展开为 `result_`/`m_name` 成员，自由助手函数里只能用 `MF_VERIFY`；`MD5::Digest` 默认
+构造不初始化字节，须走 `Digest(MD5&)` 或 `operator=`。残余 195 行分类登记：parseProperties 覆盖/
+override 臂、LoDLevels/Volatile/Implements/Components 解析面、addSectionToStream 流写侧、
+supersede 迁移面、watcher 面等，见台账 §7.31。
