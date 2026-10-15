@@ -463,6 +463,18 @@ entityID + spaceID 占 3 个，余量充足。见台账 §7.35。
    `CMAKE_CONFIGURATION_TYPES` 定为 `Debug;Hybrid`，生成的工程不含 Release 配置，
    `--config Release` 对任何目标必败。构建步骤改为 `--config Hybrid`（根自身的规范
    配置；libpython ExternalProject 仍 `build.bat -c Release` 编 pythoncore，不受影响）。
+6. 二轮 dispatch（run 38745701681）越过 MSB8013 进入真实编译，暴露两个构建期阻塞头：
+   ① **cstdmf 腿在 superproject 模式回归（已修）**——`critical_error_handler.cpp` 编
+   `critical_message_box.hpp` 时 `HWND/WNDPROC/CALLBACK` 未声明（C2065/C2923）：standalone
+   门禁因 `PCH_SUPPORT=1` 让 `pch.hpp` 文本注入 `cstdmf_windows.hpp`（windows.h），而根
+   server 配置关 `PCH_SUPPORT`（workflow 头注预记的偏差首次实际咬人）。修复 =
+   `critical_message_box.hpp` 自带 `#include "cstdmf_windows.hpp"`（`concurrency.hpp` /
+   `debug_exception_filter.hpp` 同款仓内 idiom，Windows 外空展开零行为差）；Linux 侧选择性
+   门禁 cstdmf_test 451 用例 0 失败，superproject 侧证明由下一轮 dispatch 出。
+   ② **`examples/cellapp_extension` 全 TU `C1083: cellapp/entity.hpp 等找不到`（未动）**
+   ——example 目标（`BW_ADD_LIBRARY ... MODULE`，自身无 INCLUDE_DIRS）没把 `server/` 父目录
+   带上（`cellapp/xxx.hpp` 形态依赖 `programming/bigworld/server` 在 include 路径），根
+   include 布局如何供给是构建系统设计件，记录为下一个阻塞头。
 门禁：CI 配置改动 → 全量套件 `make -s -rR bw-run-all-unit-tests`，
 21 模块 / 1505 用例 / 0 失败（与批次 36 同数——本轮无测试改动），
 YAML 经解析校验（3 jobs / 各自 steps 与 job 级 if 正确）。见台账 §7.37。
