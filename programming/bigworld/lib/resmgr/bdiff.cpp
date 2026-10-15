@@ -66,7 +66,8 @@ bool performDiff( const Bytes& v1, const Bytes& v2, FILE * diff )
 		for (VecOfs::const_iterator vi = vec.begin(); vi != vec.end(); ++vi )
 		{
 			unsigned j;
-			unsigned m = std::min( v1.size()-*vi, v2.size()-i );
+			unsigned m = static_cast< unsigned >(
+				std::min( v1.size()-*vi, v2.size()-i ) );
 			if (m > 32767)
 				m = 32767;
 			if (m <= bestLen)
@@ -138,7 +139,7 @@ bool performDiff( const Bytes& v1, const Bytes& v2, FILE * diff )
 	}
 	if (lastMatch < v2.size())
 	{
-		unsigned short out = v2.size() - lastMatch;
+		unsigned short out = static_cast< unsigned short >( v2.size() - lastMatch );
 		INFO_MSG( "write final %u (%" PRIzu ", %u)\n",
 				(unsigned)v2.size() - lastMatch, v2.size(), lastMatch );
 		if (1 != fwrite( &out, sizeof(out), 1, diff ))

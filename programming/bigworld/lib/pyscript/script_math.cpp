@@ -3,6 +3,24 @@
 #include "script_math.hpp"
 
 #include "script.hpp"
+
+// PySTLSequenceHolder's qualified Script::setData call binds at the
+// template's definition point (stl_to_py.hpp), so under two-phase lookup
+// the Keyframe converter defined further down this file is not a candidate
+// (MSVC C2665 under /std:c++20; the legacy permissive lookup used to see
+// it). Declaring it over the underlying pair type here - Keyframe is that
+// pair - makes that definition a definition-point candidate.
+BW_BEGIN_NAMESPACE
+
+namespace Script
+{
+	int setData( PyObject * pObject,
+		std::pair< float, MatrixProviderPtr > & rpVal,
+		const char * varName );
+}
+
+BW_END_NAMESPACE
+
 #include "stl_to_py.hpp"
 
 #include "cstdmf/guard.hpp"

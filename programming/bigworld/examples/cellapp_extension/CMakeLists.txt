@@ -38,6 +38,12 @@ ENDIF()
 # (server/cellapp/CMakeLists.txt). The legacy VS project carried this
 # additional include dir; without it every TU fails with
 # "'cellapp/controller.hpp': No such file or directory".
-TARGET_INCLUDE_DIRECTORIES( cellapp_extension PRIVATE ${BW_SOURCE_DIR}/server )
+# The source root itself is the other cellapp include (make track:
+# -I$(BW_ABS_SRC) in server/cellapp/Makefile.rules) - bounce_grenade_extra.cpp
+# reaches "common/closest_triangle.hpp" through it (C1083 in the root
+# superproject build).
+TARGET_INCLUDE_DIRECTORIES( cellapp_extension PRIVATE
+	${BW_SOURCE_DIR}
+	${BW_SOURCE_DIR}/server )
 
 BW_PROJECT_CATEGORY( cellapp_extension "Examples" )

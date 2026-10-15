@@ -19,6 +19,9 @@
 #include <fcntl.h>
 #include <stdio.h>
 #include <windows.h>
+// CommandLineToArgvW lives in shellapi.h, which windows.h does not pull in
+// even in full mode (C3861 in the root superproject build).
+#include <shellapi.h>
 #include <cassert>
 #include "service.hpp"
 
@@ -1017,7 +1020,9 @@ DWORD CService::CheckSIDs(void)
                             if ( AllocConsole() )
                             {
                                 // Now re-map the C Runtime STDIO handles
-                                int hCrt = ::_open_osfhandle((long) GetStdHandle(STD_OUTPUT_HANDLE), _O_TEXT);
+                                int hCrt = ::_open_osfhandle(
+						reinterpret_cast< intptr_t >(
+							GetStdHandle(STD_OUTPUT_HANDLE) ), _O_TEXT);
 
                                 *stdout = *(::_fdopen(hCrt, "w"));
                                 ::setvbuf(stdout, NULL, _IONBF, 0);

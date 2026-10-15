@@ -66,7 +66,8 @@ ScriptTimers::ScriptID ScriptTimers::addTimer( float initialOffset,
 
 	TimerHandle timerHandle = g_pTimeQueue->add(
 			initialTicks, repeatTicks,
-			pHandler, reinterpret_cast< void * >( userArg ),
+			pHandler,
+			reinterpret_cast< void * >( static_cast< intptr_t >( userArg ) ),
 			"ScriptTimer" );
 
 	if (timerHandle.isSet())
@@ -217,7 +218,8 @@ void ScriptTimers::readFromStream( BinaryIStream & stream, uint32 numTimers,
 		stream >> timerID >> time >> interval >> userData;
 
 		map_[ timerID ] = g_pTimeQueue->add(
-			time, interval, pHandler, reinterpret_cast< void * >( userData ),
+			time, interval, pHandler,
+			reinterpret_cast< void * >( static_cast< intptr_t >( userData ) ),
 			"ScriptTimer" );
 	}
 }

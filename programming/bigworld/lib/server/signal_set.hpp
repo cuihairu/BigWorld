@@ -104,6 +104,97 @@ private:
 
 BW_END_NAMESPACE
 
+#else // defined( _WIN32 )
+
+// Windows compile-compat Set: the POSIX section above needs sigset_t, so
+// here Set keeps its interface over a plain bitmap instead. The signal
+// numbers (including the POSIX-only ones lib/server/common.hpp defines for
+// MSVC) are register-and-flag only - Windows never delivers them - and
+// Blocker stays POSIX-only per the decision note above.
+
+#include "server/common.hpp"
+
+BW_BEGIN_NAMESPACE
+
+namespace Signal
+{
+
+/**
+ * 	This class keeps the POSIX Set's interface over a fixed bitmap. There is
+ * 	no operator sigset_t* because there is no sigset_t to hand out.
+ */
+class Set
+{
+public:
+	enum InitState
+	{
+		EMPTY, FULL
+	};
+
+	enum { NUM_SIGNALS = 32 };
+
+	Set( InitState state = EMPTY )
+	{
+		this->clearAll();
+
+		if (state == FULL)
+		{
+			for (int signal = 1; signal < NUM_SIGNALS; ++signal)
+			{
+				signals_[ signal ] = true;
+			}
+
+			isClear_ = false;
+		}
+	}
+
+	void clear( int signal )
+	{
+		if (this->inRange( signal ))
+		{
+			signals_[ signal ] = false;
+		}
+	}
+
+	void set( int signal )
+	{
+		if (this->inRange( signal ))
+		{
+			signals_[ signal ] = true;
+			isClear_ = false;
+		}
+	}
+
+	void clearAll()
+	{
+		for (int i = 0; i < NUM_SIGNALS; ++i)
+		{
+			signals_[ i ] = false;
+		}
+
+		isClear_ = true;
+	}
+
+	bool isClear() const			{ return isClear_; }
+	bool isSet( int signal ) const
+	{
+		return this->inRange( signal ) && signals_[ signal ];
+	}
+
+private:
+	static bool inRange( int signal )
+	{
+		return (1 <= signal) && (signal < NUM_SIGNALS);
+	}
+
+	bool	signals_[ NUM_SIGNALS ];
+	bool	isClear_;
+};
+
+}	// end namespace Signal
+
+BW_END_NAMESPACE
+
 #endif // !defined( _WIN32 )
 
 #endif // SIGNAL_SET_HPP

@@ -38,7 +38,11 @@ extern "C" {
 
 		unsigned int if_index;	/* 1, 2, ... */
 
-		char *if_name;			/* null terminated name: "eth0", ... */
+		// const: initialised from string literals below, which a
+		// char* member would reject since C++11 (MSVC C2440 under
+		// /std:c++20 in the root superproject build). The only
+		// non-POSIX consumer copies the name into a BW::string.
+		const char *if_name;	/* null terminated name: "eth0", ... */
 
 	};
 
@@ -64,7 +68,8 @@ extern "C" {
 
 		unsigned int if_index;	/* 1, 2, ... */
 
-		char *if_name;			/* null terminated name: "eth0", ... */
+		// const: same literal-initialisation constraint as the stub above.
+		const char *if_name;	/* null terminated name: "eth0", ... */
 
 	};
 

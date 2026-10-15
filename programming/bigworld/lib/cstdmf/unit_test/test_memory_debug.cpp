@@ -1,5 +1,7 @@
 #include "pch.hpp"
 
+#include <vector>
+
 #include "cstdmf/allocator.hpp"
 #include "cstdmf/bw_memory.hpp"
 #include "cstdmf/memory_debug.hpp"
@@ -195,6 +197,43 @@ TEST( MemoryDebug_testCounts )
 #ifdef _WIN32
 #pragma warning(pop)
 #endif
+
+
+TEST( MemoryDebug_testDebugStlAllocator )
+{
+	// DebugStlAllocator's allocate/deallocate used to spell their signature
+	// with std::allocator<T>::pointer/size_type, which C++20 removed from
+	// std::allocator (MSVC C2039 under /std:c++20 in the root superproject
+	// build). This exercises the API directly and through a standard
+	// container so the signature stays allocator-traits compatible.
+	FixedSizedAllocator fixedAllocator( 16, 64, "test_debug_stl_allocator" );
+
+	typedef BW::detail::DebugStlAllocator< int > TestAllocator;
+	TestAllocator testAllocator( &fixedAllocator );
+
+	int * pFirst = testAllocator.allocate( 4 );
+	testAllocator.construct( pFirst, 42 );
+	CHECK_EQUAL( 42, *pFirst );
+
+	int * pSecond = testAllocator.allocate( 1 );
+	testAllocator.construct( pSecond, 7 );
+	CHECK_EQUAL( 7, *pSecond );
+	testAllocator.destroy( pSecond );
+	testAllocator.deallocate( pSecond, 1 );
+
+	std::vector< int, TestAllocator > testVector( testAllocator );
+	testVector.push_back( 1 );
+	testVector.push_back( 2 );
+	testVector.push_back( 3 );
+
+	CHECK_EQUAL( 3u, testVector.size() );
+	CHECK_EQUAL( 1, testVector[ 0 ] );
+	CHECK_EQUAL( 2, testVector[ 1 ] );
+	CHECK_EQUAL( 3, testVector[ 2 ] );
+
+	testAllocator.destroy( pFirst );
+	testAllocator.deallocate( pFirst, 4 );
+}
 
 
 #if ENABLE_SMARTPOINTER_TRACKING

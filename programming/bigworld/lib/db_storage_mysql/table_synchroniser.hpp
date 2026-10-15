@@ -3,7 +3,11 @@
 
 #include "cstdmf/bw_namespace.hpp"
 
+// pid_t; MSVC has no <unistd.h> (C1083 in the root superproject build) but
+// its CRT headers provide pid_t.
+#if !defined( _WIN32 )
 #include <unistd.h>
+#endif // !defined( _WIN32 )
 
 #include "cstdmf/bw_string.hpp"
 

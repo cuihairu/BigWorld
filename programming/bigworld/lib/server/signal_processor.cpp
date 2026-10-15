@@ -180,6 +180,13 @@ void SignalProcessor::addSignalHandler( int sigNum,
  */
 void SignalProcessor::enableDetectSignal( int sigNum, int flags )
 {
+#if defined( _WIN32 )
+	// MSVC's CRT only offers signal(): sigaction/sigfillset/SA_SIGINFO have
+	// no equivalents, and there is no handler-time masking. POSIX-only
+	// numbers fail the signal() call harmlessly with SIG_ERR (see the
+	// constants block in server/common.hpp).
+	::signal( sigNum, &signalHandler );
+#else // defined( _WIN32 )
 	struct sigaction action;
 	action.sa_handler = &signalHandler;
 	sigfillset( &(action.sa_mask) );
@@ -194,6 +201,7 @@ void SignalProcessor::enableDetectSignal( int sigNum, int flags )
 	action.sa_flags = flags;
 
 	::sigaction( sigNum, &action, NULL );
+#endif // defined( _WIN32 )
 }
 
 
@@ -307,8 +315,12 @@ void SignalProcessor::handleSignal( int sigNum )
  */
 void SignalProcessor::dispatch()
 {
+	// Blocker relies on pthread_sigmask and stays POSIX-only (see
+	// server/signal_set.hpp); on Windows the dispatch runs unblocked.
+#if !defined( _WIN32 )
 	const Signal::Set allSignals( Signal::Set::FULL );
 	Signal::Blocker blocker( allSignals );
+#endif // !defined( _WIN32 )
 
 	int sigNum = SIGMIN;
 	while (sigNum <= SIGMAX)
@@ -366,6 +378,13 @@ void SignalProcessor::dispatchSignal( int sigNum )
  */
 int SignalProcessor::waitForSignals( const Signal::Set & set )
 {
+#if defined( _WIN32 )
+	// sigwaitinfo has no Windows equivalent; its only caller
+	// (TableSynchroniser::run) is stubbed out on Windows as well.
+	ERROR_MSG( "SignalProcessor::waitForSignals: "
+			"Not supported on this platform\n" );
+	return -1;
+#else // defined( _WIN32 )
 	int sigNum = ::sigwaitinfo( set, NULL );
 
 	while (sigNum < 0 && errno == EINTR)
@@ -376,6 +395,7 @@ int SignalProcessor::waitForSignals( const Signal::Set & set )
 	this->dispatchSignal( sigNum );
 
 	return sigNum;
+#endif // defined( _WIN32 )
 }
 
 
@@ -386,10 +406,12 @@ int SignalProcessor::waitForSignals( const Signal::Set & set )
  */
 const char * SignalProcessor::signalNumberToString( int sigNum )
 {
+#if !defined( _WIN32 )
 	if (sigNum >= SIGRTMIN && sigNum <= SIGRTMAX)
 	{
 		return "SIGRTxxx";
 	}
+#endif // !defined( _WIN32 )
 
 	// Check sigNum is in valid signal range.
 	/* BIGWORLD(3.13 migration): SIGUNUSED is no longer defined by glibc;

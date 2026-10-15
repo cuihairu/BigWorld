@@ -4,6 +4,42 @@
 #include "cstdmf/bwversion.hpp"
 #include "network/basictypes.hpp"
 
+#if defined( _WIN32 )
+// Compile-compat only: the tree's server code (CellApp::onSignalled,
+// DBAppMgr::onSignalled, table_synchroniser, the SignalProcessor name
+// table) references the POSIX signal family, while MSVC's <signal.h> only
+// knows seven of them. These keep their POSIX Linux values so the name
+// table in signal_processor.cpp stays shared. None of these numbers is
+// ever DELIVERED by Windows - registering one with signal() fails with
+// SIG_ERR - so handlers registered against them are inert until a real
+// delivery mechanism is designed for Windows.
+#include <signal.h>
+#define SIGHUP 1
+#define SIGQUIT 3
+#define SIGTRAP 5
+#define SIGKILL 9
+#define SIGUSR1 10
+#define SIGUSR2 12
+#define SIGPIPE 13
+#define SIGALRM 14
+#define SIGSTKFLT 16
+#define SIGCHLD 17
+#define SIGCONT 18
+#define SIGSTOP 19
+#define SIGTSTP 20
+#define SIGTTIN 21
+#define SIGTTOU 22
+#define SIGURG 23
+#define SIGXCPU 24
+#define SIGXFSZ 25
+#define SIGVTALRM 26
+#define SIGPROF 27
+#define SIGWINCH 28
+#define SIGIO 29
+#define SIGPWR 30
+#define SIGSYS 31
+#endif // defined( _WIN32 )
+
 
 BW_BEGIN_NAMESPACE
 

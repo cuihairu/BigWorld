@@ -25,7 +25,7 @@ float EMA::calculateBiasFromNumSamples( float numSamples,
 		float weighting )
 {
 	return (!isZero( numSamples )) ?
-		exp( log( 1.f - weighting )/numSamples ) :
+		static_cast< float >( exp( log( 1.f - weighting )/numSamples ) ) :
 		0.f;
 }
 

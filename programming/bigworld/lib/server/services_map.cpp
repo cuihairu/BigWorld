@@ -202,7 +202,8 @@ bool ServicesMap::chooseFragment( const BW::string & serviceName,
 	}
 
 	// TODO: Make this more efficient. Change to BW::map of std:vector?
-	int count = std::distance( range.first, range.second );
+	int count =
+		static_cast< int >( std::distance( range.first, range.second ) );
 
 	Fragments::const_iterator iter = range.first;
 

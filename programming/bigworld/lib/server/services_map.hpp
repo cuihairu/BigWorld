@@ -34,7 +34,7 @@ public:
 	const_iterator begin() const { return fragments_.begin(); }
 	const_iterator end() const { return fragments_.end(); }
 
-	uint size() const { return fragments_.size(); }
+	uint size() const { return static_cast< uint >( fragments_.size() ); }
 
 	bool empty() const { return fragments_.empty(); }
 

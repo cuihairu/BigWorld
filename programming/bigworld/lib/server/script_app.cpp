@@ -237,7 +237,7 @@ bool ScriptApp::triggerDelayableEvent( const char * eventName,
 	bool result =
 		this->scriptEvents().triggerEvent( eventName, pArgs, resultsList );
 
-	int size = resultsList.size();
+	int size = static_cast< int >( resultsList.size() );
 	DelayedEvent * pDelayedEvent = NULL;
 
 	for (int i = 0; i < size; ++i)

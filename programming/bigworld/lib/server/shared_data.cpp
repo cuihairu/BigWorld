@@ -266,7 +266,7 @@ int SharedData::ass_subscript( PyObject* key, PyObject * value )
  */
 int SharedData::length()
 {
-	return PyDict_Size( pMap_ );
+	return static_cast< int >( PyDict_Size( pMap_ ) );
 }
 
 

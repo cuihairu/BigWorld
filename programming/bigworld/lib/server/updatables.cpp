@@ -2,6 +2,10 @@
 #include "updatable.hpp"
 
 #include "cstdmf/debug.hpp"
+// uint (the POSIX sys/types.h typedef) is spelled here in the loop and two
+// index guards; stdmf.hpp defines it for every platform (C3861/C2065 in the
+// root superproject build).
+#include "cstdmf/stdmf.hpp"
 
 #include <cstddef>
 
@@ -85,7 +89,7 @@ void Updatables::adjustForAddedObject()
 	int level = -1 - pObject->removalHandle_;
 	int hole = levelSize_.back();
 
-	int currLevel = levelSize_.size() - 1;
+	int currLevel = static_cast< int >( levelSize_.size() ) - 1;
 
 	// Each element of levelSize_ stores the number of Updatables at
 	// that level or lower. It is like an end pointer for that level.
@@ -204,7 +208,7 @@ bool Updatables::remove( Updatable * pObject )
 void Updatables::call()
 {
 	inUpdate_ = true;
-	unsigned int size = objects_.size();
+	unsigned int size = static_cast< unsigned int >( objects_.size() );
 
 	for (unsigned int i = 0; i < size; i++)
 	{
@@ -225,7 +229,8 @@ void Updatables::call()
 	inUpdate_ = false;
 
 	// Adjust any objects newly registered while inUpdate_ was true.
-	const int numAdded = objects_.size() - size;
+	const int numAdded =
+		static_cast< int >( objects_.size() - size );
 	for (int i = 0; i < numAdded; ++i)
 	{
 		this->adjustForAddedObject();

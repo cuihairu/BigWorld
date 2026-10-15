@@ -57,7 +57,7 @@ public:
 	const EntityDescription & description() const;
 
 	uint propCountGhost() const						{ return propCountGhost_; }
-	uint propCountGhostPlusReal() const				{ return propDescs_.size();}
+	uint propCountGhostPlusReal() const				{ return static_cast< uint >( propDescs_.size() );}
 	DataDescription * propIndex( int index ) const	{ return propDescs_[index];}
 
 	uint propCountClientServer() const

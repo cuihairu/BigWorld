@@ -608,3 +608,66 @@ signal_set→0、`interface` 宏级联 146→32（全局 lean 未覆盖的残留
 /showIncludes 探针定路由）；转换告警 ~15 站点（C4267/C4244：balance_config、
 bdiff、ema、id_client、py_services_map、python_server×6、services_map、
 script_timers）；Berkeley 族调用点转换（现由豁免压制）。
+
+**批次 40（2026-10-16）——探针 #8 普查解码与两大主族修复（R1017）**
+
+探针 #8（run 38795984158，`7358401d`，8m13s，922 错误）全部分族。
+R1016D 五族证实全灭（C4005=0、C7555=0、C4996=0、C1083 仅剩 cellapp_extension
+closest_triangle 1、C2220=8）；总数 649→922 为洋葱效应——C4005 噪声消失后
+显出两大主族：
+
+- **interface 宏级联（约 420 行）路由闭合（无需 /showIncludes）**：include
+  闭包脚本证实 `network/basictypes.hpp → math/vector3.hpp → math/xp_math.hpp
+  → d3dx9math.h（DXSDK）→ d3dx9.h → d3d9.h（Windows SDK，不在 DXSDK 包内）
+  → COM 头直接抵达 rpcndr.h` 的 `#define interface struct`。WIN32_LEAN_AND_MEAN
+  不经此路（windows.h 不是载体，全局 lean 已生效）。全部报错站点都是名为
+  interface 的标识符（ServerApp::interface()、TimeKeeper 构造参数、
+  db_engine_creator::interface()、createImpl 参数、signal 站点解析级联）。
+  修法：xp_math.hpp 在 DirectX include 块后 `#undef interface`——rpcndr.h
+  的 include guard 保证该 TU 内不会重定义，一次 undef 即持久。
+- **std::allocator C++20 成员移除（432 行，43 个实例化）**：
+  DebugStlAllocator 的 allocate/deallocate 签名用
+  `std::allocator<T>::pointer/size_type` 拼写——C++20 已移除（MSVC C2039
+  硬错；libstdc++ 仅留弃用扩展，Linux 轨无感）。测试先行：
+  test_memory_debug.cpp 新增 MemoryDebug_testDebugStlAllocator
+  （allocate/construct/destroy/deallocate 直测 + std::vector 容器用法），
+  再把签名改为类自身 typedef（全仓唯一 std::allocator 使用点，grep 证实）。
+- **转换告警族（C4267/C4244/C4312/C4311/C4302/C4065）20 站点全修**：
+  size_t→int/uint/uint32/ushort、double→float、Py_ssize_t→int、time_t→int、
+  ScriptList::size_type→int 的 static_cast；int32→void* 经 intptr_t
+  （script_timers×2）；HANDLE→intptr_t（service _open_osfhandle）；
+  SOCKET→int（python_server accept）。entity_app C4065（switch 只有
+  default）实为 SIGQUIT 未定义的解析级联，随信号宏修复消失；
+  time_keeper/updatables 的 C4430/C4244 同理为解析级联。
+- **小族**：ws2tcpip.h 补 include（inet_pton/getaddrinfo/inet_ntop 居所，
+  address_resolver/nat_config，修 R1016D 自身 C3861 残留）；A/W 分裂
+  （全局 UNICODE 下 plugin_library 钉 A 版 API、util.hpp exePath
+  GetModuleFileNameA、bwresource 规范化 _fullpath + exeDir 反斜杠）；
+  POSIX 守卫（updatables uint→stdmf include、py_traceback
+  _open/_read/_close+ssize_t+io.h、config_reader Windows getline 助手
+  （fgets+realloc 增长，同 NULL/-1 EOF 契约）、manager_app_gateway
+  Sleep(delay/1000)、table_synchroniser 整 TU Windows 桩（沿
+  child_process.cpp 先例）、signal 族（common.hpp 25 个 POSIX 信号号
+  compile-compat 宏 + signal_set.hpp Windows 位图 Set（无 operator
+  sigset_t*，Blocker 保持 POSIX-only）+ signal_processor 四处平台分裂：
+  signal() 注册 / dispatch 去 Blocker / waitForSignals stub /
+  signalNumberToString SIGRT 门控）、script_math 两阶段查找（stl_to_py.hpp
+  模板定义点绑定的 Script::setData 对 pair<float,MatrixProviderPtr> 的
+  前置声明——/permissive- 下定义点之后的重载不再可见）、endpoint
+  if_nameindex 桩 const char*、service shellapi.h + intptr_t、
+  cellapp_extension CMakeLists bwpython313 ADD_DEPENDENCIES + 根/服务器
+  include 路径（probe #7 轮））。
+- **自身回归截获**：bwresource 规范化块最初把 POSIX canonicalize_file_name
+  臂整个替换成 _fullpath（Linux g++ 语法检查报 _MAX_PATH/_fullpath 未
+  声明）——恢复为平台分裂臂（_MAX_CANONICAL_PATH = _MAX_PATH / PATH_MAX）。
+
+门禁：全量 `make -s -rR bw-run-all-unit-tests`：21 模块 / 1505 用例 /
+0 失败（EXIT=0）。新测试位于 ENABLE_MEMORY_DEBUG 守卫内（与既有
+MemoryDebug_testCounts/testSmartPointerCounts 同境；hybrid server 轨该开关
+经 config.hpp 公式求值为 0，故三者在门禁二进制中均不注册、计数不变）；
+守卫开启态（+ -DENABLE_MEMTRACKER）经 make 轨精确旗标语法检查验证
+（SYNTAX_EXIT=0）。改动 26 个 TU/头全部过 make 轨精确旗标语法检查。
+探针 #9 待派发。**下一层已知头**：两大主族修复的真实效果由探针 #9 判定；
+Berkeley 族调用点转换（现由 _WINSOCK_DEPRECATED_NO_WARNINGS 豁免压制）；
+bwmachined/linux_machine_guard.cpp（signal(SIGCHLD)）与
+server/cellapp/LeakTracer.cpp（裸 windows.h TU）为下轮整 TU 守卫候选。

@@ -61,12 +61,18 @@ public:
 	{
 	}
 
-	typename std::allocator<T>::pointer allocate( typename std::allocator<T>::size_type n, typename std::allocator<void>::const_pointer = 0 )
+	// These used std::allocator<T>::pointer/size_type and
+	// std::allocator<void>::const_pointer, which C++20 removed from
+	// std::allocator (MSVC C2039 under /std:c++20 in the root superproject
+	// build; libstdc++ only keeps them as deprecated extensions). The class's
+	// own typedefs spell the same shapes for allocator_traits on every
+	// standard library.
+	pointer allocate( size_type n, const_pointer = 0 )
 	{
-		return (typename std::allocator<T>::pointer)baseAllocator_->allocate( n * sizeof(T), Allocator::IF_DEBUG_ALLOC);
+		return (pointer)baseAllocator_->allocate( n * sizeof(T), Allocator::IF_DEBUG_ALLOC);
 	}
 
-	void deallocate( typename std::allocator<T>::pointer p, typename std::allocator<T>::size_type n )
+	void deallocate( pointer p, size_type n )
 	{
 		baseAllocator_->deallocate( p, Allocator::IF_DEBUG_ALLOC );
 	}

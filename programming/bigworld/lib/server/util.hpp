@@ -5,6 +5,11 @@
 
 #include <stdlib.h>
 
+#if defined( _WIN32 )
+// GetModuleFileNameA for exePath
+#include "cstdmf/cstdmf_windows.hpp"
+#endif // defined( _WIN32 )
+
 #include "math/vector2.hpp"
 #include "math/vector3.hpp"
 #include "network/basictypes.hpp"
@@ -117,20 +122,35 @@ namespace ServerUtil
 
 
 	/**
-	 *	This function returns the executables full path. This function only works
-	 *	on Linux. On other flavours of Unix, the structure of the /proc filesystem
-	 *	is a bit different.
+	 *	This function returns the executables full path. On POSIX this
+	 *	follows the /proc/<pid>/exe link, which only works on Linux - on
+	 *	other flavours of Unix the /proc filesystem is structured
+	 *	differently. Windows asks the loader instead.
 	 */
 	inline
 	BW::string exePath()
 	{
+		char fullExePath[1024];
+
+#if defined( _WIN32 )
+		// Windows has no /proc and no readlink (C3861 in the root
+		// superproject build).
+		DWORD ret = GetModuleFileNameA( NULL, fullExePath,
+			sizeof( fullExePath ) );
+
+		if ((ret == 0) || (ret >= sizeof( fullExePath )))
+		{
+			return BW::string();
+		}
+
+		return BW::string( fullExePath, ret );
+#else
 		pid_t pid = getpid();
 
 		char linkPath[64];
 		snprintf( linkPath, sizeof(linkPath), "/proc/%i/exe", pid );
 
 		// Read the symbolic link
-		char fullExePath[1024];
 		int ret = readlink( linkPath, fullExePath, sizeof(fullExePath) );
 
 		if ((ret == -1) || (ret >= int(sizeof(fullExePath))))
@@ -139,6 +159,7 @@ namespace ServerUtil
 		}
 
 		return BW::string( fullExePath, ret );
+#endif // defined( _WIN32 )
 	}
 
 
@@ -149,7 +170,11 @@ namespace ServerUtil
 	BW::string exeDir()
 	{
 		BW::string ourExePath = exePath();
+#if defined( _WIN32 )
+		BW::string::size_type slashPos = ourExePath.find_last_of( '\\' );
+#else
 		BW::string::size_type slashPos = ourExePath.find_last_of( '/' );
+#endif // defined( _WIN32 )
 		return BW::string( ourExePath, 0, slashPos );
 	}
 }; // namespace Util

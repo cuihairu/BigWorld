@@ -1,10 +1,12 @@
 #include "nat_config.hpp"
 
-// Winsock2 provides inet_pton and AF_INET; only the include list differs
-// from POSIX (same split as lib/network/address_resolver.cpp).
+// Winsock2 provides AF_INET and struct in_addr; inet_pton itself lives in
+// ws2tcpip.h (C3861 in the root superproject build), so only the include
+// list differs from POSIX (same split as lib/network/address_resolver.cpp).
 #if defined( _WIN32 )
 	#include "cstdmf/cstdmf_windows.hpp"
 	#include <Winsock2.h>
+	#include <ws2tcpip.h>
 #else
 	#include <arpa/inet.h>
 	#include <netinet/in.h>

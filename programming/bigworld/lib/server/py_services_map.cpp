@@ -282,7 +282,7 @@ PyObject* PyServicesMap::py_items( PyObject * args )
 		MF_ASSERT( mailBox.exists() );
 
 		ScriptString serviceName = ScriptString::create( iServiceName->data(),
-			iServiceName->size() );
+			static_cast< int >( iServiceName->size() ) );
 
 		ScriptTuple servicePair = ScriptTuple::create( 2 );
 		MF_VERIFY( servicePair.setItem( 0, serviceName ) );

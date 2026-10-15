@@ -44,7 +44,7 @@ float BalanceConfig::cpuOffloadForLevel( int level )
 {
 	// Each level offloads twice as much as the previous with the last level
 	// offloading maxCPUOffload.
-	return maxCPUOffload() * powf( LEVEL_STEP, level );
+	return maxCPUOffload() * powf( LEVEL_STEP, static_cast< float >( level ) );
 }
 
 
