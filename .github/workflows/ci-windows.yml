@@ -197,16 +197,16 @@ jobs:
           retention-days: 7
 
   # R3 probe, not a gate: the root superproject configure (the CMake entry
-  # the Windows track is documented to use) is expected to fail today. The
-  # job exists to surface WHERE it fails, in order, on the same runner the
-  # gate proved out - expected first blockers per todo R3: libpython (the
-  # vendored CPython tree has no CMake build system) and the vendored
-  # png/zip/sqlite references in BWConfiguration_server.cmake. Each push
-  # records the current head of that blocker list. continue-on-error keeps
-  # the verified-green compile gate above as this workflow's verdict; the
-  # probe's own step status stays visible in the job log and the artifact.
+  # the Windows track is documented to use). This used to be the head of the
+  # R3 blocker list (libpython had no CMake carrier; the vendored
+  # png/zip/sqlite trees were referenced unconditionally) and is green since
+  # the libpython carrier landed - each push re-records that it STAYS green,
+  # because the two legs above only configure modules standalone.
+  # continue-on-error keeps the verified-green compile gate above as this
+  # workflow's verdict; the probe's own step status stays visible in the job
+  # log and the artifact.
   root-configure-probe:
-    name: root configure (R3 probe, expected red)
+    name: root configure (R3 probe)
     runs-on: windows-latest
     timeout-minutes: 30
     continue-on-error: true
@@ -235,5 +235,70 @@ jobs:
         with:
           name: ci-windows-root-probe-${{ github.run_id }}
           path: cmake-configure-root.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # R3 probe, not a gate, and manual-only: the first REAL build of the root
+  # superproject on the Windows runner. The configure probe above proves the
+  # generate step only - the ExternalProject build steps it schedules have
+  # never executed, and their behaviour is carried as comments, not facts:
+  #   * libpython runs PCbuild\build.bat, whose default IncludeExternals=true
+  #     clones externals/ (openssl, zlib, libffi, bzip2, tcltk, sqlite, xz)
+  #     from the network - mandatory, pythoncore compiles $(zlibDir)\*.c;
+  #   * the vendored CPython 3.13 PCbuild has never seen MSVC 19.51 / VS 18;
+  #   * the 34 libraries + 39 executables get their first /DWIN32-style
+  #     full-superproject MSVC compile (the two legs above only build two
+  #     standalone modules).
+  # Building ALL in dependency order puts bwpython313 first, so the first
+  # failure localises the head of the build-phase blocker list the same way
+  # the configure probe did for configure. workflow_dispatch-only via the
+  # job-level if below: a ~1h build must not ride along on every push, and
+  # promoting it to a push/schedule job is a decision for after it is green.
+  # Nothing is published, tagged or released from this job - it only builds.
+  root-build-probe:
+    name: root build (R3 probe, manual)
+    runs-on: windows-latest
+    if: github.event_name == 'workflow_dispatch'
+    timeout-minutes: 120
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Configure root superproject (server target)
+        shell: pwsh
+        env:
+          CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+        run: |
+          $repo = ((Resolve-Path programming/bigworld).Path -replace '\\','/')
+          # Same configure as root-configure-probe, its own build dir: the
+          # jobs do not share a workspace.
+          cmake -S "$repo" -B "build/win_root_build" `
+                -G "Visual Studio 18 2026" -A x64 `
+                -DBW_CMAKE_TARGET=server 2>&1 | `
+                Tee-Object -FilePath cmake-configure-root.log
+
+      - name: Build root superproject (Release, all targets)
+        shell: pwsh
+        run: |
+          # ALL in dependency order: MSBuild builds what failed first, so
+          # the log localises the head of the blocker list. ExternalProject
+          # sub-logs (libpython/PCbuild) land under the build tree and are
+          # uploaded below alongside the tee'd console log.
+          cmake --build "build/win_root_build" --config Release `
+                --parallel 4 2>&1 | `
+                Tee-Object -FilePath cmake-build-root.log
+          Write-Host "build exit: $LASTEXITCODE"
+          exit $LASTEXITCODE
+
+      - name: Upload build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-windows-root-build-${{ github.run_id }}
+          path: |
+            cmake-configure-root.log
+            cmake-build-root.log
+            build/win_root_build/**/*BUILD*.log
           if-no-files-found: ignore
           retention-days: 7

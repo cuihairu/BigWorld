@@ -435,3 +435,22 @@ entityID + spaceID 占 3 个，余量充足。见台账 §7.35。
 ③ `CHECK` 宏依赖测试方法的 `m_name`，不能放在普通静态帮助函数里
 （`CppUnitLite2/src/Test.h:111` 直接引用 `m_name`）；④ `-Werror=narrowing` 拒绝
 `{ full, defs, udo }` int→bool 聚合初始化，须显式 `!= 0`。见台账 §7.36。
+
+**批次 37（2026-10-15）——CI 根构建期探针（零测试改动轮）**
+（R1015G，L38/L39 Windows 面 lane）。本轮无任何测试/C++ 改动，全部改动在
+`.github/workflows/ci-windows.yml`：
+1. 新增 job `root build (R3 probe, manual)`：job 级 `if: github.event_name ==
+   'workflow_dispatch'`——约 1h 的全 superproject 构建不随 push/pr 跑（CI 经济模型），
+   仅手动 `gh workflow run ci-windows.yml --ref dev` 触发；timeout 120 min、
+   continue-on-error、configure + build log 与 ExternalProject 子 log 上传 7 天。
+   构建命令 `cmake --build build/win_root_build --config Release --parallel 4`（全目标、
+   依赖序，首个失败定位阻塞清单头部；`bwpython313` ExternalProject 天然排最前）。
+   这是 libpython 承载注释里"构建期行为待首次真实构建判定"三项（get_externals 网络克隆、
+   CPython PCbuild 对 MSVC 19.51、全 superproject 首次 MSVC 编译）的判定入口。
+2. `root-configure-probe` job 名去掉过时的 "expected red"（configure 自 `1bdb68b5`
+   起绿，每次 push 记录的是"仍然绿"），注释同步改为常态化描述。
+3. 同轮完成 C 档 cellapp scaffold 成本判定（未实现，见 todo）：`entity_type.o` 的
+   链接传递闭包 = `entity.cpp` 实体运行时整链，非单轮切片。
+门禁：CI 配置改动 → 全量套件 `make -s -rR bw-run-all-unit-tests`，
+21 模块 / 1505 用例 / 0 失败（与批次 36 同数——本轮无测试改动），
+YAML 经解析校验（3 jobs / 各自 steps 与 job 级 if 正确）。见台账 §7.37。
