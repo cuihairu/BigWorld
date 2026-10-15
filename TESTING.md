@@ -96,7 +96,7 @@ gcovr -r /home/cui/workspaces/BigWorld/programming/bigworld --txt -o /tmp/cov.tx
 | resmgr/bwresource.cpp | 282/746 | 62% | 批次 28 实测（精准插桩 464/746；386/746 为 09-28 全量口径） |
 | entitydef/entity_description.cpp | 72/663 | 89% | 批次 32 实测（精准插桩 591/663；195/663 为批次 31 口径） |
 | network/logger_message_forwarder.cpp | 335/335 | 0% | 维持受限登记（批次17） |
-| entitydef/method_description.cpp | 137/466 | 70% | 批次 28 实测（精准插桩 329/466；323/478 为 09-28 全量口径） |
+| entitydef/method_description.cpp | 129/466 | 72% | 批次 34 实测（精准插桩 337/466；329/466 为批次 28 口径） |
 | server/python_server.cpp | 298/298 | 0% | 受限：需完整 app 装配 |
 
 收口记录（不再在列）：`cstdmf/watcher.hpp` 14%→**22%**（943→1545 行覆盖、+602 实例行，缺口
@@ -350,3 +350,24 @@ MF_EXIT/边界臂、watcher 面，见台账 §7.32。
 `EntityType::old`（`entity_type.cpp:168-185`）对旧描述无条件 supersede，`__class__` 失败回滚
 `pEntityType_ = pOldType`（`entity.cpp:4287`）后全仓无 un-supersede——回滚"成功"的实体按名查找
 全断（`mailbox.cpp:122/240` findMethod→NULL）而 msgID 派发仍活，半残实体。见台账 §7.33。
+
+**批次 34（2026-10-15）——method_description.cpp 纯助手族直驱**（server→server 调用约定与关键字
+参数/返回值面）。既有 TU `test_method_description.cpp` 追加 5 用例（entitydef_test 370→375，全套
+1476→1481），精准插桩 329/466 70%→**337/466 72%**：
+1. `MethodDescription_extractSourceEntityIDIntAndNone`——暴露 CELL 方法的源实体 id 提取：int 首参
+   直取 + 元组去头；None 首参记 NULL_ENTITY_ID（两者都返回去头后的元组）。
+2. `MethodDescription_extractSourceEntityIDObjectWithId`——首参非 int 非 None 时从 `.id` 属性取
+   （exec 类 + 实例）；无 `.id` 属性报错返回空元组。
+3. `MethodDescription_extractSourceEntityIDPassthroughAndEmpty`——BASE 方法（或非暴露）原样透传
+   且 sourceEntityID 不动；暴露 CELL 方法零参元组报错。
+4. `MethodDescription_convertKeywordArgs`——位置前缀原样拷贝、命名尾槽按名从 kwargs 补齐、名字
+   缺失/总数不符报错（kwargs 按个数计数、按尾参名取值——注意不是"剩余 kwargs 任意分配"）。
+5. `MethodDescription_returnValuesHelpers`——areValidReturnValues 按 <ReturnValues> 节校验元数与
+   逐元素类型（错元数/错类型均 false）；createDictFromTuple 产出以声明返回名为键的 dict。
+**实测坑位**：① `ScriptObject::operator==` 是**指针等价**（py_script_object.hpp:596），值断言必须
+走 `ScriptString::check` + `c_str()` strcmp / `ScriptInt::check` + `asLong()`；② ScriptDict 无
+`size()`（只有 next/getItem/setItem），断言用逐键 getItem；③ `<ReturnValues>` 节用命名子元素
+（`<name> STRING </name>`，MethodArgs::parse 旧样式同名惯例）。残余 129 行维持批次 28 分类
+（PyDeferredResponse 58-135、staticInitTwoWay 错误臂 254-298、parse 空 name 臂 347-348（XML
+段名不可为空、不可驱动）、handleException 族 747-798、callMethod 错误臂 850-923、网络发送
+970-1071、:1163/1166/:1216），见台账 §7.34。

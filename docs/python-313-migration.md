@@ -963,3 +963,19 @@ todo C 档「server 侧 reload 迁移语义测试承载」的下一片：`Entity
 **F7（入 docs/upgrade-plan/hot-reload-productionization.md 失败模式清单）**：回滚"成功"的实体处于半残态——按名字的 mailbox 方法查找全断（`mailbox.cpp:122/240` `findMethod` → `description().cell()/base().find(attr)` → NULL → 脚本侧报错），按 msgID 的暴露派发仍活；设计稿「双版本兼容窗口」与「失败回滚」两节已按此修正（窗口只保得住下标/msgID 派发，按名补解析需另设计；逆操作必须同时回退 supersede 改名）。
 
 提交范围：`lib/entitydef/unit_test/test_entity_description.cpp`（既有 TU 追加）、`TESTING.md`、`docs/upgrade-plan/migration-status.md`、`docs/upgrade-plan/hot-reload-productionization.md`、`README.md`、`todo.md`、本文档（§7.33）。
+
+### 7.34 覆盖率批次 34：entitydef/method_description.cpp 纯助手族直驱（2026-10-15）
+
+已登记候选（残余 137 行）的**可驱面复核**结论：批次 28 分类中除纯助手族外全部维持受限（PyDeferredResponse 58-135 需两路调用上下文、handleException 族 747-798 与 callMethod 错误臂 850-923 需活 Mercury 通道或异常回复管线、网络发送 970-1071 需活通道、parse 空 name 臂 347-348 不可驱动——XML 段名不可为空、无合法构造路径；staticInitTwoWay 错误臂 254-298 需破坏 BWTwoWay 模块、环境操纵不做）。本批直驱四个**零覆盖**的纯助手（`test_method_description.cpp` 追加 5 用例，entitydef_test 370→**375**），精准插桩 329/466 70%→**337/466 72%**，门禁 1476→**1481**。
+
+**语义面（从源码钉死）**：
+- `extractSourceEntityID`（method_description.cpp:610-658）——Server→Server 调用约定核心：仅暴露 CELL 方法取参首槽作 sourceEntityID；int 直取（`convertTo` 成功路径）、None 记 NULL_ENTITY_ID、其余从 `.id` 属性回退（无属性报错返回空元组）；两种成功都**返回去头元组**喂 addToServerStream。非暴露/BASE 方法原样透传、sourceEntityID 不动。
+- `convertKeywordArgs`（:716-719 → method_args.cpp:389-442）——位置前缀原样拷贝，命名尾槽**按名**从 kwargs 取值；kwargs 按**个数**计数（total = 位置数 + kwargs 个数 必须恰等于形参数），缺名/计数不符报错。注意不是「剩余 kwargs 任意分配」——尾参必须按声明名命中。
+- `areValidReturnValues`（:941-951 → MethodArgs::checkValid）——按 `<ReturnValues>` 节校验元数与逐元素类型。
+- `createDictFromTuple`（:1238-1241 → method_args.cpp:448-472）——合法元组 → 以声明返回名为键的 dict。
+
+**实测坑位**：① `ScriptObject::operator==` 是**指针等价**（py_script_object.hpp:596，`obj1.get() == obj2.get()`）——值断言必须走 `ScriptString::check` + `c_str()` strcmp、`ScriptInt::check` + `asLong()`，任何 `obj == ScriptObject(ScriptString::create(...))` 形式都对临时对象比指针必败；② `ScriptDict` 无 `size()`（只有 next/getItem/setItem），dict 断言逐键 getItem；③ `<ReturnValues>` 节用命名子元素（`<name> STRING </name>`，MethodArgs::parse 默认旧样式、段名即参数名）；④ `ScriptTuple` 的 `size()` 返回 Py_ssize_t、`STANDARD_SCRIPT_OBJECT_IMP` 提供 `explicit ScriptTuple(const ScriptObject&)` 构造（check 后可安全转换）。
+
+残余 129 行维持批次 28 受限分类（PyDeferredResponse/handleException/callMethod 错误臂/网络发送/staticInit 错误臂/parse 空 name 臂）。
+
+提交范围：`lib/entitydef/unit_test/test_method_description.cpp`（既有 TU 追加）、`TESTING.md`、`docs/upgrade-plan/migration-status.md`、`README.md`、`todo.md`、本文档（§7.34）。
