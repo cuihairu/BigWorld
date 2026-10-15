@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="logo.svg" alt="BigWorld logo" width="120" />
+  <img src="logo.svg" alt="BigWorld logo" width="64" />
 </p>
 
 <p align="center">
