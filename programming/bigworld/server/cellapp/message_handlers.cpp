@@ -11,6 +11,7 @@
 #include "buffered_input_message_handler.hpp"
 #include "entity_message_handler.hpp"
 #include "entity_message_log_scope.hpp"
+#include "entity_message_routing.hpp"
 #include "entity_population.hpp"
 #include "real_entity.hpp"
 #include "space.hpp"
@@ -128,132 +129,120 @@ void EntityMessageHandler::handleMessage( const Mercury::Address & srcAddr,
 
 	BufferedGhostMessages & bufferedMessages = app.bufferedGhostMessages();
 
-	bool shouldBufferGhostMessage =
-		!pEntity ||
-		pEntity->shouldBufferMessagesFrom( srcAddr ) ||
+	// The routing decision is data (entity_message_routing.hpp) so the unit
+	// tests can pin the ladder down; the side effects stay here.
+	EntityMessageRoutingState routingState;
+	routingState.reality = reality_;
+	routingState.entityExists = (pEntity != NULL);
+	routingState.entityIsReal = (pEntity != NULL) && pEntity->isReal();
+	routingState.entityIsOffloadingToSender = (pEntity != NULL) &&
+		pEntity->isOffloadingTo( srcAddr );
+	routingState.entityHasWitness = routingState.entityIsReal &&
+		(pEntity->pReal()->pWitness() != NULL);
+	routingState.shouldBufferFromSender = (pEntity != NULL) &&
+		pEntity->shouldBufferMessagesFrom( srcAddr );
+	routingState.delayingForSender =
 		bufferedMessages.isDelayingMessagesFor( entityID, srcAddr );
+	routingState.hasMessagesForSender =
+		bufferedMessages.hasMessagesFor( entityID, srcAddr );
+	routingState.isSubsequenceStart =
+		BufferedGhostMessages::isSubsequenceStart( header.identifier );
+	routingState.shouldBufferIfTickPending = shouldBufferIfTickPending_;
+	routingState.nextTickPending = app.nextTickPending();
 
-	bool isForDestroyedGhost = false;
-
-	// Message is for a destroyed ghost if it is out of subsequence order.
-	if (reality_ == GHOST_ONLY)
+	switch (classifyEntityMessage( routingState ))
 	{
-		// Destroyed by restored real.
-		if (pEntity && pEntity->isReal())
+		// Drop GHOST_ONLY messages for destroyed ghost.
+		case DISPOSITION_DROP_DESTROYED_GHOST:
+			WARNING_MSG( "EntityMessageHandler::handleMessage( %s [id: %d] ): "
+					"Dropping ghost message for entity %u from %s, "
+					"ghost was destroyed while in-flight.\n",
+				header.msgName(), int( header.identifier ),
+				entityID, srcAddr.c_str() );
+
+			this->sendFailure( srcAddr, header, data, entityID );
+			break;
+
+		// Buffer GHOST_ONLY messages that are out of sender order.
+		case DISPOSITION_BUFFER_GHOST_MESSAGE:
 		{
-			isForDestroyedGhost = true;
+			BufferedGhostMessage * pMsg =
+				BufferedGhostMessageFactory::createBufferedMessage(
+					srcAddr, header, data, entityID, this );
+
+			bufferedMessages.add( entityID, srcAddr, pMsg );
+
+			WARNING_MSG( "EntityMessageHandler::handleMessage( %s [id: %d] ): "
+					   "Buffered ghost message for entity %u from %s\n",
+					   header.msgName(), int( header.identifier ),
+					   entityID, srcAddr.c_str() );
+			break;
 		}
 
-		// Destroyed by restored real, then recreated when offload to sender.
-		else if (pEntity && pEntity->isOffloadingTo( srcAddr ) &&
-				!BufferedGhostMessages::isSubsequenceStart( header.identifier ))
-		{
-			isForDestroyedGhost = true;
-		}
-
-		// Destroyed when senders death was handled.
-		else if (shouldBufferGhostMessage && 
-				!bufferedMessages.hasMessagesFor( entityID, srcAddr ) &&
-				!BufferedGhostMessages::isSubsequenceStart( header.identifier ))
-		{
-			isForDestroyedGhost = true;
-		}
-
-		// TODO: We can not detect if a subsequence start message is for a
-		// destroyed ghost as there is no preceeding message to reference its
-		// order. Buffering/handling redundant subsequence starts would be OK
-		// if the message is idempotent.
-	}
-
-	// Drop GHOST_ONLY messages for destroyed ghost.
-	if (isForDestroyedGhost)
-	{
-		WARNING_MSG( "EntityMessageHandler::handleMessage( %s [id: %d] ): "
-				"Dropping ghost message for entity %u from %s, "
-				"ghost was destroyed while in-flight.\n",
-			header.msgName(), int( header.identifier ),
-			entityID, srcAddr.c_str() );
-
-		this->sendFailure( srcAddr, header, data, entityID );
-	}
-
-	// Buffer GHOST_ONLY messages that are out of sender order.
-	else if (reality_ == GHOST_ONLY && shouldBufferGhostMessage)
-	{
-		BufferedGhostMessage * pMsg =
-			BufferedGhostMessageFactory::createBufferedMessage(
-				srcAddr, header, data, entityID, this );
-
-		bufferedMessages.add( entityID, srcAddr, pMsg );
-
-		WARNING_MSG( "EntityMessageHandler::handleMessage( %s [id: %d] ): "
-				   "Buffered ghost message for entity %u from %s\n",
-				   header.msgName(), int( header.identifier ),
-				   entityID, srcAddr.c_str() );
-	}
-
-	// REAL_ONLY messages should be forwarded if we don't have the real.
-	else if (reality_ >= REAL_ONLY && (!pEntity || !pEntity->isReal()))
-	{
+		// REAL_ONLY messages should be forwarded if we don't have the real.
 		// We only try to look up the cached channel for the entity if it
 		// doesn't exist, since calling findRealChannel() for ghosts will
 		// cause an assertion.
-		CellAppChannel * pChannel = pEntity ?
-			pEntity->pRealChannel() :
-			Entity::population().findRealChannel( entityID );
+		case DISPOSITION_FORWARD_TO_REAL:
+		{
+			CellAppChannel * pChannel = pEntity ?
+				pEntity->pRealChannel() :
+				Entity::population().findRealChannel( entityID );
 
-		if (pChannel)
-		{
-			Entity::forwardMessageToReal( *pChannel, entityID,
-				header.identifier, data, srcAddr, header.replyID );
+			if (pChannel)
+			{
+				Entity::forwardMessageToReal( *pChannel, entityID,
+					header.identifier, data, srcAddr, header.replyID );
+			}
+			else
+			{
+				ERROR_MSG( "EntityMessageHandler::handleMessage( %s [id: %d] ): "
+					"Dropped real message for unknown entity %u\n",
+					header.msgName(), int( header.identifier ), entityID );
+
+				this->sendFailure( srcAddr, header, data, entityID );
+			}
+			break;
 		}
-		else
-		{
-			ERROR_MSG( "EntityMessageHandler::handleMessage( %s [id: %d] ): "
-				"Dropped real message for unknown entity %u\n",
-				header.msgName(), int( header.identifier ), entityID );
+
+		// Drop WITNESS_ONLY message for entities without a witness.
+		case DISPOSITION_DROP_NO_WITNESS:
+			DEBUG_MSG( "EntityMessageHandler::handleMessage( %s [id: %d] ): "
+				"Received witness message for entity %u with no witness "
+				"from %s\n",
+				header.msgName(), int( header.identifier ),
+				entityID, srcAddr.c_str() );
 
 			this->sendFailure( srcAddr, header, data, entityID );
-		}
-	}
+			break;
 
-	// Drop WITNESS_ONLY message for entities without a witness.
-	else if (reality_ == WITNESS_ONLY && !pEntity->pReal()->pWitness())
-	{
-		DEBUG_MSG( "EntityMessageHandler::handleMessage( %s [id: %d] ): "
-			"Received witness message for entity %u with no witness "
-			"from %s\n",
-			header.msgName(), int( header.identifier ),
-			entityID, srcAddr.c_str() );
-
-		this->sendFailure( srcAddr, header, data, entityID );
-	}
-
-	// Message is good, call through to the handler.
-	else if (shouldBufferIfTickPending_ && app.nextTickPending())
-	{
-		static GameTime s_lastMessageTime = 0;
-		BufferedEntityMessages & bufferedEntityMessages =
-			app.bufferedEntityMessages();
-
-		if (s_lastMessageTime != app.time())
+		case DISPOSITION_BUFFER_IF_TICK_PENDING:
 		{
-			WARNING_MSG( "EntityMessageHandler::handleMessage: No time left in "
-					"tick (%u). Buffering '%s' and similar messages this tick. "
-					"Num previously in buffer = %zu.\n",
-				app.time(),
-				header.msgName(),
-				bufferedEntityMessages.size() );
+			static GameTime s_lastMessageTime = 0;
+			BufferedEntityMessages & bufferedEntityMessages =
+				app.bufferedEntityMessages();
 
-			s_lastMessageTime = app.time();
+			if (s_lastMessageTime != app.time())
+			{
+				WARNING_MSG( "EntityMessageHandler::handleMessage: No time left in "
+						"tick (%u). Buffering '%s' and similar messages this tick. "
+						"Num previously in buffer = %zu.\n",
+					app.time(),
+					header.msgName(),
+					bufferedEntityMessages.size() );
+
+				s_lastMessageTime = app.time();
+			}
+
+			bufferedEntityMessages.add( *this,
+					srcAddr, header, data, entityID );
+			break;
 		}
 
-		bufferedEntityMessages.add( *this,
-				srcAddr, header, data, entityID );
-	}
-	else
-	{
-		this->callHandler( srcAddr, header, data, pEntity );
+		// Message is good, call through to the handler.
+		case DISPOSITION_DISPATCH:
+			this->callHandler( srcAddr, header, data, pEntity );
+			break;
 	}
 }
 

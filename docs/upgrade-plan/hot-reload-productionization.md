@@ -86,4 +86,4 @@
 ## 验收映射（对应 todo L34）
 
 - 「迁移路径测试覆盖 `Entity::migrate` 语义保持」→ P2，承载缺口：`Entity::migrate` 需要 Entity 实例 + 脚本类型，现 cellapp/unit_test 只编入低耦合 TU（C 档"server 侧 reload 迁移语义测试承载"同源）。
-- 「失败无半迁移状态」→ 加载期失败今天已天然无半迁移（失败路径不触发 migrate）；迁移期半迁移由 P2 的收集-决策+回滚关闭。
+- 「失败无半迁移状态」→ 加载期失败今天已天然无半迁移（失败路径不触发 migrate）；迁移期半迁移由 P2 的收集-决策+回滚关闭。**批次 36（2026-10-15）起该性质有测试承载**：`ReloadScript::planReload`（`reload_script_plan.hpp`）把 `CellApp::reloadScript` 的动作序列做成数据，失败尾断言不含任何 `MIGRATE_*`，成功尾断言 scratch 解释器先销毁再 migrate、cleanup 最后（7 用例，cellapp_test）。同一提取如实上报 **F8**——全量重载失败时 `EntityType::init(true)`（`entity_type.cpp:262`）已调 `DataType::clearStaticsForReload()` 清空 `s_singletonMap_` 而失败路径不重建，`planReload` 以 `dataTypesWiped` 字段标出；迁移期半迁移与 F8 同属 P2 承载缺口。

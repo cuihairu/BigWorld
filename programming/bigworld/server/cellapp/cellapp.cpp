@@ -19,6 +19,7 @@
 #include "id_config.hpp"
 #include "py_entities.hpp"
 #include "real_entity.hpp"
+#include "reload_script_plan.hpp"
 #include "replay_data_collector.hpp"
 #include "space.hpp"
 #include "spaces.hpp"
@@ -2325,64 +2326,99 @@ bool CellApp::reloadScript( bool isFullReload )
 				"reloadScript should be used with caution, and never in a "
 				"production environment.\n" );
 
-	// Load entity defs in new Python interpreter.
+	// Head of the sequence: the scratch interpreter is swapped in and the
+	// loads run inside it. These steps run before the plan can know their own
+	// outcomes; ReloadScript::planReload() carries them as sequence data and
+	// drives everything from the swap-back on.
 	PyThreadState* pNewPyIntrep = Script::createInterpreter();
 	PyThreadState* pOldPyIntrep = Script::swapInterpreter( pNewPyIntrep );
 
-	bool isOK = (isFullReload) ? EntityType::init( true/*isReload*/ ) :
-					EntityType::reloadScript();
+	const bool defsLoaded =
+		(isFullReload) ? EntityType::init( true/*isReload*/ ) :
+						EntityType::reloadScript();
 
 	// Load UDO modules
 	UserDataObjectTypes udoTypes;
 	UserDataObjectTypesInDifferentDomain udoTypesInDifferentDomain;
 
-	if (isOK)
-		isOK = UserDataObjectType::load( udoTypes, udoTypesInDifferentDomain );
-
-	if (isOK)
+	bool udoLoaded = false;
+	if (defsLoaded)
 	{
-		// Restore original Python interpreter. EntityType::init() got a copy
-		// of the loaded modules. And EntityType::migrate() will replace the
-		// modules in the original Python interpreter with new modules.
-		// __kyl__ (8/2/2006) Can't simply throw away old interpreter and
-		// use new interpreter since we are currently inside a Python call
-		// so the old interpreter is still on the callstack.
-		Script::swapInterpreter( pOldPyIntrep );
-		Script::destroyInterpreter( pNewPyIntrep );
-
-		EntityType::migrate( isFullReload );
-		UserDataObjectType::migrate( udoTypes, udoTypesInDifferentDomain );
-		ServerEntityMailBox::migrateMailBoxes();
-
-		// Migrate entities
-		for (EntityPopulation::const_iterator iter = Entity::population().begin();
-				iter != Entity::population().end(); ++iter)
-		{
-			MF_VERIFY( iter->second->migrate() );
-		}
-
-		EntityType::cleanupAfterReload( isFullReload );
-
-		return true;
+		udoLoaded = UserDataObjectType::load( udoTypes,
+			udoTypesInDifferentDomain );
 	}
-	else
+
+	const ReloadScript::PlanInputs planInputs = { isFullReload, defsLoaded,
+		udoLoaded };
+	const ReloadScript::ReloadPlan plan =
+		ReloadScript::planReload( planInputs );
+
+	for (int i = 0; i < plan.count; ++i)
 	{
-		// Restore original Python interpreter.
-		Script::swapInterpreter( pOldPyIntrep );
-
-		if (!isFullReload)
+		switch (plan.actions[ i ])
 		{
-			// Try using the old scripts again.
-			// NOTE: This works (mostly) because when we try to import a module
-			// that's already imported, it doesn't try to read it from the
-			// disk.
-			MF_VERIFY( EntityType::reloadScript( true ) );
-		}
+			// Head steps, already executed above.
+			case ReloadScript::SWAP_IN_INTERPRETER:
+			case ReloadScript::LOAD_ENTITY_DEFS:
+			case ReloadScript::LOAD_USER_DATA_OBJECTS:
+				break;
 
-		EntityType::cleanupAfterReload( isFullReload );
-		Script::destroyInterpreter( pNewPyIntrep );
-		return false;
+			case ReloadScript::SWAP_BACK_INTERPRETER:
+				// Restore original Python interpreter. EntityType::init() got a
+				// copy of the loaded modules. And EntityType::migrate() will
+				// replace the modules in the original Python interpreter with
+				// new modules.
+				// __kyl__ (8/2/2006) Can't simply throw away old interpreter
+				// and use new interpreter since we are currently inside a
+				// Python call so the old interpreter is still on the callstack.
+				Script::swapInterpreter( pOldPyIntrep );
+				break;
+
+			case ReloadScript::DESTROY_NEW_INTERPRETER:
+				Script::destroyInterpreter( pNewPyIntrep );
+				break;
+
+			case ReloadScript::MIGRATE_ENTITY_TYPES:
+				EntityType::migrate( isFullReload );
+				break;
+
+			case ReloadScript::MIGRATE_USER_DATA_OBJECT_TYPES:
+				UserDataObjectType::migrate( udoTypes,
+					udoTypesInDifferentDomain );
+				break;
+
+			case ReloadScript::MIGRATE_MAIL_BOXES:
+				ServerEntityMailBox::migrateMailBoxes();
+				break;
+
+			case ReloadScript::MIGRATE_ENTITIES:
+				// Migrate entities
+				for (EntityPopulation::const_iterator iter =
+						Entity::population().begin();
+					iter != Entity::population().end(); ++iter)
+				{
+					MF_VERIFY( iter->second->migrate() );
+				}
+				break;
+
+			case ReloadScript::CLEANUP_AFTER_RELOAD:
+				EntityType::cleanupAfterReload( isFullReload );
+				break;
+
+			case ReloadScript::RECOVER_OLD_SCRIPTS:
+				// Try using the old scripts again.
+				// NOTE: This works (mostly) because when we try to import a
+				// module that's already imported, it doesn't try to read it
+				// from the disk.
+				MF_VERIFY( EntityType::reloadScript( true ) );
+				break;
+
+			default:
+				break;
+		}
 	}
+
+	return plan.succeeded;
 }
 
 

@@ -576,10 +576,11 @@ target_link_libraries(entitydef PRIVATE
 	cstdmf math resmgr network connection physics2 moo terrain scene chunk script pyscript
 	BWPython::Python ZLIB::ZLIB PNG::PNG)
 
-# --- entitydef_test (lib/entitydef/unit_test/Makefile.rules cxxSource, 16 TUs)
+# --- entitydef_test (lib/entitydef/unit_test/Makefile.rules cxxSource, 17 TUs)
 add_executable(entitydef_test
 	${BW_LIB_DIR}/entitydef/unit_test/main.cpp
 	${BW_LIB_DIR}/entitydef/unit_test/test_entity_description.cpp
+	${BW_LIB_DIR}/entitydef/unit_test/test_fantasydemo_assets.cpp
 	${BW_LIB_DIR}/entitydef/unit_test/test_datatype_const_iterator.cpp
 	${BW_LIB_DIR}/entitydef/unit_test/test_datatype_persistent_only_const_iterator.cpp
 	${BW_LIB_DIR}/entitydef/unit_test/unittest_mailbox.cpp
