@@ -19,6 +19,9 @@ name: CI Windows (MSVC compile gate)
 #   CMAKE_PROJECT_INCLUDE : build/cmake/BWMacros.cmake (root-only otherwise;
 #                           supplies BW_ADD_LIBRARY / BW_TARGET_LINK_LIBRARIES)
 #   CMAKE_MODULE_PATH     : build/cmake (supplies BWStandardProject)
+# Every -D path is passed with forward slashes: CMake copies them verbatim
+# into the generated try_compile project, where a Windows backslash is an
+# invalid escape.
 #   BW_SOURCE_DIR         : the source root BWStandardProject includes from
 #   BW_PLATFORM*          : what the root derives from WIN32 + pointer size
 #   CMAKE_POLICY_VERSION_MINIMUM : windows-latest ships CMake >= 3.27, which
@@ -102,7 +105,11 @@ jobs:
         env:
           CMAKE_POLICY_VERSION_MINIMUM: "3.5"
         run: |
-          $repo = (Resolve-Path programming/bigworld).Path
+          # CMake copies -D path values verbatim into the generated try_compile
+          # project, where a Windows backslash is an invalid escape
+          # ("Invalid character escape '\a'"); forward slashes are accepted
+          # everywhere on Windows.
+          $repo = ((Resolve-Path programming/bigworld).Path -replace '\\','/')
           cmake -S "$repo/lib/${{ matrix.library }}" `
                 -B "build/win_${{ matrix.library }}" `
                 -Wno-dev `
