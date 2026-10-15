@@ -67,6 +67,11 @@ name: CI Windows (MSVC compile gate)
 # "could not find any instance of Visual Studio" - and CMake 4.x dropped the
 # unversioned "Visual Studio" name. CMake locates the compiler through
 # vswhere itself, so no dev-shell setup or marketplace action is needed.
+#
+# The math leg additionally fetches the legacy D3DX SDK (pinned
+# Microsoft.DXSDK.D3DX package, June 2010 headers + import libraries) and
+# publishes it as DXSDK_DIR, which BWStandardProject.cmake consumes - see
+# the step comment. cstdmf needs none of it.
 
 on:
   push:
@@ -122,6 +127,34 @@ jobs:
           } else {
             Write-Host "vswhere.exe not found at $vswhere"
           }
+
+      - name: Fetch legacy D3DX SDK (math only)
+        if: ${{ matrix.library == 'math' }}
+        shell: pwsh
+        run: |
+          # lib/math's Windows vector types are D3DX typedefs (xp_math.hpp)
+          # and it links d3dx9 (lib/math/CMakeLists.txt), so the gate needs
+          # the retired DirectX SDK. BWStandardProject.cmake reads it from
+          # the DXSDK_DIR environment variable ($DXSDK_DIR/Include and
+          # $DXSDK_DIR/Lib/x64). Microsoft.DXSDK.D3DX is the official
+          # Microsoft package carrying the June 2010 headers and import
+          # libraries; the pinned version keeps the fetch reproducible, and
+          # the DXSDK_DIR layout BWStandardProject expects is synthesized
+          # from the NuGet layout. This is the "install the legacy SDK in
+          # CI" branch of the todo's three-way DXSDK decision - the repo
+          # itself vendors nothing and compiles nothing from this package.
+          $root = "build/dxsdk"
+          New-Item -ItemType Directory -Force $root | Out-Null
+          Invoke-WebRequest `
+            -Uri "https://www.nuget.org/api/v2/package/Microsoft.DXSDK.D3DX/9.29.952.8" `
+            -OutFile "$root/pkg.zip"
+          Expand-Archive -Path "$root/pkg.zip" -DestinationPath "$root/pkg" -Force
+          New-Item -ItemType Directory -Force "$root/Include", "$root/Lib/x64" | Out-Null
+          Copy-Item "$root/pkg/build/native/include/*" "$root/Include/" -Recurse -Force
+          Copy-Item "$root/pkg/build/native/release/lib/x64/*" "$root/Lib/x64/" -Force
+          $dir = ($PWD.ProviderPath -replace '\\','/') + "/$root"
+          "DXSDK_DIR=$dir" | Out-File -FilePath $env:GITHUB_ENV -Append
+          Get-ChildItem "$root/Include/d3dx9*.h" | Select-Object -ExpandProperty Name
 
       - name: Configure (${{ matrix.library }})
         shell: pwsh
