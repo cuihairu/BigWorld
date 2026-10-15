@@ -517,3 +517,48 @@ third_party/python 两文件为本轮新增非测试改动。
 门禁：CI 配置改动 → 全量套件 `make -s -rR bw-run-all-unit-tests`，
 21 模块 / 1505 用例 / 0 失败（与批次 36 同数——本轮无测试改动），
 YAML 经解析校验（3 jobs / 各自 steps 与 job 级 if 正确）。见台账 §7.37。
+
+**批次 38（2026-10-16）——根构建探针 #5/#6：钩子导出落地 + 首次真实编译普查与五族修复**
+（R1016A，L38 Windows lane 续；本轮无测试改动）。三段：
+1. `67099235`（windows build carriers + hooks 导出）：`PCbuild/Directory.Build.targets`
+   把 `bwhooks.c` 注入 pythoncore 的 ClCompile 并加导出——`_hashlib.pyd` LNK2001 的
+   设计件落地（PCbuild 扩展只链 `python313.lib`，钩子进 pythoncore 后经导入库自然
+   可达，Linux 轨行为不变）；同轮 8 处载体修（examples/cellapp_extension CMakeLists
+   include 路径、cstdmf_init.cpp、launch_windows_process.hpp、memory_debug timeval、
+   endpoint.hpp、event_dispatcher.hpp、backup_hash）。探针 #5（run 38762634821）
+   configure 倒在 `No SOURCES given to target: libpython`（sourceless STATIC）→
+   `f45598be` 将 libpython 定为 IMPORTED 目标指向 pythoncore 导入库后 configure 绿。
+2. 探针 #6（run 38770875378）：configure 绿，根 superproject 首次真实 MSVC 编译——
+   448 错误 / 10 项目（server 379、pyscript 18、bwengine_mysql 11、cstdmf 11、
+   network 10、cellapp_extension 7、resmgr 5、bwengine_xml 3、script 3、math 1）。
+   五大族定位：①pyconfig.h C1083×38（Python.h 含 pyconfig.h，PCbuild 的 IntDir 生成
+   目录不在 include 面）；②`interface` 宏级联（站点 `time_keeper.hpp:17` /
+   `db_engine_creator.hpp:24` 等——SDK `objbase.h` `#define interface struct` 把
+   interface 形参重写成 struct，后续成员解析级联成 C2065/C4430/C2332/C2144；仓内
+   `#define interface` 零处、`ole2.h` 零包含、HRESULT/IUnknown 用点仅 lib/model 与
+   lib/terrain，已核）；③zlib.h×4（resmgr/network 消费 vendored zip 而其头目录不在
+   include 面）；④`signal_set.hpp` sigset 族（直接 81 + signal_processor.cpp 下游
+   16——MSVC CRT 的 `<signal.h>` 只有 signal/raise/sig_atomic_t）；⑤C2220 /WX 十处
+   （留待下一轮）。
+3. 本轮修复（9 文件，全部非测试面）：`BWStandardProject.cmake` 三项——python
+   Include/PC 与 vendored `third_party/zip` 入 include、pyconfig 生成目录按
+   `Include/patchlevel.h` 推导版本（CPython 升版不指向过期归档；plain
+   INCLUDE_DIRECTORIES 非存在性检查、目录未生成时无害，IMPORTED 接口 include 会在
+   generate 期硬查故不可放）、`-DWIN32_LEAN_AND_MEAN` 全局（`cstdmf_windows.hpp`
+   同款 define；`Winsock2.h` 自含 windows.h，逐头排序不可靠）；两份 `signal_set.hpp`
+   POSIX 全守卫（`pthread_sigmask` 无 Windows 等价，Blocker 语义须设计决定非翻译，
+   留待）；`debug.hpp` 自载 `cstdmf_windows.hpp`（MF_DEBUGPRINT_NOALLOC 的
+   OutputDebugStringA）；`memory_debug.cpp` `<sys/time.h>` 收 POSIX（前轮遗留缺口）；
+   `endpoint.cpp` SIGPIPE StaticIniter 守卫（MSVC 无 sigaction/SIG_IGN）；
+   `background_file_writer.cpp` fchmod/chmod 两块守卫（Windows 臂降级 WARNING）；
+   `address_resolver.cpp` include 分置（Winsock2 供给 getaddrinfo/inet_ntop/hostent，
+   函数体共享）；`third_party/python/CMakeLists.txt` 去重复的 pyconfig 推导（收敛到
+   BWStandardProject 单点）。前轮已修错误复查全数消失：launch_windows_process 级联、
+   memory_debug.hpp C3646、cstdmf_init C2065、backup_hash C4267、cellapp_extension
+   之 cellapp/*.hpp C1083。
+门禁：构建系统文件改动（BWStandardProject.cmake 触及全部模块编译面）→ 全量
+`make -s -rR bw-run-all-unit-tests`：21 模块 / 1505 用例 / 0 失败（EXIT=0，与批次
+36/37 同数——本轮无测试改动）；CMake 改动另经本地 3.5 最小工程双验证（Linux 解析
+通过 + 强制 MSVC 实测：pyconfig 目录推导出 `PCbuild/obj/313amd64_Release/pythoncore`、
+zlib 目录与 WIN32_LEAN_AND_MEAN 定义在 COMPILE_DEFINITIONS）。MSVC 侧证明由探针
+#7（已派发）出。进度并入 todo.md L38（R3 行）。

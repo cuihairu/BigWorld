@@ -788,6 +788,11 @@ void finiNetwork()
 namespace
 {
 
+// POSIX only. Windows has no SIGPIPE, so there is nothing to ignore, and the
+// MSVC CRT's <signal.h> provides neither sigaction nor SIG_IGN (MSVC C2079,
+// C2065 in the root superproject build).
+#if !defined( _WIN32 )
+
 class StaticIniter
 {
 public:
@@ -802,6 +807,8 @@ public:
 };
 
 StaticIniter g_staticIniter;
+
+#endif // !defined( _WIN32 )
 
 } // anonymous namespace
 #endif

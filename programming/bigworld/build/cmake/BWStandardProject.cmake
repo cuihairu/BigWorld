@@ -4,6 +4,35 @@ INCLUDE_DIRECTORIES( ${BW_SOURCE_DIR}/third_party )
 INCLUDE_DIRECTORIES( $ENV{DXSDK_DIR}/Include )
 INCLUDE_DIRECTORIES( ${BW_SOURCE_DIR}/third_party/python/Include )
 INCLUDE_DIRECTORIES( ${BW_SOURCE_DIR}/third_party/python/PC )
+# The vendored zlib. resmgr (zip_file_system.cpp, binary_block.cpp) and
+# lib/network (compression_stream.cpp, zip_stream.cpp) include <zlib.h>, but
+# zip is a plain static library with no interface includes, so its header
+# directory has to be supplied here like every other third party one (MSVC
+# C1083 on the first root superproject build).
+INCLUDE_DIRECTORIES( ${BW_SOURCE_DIR}/third_party/zip )
+
+# Python.h includes pyconfig.h, which PCbuild generates into pythoncore's own
+# IntDir (PCbuild/pyproject.props:14) - the vendored tree ships no pyconfig.h,
+# so this directory only comes into being when pythoncore is built by the
+# bwpython313 ExternalProject in third_party/python. A path that does not
+# exist yet is harmless here: unlike an IMPORTED target's
+# INTERFACE_INCLUDE_DIRECTORIES, a plain INCLUDE_DIRECTORIES entry is not
+# existence-checked at generate time, and the compiler ignores an absent -I.
+# The version comes from the vendored patchlevel.h rather than being
+# hardcoded, so a CPython bump cannot silently point at a stale archive.
+IF( MSVC AND EXISTS "${BW_SOURCE_DIR}/third_party/python/Include/patchlevel.h" )
+	FILE( READ "${BW_SOURCE_DIR}/third_party/python/Include/patchlevel.h" _bw_py_patchlevel )
+	string( REGEX MATCH "#define[ \t]+PY_MAJOR_VERSION[ \t]+([0-9]+)" _bw_py_match "${_bw_py_patchlevel}" )
+	SET( _bw_py_major "${CMAKE_MATCH_1}" )
+	string( REGEX MATCH "#define[ \t]+PY_MINOR_VERSION[ \t]+([0-9]+)" _bw_py_match "${_bw_py_patchlevel}" )
+	SET( _bw_py_minor "${CMAKE_MATCH_1}" )
+	IF( BW_ARCH_64 OR CMAKE_SIZEOF_VOID_P EQUAL 8 )
+		SET( _bw_py_arch "amd64" )
+	ELSE()
+		SET( _bw_py_arch "win32" )
+	ENDIF()
+	INCLUDE_DIRECTORIES( "${BW_SOURCE_DIR}/third_party/python/PCbuild/obj/${_bw_py_major}${_bw_py_minor}${_bw_py_arch}_Release/pythoncore" )
+ENDIF()
 
 # Add include directories for remote build system header files
 IF (BW_IS_REMOTE_ONLY AND  NOT ${BW_LINUX_CONN_TYPE} MATCHES "RSYNC" )
@@ -63,6 +92,16 @@ ADD_DEFINITIONS(
 	-D_WIN32_WINNT=0x0501   # Windows XP
 	-D_WIN32_WINDOWS=0x0501
 	-D_WIN32_IE=0x0600
+	# Lean windows.h. A full windows.h drags in ole2/objbase, whose
+	# `#define interface struct` rewrites every interface()-named declaration
+	# in the Mercury chain into a syntax error (MSVC C2332/C2144/C2059 on
+	# db_storage/db_engine_creator.hpp in the root superproject build), and
+	# Winsock2.h includes windows.h itself, so include order cannot settle it.
+	# lib/cstdmf/cstdmf_windows.hpp already relies on the same define; setting
+	# it here closes the path for every header that includes <windows.h> or
+	# <Winsock2.h> directly. ole2.h is not included anywhere in the tree, so
+	# nothing depends on windows.h pulling it in.
+	-DWIN32_LEAN_AND_MEAN
 )
 
 # Standard preprocessor definitions

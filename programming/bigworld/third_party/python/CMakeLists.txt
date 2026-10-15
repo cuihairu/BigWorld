@@ -106,10 +106,13 @@ set(BW_PYTHONCORE_ARCHIVE
 	"${BW_PYTHON_PCBUILD}/${_bw_py_arch}/python${BW_PYTHON_VERSION}.lib")
 
 # pyproject.props:14 - pythoncore.vcxproj regenerates pyconfig.h into its own
-# IntDir, which is the only copy in the tree. Python.h includes it, so it has
-# to be on this target's include path as well.
-set(BW_PYTHON_PYCONFIG_DIR
-	"${BW_PYTHON_PCBUILD}/obj/${BW_PYTHON_MAJOR}${BW_PYTHON_MINOR}${_bw_py_arch}_Release/pythoncore")
+# IntDir, which is the only copy in the tree, at
+# ${BW_PYTHON_PCBUILD}/obj/<major><minor><arch>_Release/pythoncore with the
+# same version and arch spelling as the archive path above. Python.h includes
+# it, but this target cannot carry that include dir - see the comment below
+# the libpython declaration. BWStandardProject.cmake adds it as a plain
+# INCLUDE_DIRECTORIES entry instead, deriving the version from patchlevel.h in
+# the same way as above.
 
 # The interpreter itself: upstream's build entry point, no hand-rolled
 # MSBuild invocation. CONFIGURE_COMMAND is empty because autotools does not
@@ -136,9 +139,12 @@ ExternalProject_Add(bwpython313
 # longer exists.
 #
 # No INTERFACE_INCLUDE_DIRECTORIES here: IMPORTED targets are checked at
-# generate time for existing paths, and the pyconfig.h directory below only
-# comes into being when pythoncore builds. Consumers get the two Python source
-# include dirs from BWStandardProject.cmake:5-6, which every module includes.
+# generate time for existing paths, and the pyconfig.h directory only comes
+# into being when pythoncore builds, so putting it here would fail the
+# configure of every clean checkout. BWStandardProject.cmake adds it as a
+# plain INCLUDE_DIRECTORIES instead - not existence-checked, and ignored by
+# the compiler until the archive exists. Consumers get the two Python source
+# include dirs from the same file.
 add_library(libpython STATIC IMPORTED GLOBAL)
 add_dependencies(libpython bwpython313)
 set_target_properties(libpython PROPERTIES

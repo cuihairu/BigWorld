@@ -5,6 +5,11 @@
 
 #include <signal.h>
 
+#if !defined( _WIN32 )
+
+// POSIX only, same as lib/server/signal_set.hpp, which this file mirrors: the
+// sigset_t members and sig* calls need POSIX, and the MSVC CRT's <signal.h>
+// offers neither (MSVC C4430, C2065, C3861 in the root superproject build).
 
 BW_BEGIN_NAMESPACE
 
@@ -83,5 +88,7 @@ private:
 }	// end namespace Signal
 
 BW_END_NAMESPACE
+
+#endif // !defined( _WIN32 )
 
 #endif // SIGNAL_SET_HPP

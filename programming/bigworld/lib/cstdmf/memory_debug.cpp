@@ -20,9 +20,12 @@
 #include <limits.h>
 #include <time.h>
 
-#ifdef MF_SERVER
+// First-allocation timing is POSIX-only, the same split memory_debug.hpp now
+// uses for CallstackStats::firstTime. MF_SERVER alone does not exclude MSVC:
+// the root superproject defines it for every module (BWConfiguration_server.cmake).
+#if defined( MF_SERVER ) && !defined( _WIN32 )
 #include <sys/time.h>
-#endif // MF_SERVER
+#endif // defined( MF_SERVER ) && !defined( _WIN32 )
 
 namespace BW
 {

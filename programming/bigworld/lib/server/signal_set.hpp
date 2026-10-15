@@ -5,6 +5,20 @@
 
 #include <signal.h>
 
+#if !defined( _WIN32 )
+
+// POSIX only. Everything below is built on sigset_t and the sig* family,
+// none of which the MSVC CRT provides: <signal.h> there only offers signal(),
+// raise() and sig_atomic_t, so the sigset_t members were assumed to be int and
+// every sig* call was an unknown identifier (MSVC C4430, C2065, C3861 in the
+// root superproject build). This is the same POSIX-only-where-there-is-no-
+// Windows-equivalent split dprintf.hpp uses for struct timeval.
+//
+// Not ported here: pthread_sigmask is what gives Blocker its meaning, and
+// Windows has no per-thread signal mask to replace it, so a Windows Blocker
+// would need a decision about what "blocking" should mean rather than a
+// translation of the call. The only users are lib/server/signal_processor and
+// lib/db_storage_mysql/table_synchroniser, which stay POSIX-only for now.
 
 BW_BEGIN_NAMESPACE
 
@@ -89,5 +103,7 @@ private:
 }	// end namespace Signal
 
 BW_END_NAMESPACE
+
+#endif // !defined( _WIN32 )
 
 #endif // SIGNAL_SET_HPP

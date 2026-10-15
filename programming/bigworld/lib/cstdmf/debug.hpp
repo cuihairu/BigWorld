@@ -8,6 +8,13 @@
 
 #include <assert.h>
 
+// MF_DEBUGPRINT_NOALLOC below calls OutputDebugStringA on Windows. The root
+// superproject builds lib/cstdmf with precompiled headers turned off
+// (BWConfiguration_server.cmake), so no TU is handed windows.h by a pch and
+// this header has to carry its own include, like critical_message_box.hpp
+// (MSVC C3861 on the first root superproject build). A no-op outside Windows.
+#include "cstdmf_windows.hpp"
+
 
 /**
  *	This macro is a helper used by the *_MSG macros.

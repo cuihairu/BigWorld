@@ -1,9 +1,18 @@
 #include "address_resolver.hpp"
 
-#include <netdb.h>
-#include <arpa/inet.h>
-#include <sys/socket.h>
-#include <sys/types.h>
+#if defined( _WIN32 )
+	// Winsock2 provides getaddrinfo/freeaddrinfo, hostent/gethostbyname,
+	// AF_INET, sockaddr_in and inet_ntop, so only the include list differs
+	// from POSIX and the body below is shared. Lean windows.h first, same
+	// order as endpoint.hpp.
+	#include "cstdmf/cstdmf_windows.hpp"
+	#include <Winsock2.h>
+#else
+	#include <netdb.h>
+	#include <arpa/inet.h>
+	#include <sys/socket.h>
+	#include <sys/types.h>
+#endif
 
 BW_BEGIN_NAMESPACE
 
