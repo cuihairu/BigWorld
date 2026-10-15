@@ -28,12 +28,20 @@ name: CI Windows (MSVC compile gate)
 #                           hard-errors on the 2.8.12 minimum; 3.5 is the
 #                           compatibility floor it still honours.
 #
+# The root (CMakeLists.txt:105) is the only place that includes
+# BWCompilerAndLinkerOptions.cmake, so a module-standalone configure gets no
+# compiler flags at all - including /DWIN32, without which
+# cstdmf/concurrency.hpp never includes <windows.h> (its guard tests
+# "WIN32", which only /DWIN32 defines; MSVC x64 defines _WIN32 but not
+# WIN32 on its own). The CMAKE_CXX_FLAGS below therefore mirrors
+# BW_COMPILER_FLAGS from that file.
+#
 # Two deliberate deviations from the repo's Windows flag profile, both local
 # to this job (the repo's CMake files are untouched):
-#   /WX-    build/cmake/BWCompilerAndLinkerOptions.cmake adds /WX (warnings
-#           as errors), a VS2008-era setting. Legacy code emits MSVC 19.x
-#           warnings; clearing them is separate follow-up work. /WX- keeps
-#           this job a compile gate rather than a warning gate.
+#   /WX-    BWCompilerAndLinkerOptions.cmake adds /WX (warnings as errors),
+#           a VS2008-era setting. Legacy code emits MSVC 19.x warnings;
+#           clearing them is separate follow-up work. /WX- keeps this job a
+#           compile gate rather than a warning gate.
 #   Release the root adds a custom "Hybrid" configuration; module-standalone
 #           mode only carries the standard VS configurations, so the job
 #           builds Release.
@@ -120,7 +128,7 @@ jobs:
                 -DBW_PLATFORM_WINDOWS=ON -DBW_PLATFORM=win64 -DBW_ARCH_64=ON `
                 -DBW_COMPILER_TOKEN=msvc `
                 -DCMAKE_CONFIGURATION_TYPES="Debug;Release" `
-                '-DCMAKE_CXX_FLAGS=/WX-' 2>&1 | Tee-Object -FilePath cmake-configure.log
+                '-DCMAKE_CXX_FLAGS=/DWIN32 /D_WINDOWS /W3 /Zi /MP /Gy /w34302 /d2Zi+ /WX-' 2>&1 | Tee-Object -FilePath cmake-configure.log
 
       - name: Build (${{ matrix.library }})
         shell: pwsh
