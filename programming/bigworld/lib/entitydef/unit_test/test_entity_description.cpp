@@ -2240,6 +2240,170 @@ TEST_F( EntityDefUnitTestHarness, EntityDescription_setExposedMsgIDsAndCheckMeth
 }
 
 
+/**
+ *	Supersede renames every cell method with an old_ prefix: lookups by the
+ *	original name break, while index-based access (internal and exposed)
+ *	still resolves to the same objects. Other component lists are untouched.
+ */
+TEST_F( EntityDefUnitTestHarness, EntityDescription_supersedeRenamesCellMethods )
+{
+	installFixtures();
+
+	writeFixtureFile( BW::string( FIXTURE_DIR ) + "/batch33Supersede.def",
+		"<root>\n"
+		"	<CellMethods>\n"
+		"		<cellTick/>\n"
+		"		<cellHeal>\n"
+		"			<Exposed/>\n"
+		"		</cellHeal>\n"
+		"	</CellMethods>\n"
+		"	<BaseMethods>\n"
+		"		<basePing>\n"
+		"			<Exposed/>\n"
+		"		</basePing>\n"
+		"	</BaseMethods>\n"
+		"	<ClientMethods>\n"
+		"		<clientNotify/>\n"
+		"	</ClientMethods>\n"
+		"</root>\n" );
+
+	EntityDescription description;
+	CHECK( description.parse( "batch33Supersede", "", NULL ) );
+
+	CHECK( description.cell().find( "cellTick" ) != NULL );
+	CHECK_EQUAL( 2, description.cell().size() );
+
+	description.supersede( MethodDescription::CELL );
+
+	// Name lookups break for the original names ...
+	CHECK( description.cell().find( "cellTick" ) == NULL );
+	CHECK( description.cell().find( "cellHeal" ) == NULL );
+	// ... and resolve under the old_ prefix to the same objects.
+	const MethodDescription * pOldTick =
+		description.cell().find( "old_cellTick" );
+	CHECK( pOldTick != NULL );
+	CHECK( pOldTick == description.cell().internalMethod( 0 ) );
+	CHECK( pOldTick->name() == "old_cellTick" );
+
+	// Exposed (msgID) dispatch keeps its index mapping after the rename.
+	const MethodDescription * pOldHeal =
+		description.cell().exposedMethod( 0 );
+	CHECK( pOldHeal != NULL );
+	CHECK( pOldHeal->name() == "old_cellHeal" );
+
+	// Only the cell list was touched.
+	CHECK( description.base().find( "basePing" ) != NULL );
+	CHECK( description.client().find( "clientNotify" ) != NULL );
+}
+
+
+/**
+ *	Supersede with the base component renames only the base list and leaves
+ *	the cell and client lists resolvable under their original names.
+ */
+TEST_F( EntityDefUnitTestHarness, EntityDescription_supersedeRenamesBaseMethods )
+{
+	installFixtures();
+
+	writeFixtureFile( BW::string( FIXTURE_DIR ) + "/batch33SupersedeBase.def",
+		"<root>\n"
+		"	<CellMethods>\n"
+		"		<cellTick/>\n"
+		"	</CellMethods>\n"
+		"	<BaseMethods>\n"
+		"		<basePing>\n"
+		"			<Exposed/>\n"
+		"		</basePing>\n"
+		"	</BaseMethods>\n"
+		"	<ClientMethods>\n"
+		"		<clientNotify/>\n"
+		"	</ClientMethods>\n"
+		"</root>\n" );
+
+	EntityDescription description;
+	CHECK( description.parse( "batch33SupersedeBase", "", NULL ) );
+
+	description.supersede( MethodDescription::BASE );
+
+	CHECK( description.base().find( "basePing" ) == NULL );
+	CHECK( description.base().find( "old_basePing" ) != NULL );
+	CHECK( description.base().find( "old_basePing" ) ==
+		description.base().internalMethod( 0 ) );
+	CHECK( description.base().exposedMethod( 0 )->name() == "old_basePing" );
+
+	// Cell and client lists keep their original names.
+	CHECK( description.cell().find( "cellTick" ) != NULL );
+	CHECK( description.client().find( "clientNotify" ) != NULL );
+}
+
+
+/**
+ *	Each supersede call renames again: the old_ prefix stacks. This is why
+ *	EntityType::old guards against re-recording an old type.
+ */
+TEST_F( EntityDefUnitTestHarness, EntityDescription_supersedeTwiceStacksPrefixes )
+{
+	installFixtures();
+
+	writeFixtureFile( BW::string( FIXTURE_DIR ) + "/batch33SupersedeTwice.def",
+		"<root>\n"
+		"	<CellMethods>\n"
+		"		<cellTick/>\n"
+		"	</CellMethods>\n"
+		"</root>\n" );
+
+	EntityDescription description;
+	CHECK( description.parse( "batch33SupersedeTwice", "", NULL ) );
+
+	description.supersede( MethodDescription::CELL );
+	CHECK( description.cell().find( "old_cellTick" ) != NULL );
+
+	description.supersede( MethodDescription::CELL );
+
+	CHECK( description.cell().find( "old_cellTick" ) == NULL );
+	CHECK( description.cell().find( "old_old_cellTick" ) != NULL );
+	CHECK( description.cell().size() == 1 );
+}
+
+
+/**
+ *	A superseded description no longer digests the same: the rename feeds
+ *	addToMD5 through every exposed method name, so a schema digest must be
+ *	captured before supersede (the reload chain supersedes old descriptions
+ *	during Entity::migrate and never undoes it).
+ */
+TEST_F( EntityDefUnitTestHarness, EntityDescription_supersedeChangesMd5 )
+{
+	installFixtures();
+
+	writeFixtureFile( BW::string( FIXTURE_DIR ) + "/batch33SupersedeMd5.def",
+		"<root>\n"
+		"	<CellMethods>\n"
+		"		<cellHeal>\n"
+		"			<Exposed/>\n"
+		"		</cellHeal>\n"
+		"	</CellMethods>\n"
+		"</root>\n" );
+
+	EntityDescription description;
+	CHECK( description.parse( "batch33SupersedeMd5", "", NULL ) );
+
+	MD5::Digest beforeFull, beforePersistent;
+	digestsOf( description, beforeFull, beforePersistent );
+
+	description.supersede( MethodDescription::CELL );
+
+	MD5::Digest afterFull, afterPersistent;
+	digestsOf( description, afterFull, afterPersistent );
+
+	// The exposed cell method was renamed, so the full digest moved.
+	CHECK( beforeFull != afterFull );
+
+	// No properties: the persistent digest covers the entity name only.
+	CHECK( beforePersistent == afterPersistent );
+}
+
+
 #if ENABLE_WATCHERS
 /**
  *	The description exposes a watcher tree over its method lists.

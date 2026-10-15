@@ -947,3 +947,19 @@ TODO 表下批首位候选 `network/machine_guard.cpp`（批次17 登记的 28% 
 **残余登记（72 行）**：parse 错误/警告臂（307-357）、LoD/Volatile 缺省臂（416,419）、parseComponents 缺臂（508,511）、parseProperties 覆盖与 clientSafety 臂（598-728）、parseMethods 错误臂（937-977）、checkExposedMethods 臂（1061-1075）、访客 MF_EXIT/边界臂（1163-1312）、读侧边界臂（1590-1702）、访问器 MF_EXIT 臂（1864）与 watcher 面（1882,1884）——以失败/断言臂为主，直驱需逐一构造失败输入，边际收益低。
 
 提交范围：`lib/entitydef/unit_test/test_entity_description.cpp`（既有 TU 追加）、`TESTING.md`、`docs/upgrade-plan/migration-status.md`、`README.md`、`todo.md`、本文档（§7.32）。
+
+### 7.33 热重载回滚链 supersede 语义直驱（2026-10-15）
+
+todo C 档「server 侧 reload 迁移语义测试承载」的下一片：`Entity::migrate` 的 `__class__` 换/回滚本体仍需 Entity 实例与运行时（harness 不可达，缺口原样），但其回滚路径**依赖的可达语义体**——`EntityType::old` → 旧描述 `supersede(CELL)`——在 lib/entitydef 层可直接驱动。本批把这套语义钉死并产出热重载设计稿的 **F7** 失败模式。既有 TU `test_entity_description.cpp` 追加 4 用例（entitydef_test 366→**370**），门禁 1472→**1476**，覆盖率口径不动（supersede 臂批次 29 smoke 已过线，本批补的是功能效应断言）。
+
+**supersede 语义链（从源码钉死）**：`EntityMethodDescriptions::supersede`（entity_method_descriptions.cpp:218-231）清名→索引 map、全部方法改名 `old_` 前缀、按新名重建 map；`EntityDescription::supersede`（entity_description.cpp:892-904）按组件分派 BASE→base_、CELL→cell_、其余仅 WARNING。效果：`find(旧名)`→NULL、`find("old_"+名)`→同对象、`internalMethod`/`exposedMethod` 下标访问不受影响（走 exposedMethods_ 下标不查 map）。生产调用链：`Entity::migrate`（entity.cpp:4267，`pNewType->old(pOldType)` 先于 `__class__` 尝试 :4275）→ `EntityType::old`（entity_type.cpp:168-185，首设才生效，重复设不同值 dev 断言）→ 旧描述 `supersede(CELL)`；`__class__` 失败回滚 `pEntityType_ = pOldType`（entity.cpp:4287）**无 un-supersede**（全仓 grep 确认 supersede 仅 entity_description/entity_method_descriptions/entity_type 三处）。
+
+**用例覆盖面（4 用例）**：
+1. `EntityDescription_supersedeRenamesCellMethods`——supersede(CELL) 后 `find("cellTick")`/`find("cellHeal")`→NULL、`find("old_cellTick")` 可达且 `== internalMethod(0)`、`exposedMethod(0)` 仍解析且名字带 old_ 前缀（**msgID 派发面不受影响**的直接证据）；base/client 列不动。
+2. `EntityDescription_supersedeRenamesBaseMethods`——supersede(BASE) 同语义，cell/client 列不动。
+3. `EntityDescription_supersedeTwiceStacksPrefixes`——重复 supersede 前缀叠加（`old_old_cellTick`），印证 `EntityType::old` 首设守卫的必要性（重复调用是破坏性的）。
+4. `EntityDescription_supersedeChangesMd5`——supersede 后 `addToMD5` 漂移（暴露方法改名直接进 digest），**schema digest 必须在 supersede 前采集**；无属性实体 persistent digest 不变（只含实体名，对照面）。
+
+**F7（入 docs/upgrade-plan/hot-reload-productionization.md 失败模式清单）**：回滚"成功"的实体处于半残态——按名字的 mailbox 方法查找全断（`mailbox.cpp:122/240` `findMethod` → `description().cell()/base().find(attr)` → NULL → 脚本侧报错），按 msgID 的暴露派发仍活；设计稿「双版本兼容窗口」与「失败回滚」两节已按此修正（窗口只保得住下标/msgID 派发，按名补解析需另设计；逆操作必须同时回退 supersede 改名）。
+
+提交范围：`lib/entitydef/unit_test/test_entity_description.cpp`（既有 TU 追加）、`TESTING.md`、`docs/upgrade-plan/migration-status.md`、`docs/upgrade-plan/hot-reload-productionization.md`、`README.md`、`todo.md`、本文档（§7.33）。

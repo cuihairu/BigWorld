@@ -38,6 +38,7 @@
 | F4 | 无跨进程一致性 | `cellapp.cpp:2944-2946` 文档明示"用户负责在所有 server 组件上调用"；digest 已计算（`entity_type.cpp:280-287`）但只打印、不比对、不传播 | cellapp 已迁移而 baseapp/dbmgr 仍旧 defs 时，跨进程 type-id 漂移 |
 | F5 | 自定义数据类型实例不迁移 | `cellapp.cpp:2951-2960` 文档要求用户手工逐实例重指 `__class__` | 依赖调用方脚本正确性，无引擎侧保障 |
 | F6 | 批量迁移完成钩子是死代码 | `Entity::migratedAll`（`entity.hpp:284` 声明、`entity.cpp:4308` 定义）全仓无调用方 | `onMigratedAll` 永不触发 |
+| F7 | 回滚后旧描述仍处于 superseded 态 | `entity.cpp:4267` `pNewType->old(pOldType)` 先于 `__class__` 尝试（`entity.cpp:4275`）执行；`entity_type.cpp:168-185` 首次调用即无条件对旧描述 `supersede(CELL)`（全部 cell 方法改名 `old_` 前缀、清名重建 map）；`entity.cpp:4287` `__class__` 失败回滚 `pEntityType_ = pOldType`，而全仓无 un-supersede（批次 33 实测：`find("cellTick")`→NULL、`find("old_cellTick")` 可达、`internalMethod`/`exposedMethod` 下标派发不受影响、digest 随改名漂移） | 回滚"成功"的实体按名字的 mailbox 方法查找全断（`mailbox.cpp:122/240` `findMethod` 返回 NULL→脚本侧报错），按 msgID 的暴露派发仍活——半残实体；第 4 节回滚设计必须连 un-supersede（或以窗口期重解析补偿），且 schema digest 必须在 supersede 前采集 |
 
 ## 设计
 
@@ -51,7 +52,7 @@
 ### 2. 双版本兼容窗口
 
 - `cleanupAfterReload` 拆两段：迁移 tick 只清 `s_pNewModules_`；`pOldSelf_` 断链改为延迟——由 tick 钩子在配置的窗口（秒或 tick 数，默认 0 保持现行为）后执行。
-- 窗口内 `EntityType::old()` 链有效，`supersede` 旧签名调用可解析；窗口到期统一断链并告警残留计数。
+- 窗口内 `EntityType::old()` 链有效；注意 F7 实测边界：supersede 之后按名字的查找已断（只剩 `old_` 前缀名），窗口只保得住**下标/msgID 派发**——按名补解析需另设计。窗口到期统一断链并告警残留计数。
 
 ### 3. dry-run
 
@@ -62,7 +63,7 @@
 ### 4. 失败回滚
 
 - 逐实体 `Entity::migrate` 循环改为**收集-决策**：失败（F1 的两类失败 + F2 的脚本异常计入）先记录并继续或即停，由 reload 请求的策略位决定；返回值不再经 `MF_VERIFY`。
-- 已迁移实体的回滚 = `Entity::migrate` 的逆操作（`pEntityType_` 与 `__class__` 对调回旧类型，旧类型经 `old()` 链仍可达）。
+- 已迁移实体的回滚 = `Entity::migrate` 的逆操作（`pEntityType_` 与 `__class__` 对调回旧类型，旧类型经 `old()` 链仍可达）。注意 F7：逆操作必须同时回退 `supersede` 的改名（否则按名查找仍断）；版本化 schema 的 digest 采集点也必须定在 supersede 之前。
 - 决策默认"即停+回滚"，保 L34 验收"失败无半迁移状态"。
 
 ### 5. 跨进程一致性屏障

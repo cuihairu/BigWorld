@@ -331,3 +331,22 @@ asString/asInt 是 protected，须经基类 DataSectionPtr 用 `readString/readI
 用 `c_str()`（无 asChar）。残余 72 行分类登记：parse 错误/警告臂、LoD/Volatile 缺省臂、
 parseProperties 覆盖与 clientSafety 臂、parseMethods 错误臂、checkExposedMethods 臂、访客
 MF_EXIT/边界臂、watcher 面，见台账 §7.32。
+
+**批次 33（2026-10-15）——热重载回滚链 supersede 语义直驱**（todo C 档 reload 测试承载切片，
+服务 B 档热重载生产化的失败模式证据）。本批不动覆盖率口径：`EntityMethodDescriptions::supersede`
+（`entity_method_descriptions.cpp:218-231`，清名重建 map + 全部方法改名 `old_` 前缀）与
+`EntityDescription::supersede`（BASE/CELL 分派、CLIENT 仅警告）在批次 29 的 smoke 用例中已过线，
+但其**功能效应**（按名查找断、下标访问活）从未断言。既有 TU 追加 4 用例（entitydef_test 366→370，
+全套 1472→1476）：
+1. `EntityDescription_supersedeRenamesCellMethods`——supersede(CELL) 后 `find("cellTick")`→NULL、
+   `find("old_cellTick")` 可达且与 `internalMethod(0)` 同对象、`exposedMethod(0)` 仍解析（名字带
+   old_ 前缀）→ **按 msgID 的暴露派发不受影响**；base/client 列不动。
+2. `EntityDescription_supersedeRenamesBaseMethods`——supersede(BASE) 同语义，cell/client 列不动。
+3. `EntityDescription_supersedeTwiceStacksPrefixes`——重复 supersede 前缀叠加（`old_old_`），
+   印证 `EntityType::old` 首设守卫的必要性。
+4. `EntityDescription_supersedeChangesMd5`——supersede 后 addToMD5 漂移（暴露方法改名进 digest），
+   **schema digest 必须在 supersede 前采集**；无属性实体 persistent digest 不变（只含实体名）。
+顺带产出 **F7** 入热重载设计稿：`Entity::migrate`（`entity.cpp:4267`）在 `__class__` 尝试前先经
+`EntityType::old`（`entity_type.cpp:168-185`）对旧描述无条件 supersede，`__class__` 失败回滚
+`pEntityType_ = pOldType`（`entity.cpp:4287`）后全仓无 un-supersede——回滚"成功"的实体按名查找
+全断（`mailbox.cpp:122/240` findMethod→NULL）而 msgID 派发仍活，半残实体。见台账 §7.33。
