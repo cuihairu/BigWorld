@@ -15,8 +15,13 @@
 #include "server/signal_processor.hpp"
 
 #include <signal.h>
+// procfs fd scan and rlimit handling live in the !_WIN32 arm of
+// numFileDescriptorsOpen below; neither header exists on MSVC (C1083 in the
+// root superproject build).
+#if !defined( _WIN32 )
 #include <dirent.h>
 #include <sys/resource.h>
+#endif // !defined( _WIN32 )
 
 DECLARE_DEBUG_COMPONENT2( "Server", 0 );
 

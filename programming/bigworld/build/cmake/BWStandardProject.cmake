@@ -102,6 +102,13 @@ ADD_DEFINITIONS(
 	# <Winsock2.h> directly. ole2.h is not included anywhere in the tree, so
 	# nothing depends on windows.h pulling it in.
 	-DWIN32_LEAN_AND_MEAN
+	# The tree still uses the Berkeley address APIs (inet_ntoa x9,
+	# gethostbyname x2, gethostbyaddr, inet_addr in lib/network and
+	# lib/server) and /WX turns their SDK deprecation note into an error
+	# (C4996 x13 in the root superproject build). This is the SDK's own
+	# opt-out for exactly that family; converting the call sites to
+	# inet_ntop/getaddrinfo is on the Windows lane ledger.
+	-D_WINSOCK_DEPRECATED_NO_WARNINGS
 )
 
 # Standard preprocessor definitions

@@ -562,3 +562,49 @@ YAML 经解析校验（3 jobs / 各自 steps 与 job 级 if 正确）。见台�
 通过 + 强制 MSVC 实测：pyconfig 目录推导出 `PCbuild/obj/313amd64_Release/pythoncore`、
 zlib 目录与 WIN32_LEAN_AND_MEAN 定义在 COMPILE_DEFINITIONS）。MSVC 侧证明由探针
 #7（已派发）出。进度并入 todo.md L38（R3 行）。
+
+**批次 39（2026-10-16）——探针 #7 普查解码与洋葱下一层五族修复（R1016D）**
+（R1016D，L38 Windows lane 续；本轮无测试改动）。探针 #7（run 38785120808，
+commit `69623139`）configure 绿后全量编译 649 错——**旧五族全数证实已修**：
+pyconfig.h C1083 38→7（残余是构建顺序竞态非 include 缺失）、zlib.h→0、
+signal_set→0、`interface` 宏级联 146→32（全局 lean 未覆盖的残留路由待
+/showIncludes 定位）、cellapp 的 cellapp/*.hpp C1083→0。649>448 是洋葱效应：
+旧层塌掉后暴露更深层。**本轮修五族（10 文件，目标 ~305/649）**：
+1. **C4005 ×238（自伤）**：`69623139` 加的命令行 `-DWIN32_LEAN_AND_MEAN` 与
+   `cstdmf_windows.hpp:5` 的裸 `#define` 在 /WX 下相撞——每 TU 一个 C4005 宏重
+   定义。修：该 define 收进 `#ifndef` 守卫（模块级门禁不带此 flag 仍依赖它，
+   故不可删）。
+2. **C7555 ×37（语言级）**：make 轨 `-std=c++23`（platform_el7.mak:6）而 MSVC
+   无 std flag 时默认 c++14，pyscript 指定初始化器全灭。修：
+   `BWCompilerAndLinkerOptions.cmake` 全配置 `/std:c++20`（MSVC 最接近的稳定
+   档；完整 c++23 需 19.5x 的 /std:c++latest preview 面）。
+3. **C4996 ×13（弃用告警即 error）**：① Berkeley 地址族 ×10（inet_ntoa×9 /
+   gethostbyname×2 / gethostbyaddr / inet_addr）——`BWStandardProject.cmake` 加
+   SDK 自带的 `_WINSOCK_DEPRECATED_NO_WARNINGS` 弃用豁免（调用点转
+   inet_ntop/getaddrinfo 记入 Windows lane 台账）；② pyscript `script.cpp`
+   Py_FrozenFlag/Py_NoSiteFlag/Py_IgnoreEnvironmentFlag ×3（CPython 3.13 标
+   Py_DEPRECATED，gcc 仅告警、MSVC /WX 成 error）——局部 `#pragma
+   warning(disable:4996)` 包住三行（迁移到 PyConfig 属行为级改动，留 3.13
+   迁移台账）。
+4. **cellapp_extension pyconfig ×7（构建顺序竞态）**：MODULE 目标不链 libpython
+   故不继承对 bwpython313 ExternalProject 的依赖，其 TU 在 externals 克隆前就
+   开编。修：该 CMakeLists `ADD_DEPENDENCIES( cellapp_extension bwpython313 )`。
+5. **POSIX 头 C1083 ×5**：`bwconfig.cpp`（pwd.h 收 POSIX，Windows 臂改读
+   `USERNAME` 环境变量，与 pw_name 查询同效）；`child_process.cpp` 整 TU
+   `#if !defined(_WIN32)` 收拢（fork/exec/waitpid 无 Windows 翻译，仓内无人
+   包其头文件）；`nat_config.cpp` include 分置 Winsock2 + inet_addr 改
+   inet_pton 助手（in_addr_t 返回型平台不一 + 弃用，保留 INADDR_NONE 哨兵语义）；
+   `server_app.cpp`（dirent.h/sys/resource.h 收 POSIX——使用点已在
+   `#ifdef _WIN32` 两臂内）；`server_info.cpp`（unistd.h 收 POSIX）。
+本地验证：五文件 + `cstdmf_windows.hpp`/`script.cpp` 以 make 轨精确旗标
+`g++ -fsyntax-only -std=c++23 ...` 全过（SYNTAX_EXIT=0）；CMake 改动经本地
+3.5 最小工程强制 MSVC 验证（`COMPILER_FLAGS: .../std:c++20...` 与
+`_WINSOCK_DEPRECATED_NO_WARNINGS` 均落 COMPILE_DEFINITIONS；须先
+`include(BWMacros)` 再 `BWStandardProject`，"Unsupported compiler" 行为良性）。
+门禁：构建系统文件改动 → 全量 `make -s -rR bw-run-all-unit-tests`：
+21 模块 / 1505 用例 / 0 失败（EXIT=0，与批次 38 同数——本轮无测试改动）。
+探针 #8 待派发。**下一层已知头**：`interface` 残留 ×32 站点/约 9 server TU
+（BW 侧 include 链已排查干净，疑 rpcndr.h 经 lean 不挡的链抵达，需
+/showIncludes 探针定路由）；转换告警 ~15 站点（C4267/C4244：balance_config、
+bdiff、ema、id_client、py_services_map、python_server×6、services_map、
+script_timers）；Berkeley 族调用点转换（现由豁免压制）。

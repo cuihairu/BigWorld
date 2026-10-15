@@ -9,6 +9,13 @@ IF( MSVC )
 		/DWIN32
 		/D_WINDOWS
 
+		# Language level: without this MSVC compiles at its c++14 default,
+		# while the make track builds with -std=c++23 (platform_el7.mak:6);
+		# pyscript's designated initializers then fail with C7555 in the
+		# root superproject build. c++20 is the closest stable MSVC tier
+		# (full c++23 needs /std:c++latest on 19.5x, preview surface).
+		/std:c++20
+
 		# General
 		/W3		# Warning level 3
 		/Zi		# Always generate debug information

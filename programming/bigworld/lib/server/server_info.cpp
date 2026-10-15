@@ -3,7 +3,11 @@
 
 #include "server_info.hpp"
 
+// gethostname is only called in the !_WIN32 arm below; MSVC has no
+// <unistd.h> (C1083 in the root superproject build).
+#if !defined( _WIN32 )
 #include <unistd.h>
+#endif // !defined( _WIN32 )
 #include <limits.h>
 #include <sstream>
 

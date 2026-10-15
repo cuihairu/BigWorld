@@ -1,3 +1,11 @@
+// POSIX only, and dead in this tree: the fork/exec/waitpid machinery below
+// has no Windows translation (CreateProcess is a different model, not a
+// call-for-call mapping) and nothing in the repo includes child_process.hpp
+// outside this file. The whole TU compiles away on MSVC - the root
+// superproject builds every server source and neither sys/wait.h nor the
+// pid_t in the header exist there (C1083 in the root superproject build).
+#if !defined( _WIN32 )
+
 #include "child_process.hpp"
 
 #include "cstdmf/debug.hpp"
@@ -429,5 +437,7 @@ void ChildProcess::emptyPipes()
 }
 
 BW_END_NAMESPACE
+
+#endif // !defined( _WIN32 )
 
 // child_process.cpp

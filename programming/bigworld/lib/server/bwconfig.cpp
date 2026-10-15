@@ -8,8 +8,12 @@
 
 #include "resmgr/bwresource.hpp"
 
+// passwd lookup for the per-user config filename; MSVC has no <pwd.h>
+// (C1083 in the root superproject build) and uses %USERNAME% instead.
+#if !defined( _WIN32 )
 #include <sys/types.h>
 #include <pwd.h>
+#endif // !defined( _WIN32 )
 
 DECLARE_DEBUG_COMPONENT2( "Config", 0 )
 
@@ -184,6 +188,10 @@ void init()
 	// Attempt to find a personalised configuration file first. This is of the
 	// form "bw_<username>.xml".
 	bool isUserFilename = false;
+	// MSVC has no <pwd.h> (C1083 in the root superproject build); the
+	// per-user config name falls back to the USERNAME environment variable,
+	// which is what the pw_name lookup delivers on POSIX.
+#if !defined( _WIN32 )
 	struct passwd * pPasswordEntry = ::getpwuid( ::getUserId() );
 
 	if (pPasswordEntry && (pPasswordEntry->pw_name != NULL))
@@ -192,6 +200,15 @@ void init()
 			pPasswordEntry->pw_name + ".xml";
 		isUserFilename = true;
 	}
+#else
+	const char * pUserName = ::getenv( "USERNAME" );
+
+	if (pUserName != NULL)
+	{
+		filename = BW::string( "server/bw_" ) + pUserName + ".xml";
+		isUserFilename = true;
+	}
+#endif // !defined( _WIN32 )
 
 	while (!filename.empty())
 	{
