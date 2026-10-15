@@ -979,3 +979,19 @@ todo C 档「server 侧 reload 迁移语义测试承载」的下一片：`Entity
 残余 129 行维持批次 28 受限分类（PyDeferredResponse/handleException/callMethod 错误臂/网络发送/staticInit 错误臂/parse 空 name 臂）。
 
 提交范围：`lib/entitydef/unit_test/test_method_description.cpp`（既有 TU 追加）、`TESTING.md`、`docs/upgrade-plan/migration-status.md`、`README.md`、`todo.md`、本文档（§7.34）。
+
+### 7.35 覆盖率批次 35：cellapp 实体消息 EntityID/SpaceID 关联接线（2026-10-15）
+
+观测面 lane 的生产接线最后一步：进程内日志关联上下文（`LogCorrelation`，见 §7.31 链）在 channelID（`UDPBundleProcessor`）之上补齐**实体与空间两维**。新增头内联 RAII 载体 `EntityMessageLogScope`（`server/cellapp/entity_message_log_scope.hpp`：构造即 `LogCorrelation::set("entityID")`、`setSpaceID` 补 "spaceID"，析构经 `ScopedLogCorrelation` 恢复进入前快照；持有 ScopedLogCorrelation 故不可复制不可移动，须就地构造），接线在 `EntityMessageHandler::handleMessage` 4 参重载（`server/cellapp/message_handlers.cpp`，findEntity 之后、分支之前）——3 参输入侧重载与缓冲重放都汇入该重载，一处接线覆盖两条路径。
+
+**语义面（从源码钉死）**：
+- 接线点选 4 参重载而非 3 参入口：`EntityMessageHandler::handleMessage(src, header, data)` 只解包 entityID 就转发（message_handlers.cpp:92-99），缓冲消息重放也走 4 参；此处 entityID 已解包、findEntity 已完成，是全部下游分支（destroyed-ghost 丢弃/缓冲/REAL_ONLY 转发）的共同祖先。
+- spaceID 守卫 `pEntity != NULL && !pEntity->isDestroyed()`：destroy 后实体仍在 population 可 findEntity，但 `Entity::destroy` 先 `setDestroyed()`（entity.cpp:2959）再 `pSpace_->removeEntity(this)`（:2964）最后 `pSpace_ = NULL`（:2965）——而 `Entity::spaceID()`（entity.cpp:6116）是裸 `return pSpace_->id()`、无 NULL 检查，直取即崩；`Entity::isDestroyed()`（entity.hpp:213）是安全门。未知实体（pEntity==NULL）同样不取。
+- 上下文容量：`LogCorrelation` 上限 8 字段、超出静默丢弃（log_meta_data.cpp:268 WARNING）；channelID + entityID + spaceID 占 3，余量充足。
+- 载体只 set 不 clear：channelID 等外层字段在 scope 退出时由 ScopedLogCorrelation 整体恢复，嵌套 scope 互不泄漏。
+
+**测试承载（调用点不可达的处置）**：`message_handlers.cpp` 不编入 cellapp_test（Makefile.rules 只编低耦合 TU），运行时接线不可测——与 C 档「Entity 运行时承载缺口」同源，如实记录。wrapper 语义核心由新建 `server/cellapp/unit_test/test_entity_message_log_scope.cpp` 4 用例直驱（cellapp_test 8→**12**，全套 1481→**1485**）：仅 entityID（未知/销毁实体路径）、entityID+spaceID（活实体路径）、与 channelID 外层叠加且退出恢复、嵌套 scope 逐层恢复。读取走 `LogCorrelation::save` 快照 + 按 key 查找。
+
+**实测坑位**：① `ScopedLogCorrelation` 拷贝构造/赋值是 private 未定义（log_meta_data.hpp:159-160）——含它的类天然不可复制，工厂函数返回值路线（NRVO 依赖 C++17 保证）不可用，只能就地构造后 `setSpaceID` 补字段；② `LogCorrelation::set` 的值参数是 `long long`，EntityID/SpaceID 是 int32，隐式放宽转换无符号丢失；③ 测试里读上下文不能用 `hasFields`+遍历（无按 key getter），用 `save` 快照。
+
+提交范围：`server/cellapp/entity_message_log_scope.hpp`（新增头内联载体）、`server/cellapp/message_handlers.cpp`（接线）、`server/cellapp/unit_test/test_entity_message_log_scope.cpp`（新建 TU）、`server/cellapp/unit_test/Makefile.rules`（cxxSource 注册）、`TESTING.md`、`docs/upgrade-plan/migration-status.md`、`README.md`、`todo.md`、本文档（§7.35）。

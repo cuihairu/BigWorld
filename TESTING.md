@@ -371,3 +371,26 @@ MF_EXIT/边界臂、watcher 面，见台账 §7.32。
 （PyDeferredResponse 58-135、staticInitTwoWay 错误臂 254-298、parse 空 name 臂 347-348（XML
 段名不可为空、不可驱动）、handleException 族 747-798、callMethod 错误臂 850-923、网络发送
 970-1071、:1163/1166/:1216），见台账 §7.34。
+
+**批次 35（2026-10-15）——cellapp 实体消息 EntityID/SpaceID 关联接线**（观测面 lane，结构化日志
+关联字段的最后一块生产接线）。新增头内联载体 `EntityMessageLogScope`
+（`server/cellapp/entity_message_log_scope.hpp`：构造即 `LogCorrelation::set("entityID")`、
+`setSpaceID` 补 "spaceID"，析构经 `ScopedLogCorrelation` 恢复进入前上下文；不可复制不可移动，
+须就地构造）并接线进 `EntityMessageHandler::handleMessage` 4 参重载
+（`server/cellapp/message_handlers.cpp`，findEntity 之后、分支之前）——3 参输入侧重载与缓冲
+重放都汇入该重载，一处接线覆盖两条路径。新建 `cellapp/unit_test/test_entity_message_log_scope.cpp`
+4 用例（cellapp_test 8→12，全套 1481→1485）：
+1. `EntityMessageLogScope_EntityIDOnly`——未知/已销毁实体路径：只设 entityID，无 spaceID，退出后
+   上下文清空。
+2. `EntityMessageLogScope_EntityIDAndSpaceID`——活实体路径：entityID + spaceID 两字段可读回。
+3. `EntityMessageLogScope_RestoresOuterContext`——与 `UDPBundleProcessor` 设的 channelID 叠加
+   （三字段并存），退出后 channelID 原样保留——scope 只恢复进入前快照，不重置他人字段。
+4. `EntityMessageLogScope_NestedScopes`——嵌套 scope（如转发消息）替换 entityID、保留外层
+   spaceID，退出后外层字段逐层恢复。
+**实测坑位**：① 调用点不可达——`message_handlers.cpp` 不编入 cellapp_test（Makefile.rules
+只编低耦合 TU），运行时接线验证需 Entity 运行时（同 C 档承载缺口），本批只直驱 wrapper 语义
+核心；② `Entity::spaceID()`（entity.cpp:6116）裸解引用 `pSpace_` 无 NULL 检查，而 destroy 后实体
+仍在 population 可 findEntity、pSpace_ 已 NULL（entity.cpp:2959 setDestroyed → :2964 removeEntity →
+:2965 pSpace_=NULL），故接线必须带 `pEntity != NULL && !pEntity->isDestroyed()` 守卫，不能直取；
+③ `LogCorrelation` 上限 8 字段（超出静默丢弃，log_meta_data.cpp:268 WARNING），channelID +
+entityID + spaceID 占 3 个，余量充足。见台账 §7.35。

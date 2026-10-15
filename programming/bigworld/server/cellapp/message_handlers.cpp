@@ -10,6 +10,7 @@
 #include "entity.hpp"
 #include "buffered_input_message_handler.hpp"
 #include "entity_message_handler.hpp"
+#include "entity_message_log_scope.hpp"
 #include "entity_population.hpp"
 #include "real_entity.hpp"
 #include "space.hpp"
@@ -113,6 +114,17 @@ void EntityMessageHandler::handleMessage( const Mercury::Address & srcAddr,
 	Entity * pEntity = app.findEntity( entityID );
 
 	AUTO_SCOPED_ENTITY_PROFILE( pEntity );
+
+	// Every log written while handling this message carries the entity it was
+	// for, on top of the channelID set higher up. The space is only read for a
+	// live entity: a destroyed entity is still findable in the population but
+	// Entity::destroy has already cleared its pSpace_, and Entity::spaceID
+	// dereferences it unconditionally.
+	EntityMessageLogScope entityLogScope( entityID );
+	if (pEntity != NULL && !pEntity->isDestroyed())
+	{
+		entityLogScope.setSpaceID( pEntity->spaceID() );
+	}
 
 	BufferedGhostMessages & bufferedMessages = app.bufferedGhostMessages();
 
