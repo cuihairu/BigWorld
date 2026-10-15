@@ -19,6 +19,8 @@ name: CI Windows (MSVC compile gate)
 #   CMAKE_PROJECT_INCLUDE : build/cmake/BWMacros.cmake (root-only otherwise;
 #                           supplies BW_ADD_LIBRARY / BW_TARGET_LINK_LIBRARIES)
 #   CMAKE_MODULE_PATH     : build/cmake (supplies BWStandardProject)
+#   BW_SOURCE_DIR         : the source root BWStandardProject includes from
+#   BW_PLATFORM*          : what the root derives from WIN32 + pointer size
 #   PCH_SUPPORT           : the historical VS-project define that makes every
 #                           module's pch.hpp (41 of them, cstdmf first) actually
 #                           carry its includes - notably cstdmf_windows.hpp,
@@ -28,15 +30,18 @@ name: CI Windows (MSVC compile gate)
 #                           (BWConfiguration_server.cmake), but every cpp
 #                           still does '#include "pch.hpp"' and relies on it
 #                           textually, so the gate mirrors the canonical
-#                           VS-project build instead.
-# Every -D path is passed with forward slashes: CMake copies them verbatim
-# into the generated try_compile project, where a Windows backslash is an
-# invalid escape.
-#   BW_SOURCE_DIR         : the source root BWStandardProject includes from
-#   BW_PLATFORM*          : what the root derives from WIN32 + pointer size
+#                           VS-project build instead. It rides in
+#                           CMAKE_CXX_FLAGS: a bare -DPCH_SUPPORT cache entry
+#                           is read by nothing module-standalone, because the
+#                           IF that turns it into ADD_DEFINITIONS lives in the
+#                           root (CMakeLists.txt:168).
 #   CMAKE_POLICY_VERSION_MINIMUM : windows-latest ships CMake >= 3.27, which
 #                           hard-errors on the 2.8.12 minimum; 3.5 is the
 #                           compatibility floor it still honours.
+#
+# Every -D path is passed with forward slashes: CMake copies them verbatim
+# into the generated try_compile project, where a Windows backslash is an
+# invalid escape.
 #
 # The root (CMakeLists.txt:105) is the only place that includes
 # BWCompilerAndLinkerOptions.cmake, so a module-standalone configure gets no
@@ -136,9 +141,9 @@ jobs:
                 -DCMAKE_MODULE_PATH="$repo/build/cmake" `
                 -DBW_SOURCE_DIR="$repo" `
                 -DBW_PLATFORM_WINDOWS=ON -DBW_PLATFORM=win64 -DBW_ARCH_64=ON `
-                -DBW_COMPILER_TOKEN=msvc -DPCH_SUPPORT=1 `
+                -DBW_COMPILER_TOKEN=msvc `
                 -DCMAKE_CONFIGURATION_TYPES="Debug;Release" `
-                '-DCMAKE_CXX_FLAGS=/DWIN32 /D_WINDOWS /W3 /Zi /MP /Gy /w34302 /d2Zi+ /WX-' 2>&1 | Tee-Object -FilePath cmake-configure.log
+                '-DCMAKE_CXX_FLAGS=/DWIN32 /D_WINDOWS /DPCH_SUPPORT=1 /W3 /Zi /MP /Gy /w34302 /d2Zi+ /WX-' 2>&1 | Tee-Object -FilePath cmake-configure.log
 
       - name: Build (${{ matrix.library }})
         shell: pwsh
