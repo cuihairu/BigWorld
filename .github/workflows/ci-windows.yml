@@ -34,6 +34,11 @@ name: CI Windows (MSVC compile gate)
 #   Release the root adds a custom "Hybrid" configuration; module-standalone
 #           mode only carries the standard VS configurations, so the job
 #           builds Release.
+#
+# The generator is the unversioned "Visual Studio" (latest installed VS) and
+# setup-msvc uses vs-version 'latest', so the job follows the runner image
+# instead of pinning one VS year; the runner does not put cl.exe on PATH by
+# itself, hence the explicit setup-msvc step.
 
 on:
   push:
@@ -75,12 +80,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      - name: Set up MSVC
+        uses: microsoft/setup-msvc@v1
+        with:
+          vs-version: 'latest'
+
       - name: Show toolchain
         shell: pwsh
         run: |
           cmake --version | Select-Object -First 1
           cl.exe /? 2>&1 | Select-String "Copyright" | Select-Object -First 1
-          cmake --help 2>&1 | Select-String "Visual Studio 17 2022" | Select-Object -First 1
+          cmake --help 2>&1 | Select-String "Visual Studio" | Select-Object -First 3
 
       - name: Configure (${{ matrix.library }})
         shell: pwsh
@@ -89,21 +99,21 @@ jobs:
         run: |
           $repo = (Resolve-Path programming/bigworld).Path
           cmake -S "$repo/lib/${{ matrix.library }}" `
-                -B "build/win17_${{ matrix.library }}" `
+                -B "build/win_${{ matrix.library }}" `
                 -Wno-dev `
-                -G "Visual Studio 17 2022" -A x64 `
+                -G "Visual Studio" -A x64 `
                 -DCMAKE_PROJECT_INCLUDE="$repo/build/cmake/BWMacros.cmake" `
                 -DCMAKE_MODULE_PATH="$repo/build/cmake" `
                 -DBW_SOURCE_DIR="$repo" `
                 -DBW_PLATFORM_WINDOWS=ON -DBW_PLATFORM=win64 -DBW_ARCH_64=ON `
-                -DBW_COMPILER_TOKEN=vc17 `
+                -DBW_COMPILER_TOKEN=msvc `
                 -DCMAKE_CONFIGURATION_TYPES="Debug;Release" `
                 '-DCMAKE_CXX_FLAGS=/WX-' 2>&1 | Tee-Object -FilePath cmake-configure.log
 
       - name: Build (${{ matrix.library }})
         shell: pwsh
         run: |
-          cmake --build "build/win17_${{ matrix.library }}" --config Release `
+          cmake --build "build/win_${{ matrix.library }}" --config Release `
                 --target ${{ matrix.library }} --parallel 2>&1 | `
                 Tee-Object -FilePath cmake-build.log
 
