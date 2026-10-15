@@ -925,3 +925,25 @@ TODO 表下批首位候选 `network/machine_guard.cpp`（批次17 登记的 28% 
 **残余登记（195 行）**：parseProperties 属性覆盖/override 臂、LoDLevels/Volatile/Implements/Components 解析面、addSectionToStream 流写侧、supersede 迁移面、watcher 面等。
 
 提交范围：`lib/entitydef/unit_test/test_entity_description.cpp`（既有 TU 追加）、`TESTING.md`、`docs/upgrade-plan/migration-status.md`、`README.md`、`todo.md`、本文档（§7.31）。
+
+### 7.32 覆盖率补强批次 32：entitydef/entity_description.cpp 流/访问器/暴露消息号直驱（2026-10-15）
+
+§7.31 残余登记中的**流写侧访客族 + 读侧 + 访问器 + 暴露消息号**四块本批直驱。既有 TU `test_entity_description.cpp` 追加 7 用例（entitydef_test 359→366），精准插桩口径 **70% → 89%（468/663 → 591/663 实例行）**，门禁 1465→**1472**。
+
+**摘要/流协议规则（从源码钉死）**：`addToStream` 助手循环 `NUM_PASSES = 4` 个 pass，`shouldSkipPass` 按 `PASS_JUMPER[4]` = {BASE、BASE|CLIENT、CELL|CLIENT、CELL}（EXACT_MATCH 置位时精确相等、否则位重叠）决定跑不跑；`shouldConsiderData` 的 `PASS_FILTER[4][2]` 是 isBaseData × isClientServerData 二维真值表 → hp(CELL_PUBLIC：非 base 非 CS) 落 pass3、owner(BASE：base 非 CS) 落 pass0、nick(ALL_CLIENTS：非 base 且 CS) 落 pass2、pass1（base 且 CS）在无此类属性时贡献 0 字节。`pDataSizes` 每个跑过的 pass 记 `stream.size() - 该 pass 前尺寸`，故**必须按 4 开数组**（`numDataSizes=3` 时 `MF_ASSERT_DEV(numDataSizes == actualPass-1)` 放行但第 4 pass 不记录）。`clientServerProperties_` 经 `allocateClientServerFullIndexes` **按 `streamSize()` 稳定排序**（定长升序在前、变长按名义尺寸升序在后，tie 保持 def 顺序）——`clientServerProperty(n)` 的 n 是排序后序号而非 def 顺序，`clientServerFullIndex()` 也是排序后的号，tagged client 流的 index 同理。
+
+**entity_description.cpp 流/访问器/暴露消息号用例覆盖面**（7 用例）：
+
+1. **addDictionaryToStream 往返**：dict{hp:5, owner:7, nick:"bob"} 三段域全开 → 逐 pass 尺寸 {4, 0, 4, 2} 且和等于流总长 → readStreamToDict 回读值全对且 `is.remainingLength()==0`（字典映射面 + pass 分派 + 尺寸记账三合一）。
+2. **缺键/错型/null mapping**：dict 只给 hp → owner 读回 0、nick 读回 ""（AddToStreamMapVisitor `isErrorOnNULL()==false` 走默认值）；hp 给 ScriptString（UINT16 期望 int）→ 换默认值后整体失败；null `ScriptMapping` → 前置拒绝。
+3. **addAttributesToStream 往返与双臂**：Python 实例属性 → 流 → dict 回读全对；对象缺属性 → AddToStreamAttributeVisitor `isErrorOnNULL()==true` → 失败；NULL 对象 → 前置拒绝。
+4. **readStreamToSection**：值 section → 流 → 新建 XML section，`readString("nick")=="bob"`、`readInt("secret")==9`。
+5. **readTaggedClientStreamToDict**：手工按 tagged 格式组流（count u8 + 逐项 [clientServerFullIndex u8 + 该属性 addToStream 输出]），覆盖 other-client 与 own-client 数据；顺带断言 clientServerProperty 的排序结果 [score, secret, nick]。
+6. **访问器**：pIdentifier（Identifier 属性须同时 `<Persistent>true</Persistent>`——parse 对 Indexed 默认为真，非持久 Indexed 直接 parse 失败）、isTempProperty、clientServerPropertyCount/clientServerProperty、无 Identifier 时 pIdentifier()==NULL。
+7. **setExposedMsgIDs + checkMethods**：唯一暴露 base 方法取 range(10,19) 首槽 msgID=10、未暴露方法保留 -1 哨兵读作 255（Mercury::MessageID uint8 回绕）；checkMethods 的 warnOnMissing 双臂与「Python 类缺方法即 false」。
+
+**实测坑位**：① `clientServerProperties_` 按流尺寸稳定排序（见上）——首个版本按 def 顺序取 index 0/1/2，把 ScriptString 喂给 UINT16 属性、ScriptInt 喂给 STRING 属性，`addToStream` 类型不匹配全红；② `NUM_PASSES=4` 而非常见猜测的 3，dataSizes 少开一个导致「逐 pass 尺寸和 8 ≠ 流总长 10」的假失败（未记录的第 4 pass 正好是 2 字节的 hp）；③ `MemoryOStream` 追加原始字节是 `addBlob`（无 `append`）；④ `XMLSection` 的 `asString`/`asInt` 是 **protected**，须经基类 `DataSectionPtr` 用 `readString`/`readInt`；⑤ `ScriptString` 取值用 `c_str()`（无 `asChar`）；⑥ **/tmp 配额**——精准插桩产出 187 MB 二进制，两轮插桩 + 多份 cp 副本很快把 tmpfs 写满（`cp: error writing … Disk quota exceeded`），插桩目录须随测随清。
+
+**残余登记（72 行）**：parse 错误/警告臂（307-357）、LoD/Volatile 缺省臂（416,419）、parseComponents 缺臂（508,511）、parseProperties 覆盖与 clientSafety 臂（598-728）、parseMethods 错误臂（937-977）、checkExposedMethods 臂（1061-1075）、访客 MF_EXIT/边界臂（1163-1312）、读侧边界臂（1590-1702）、访问器 MF_EXIT 臂（1864）与 watcher 面（1882,1884）——以失败/断言臂为主，直驱需逐一构造失败输入，边际收益低。
+
+提交范围：`lib/entitydef/unit_test/test_entity_description.cpp`（既有 TU 追加）、`TESTING.md`、`docs/upgrade-plan/migration-status.md`、`README.md`、`todo.md`、本文档（§7.32）。

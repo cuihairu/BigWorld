@@ -25,6 +25,7 @@
 #include "entitydef/constants.hpp"
 #include "entitydef/entity_description.hpp"
 #include "entitydef/method_description.hpp"
+#include "entitydef/script_data_source.hpp"
 
 #include "resmgr/bwresource.hpp"
 #include "resmgr/multi_file_system.hpp"
@@ -33,6 +34,7 @@
 #include "cstdmf/bw_string.hpp"
 #include "cstdmf/bw_util.hpp"
 #include "cstdmf/md5.hpp"
+#include "network/exposed_message_range.hpp"
 
 #include <sys/stat.h>
 #include <unistd.h>
@@ -1696,6 +1698,545 @@ TEST_F( EntityDefUnitTestHarness, EntityDescription_md5ClientServerPropertyOrder
 
 	CHECK( fullBefore != fullAfter );
 	CHECK( persistentBefore == persistentAfter );
+}
+
+
+/**
+ *	Property values stream from a Python dict through addDictionaryToStream,
+ *	including the per-pass data sizes, and read back with the same values.
+ */
+TEST_F( EntityDefUnitTestHarness, EntityDescription_addDictionaryToStreamRoundTrip )
+{
+	installFixtures();
+
+	writeFixtureFile( BW::string( FIXTURE_DIR ) + "/batch32DictStream.def",
+		"<root>\n"
+		"	<Properties>\n"
+		"		<hp>\n"
+		"			<Type>UINT16</Type>\n"
+		"			<Flags>CELL_PUBLIC</Flags>\n"
+		"		</hp>\n"
+		"		<owner>\n"
+		"			<Type>UINT32</Type>\n"
+		"			<Flags>BASE</Flags>\n"
+		"		</owner>\n"
+		"		<nick>\n"
+		"			<Type>STRING</Type>\n"
+		"			<Flags>ALL_CLIENTS</Flags>\n"
+		"		</nick>\n"
+		"	</Properties>\n"
+		"</root>\n" );
+
+	EntityDescription description;
+
+	CHECK( description.parse( "batch32DictStream", "", NULL ) );
+
+	ScriptDict map = ScriptDict::create();
+	CHECK( map.setItem( "hp", ScriptInt::create( 5 ), ScriptErrorPrint() ) );
+	CHECK( map.setItem( "owner", ScriptInt::create( 7 ),
+		ScriptErrorPrint() ) );
+	CHECK( map.setItem( "nick", ScriptString::create( "bob" ),
+		ScriptErrorPrint() ) );
+
+	const int domains = EntityDescription::BASE_DATA |
+		EntityDescription::CELL_DATA | EntityDescription::CLIENT_DATA;
+
+	// There are four passes (base, base+client, cell+client, cell). owner
+	// lands in pass 0, nick in pass 2, hp in pass 3, and no property has the
+	// base-and-client combination, so pass 1 contributes nothing.
+	int32 sizes[ 4 ];
+	MemoryOStream os;
+
+	CHECK( description.addDictionaryToStream( map, os, domains, sizes, 4 ) );
+	CHECK( os.size() > 0 );
+
+	CHECK_EQUAL( 4, sizes[ 0 ] );
+	CHECK_EQUAL( 0, sizes[ 1 ] );
+	CHECK_EQUAL( 4, sizes[ 2 ] );
+	CHECK_EQUAL( 2, sizes[ 3 ] );
+
+	int32 total = 0;
+
+	for (int i = 0; i < 4; ++i)
+	{
+		CHECK( sizes[ i ] >= 0 );
+		total += sizes[ i ];
+	}
+
+	CHECK_EQUAL( os.size(), size_t( total ) );
+
+	ScriptDict dict = ScriptDict::create();
+	MemoryIStream is( os.data(), os.size() );
+	CHECK( description.readStreamToDict( is, domains, dict ) );
+	CHECK_EQUAL( 0, is.remainingLength() );
+
+	ScriptObject pHp = dict.getItem( "hp", ScriptErrorPrint() );
+	CHECK( pHp.exists() );
+	CHECK( ScriptInt::check( pHp ) );
+	CHECK_EQUAL( 5, ScriptInt( pHp.get() ).asLong() );
+
+	ScriptObject pOwner = dict.getItem( "owner", ScriptErrorPrint() );
+	CHECK( pOwner.exists() );
+	CHECK( ScriptInt::check( pOwner ) );
+	CHECK_EQUAL( 7, ScriptInt( pOwner.get() ).asLong() );
+
+	ScriptObject pNick = dict.getItem( "nick", ScriptErrorPrint() );
+	CHECK( pNick.exists() );
+	CHECK( ScriptString::check( pNick ) );
+	CHECK( strcmp( "bob", ScriptString( pNick.get() ).c_str() ) == 0 );
+}
+
+
+/**
+ *	A dict that misses keys streams their defaults, a value of the wrong
+ *	Python type fails the stream, and a null mapping is rejected up front.
+ */
+TEST_F( EntityDefUnitTestHarness, EntityDescription_addDictionaryToStreamDefaultsAndInvalid )
+{
+	installFixtures();
+
+	writeFixtureFile( BW::string( FIXTURE_DIR ) + "/batch32DictDefaults.def",
+		"<root>\n"
+		"	<Properties>\n"
+		"		<hp>\n"
+		"			<Type>UINT16</Type>\n"
+		"			<Flags>CELL_PUBLIC</Flags>\n"
+		"		</hp>\n"
+		"		<owner>\n"
+		"			<Type>UINT32</Type>\n"
+		"			<Flags>BASE</Flags>\n"
+		"		</owner>\n"
+		"		<nick>\n"
+		"			<Type>STRING</Type>\n"
+		"			<Flags>ALL_CLIENTS</Flags>\n"
+		"		</nick>\n"
+		"	</Properties>\n"
+		"</root>\n" );
+
+	EntityDescription description;
+
+	CHECK( description.parse( "batch32DictDefaults", "", NULL ) );
+
+	const int domains = EntityDescription::BASE_DATA |
+		EntityDescription::CELL_DATA | EntityDescription::CLIENT_DATA;
+
+	// Only hp has a value: owner and nick stream their defaults.
+	ScriptDict map = ScriptDict::create();
+	CHECK( map.setItem( "hp", ScriptInt::create( 5 ), ScriptErrorPrint() ) );
+
+	MemoryOStream os;
+	CHECK( description.addDictionaryToStream( map, os, domains ) );
+
+	ScriptDict dict = ScriptDict::create();
+	MemoryIStream is( os.data(), os.size() );
+	CHECK( description.readStreamToDict( is, domains, dict ) );
+
+	ScriptObject pHp = dict.getItem( "hp", ScriptErrorPrint() );
+	CHECK( pHp.exists() );
+	CHECK_EQUAL( 5, ScriptInt( pHp.get() ).asLong() );
+
+	ScriptObject pOwner = dict.getItem( "owner", ScriptErrorPrint() );
+	CHECK( pOwner.exists() );
+	CHECK_EQUAL( 0, ScriptInt( pOwner.get() ).asLong() );
+
+	ScriptObject pNick = dict.getItem( "nick", ScriptErrorPrint() );
+	CHECK( pNick.exists() );
+	CHECK( ScriptString::check( pNick ) );
+	CHECK( strcmp( "", ScriptString( pNick.get() ).c_str() ) == 0 );
+
+	// A value of the wrong Python type fails the stream and is replaced by
+	// the default while doing so.
+	ScriptDict wrong = ScriptDict::create();
+	CHECK( wrong.setItem( "hp", ScriptString::create( "oops" ),
+		ScriptErrorPrint() ) );
+
+	MemoryOStream wrongStream;
+	CHECK( !description.addDictionaryToStream( wrong, wrongStream, domains ) );
+
+	// A null mapping is rejected before anything is written.
+	ScriptMapping invalid;
+	MemoryOStream invalidStream;
+	CHECK( !description.addDictionaryToStream( invalid, invalidStream,
+		domains ) );
+}
+
+
+/**
+ *	Property values stream from Python instance attributes through
+ *	addAttributesToStream and read back with the same values. An object
+ *	missing an attribute fails the stream, as does a null object.
+ */
+TEST_F( EntityDefUnitTestHarness, EntityDescription_addAttributesToStreamRoundTrip )
+{
+	installFixtures();
+
+	writeFixtureFile( BW::string( FIXTURE_DIR ) + "/batch32Attrs.def",
+		"<root>\n"
+		"	<Properties>\n"
+		"		<hp>\n"
+		"			<Type>UINT16</Type>\n"
+		"			<Flags>CELL_PUBLIC</Flags>\n"
+		"		</hp>\n"
+		"		<owner>\n"
+		"			<Type>UINT32</Type>\n"
+		"			<Flags>BASE</Flags>\n"
+		"		</owner>\n"
+		"		<nick>\n"
+		"			<Type>STRING</Type>\n"
+		"			<Flags>ALL_CLIENTS</Flags>\n"
+		"		</nick>\n"
+		"	</Properties>\n"
+		"</root>\n" );
+
+	EntityDescription description;
+
+	CHECK( description.parse( "batch32Attrs", "", NULL ) );
+
+	// PyRun_String with Py_file_input returns None, so define the class and
+	// its attribute values with exec and fetch the instance with eval.
+	PyObject * pGlobals = PyDict_New();
+	PyObject * pBuiltins = PyImport_AddModule( "builtins" );
+	PyDict_SetItemString( pGlobals, "__builtins__",
+		PyModule_GetDict( pBuiltins ) );
+
+	PyRun_String(
+		"class _BWBatch32Attrs(object):\n"
+		"    pass\n"
+		"a = _BWBatch32Attrs()\n"
+		"a.hp = 5\n"
+		"a.owner = 7\n"
+		"a.nick = 'bob'\n"
+		"b = _BWBatch32Attrs()\n"
+		"b.hp = 5\n",
+		Py_file_input, pGlobals, pGlobals );
+	PyErr_Clear();
+
+	ScriptObject full( PyRun_String( "a\n", Py_eval_input, pGlobals,
+		pGlobals ), ScriptObject::STEAL_REFERENCE );
+	CHECK( full.exists() );
+	CHECK( full.get() != Py_None );
+
+	ScriptObject partial( PyRun_String( "b\n", Py_eval_input, pGlobals,
+		pGlobals ), ScriptObject::STEAL_REFERENCE );
+	CHECK( partial.exists() );
+
+	Py_DECREF( pGlobals );
+	PyErr_Clear();
+
+	const int domains = EntityDescription::BASE_DATA |
+		EntityDescription::CELL_DATA | EntityDescription::CLIENT_DATA;
+
+	MemoryOStream os;
+	CHECK( description.addAttributesToStream( full, os, domains ) );
+	CHECK( os.size() > 0 );
+
+	ScriptDict dict = ScriptDict::create();
+	MemoryIStream is( os.data(), os.size() );
+	CHECK( description.readStreamToDict( is, domains, dict ) );
+
+	ScriptObject pHp = dict.getItem( "hp", ScriptErrorPrint() );
+	CHECK( pHp.exists() );
+	CHECK_EQUAL( 5, ScriptInt( pHp.get() ).asLong() );
+
+	ScriptObject pNick = dict.getItem( "nick", ScriptErrorPrint() );
+	CHECK( pNick.exists() );
+	CHECK( ScriptString::check( pNick ) );
+	CHECK( strcmp( "bob", ScriptString( pNick.get() ).c_str() ) == 0 );
+
+	// The attribute visitor treats a missing attribute as an error, unlike
+	// the map visitor which falls back to the default value.
+	MemoryOStream partialStream;
+	CHECK( !description.addAttributesToStream( partial, partialStream,
+		domains ) );
+
+	// A null object is rejected up front.
+	MemoryOStream nullStream;
+	CHECK( !description.addAttributesToStream( ScriptObject(), nullStream,
+		domains ) );
+}
+
+
+/**
+ *	A value section streams out and reads back into a fresh section with the
+ *	same property children.
+ */
+TEST_F( EntityDefUnitTestHarness, EntityDescription_readStreamToSection )
+{
+	installFixtures();
+
+	writeFixtureFile( BW::string( FIXTURE_DIR ) + "/batch32Section.def",
+		"<root>\n"
+		"	<Properties>\n"
+		"		<nick>\n"
+		"			<Type>STRING</Type>\n"
+		"			<Flags>ALL_CLIENTS</Flags>\n"
+		"		</nick>\n"
+		"		<secret>\n"
+		"			<Type>UINT16</Type>\n"
+		"			<Flags>OWN_CLIENT</Flags>\n"
+		"		</secret>\n"
+		"	</Properties>\n"
+		"</root>\n" );
+
+	EntityDescription description;
+
+	CHECK( description.parse( "batch32Section", "", NULL ) );
+
+	BW::stringstream valueXML;
+	valueXML << "<root>\n	<nick>bob</nick>\n	<secret>9</secret>\n</root>\n";
+
+	XMLSectionPtr pValues = XMLSection::createFromStream( "", valueXML );
+	CHECK( pValues != NULL );
+
+	const int domains = EntityDescription::FROM_CELL_TO_CLIENT_DATA;
+
+	MemoryOStream os;
+	CHECK( description.addSectionToStream( pValues, os, domains ) );
+	CHECK( os.size() > 0 );
+
+	BW::stringstream emptyXML;
+	emptyXML << "<root/>\n";
+	XMLSectionPtr pOut = XMLSection::createFromStream( "root", emptyXML );
+	CHECK( pOut != NULL );
+
+	MemoryIStream is( os.data(), os.size() );
+	CHECK( description.readStreamToSection( is, domains, pOut ) );
+
+	CHECK_EQUAL( 0, strcmp( "bob",
+		pOut->readString( "nick" ).c_str() ) );
+	CHECK_EQUAL( 9, pOut->readInt( "secret", /* default */ 0 ) );
+}
+
+
+/**
+ *	Tagged client streams carry a count and per-item property indices: the
+ *	reader resolves each index through clientServerProperty and fills the
+ *	dict, covering other-client and own-client data alike.
+ */
+TEST_F( EntityDefUnitTestHarness, EntityDescription_readTaggedClientStreamToDict )
+{
+	installFixtures();
+
+	writeFixtureFile( BW::string( FIXTURE_DIR ) + "/batch32Tagged.def",
+		"<root>\n"
+		"	<Properties>\n"
+		"		<nick>\n"
+		"			<Type>STRING</Type>\n"
+		"			<Flags>ALL_CLIENTS</Flags>\n"
+		"		</nick>\n"
+		"		<score>\n"
+		"			<Type>UINT16</Type>\n"
+		"			<Flags>ALL_CLIENTS</Flags>\n"
+		"		</score>\n"
+		"		<secret>\n"
+		"			<Type>UINT16</Type>\n"
+		"			<Flags>OWN_CLIENT</Flags>\n"
+		"		</secret>\n"
+		"	</Properties>\n"
+		"</root>\n" );
+
+	EntityDescription description;
+
+	CHECK( description.parse( "batch32Tagged", "", NULL ) );
+	CHECK_EQUAL( 3, int( description.clientServerPropertyCount() ) );
+
+	// Each item's value part is one property's addToStream output, prefixed
+	// by its client-server property index.
+	// The client-server list is sorted by stream size: fixed-size
+	// properties first (stable within one size), then variable-length ones.
+	CHECK( strcmp( "score",
+		description.clientServerProperty( 0 )->name().c_str() ) == 0 );
+	CHECK( strcmp( "secret",
+		description.clientServerProperty( 1 )->name().c_str() ) == 0 );
+	CHECK( strcmp( "nick",
+		description.clientServerProperty( 2 )->name().c_str() ) == 0 );
+
+	// Each item's value part is one property's addToStream output, prefixed
+	// by its client-server property index.
+	const DataDescription * pScoreDesc = description.clientServerProperty( 0 );
+	ScriptDataSource scoreSource( ScriptInt::create( 5 ) );
+	MemoryOStream scoreStream;
+	CHECK( pScoreDesc->addToStream( scoreSource, scoreStream, false ) );
+
+	const DataDescription * pSecretDesc = description.clientServerProperty( 1 );
+	ScriptDataSource secretSource( ScriptInt::create( 9 ) );
+	MemoryOStream secretStream;
+	CHECK( pSecretDesc->addToStream( secretSource, secretStream, false ) );
+
+	const DataDescription * pNickDesc = description.clientServerProperty( 2 );
+	ScriptDataSource nickSource( ScriptString::create( "bob" ) );
+	MemoryOStream nickStream;
+	CHECK( pNickDesc->addToStream( nickSource, nickStream,
+		/* isPersistentOnly */ false ) );
+
+	MemoryOStream os;
+	const uint8 count = 3;
+	os.addBlob( &count, sizeof( count ) );
+	const uint8 scoreIndex = 0;
+	os.addBlob( &scoreIndex, sizeof( scoreIndex ) );
+	os.addBlob( scoreStream.data(), scoreStream.size() );
+	const uint8 secretIndex = 1;
+	os.addBlob( &secretIndex, sizeof( secretIndex ) );
+	os.addBlob( secretStream.data(), secretStream.size() );
+	const uint8 nickIndex = 2;
+	os.addBlob( &nickIndex, sizeof( nickIndex ) );
+	os.addBlob( nickStream.data(), nickStream.size() );
+	os.rewind();
+
+	ScriptDict dict = ScriptDict::create();
+	CHECK( description.readTaggedClientStreamToDict( os, dict ) );
+
+	ScriptObject pNickValue = dict.getItem( "nick", ScriptErrorPrint() );
+	CHECK( pNickValue.exists() );
+	CHECK( ScriptString::check( pNickValue ) );
+	CHECK( strcmp( "bob", ScriptString( pNickValue.get() ).c_str() ) == 0 );
+
+	ScriptObject pScoreValue = dict.getItem( "score", ScriptErrorPrint() );
+	CHECK( pScoreValue.exists() );
+	CHECK_EQUAL( 5, ScriptInt( pScoreValue.get() ).asLong() );
+
+	ScriptObject pSecretValue = dict.getItem( "secret", ScriptErrorPrint() );
+	CHECK( pSecretValue.exists() );
+	CHECK_EQUAL( 9, ScriptInt( pSecretValue.get() ).asLong() );
+}
+
+
+/**
+ *	The property accessors resolve the Identifier property, temp properties
+ *	and the client-server property list.
+ */
+TEST_F( EntityDefUnitTestHarness, EntityDescription_propertyAccessors )
+{
+	installFixtures();
+
+	writeFixtureFile( BW::string( FIXTURE_DIR ) + "/batch32Access.def",
+		"<root>\n"
+		"	<Properties>\n"
+		"		<id>\n"
+		"			<Type>UINT32</Type>\n"
+		"			<Flags>CELL_PUBLIC</Flags>\n"
+		"			<Identifier>true</Identifier>\n"
+		"			<Persistent>true</Persistent>\n"
+		"		</id>\n"
+		"		<nick>\n"
+		"			<Type>STRING</Type>\n"
+		"			<Flags>ALL_CLIENTS</Flags>\n"
+		"		</nick>\n"
+		"	</Properties>\n"
+		"	<TempProperties>\n"
+		"		<scratch/>\n"
+		"	</TempProperties>\n"
+		"</root>\n" );
+
+	EntityDescription description;
+
+	CHECK( description.parse( "batch32Access", "", NULL ) );
+	CHECK_EQUAL( 2, description.propertyCount() );
+
+	const DataDescription * pId = description.pIdentifier();
+	CHECK( pId != NULL );
+	CHECK( strcmp( "id", pId->name().c_str() ) == 0 );
+
+	CHECK_EQUAL( true, description.isTempProperty( "scratch" ) );
+	CHECK_EQUAL( false, description.isTempProperty( "nick" ) );
+
+	CHECK_EQUAL( 1, description.clientServerPropertyCount() );
+	CHECK( strcmp( "nick",
+		description.clientServerProperty( 0 )->name().c_str() ) == 0 );
+
+	// Without an Identifier property the lookup yields NULL.
+	writeFixtureFile( BW::string( FIXTURE_DIR ) + "/batch32AccessNoId.def",
+		"<root>\n"
+		"	<Properties>\n"
+		"		<nick>\n"
+		"			<Type>STRING</Type>\n"
+		"			<Flags>ALL_CLIENTS</Flags>\n"
+		"		</nick>\n"
+		"	</Properties>\n"
+		"</root>\n" );
+
+	EntityDescription plain;
+	CHECK( plain.parse( "batch32AccessNoId", "", NULL ) );
+	CHECK( plain.pIdentifier() == NULL );
+}
+
+
+/**
+ *	setExposedMsgIDs hands each exposed method the message id its position in
+ *	the range dictates, and checkMethods verifies a Python class implements
+ *	every non-componentised method.
+ */
+TEST_F( EntityDefUnitTestHarness, EntityDescription_setExposedMsgIDsAndCheckMethods )
+{
+	installFixtures();
+
+	writeFixtureFile( BW::string( FIXTURE_DIR ) + "/batch32MsgIDs.def",
+		"<root>\n"
+		"	<BaseMethods>\n"
+		"		<basePing/>\n"
+		"		<baseHeal>\n"
+		"			<Exposed/>\n"
+		"		</baseHeal>\n"
+		"	</BaseMethods>\n"
+		"	<CellMethods>\n"
+		"		<cellTick/>\n"
+		"	</CellMethods>\n"
+		"	<ClientMethods>\n"
+		"		<clientNotify/>\n"
+		"	</ClientMethods>\n"
+		"</root>\n" );
+
+	EntityDescription description;
+
+	CHECK( description.parse( "batch32MsgIDs", "", NULL ) );
+
+	ExposedMethodMessageRange range( 10, 19 );
+	description.setExposedMsgIDs( 100, &range, 100, &range, 100, &range );
+
+	CHECK_EQUAL( 1, description.base().exposedSize() );
+	CHECK_EQUAL( 0, description.cell().exposedSize() );
+
+	// baseHeal is the only exposed method, so it takes the first slot.
+	CHECK_EQUAL( 10,
+		int( description.base().exposedMethod( 0 )->exposedMsgID() ) );
+
+	// basePing is not exposed and keeps the wrapped sentinel id.
+	CHECK_EQUAL( 255,
+		int( description.base().internalMethod( 0 )->exposedMsgID() ) );
+
+	// checkMethods wants a Python class implementing basePing and baseHeal.
+	PyObject * pGlobals = PyDict_New();
+	PyObject * pBuiltins = PyImport_AddModule( "builtins" );
+	PyDict_SetItemString( pGlobals, "__builtins__",
+		PyModule_GetDict( pBuiltins ) );
+
+	PyRun_String(
+		"class _BWBatch32OnlyPing(object):\n"
+		"    def basePing(self):\n"
+		"        pass\n"
+		"class _BWBatch32Both(object):\n"
+		"    def basePing(self):\n"
+		"        pass\n"
+		"    def baseHeal(self):\n"
+		"        pass\n",
+		Py_file_input, pGlobals, pGlobals );
+	PyErr_Clear();
+
+	ScriptObject onlyPing( PyRun_String( "_BWBatch32OnlyPing\n",
+		Py_eval_input, pGlobals, pGlobals ), ScriptObject::STEAL_REFERENCE );
+	CHECK( onlyPing.exists() );
+
+	ScriptObject both( PyRun_String( "_BWBatch32Both\n",
+		Py_eval_input, pGlobals, pGlobals ), ScriptObject::STEAL_REFERENCE );
+	CHECK( both.exists() );
+
+	Py_DECREF( pGlobals );
+	PyErr_Clear();
+
+	CHECK( !description.checkMethods( description.base().internalMethods(),
+		onlyPing, /* warnOnMissing */ false ) );
+	CHECK( description.checkMethods( description.base().internalMethods(),
+		both, false ) );
 }
 
 

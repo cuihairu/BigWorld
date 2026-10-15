@@ -94,7 +94,7 @@ gcovr -r /home/cui/workspaces/BigWorld/programming/bigworld --txt -o /tmp/cov.tx
 | chunk/chunk_boundary.cpp | 403/403 | 0% | 受限：同 chunk 体系 |
 | network/logger_endpoint.cpp | 398/398 | 0% | 维持受限登记（真消息日志管线，批次17） |
 | resmgr/bwresource.cpp | 282/746 | 62% | 批次 28 实测（精准插桩 464/746；386/746 为 09-28 全量口径） |
-| entitydef/entity_description.cpp | 195/663 | 70% | 批次 31 实测（精准插桩 468/663；239/663 为批次 29 口径） |
+| entitydef/entity_description.cpp | 72/663 | 89% | 批次 32 实测（精准插桩 591/663；195/663 为批次 31 口径） |
 | network/logger_message_forwarder.cpp | 335/335 | 0% | 维持受限登记（批次17） |
 | entitydef/method_description.cpp | 137/466 | 70% | 批次 28 实测（精准插桩 329/466；323/478 为 09-28 全量口径） |
 | server/python_server.cpp | 298/298 | 0% | 受限：需完整 app 装配 |
@@ -308,3 +308,26 @@ client 方法无暴露门控（`<Exposed/>` 在 ClientMethods 恒拒绝）、暴
 构造不初始化字节，须走 `Digest(MD5&)` 或 `operator=`。残余 195 行分类登记：parseProperties 覆盖/
 override 臂、LoDLevels/Volatile/Implements/Components 解析面、addSectionToStream 流写侧、
 supersede 迁移面、watcher 面等，见台账 §7.31。
+
+`entitydef/entity_description.cpp` 70%→**89%**（精准插桩口径 468/663→591/663 实例行，批次 32；
+表值 195/663→72/663）。批次 31 收口的 MD5 族之外，本批直驱其**流写侧访客族 + 读侧 + 访问器 + 暴露
+消息号**四块：addDictionaryToStream（AddToStreamMapVisitor：缺键落默认值不报错）、
+addAttributesToStream（AddToStreamAttributeVisitor：缺属性即失败、NULL 对象前置拒绝、错误类型值
+换默认值后整体失败）、addToStream 助手逐 pass 数据尺寸（**NUM_PASSES=4**：pass0 base、pass1
+base+client、pass2 cell+client、pass3 cell，PASS_FILTER 按 isBaseData×isClientServerData 二维过滤；
+owner(BASE)→pass0、nick(ALL_CLIENTS)→pass2、hp(CELL_PUBLIC)→pass3，dataSizes 逐 pass 尺寸与流总长
+精确对账）、readStreamToSection（流→新建 XML section 往返）、readTaggedClientStreamToDict
+（count u8 + 逐项 [clientServerFullIndex u8 + 属性流数据]，other-client 与 own-client 数据均落
+dict）、pIdentifier/isTempProperty/clientServerProperty(Count) 访问器（Identifier 属性须同时
+Persistent:true——parse 对 Indexed 默认真、非持久 Indexed 直接 parse 失败）、setExposedMsgIDs
+（唯一暴露方法取 range 首槽 msgID=10，未暴露方法保留 -1 哨兵读作 255）、checkMethods
+（warnOnMissing 双臂，Python 类缺方法即 false）。既有 TU 追加 7 用例（entitydef_test 359→366）。
+**实测坑位**：① `clientServerProperties_` 经 `allocateClientServerFullIndexes` **按流尺寸稳定排序**
+（定长升序在前、变长按名义尺寸升序在后，entity_description.cpp:828-876）——clientServerProperty(n)
+的 n 不是 def 顺序，tagged 流的 index 也用排序后序号；② NUM_PASSES=4 而非 3，dataSizes 数组须开
+4 且 numDataSizes=4 才与流总长对账（numDataSizes=3 时 MF_ASSERT_DEV 放行 actualPass-1 但第 4 pass
+不记录）；③ `MemoryOStream` 追加原始字节用 `addBlob`（无 append）；④ `XMLSection` 的
+asString/asInt 是 protected，须经基类 DataSectionPtr 用 `readString/readInt`；⑤ ScriptString 取值
+用 `c_str()`（无 asChar）。残余 72 行分类登记：parse 错误/警告臂、LoD/Volatile 缺省臂、
+parseProperties 覆盖与 clientSafety 臂、parseMethods 错误臂、checkExposedMethods 臂、访客
+MF_EXIT/边界臂、watcher 面，见台账 §7.32。

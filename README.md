@@ -19,7 +19,7 @@ For more details refer to [BigWorld Technology Server Whitepaper](<docs/pdf/BigW
 ## 项目状态
 
  - **技术栈**：C++23 服务端（Linux）/ 嵌入式 **Python 3.13.16**（已从 2.7 完成迁移）/ [vcpkg](https://vcpkg.io) 第三方依赖管理
- - **质量门禁**：21 个模块单测、1465 个用例全绿（2026-10-15 实测，entity_description MD5 族直驱批次 31 后）；gcovr 插桩覆盖率实跑基线（补强批次 1–31 完成）
+ - **质量门禁**：21 个模块单测、1472 个用例全绿（2026-10-15 实测，entity_description 流/访问器/暴露消息号直驱批次 32 后）；gcovr 插桩覆盖率实跑基线（补强批次 1–32 完成）
  - **状态**：dev 分支日常构建与全量测试保持全绿
 
 Python 2.7 → 3.13 迁移的完整过程、逐批验收与陷阱记录见[迁移全量台账](docs/python-313-migration.md)；迁移现状与各模块覆盖率基线见[迁移与覆盖率现状](docs/upgrade-plan/migration-status.md)。规划与待办账本见 [todo.md](todo.md)（patrol 巡检维护，含已实现/只有设计/完全没有三档盘点）。
