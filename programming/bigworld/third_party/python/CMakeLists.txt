@@ -126,23 +126,23 @@ ExternalProject_Add(bwpython313
 	LOG_BUILD TRUE
 )
 
-add_library(bwpython313_core STATIC IMPORTED GLOBAL)
-add_dependencies(bwpython313_core bwpython313)
-set_target_properties(bwpython313_core PROPERTIES
-	IMPORTED_LOCATION "${BW_PYTHONCORE_ARCHIVE}")
-
-# The target the root superproject and lib/pyscript expect by name. No sources:
-# the BW hooks are compiled into pythoncore by PCbuild/Directory.Build.targets
-# (see the header comment), so the only thing to hand consumers is the import
-# library below. An empty STATIC archive is legal and keeps the target name
-# contract while python313.lib does the work.
-add_library(libpython STATIC)
+# The target the root superproject names (BWConfiguration_server.cmake:96) and
+# the one lib/pyscript and lib/script link. With the BW hooks now compiled into
+# pythoncore (PCbuild/Directory.Build.targets, see the header comment) the whole
+# Windows contract is python313.lib, so libpython IS that imported archive
+# rather than a wrapper target of its own - a sourceless STATIC target is
+# rejected at generate time anyway ("No SOURCES given to target: libpython",
+# run 38762101165), and a wrapper would only exist to hold an object that no
+# longer exists.
+#
+# No INTERFACE_INCLUDE_DIRECTORIES here: IMPORTED targets are checked at
+# generate time for existing paths, and the pyconfig.h directory below only
+# comes into being when pythoncore builds. Consumers get the two Python source
+# include dirs from BWStandardProject.cmake:5-6, which every module includes.
+add_library(libpython STATIC IMPORTED GLOBAL)
 add_dependencies(libpython bwpython313)
-target_include_directories(libpython PUBLIC
-	"${BW_PYTHON_SRC}/Include"
-	"${BW_PYTHON_SRC}/PC"
-	"${BW_PYTHON_PYCONFIG_DIR}")
-target_link_libraries(libpython PUBLIC bwpython313_core)
+set_target_properties(libpython PROPERTIES
+	IMPORTED_LOCATION "${BW_PYTHONCORE_ARCHIVE}")
 
 message(STATUS "libpython: pythoncore ${BW_PYTHONCORE_ARCHIVE}, "
 	"bwhooks.c carried by python313.dll via Directory.Build.targets")
