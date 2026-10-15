@@ -35,10 +35,10 @@ name: CI Windows (MSVC compile gate)
 #           mode only carries the standard VS configurations, so the job
 #           builds Release.
 #
-# The generator is the unversioned "Visual Studio" (latest installed VS) and
-# setup-msvc uses vs-version 'latest', so the job follows the runner image
-# instead of pinning one VS year; the runner does not put cl.exe on PATH by
-# itself, hence the explicit setup-msvc step.
+# The generator is the unversioned "Visual Studio", which resolves to the
+# newest VS on the image, so the job follows the runner instead of pinning one
+# VS year; CMake finds the compiler through vswhere, so no dev-shell setup or
+# marketplace action is needed.
 
 on:
   push:
@@ -80,17 +80,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Set up MSVC
-        uses: microsoft/setup-msvc@v1
-        with:
-          vs-version: 'latest'
-
       - name: Show toolchain
         shell: pwsh
         run: |
           cmake --version | Select-Object -First 1
-          cl.exe /? 2>&1 | Select-String "Copyright" | Select-Object -First 1
-          cmake --help 2>&1 | Select-String "Visual Studio" | Select-Object -First 3
+          # The "Visual Studio" generator locates the compiler through vswhere
+          # itself, so no dev-shell setup step is needed (and no marketplace
+          # action is required to resolve).
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          if (Test-Path $vswhere) {
+            & $vswhere -latest -products * -property installationPath `
+                     -property installationVersion
+          } else {
+            Write-Host "vswhere.exe not found at $vswhere"
+          }
 
       - name: Configure (${{ matrix.library }})
         shell: pwsh
