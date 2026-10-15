@@ -671,3 +671,66 @@ MemoryDebug_testCounts/testSmartPointerCounts 同境；hybrid server 轨该开�
 Berkeley 族调用点转换（现由 _WINSOCK_DEPRECATED_NO_WARNINGS 豁免压制）；
 bwmachined/linux_machine_guard.cpp（signal(SIGCHLD)）与
 server/cellapp/LeakTracer.cpp（裸 windows.h TU）为下轮整 TU 守卫候选。
+
+**批次 41（2026-10-16）——探针 #9 普查解码、interface 宏改为按文件局部作用域（R1018）**
+
+探针 #9（run 38810084412，`732813a9`，7m59s，307 错误）：922→307 腰斩，R1017
+旧族全灭（无 C2039 allocator 洪泛、无 C2332/C2187 interface 声明错误）。分族：
+C2146×109、C4430×90、C2378×44、C2371×37、C3861×4、C2664×3、C2275×2、C2143×2、
+C2065×2、C2059×2、C2039×2、C1003×2、C2665×1、C2498×1、C2447×1；告警 C4244×1、
+C4229×1。
+
+本轮主修：interface 宏作用域整体反转。
+
+- **R1017 的修法被证伪**：xp_math.hpp 在 DirectX include 块后的 TU 级
+  `#undef interface` 引发 resmgr 191 错 + cellapp_extension 104 错，全落在 SDK
+  COM 头内部（shobjidl.h 170、shlwapi.h、d3d10.h）——rpcndr.h 的 include guard
+  保证该宏 undef 后不再重定义，于是其后的每个 SDK COM 头都失去 interface。
+  宏是硬二分：SDK COM 头（d3d9.h 自己的 DECLARE_INTERFACEForward、shlobj/
+  shobjidl、shlwapi、d3d10）在其解析时刻要求宏在场，BW 代码要求宏缺席。
+  重命名出界（624 处精确 token / 61 处 `.interface()` 调用 / 175 文件）。
+- **改为按文件局部作用域**：每个以 interface 为标识符的 BW 文件自带
+  `#if defined( _WIN32 )` 内的 `#pragma push_macro( "interface" )` +
+  `#undef interface`（压栈再摘除），文件末 `#pragma pop_macro` 还原——只在本
+  文件被解析期间关宏，其后的 SDK COM 头恢复宏在场。宏缺席因此与各文件的
+  include 顺序无关。
+- **xp_math.hpp 的 TU 级 undef 已回退**（-11 行），不再承载宏策略。
+- **覆盖范围从「探针报错文件」扩大到全量普查**：以正确注释/字符串剥离器
+  重扫 lib/server/common（排除 third_party、client_integration），得 95 个持
+  独立 interface token 的文件，93 个已包（xp_math.hpp 本身不含该 token；
+  render_context.ipp 无 include 且由 render_context.cpp 的包覆盖）。
+  旧启发式剥离器被字符串内的 `/*` 误判为块注释起点而卡在注释态、整行清空，
+  95→10 假阴性——这直接导致前两轮漏包 18 个文件与一次基于错误清单的重建。
+- **包内顺序的两条硬规则**（本轮反复踩坑后确立）：push 必须落在文件**首个
+  include 连续块的末尾**——落在「首个 include 之后」会让后续 include（如
+  math/vector3.hpp 经 xp_math 抵达 d3d9.h）在宏缺席下解析；pop 必须落在
+  头文件 guard 的**最后一个 `#endif` 之前**（否则二次包含双重 pop）。
+- **包内后位 include 的 SDK 首达性验证**：20 个文件的包区间内仍有 include
+  （CODE_INLINE 的 .ipp、interface 消息头、network 的 Linux-only 头）。
+  include 闭包脚本（先按相对包含者解析、再根目录回退）证实 20/20 的
+  d3dx9math.h（及 d3d9.h/d3d9types.h/d3d10.h）**都在 push 之前已抵达**，
+  其 include guard 使包内再次包含成为空操作——SDK 头恰在宏在场时被解析。
+- 结构自检（93 文件，0 违例）：push/pop 各一且 push 在 pop 前；push 先于
+  首个 interface token；#if/#endif 计数与 HEAD 逐文件相同且嵌套深度归零；
+  无 SDK include 直落包内；末行保留换行。中途两次重建脚本各自引入过
+  「push 块只剩 pragma 行、#if 成为孤立开括号」与「pop 吃掉 guard 收口」
+  两类损坏，最终改为从 HEAD 内容重建（HEAD 无任何 wrapper）才干净收敛。
+
+门禁：全量 `make -s -rR bw-run-all-unit-tests`：21 模块 / 1505 用例 /
+0 失败（EXIT=0，与批次 40 同数——本轮无测试改动）。语法检查：非门禁模块的
+10 个 TU（entitydef/data_types、connection/baseapp_login_request_protocol、
+network/network_interface、network/packet_receiver、network/endpoint、
+baseapp/initial_connection_filter、cellapp/entity_type、loginapp/loginapp、
+transfer_db/transfer_db、bwengine_mysql/mysql_engine_creator）PASS；另 10 个
+FAIL 均为 Linux 既有面且与本轮改动无因果（lib/moo 两 TU 需 d3d9.h、
+machined_utils/watcher_nub/bwmachined 的枚举位运算触发 -Werror、
+database_tool_app/logger 的 `-DMF_CONFIG` 取值需在字符串宏内展开）——插入块
+整体位于 `#if defined( _WIN32 )` 内，Linux 预处理即整块丢弃。
+
+**下一层已知头**：两大族修复的真实效果由探针 #10 判定；service.cpp
+wsprintfW/lstrlenW（char 缓冲需 A 版）与 CommandLineToArgvW 第二参需 int*；
+server_app.cpp kill/ctime_r 无 Windows 版；plugin_library
+`_WIN32_FIND_DATAA::cFileName`（R1017 误拼 cFileNameA，MSVC 结构体无 A 后缀
+字段）；nat_config inet_pton 与 address_resolver inet_ntop 的 ws2tcpip include
+生效性；smartpointer C2665 ConstSmartPointer<BW::Vector4Provider> 构造；
+shared_data C2220；C4244×1/C4229×1。

@@ -23,17 +23,6 @@
 
 #include <emmintrin.h>
 
-// d3dx9math.h -> d3dx9.h -> d3d9.h (the Windows SDK one) reaches the COM
-// headers directly, and rpcndr.h leaves `#define interface struct` behind
-// for the rest of the TU. WIN32_LEAN_AND_MEAN cannot help - windows.h is not
-// the route here. Every declaration below that names something `interface`
-// (ServerApp::interface(), db_engine_creator's interface(), TimeKeeper's
-// `interface` parameter, ...) was rewritten into a syntax error (MSVC
-// C2332/C2059/C2027 in the root superproject build). rpcndr.h is not
-// re-processed in the same TU once its include guard holds, so dropping the
-// macro here keeps it off the rest of the TU.
-#undef interface
-
 BW_BEGIN_NAMESPACE
 
 typedef D3DXMATRIX MatrixBase;
