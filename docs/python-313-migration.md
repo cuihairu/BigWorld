@@ -856,3 +856,44 @@ TODO 表两个候选同时落位（bwresource 386/746 48%、method_description 3
 **门禁记录**：精准口径 **bwresource 322/746 → 464/746（62%）**、**method_description 153/466 → 329/466（70%）**；残余 bwresource 282 行（impl 初始化 188-484、purge 递归 551-564、searchPathsForFile/searchForFile 1179-1378、EDITOR_ENABLED 死区 1389-1392/1493-1579、ensurePathExists 族 1886-1974、addPaths/addSubPaths 族 2054-2213、fixCommonRootPath 2285-2353、monitor 包装 2558-2640、overrideAppDirectory/dissolveFilename 2702-2883，以 el7 服务端构建结构性不可达面为主）与 method_description 137 行（PyDeferredResponse 58-135、copy/赋值 254-268、createErrorObject 带 func 288-298、parse 缺 name 347-348、object-with-id 636-646、handleException 族 747-798、callMethod 错误/returnValues 分支 850-923、网络发送路径 970-1071、2 参 createArgsFromStream 1163/1166、:1216）全数分类登记。删桩复验（gcda=0、4 个对象 gcov 符数=0）后全量 21 模块门禁 **1352** 全绿。下批首位候选 `network/machine_guard.cpp`（28%，bwmachined 面之外仍有可测面；受限大件 entitydef/entity_description.cpp 665 行、moo/image.ipp 589 行维持候选）。
 
 提交范围：`lib/resmgr/unit_test/test_bwresource_paths.cpp`（新）、`lib/resmgr/unit_test/Makefile.rules`、`lib/entitydef/unit_test/test_method_description_gaps.cpp`（新）、`lib/entitydef/unit_test/Makefile.rules`、`TESTING.md`、`docs/upgrade-plan/migration-status.md`、`README.md`、`todo.md`、本文档。
+
+### 7.29 覆盖率补强批次 29：entitydef/entity_description.cpp 直驱收口（2026-10-15）
+
+TODO 表候选 `entitydef/entity_description.cpp`（665 行）的「受限：需 EntityType/EntityDef XML 装载机全套」判定**被推翻**——生产侧唯一调用点 `entity_description_map.cpp:362` 经 `desc.parse( typeName, /*componentName*/ BW::string(), pDistributionDecider )` 传入，全程只依赖 BWResource 单例与 scripts/entity_defs 下的 fixture .def 树。新建 `test_entity_description.cpp` 30 用例（entitydef_test 318→348），精准插桩口径 **0% → 64%（424/663 实例行）**，门禁 1397→**1427**。
+
+**entity_description.cpp 0% → 64%（424/663）用例覆盖面**（30 用例）：
+
+1. **parse 最小形态与失败面**：最小 .def 解析、标量属性 Flags 各位与 Persistent、缺 .def 失败、parseComponents 下 property(0) 为实体自有属性（hp）、组件属性在其后。
+2. **方法三列表**：BaseMethods/CellMethods/ClientMethods；`<Exposed/>` 的两种正确形态（`<baseExposed><Exposed/></baseExposed>`）与 ClientMethods 内 `<Exposed/>` 恒拒绝；无 Client 脚本时 ClientMethods 拒绝。
+3. **继承与优先级**：Parent 递归继承与缺父失败、Volatile 优先级平方与 yaw≥pitch≥roll 校验、LoDLevels 标签匹配 detailLevel、parseDistribution 标签解析与 detail 三 arm。
+4. **decider 面**：Distribution 三 decider 位、ClientName 弃用告警、parseDecider 无 scripts 失败。
+5. **TempProperties / Components / Implements / parseService**：TempProperties 解析；Components 装载、缺 def 失败、重名失败；Implements 接口属性；parseService 的 Methods→base 列表映射与强制非持久化；无 base 失败。
+6. **checkExposedMethods 四象限**：proxy/非 proxy × 合法/非法；SupersedeSmoke。
+7. **getDataDomains 全映射**：BASE_ENTITY_BACKUP/OFFLOAD→BASE_DATA、CELL_CREATION/CELL_ENTITY_BACKUP/OFFLOAD→CELL_DATA、CELL_GHOST_CREATION→CELL_DATA|ONLY_OTHER_CLIENT_DATA、CLIENT_PLAYER_CREATION→FROM_BASE_TO_CLIENT_DATA、CLIENT_PLAYER_CELL_CREATION→FROM_CELL_TO_CLIENT_DATA、DATABASE_ENTITY→BASE_DATA|ONLY_PERSISTENT_DATA；CLIENT_ENTITY_CELL_CREATION/CLIENT_ENTITY_LOD_DATA 两个 CRITICAL_MSG 不可达臂登记。
+8. **shouldSkipPass 矩阵**：EXACT_MATCH 置位时仅当 dataDomains 与 PASS_JUMPER[pass] 精确相等才跑（4×4 矩阵逐位断言），否则按位重叠判定；shouldConsiderData 各 pass 过滤（PASS_FILTER 双位）与 ONLY_PERSISTENT_DATA 臂。
+9. **流往返**：addSectionToStream→readStreamToDict 往返与 addSectionToDictionary 直写 dict。
+
+**实测坑位**：`EntityDescription::parse` 第二参 componentName 生产恒传空串——传实体名会把全部属性标记为 componentised、fullName 带 "Entity." 前缀，addSectionToStream 按 fullName 找值落默认值 0（gdb + PyObject_Print 实证 dict = `{'batch29Stream.hp': 0}`）；Script 属性须用 `ScriptInt::check(ScriptObject)` + `ScriptInt(p.get()).asLong()`（无 isInteger()）；XMLSection 需 `#include "resmgr/xml_section.hpp"`；StreamContentType 枚举在 BW 命名空间而非 EntityDescription 内。
+
+**残余登记（239 行）**：readStreamToSection/readTaggedClientStreamToDict/addAttributesToStream/addDictionaryToStream 网络流读侧、MD5 族（addToMD5/addPersistentPropertiesToMD5）、setExposedMsgIDs、checkMethods、pIdentifier/isTempProperty/clientServerProperty 族访问器、getDataDomains 两个 CRITICAL_MSG 不可达臂与析构/模板实例暗区。
+
+提交范围：`lib/entitydef/unit_test/test_entity_description.cpp`（新）、`lib/entitydef/unit_test/Makefile.rules`、`cmake/samples/entitydef/CMakeLists.txt`、`TESTING.md`、`docs/upgrade-plan/migration-status.md`、`README.md`、`todo.md`、本文档（§7.29）。commit `9d9dc38b`。
+
+### 7.30 覆盖率补强批次 30：network/machine_guard.cpp 直驱收口（2026-10-15）
+
+TODO 表下批首位候选 `network/machine_guard.cpp`（批次17 登记的 28% 全量口径）。MGM 消息编解码面**不依赖 bwmachined**——全部 16+1 个消息类自持 wire 格式，写侧 readImpl/writeImpl 与读侧 `MachineGuardMessage::create` 配对即可直驱。新建 `test_machine_guard_messages.cpp` 27 用例（network_test 229→256），精准插桩口径 **28% → 87%（668/764 实例行）**，门禁 1427→**1454**。
+
+**machine_guard.cpp 28% → 87%（668/764）用例覆盖面**（27 用例）：
+
+1. **机器统计面**：HighPrecisionMachineMessage / WholeMachineMessage 全字段写-读往返（Low/High 两套 InterfaceStats 位宽差异钉死）+ c_str。
+2. **进程面**：ProcessMessage 全字段往返（含额外块：major/minor/patch/interfaceVersion/username/defDigest）、额外块前向兼容跳过（声明多 4 字节 + 追写 4 字节 dummy，consume 干净、无 error）、欠声明报错（声明 1 → 字段吃完 → is.error()）；matches 六参逐位断言（category/uid/pid/port/id/name，未置位忽略）；categoryToString 三臂（SERVER_COMPONENT/WATCHER_NUB/UNKNOWN）与 c_str 嵌入。
+3. **ProcessStats / Listener / Signal**：ProcessStats 往返 + c_str；Listener 往返 + c_str 的 RegBirthL/RegDeathL 两标签臂（按 PARAM_IS_MSGTYPE + ADD_BIRTH/DEATH_LISTENER 位）；Signal 往返 + setControlledShutdown=SIGUSR1 / setKill=SIGINT / setHardKill=SIGQUIT 三臂。
+4. **创建面**：Create 往返 + c_str（CreateMessage / c_str_name / uid 三形态）；CreateWithArgs 往返 + c_str 的 args 列表与空列表（`args=[]`）臂。
+5. **杂项消息**：Tags（count + exists_ + strings）、User（PARAM_CHECK_COREDUMPS 下 CoreDump 三元组 / PARAM_GET_VERSION 下 versionString / 无 flag 时双空）、init(struct passwd&) + getConfFilename（`%s/.bwmachined.conf`）、matches 两参位、Reset、Pid、MachinedAnnounce（birth count / death addr union 双 arm + MachinedBirth/MachinedDeath）、MachinePlatform（直读 platformInfo_）、UnknownMessage（create 回显 0x55 + MESSAGE_NOT_UNDERSTOOD 位 + body 保留 + c_str "4 bytes long"）。
+6. **ReplyHandler 面**：RecordingReplyHandler 16 型分发矩阵（每个 on*Message 落位断言）+ 未知型默认臂（0x55 → onUnhandledMsg）；基类 ReplyHandler 16 个默认 on*Message 全落 onUnhandledMsg（返回 true 保持处理）。
+
+**实测坑位**：CppUnitLite2 的 `CHECK_EQUAL(const char*, const char*)` **比较指针**（45 处 assert 全部要 strcmp 化，否则报 "expected: 'x' but was: 'x'" 同文不同址）；`MachineGuardMessage::write` 非 const（roundTrip 助手取非 const 引用）；精准插桩在 libnetwork.a 场景须**重打包静态库**（instrumented obj 复制进 build 树 obj 后须 `make libnetwork` 重归档，否则链上的是旧库）；g++ 链接须**显式 `--coverage`** 才链 libgcov（否则 __gcov_exit/__gcov_merge_add 未定义）；gcda 落在**编译期 -o 路径**（/tmp 暂存目录）而非 build 树 obj 目录，gcovr 以该目录为根。
+
+**残余登记（96 行）**：sendto / sendAndRecv(Endpoint&) / sendAndRecv(srcip,destaddr) / sendAndRecvFromEndpointAddr 的 UDP 套接字面 83 行（需活 socket + 绑 PORT_MACHINED=20018 回环，引入环境依赖，登记不测）；typeStr 的 `** UNKNOWN **` 默认臂 12 行；seq ticker 回绕臂（s_seqTicker_ 达 0xffff 后 ++）1 行。
+
+提交范围：`lib/network/unit_test/test_machine_guard_messages.cpp`（新）、`lib/network/unit_test/Makefile.rules`、`lib/network/unit_test/CMakeLists.txt`、`TESTING.md`、`docs/upgrade-plan/migration-status.md`、`README.md`、`todo.md`、本文档（§7.29 补记 + §7.30）。

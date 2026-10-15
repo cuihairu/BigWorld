@@ -87,7 +87,7 @@ gcovr -r /home/cui/workspaces/BigWorld/programming/bigworld --txt -o /tmp/cov.tx
 | chunk/chunk.cpp | 1215/1228 | 1% | 受限：需 ChunkSpace + chunk 装载机 |
 | connection/server_connection.cpp | 990/990 | 0% | **维持不可测**（真登录管线 + TCPChannel 状态机，批次14/16） |
 | moo/image.ipp | 589/589 | 0% | 受限：客户端图像合成面 |
-| network/machine_guard.cpp | 553/774 | 28% | bwmachined 面不可达部分维持登记（批次17） |
+| network/machine_guard.cpp | 96/764 | 87% | 批次 30 实测（精准插桩 668/764；28% 为 09-28 全量口径，bwmachined 面之外已直驱） |
 | connection/message_handlers.hpp | 538/538 | 0% | **结构性死代码**（模板 handler 表无人实例化） |
 | chunk/chunk_space.cpp | 506/506 | 0% | 受限：需 ChunkSpace + chunk 装载机 |
 | connection/replay_controller.cpp | 495/495 | 0% | 受限：录像/回放文件管线（线格式已批次12 测） |
@@ -265,3 +265,29 @@ readStreamToSection/readTaggedClientStreamToDict/addAttributesToStream/addDictio
 pIdentifier/isTempProperty/clientServerProperty 族访问器、getDataDomains 两个 CRITICAL_MSG
 不可达臂（CLIENT_ENTITY_CELL_CREATION/CLIENT_ENTITY_LOD_DATA）、parseProperties 属性覆盖臂与
 ClientServerPropertiesSortHelper 模板实例暗区，见台账 §7.29）；
+
+`network/machine_guard.cpp` 28%→**87%**（精准插桩口径 668/764 实例行，批次 30；表值 553/774
+28% 为 09-28 全量口径）。批次17 的「bwmachined 面不可达」判定**部分推翻**——MGM 消息编解码面不
+依赖 bwmachined，16+1 个消息类自持 wire 格式（基线 [message u8][flags u8][seq lo][seq hi]，
+`MachineGuardMessage::create` 按 message_ 字节 new 子类），写侧 readImpl/writeImpl 与读侧配对即可
+直驱。新建 `test_machine_guard_messages.cpp` 27 用例（network_test 229→256）：HighPrecision/Whole
+两套 InterfaceStats 位宽往返 + c_str、ProcessMessage 全字段往返含额外块（版本三元 + interfaceVersion
++ username + defDigest）、额外块前向兼容跳过（声明 +4 并追写 4 字节 dummy → consume 干净、
+remainingLength 0）、欠声明报错（声明 1 → 字段吃完 → is.error()）、matches 六参（category/uid/
+pid/port/id/name）逐位断言且未置位忽略、categoryToString 三臂、ProcessStats、Listener 的
+RegBirthL/RegDeathL 标签臂、Signal 的 setControlledShutdown=SIGUSR1/setKill=SIGINT/
+setHardKill=SIGQUIT、Create 与 CreateWithArgs（args 列表与空列表）、Tags、User 的 PARAM_CHECK_
+COREDUMPS/PARAM_GET_VERSION 双门控 + init(struct passwd&) + getConfFilename、Reset、Pid、
+MachinedAnnounce 的 birth count / death addr union、MachinePlatform、UnknownMessage 回显（0x55 +
+MESSAGE_NOT_UNDERSTOOD + body 保留）、ReplyHandler 16 型分发矩阵 + 未知型默认臂 + 基类 16 默认
+on*Message 全落 onUnhandledMsg（返回 true 保持处理）。**实测坑位**：CppUnitLite2 的
+CHECK_EQUAL(const char*, const char*) **比较指针**（45 处 assert 须 strcmp 化，否则同文不同址报
+"expected: 'x' but was: 'x'"）；`MachineGuardMessage::write` 非 const（roundTrip 助手取非 const
+引用）；matches 的 query 需自带与 self 等值的字段（其 ctor 用 getUserId()/mf_getpid() 播种真实值）；
+精准插桩在 libnetwork.a 场景须**重打包静态库**（instrumented obj 复制进 build 树 obj 后须
+`make libnetwork` 重归档，否则链上旧库）；g++ 链接须**显式 --coverage**（否则 __gcov_exit/
+__gcov_merge_add 未定义）；gcda 落在**编译期 -o 路径**（/tmp 暂存目录）而非 build 树 obj 目录，
+gcovr 以该目录为根。残余 96 行分类登记：sendto / sendAndRecv(Endpoint&) / sendAndRecv(srcip,
+destaddr) / sendAndRecvFromEndpointAddr 的 UDP 套接字面 83 行（需活 socket + 绑 PORT_MACHINED=
+20018 回环，引入环境依赖故登记不测）、typeStr 的 `** UNKNOWN **` 默认臂 12 行、seq ticker 回绕臂
+（s_seqTicker_ 达 0xffff 后 ++）1 行；见台账 §7.30。
