@@ -451,6 +451,18 @@ entityID + spaceID 占 3 个，余量充足。见台账 §7.35。
    起绿，每次 push 记录的是"仍然绿"），注释同步改为常态化描述。
 3. 同轮完成 C 档 cellapp scaffold 成本判定（未实现，见 todo）：`entity_type.o` 的
    链接传递闭包 = `entity.cpp` 实体运行时整链，非单轮切片。
+4. 首轮 dispatch 实测修掉一个并发缺陷：workflow 级 `concurrency: ci-windows-${{ github.ref
+   }}` + cancel-in-progress 使 probe dispatch **取消了同 ref 在跑的 push 门禁腿**
+   （run 38744999297 被 38745028827 取消）。改为 job 级三组并发（msvc 门禁 /
+   configure probe 各自 cancel-in-progress；root-build probe 组 cancel-in-progress:
+   false，不中途杀构建、后续 dispatch 排队），workflow 级组删除——push 门禁与手动
+   probe 从此互不取消。
+5. 首轮 dispatch 实测暴露第一个构建期阻塞（run 38745028827，probe job 51 秒）：
+   `error MSB8013: This project doesn't contain the Configuration and Platform
+   combination of Release|x64 [ZERO_CHECK.vcxproj]`——根 `CMakeLists.txt:22` FORCE 把
+   `CMAKE_CONFIGURATION_TYPES` 定为 `Debug;Hybrid`，生成的工程不含 Release 配置，
+   `--config Release` 对任何目标必败。构建步骤改为 `--config Hybrid`（根自身的规范
+   配置；libpython ExternalProject 仍 `build.bat -c Release` 编 pythoncore，不受影响）。
 门禁：CI 配置改动 → 全量套件 `make -s -rR bw-run-all-unit-tests`，
 21 模块 / 1505 用例 / 0 失败（与批次 36 同数——本轮无测试改动），
 YAML 经解析校验（3 jobs / 各自 steps 与 job 级 if 正确）。见台账 §7.37。

@@ -96,15 +96,21 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: ci-windows-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
   msvc-compile:
     name: ${{ matrix.library }} (MSVC x64)
     runs-on: windows-latest
     timeout-minutes: 60
+    # Job-level groups, no workflow-level group: a manual root-build probe
+    # dispatch and a push gate run share a ref but not a purpose - a single
+    # workflow-level group made the dispatch cancel the in-progress gate legs
+    # (observed on the first probe dispatch). Each job keeps its own
+    # cancel-in-progress lane; the ~1h build probe cancels nothing and is
+    # itself never cancelled mid-build by a newer dispatch (a second dispatch
+    # queues behind it instead).
+    concurrency:
+      group: ci-windows-msvc-${{ github.ref }}
+      cancel-in-progress: true
     strategy:
       fail-fast: false
       matrix:
@@ -210,6 +216,9 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 30
     continue-on-error: true
+    concurrency:
+      group: ci-windows-configure-probe-${{ github.ref }}
+      cancel-in-progress: true
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -261,6 +270,9 @@ jobs:
     if: github.event_name == 'workflow_dispatch'
     timeout-minutes: 120
     continue-on-error: true
+    concurrency:
+      group: ci-windows-root-build-${{ github.ref }}
+      cancel-in-progress: false
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -278,14 +290,23 @@ jobs:
                 -DBW_CMAKE_TARGET=server 2>&1 | `
                 Tee-Object -FilePath cmake-configure-root.log
 
-      - name: Build root superproject (Release, all targets)
+      - name: Build root superproject (Hybrid, all targets)
         shell: pwsh
         run: |
           # ALL in dependency order: MSBuild builds what failed first, so
           # the log localises the head of the blocker list. ExternalProject
           # sub-logs (libpython/PCbuild) land under the build tree and are
           # uploaded below alongside the tee'd console log.
-          cmake --build "build/win_root_build" --config Release `
+          #
+          # --config Hybrid, not Release: the root FORCE-sets
+          # CMAKE_CONFIGURATION_TYPES to Debug;Hybrid (CMakeLists.txt:22),
+          # so the generated projects carry no Release configuration at all
+          # and --config Release fails every target with MSB8013 (observed
+          # on the first dispatch, run 38745028827). Hybrid is the root's
+          # own canonical server configuration; libpython's ExternalProject
+          # still builds pythoncore in Release (build.bat -c Release) by
+          # design.
+          cmake --build "build/win_root_build" --config Hybrid `
                 --parallel 4 2>&1 | `
                 Tee-Object -FilePath cmake-build-root.log
           Write-Host "build exit: $LASTEXITCODE"
