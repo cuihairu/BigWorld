@@ -96,10 +96,16 @@ typedef BW::map<
 	std::less<CallstackAddressType>,
 	detail::DebugStlAllocator< std::pair<const CallstackAddressType,
 		CacheGrindEventInfo > > > CacheGrindEventMap;
-typedef BW::map<const char *, 
-	CacheGrindEventInfo, 
-	std::less<const char *>, 
-	detail::DebugStlAllocator< std::pair<const char *, 
+// BIGWORLD_BEGIN(msvc port)
+// Key is const char*, so the allocator's value_type must be
+// pair<const char* const, V> - the pointer itself is const inside the map.
+// pair<const char*, V> (const char, non-const pointer) fails MSVC's
+// _ENFORCE_MATCHING_ALLOCATORS static assert in <map> (C2338) under
+// _MSVC_STL; libstdc++ accepts both spellings.
+typedef BW::map<const char *,
+	CacheGrindEventInfo,
+	std::less<const char *>,
+	detail::DebugStlAllocator< std::pair<const char * const,
 		CacheGrindEventInfo > > > CacheGrindCalleeEventMap;
 
 class CacheGrindCalleeEventInfo
