@@ -1,5 +1,6 @@
 # BigWorld 内嵌 Python 2.7.3 [3.13.15 迁移；2026-10-12 升 3.13.16]
 
+> [English](python-313-migration.en.md) | **中文**
 > 任务：把 BigWorld 集成的 Python 从 2.7.3 升级到 3.13.15（源码树整换 + 补丁重移植 + C-API/脚本全量迁移）。
 > 分支：dev（所有提交仅在 dev）。
 

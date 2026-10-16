@@ -59,3 +59,34 @@
 - 每完成一项：勾选并附 commit hash；新事项按 B/C 档入账并给验收口径与期次。
 - 不许把设计稿/分析章记成已完成；架构章的「源码验证重点」只是验收建议来源。
 - 每次巡检（patrol-*）更新本账并单独 commit。
+
+## D. docs 英文对应缺口（子目录）登记（2026-10-16）
+
+登记背景：docs 双语化任务按「中文实质文档须有英文对应件 + 两侧顶部首屏语言切换器」口径推进；本轮只做 `docs/` 根目录，根目录已收口（清单见下），子目录全部为缺口，逐项登记于此，本轮不动工。
+
+docs 根目录收口状态（2026-10-16）：
+
+- [x] cpp23-migration.md ↔ cpp23-migration.en.md（完整对应）
+- [x] 审计-文档一致性.md ↔ doc-consistency-audit.md（完整对应）
+- [x] vcpkg-migration.md ↔ vcpkg-migration.en.md（完整对应）
+- [x] index.md ↔ index.en.md（完整对应；`layout: home` 两侧切换器置于 frontmatter 收口 `---` 后首行——VitePress 结构约束，frontmatter 必须自第 1 行起）
+- [x] python-313-migration.md ↔ python-313-migration.en.md（**如实标注暂无译版**：997 行 / 207KB 全量迁移台账，英文页为占位说明页——只给任务陈述、章节目录与事实性概要，不硬造全文翻译；两文件均带切换器）
+- README.md / README.zh.md 不在本账范围（已另案处理，commit `59a8e719`）
+
+子目录缺口（判据与根目录轮一致：不重命名原件、对应件 `<原名>.en.md`、切换器在前 3 行内、命令/路径/专有名词不译）：
+
+- [ ] docs/adr/：4 篇（index + adr-0001/0002/0003 决策记录）——无任何 .en.md
+- [ ] docs/architecture/：28 篇（index/outline + 26 个架构章）——无任何 .en.md
+- [ ] docs/getting-started/：4 篇（index / build-from-source / project-structure / api-reference）——无任何 .en.md
+- [ ] docs/upgrade-plan/：7 篇（migration-status / python-upgrade-plan / python-c-api-guide / third-party-deps / build-system-modernization / hot-reload-productionization / packaging-and-daily-build）——无任何 .en.md
+- [ ] docs/references/：1 篇（original-docs）——无 .en.md
+- [ ] docs/analysis/：5 篇（原任务清单未列，盘点补登：overview / modules / build-and-runtime / risks / source-code-guide）——无任何 .en.md
+- 合计 49 篇中文实质文档待配对。
+
+关联剩余项：
+
+- VitePress nav/sidebar（`docs/.vitepress/config.mjs`）目前只挂中文页路由，5 个 .en.md（cpp23 / doc-consistency-audit / vcpkg / index / python-313 占位）全部无侧栏入口，仅能靠页内切换器互达；若要侧栏可见需另行设计双语挂载（rewrites 或按语言分路由前缀），本轮未动。
+- python-313-migration.md 全量翻译的技术门槛：file:line 引用、标识符与实测数值密集，单遍翻译易降质；如后续决定翻译，建议按 §1–§6 / §7.1–§7.18 / §7.19–§7.35 分段推进并逐段核数。
+
+本节事项开工时逐条打勾并附 commit hash，维护规则同前。
+

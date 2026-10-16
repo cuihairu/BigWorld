@@ -1,5 +1,6 @@
 # BigWorld 第三方依赖切换到 vcpkg
 
+> [English](vcpkg-migration.en.md) | **中文**
 > 任务：把 `programming/bigworld/third_party` 中可由 vcpkg 提供的库改为通过
 > vcpkg manifest 引入；Make 链与 CMake 链改用 vcpkg toolchain/产物。
 > 分支：dev。与 [python-313-migration.md](python-313-migration.md) 衔接
