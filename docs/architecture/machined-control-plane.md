@@ -1,5 +1,7 @@
 # machined 控制面与进程发现
 
+> [English](machined-control-plane.en.md) | **中文**
+
 <div class="arch-hero">
 
 BigWorld 的控制面不是通用编排系统，也不是一致性元数据集群。它依赖 bwmachined 提供机器级进程注册、接口发现、birth/death 通知、启动进程和发送信号等能力。理解 machined，才能理解为什么 BaseAppMgr、CellAppMgr、DBAppMgr、LoginApp 和 Reviver 能组成一个动态集群。
