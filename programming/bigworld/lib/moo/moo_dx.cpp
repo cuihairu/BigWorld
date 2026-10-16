@@ -3,11 +3,6 @@
 #include "moo/render_context.hpp"
 #include "math/math_extra.hpp"
 
-#ifdef ENABLE_DX_TRACKER
-#include "cstdmf/stack_tracker.hpp"
-#include "pyscript/pyobject_plus.hpp"
-#include "pyscript/script.hpp"
-
 #if defined( _WIN32 )
 // MSVC's SDK leaves `#define interface struct` (rpcndr.h via d3d9.h / shlobj /
 // shlwapi / d3d10) live for the rest of the TU, which rewrites the
@@ -17,6 +12,12 @@
 #pragma push_macro( "interface" )
 #undef interface
 #endif
+
+#ifdef ENABLE_DX_TRACKER
+#include "cstdmf/stack_tracker.hpp"
+#include "pyscript/pyobject_plus.hpp"
+#include "pyscript/script.hpp"
+
 #else
 #undef MEMTRACKER_SCOPED
 #undef PROFILER_SCOPED

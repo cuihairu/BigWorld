@@ -353,7 +353,9 @@ DWORD CService::Start( int argc, char** argv )
     else
     {
 #ifdef UNICODE
-        lpArgv = ::CommandLineToArgvW(::GetCommandLineW(), &(dwArgc) );
+        int wargc = 0;
+        lpArgv = ::CommandLineToArgvW(::GetCommandLineW(), &wargc );
+        dwArgc = (DWORD)wargc;
 #else
         dwArgc = argc;
         lpArgv = argv;
@@ -688,7 +690,8 @@ DWORD CService::Install(LPTSTR pDependencies /* = NULL */,
         if ( schService )
         {
 			SERVICE_DESCRIPTION desc;
-			desc.lpDescription = "BigWorld Daemon";
+			static TCHAR serviceDescription[] = TEXT("BigWorld Daemon");
+			desc.lpDescription = serviceDescription;
 			ChangeServiceConfig2( schService, SERVICE_CONFIG_DESCRIPTION, &desc );
 
             TCHAR szBuf[256];
@@ -1146,7 +1149,7 @@ DWORD CService::CheckSIDs(void)
 BOOL WINAPI CService::control_handler ( DWORD dwCtrlType )
 {
     ASSERT( g_pService );
-    char szBuf[256];
+    TCHAR szBuf[256];
     DWORD bytes;
 
     switch( dwCtrlType )

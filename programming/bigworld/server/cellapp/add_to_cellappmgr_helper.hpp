@@ -11,9 +11,6 @@
 #pragma push_macro( "interface" )
 #undef interface
 
-#if defined( _WIN32 )
-#pragma pop_macro( "interface" )
-#endif
 #endif
 
 
@@ -64,3 +61,7 @@ private:
 BW_END_NAMESPACE
 
 // add_to_cellappmgr_helper.cpp
+
+#if defined( _WIN32 )
+#pragma pop_macro( "interface" )
+#endif

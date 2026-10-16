@@ -88,9 +88,16 @@ LINK_DIRECTORIES( ${BW_SOURCE_DIR}/third_party/nvtt/lib/${BW_COMPILER_TOKEN} )
 IF( BW_PLATFORM_WINDOWS )
 # Windows version definitions
 ADD_DEFINITIONS(
-	-DNTDDI_VERSION=0x05010000 # NTDDI_WINXP
-	-D_WIN32_WINNT=0x0501   # Windows XP
-	-D_WIN32_WINDOWS=0x0501
+	-DNTDDI_VERSION=0x06010000 # NTDDI_WIN7
+	-D_WIN32_WINNT=0x0601   # Windows 7. inet_pton/inet_ntop in ws2tcpip.h
+	                        # are gated on _WIN32_WINNT >= 0x0600, and both
+	                        # lib/server/nat_config.cpp and lib/network/
+	                        # address_resolver.cpp call them (C2039/C3861 in the
+	                        # root superproject build while pinned to XP). The
+	                        # VS 2026 toolchain cannot produce XP binaries and the
+	                        # embedded CPython 3.13 already requires 8.1+, so the
+	                        # XP pin was fiction either way.
+	-D_WIN32_WINDOWS=0x0601
 	-D_WIN32_IE=0x0600
 	# Lean windows.h. A full windows.h drags in ole2/objbase, whose
 	# `#define interface struct` rewrites every interface()-named declaration

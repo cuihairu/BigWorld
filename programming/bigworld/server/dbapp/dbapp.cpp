@@ -68,9 +68,6 @@
 #include "server/util.hpp"
 #include "server/writedb.hpp"
 
-#ifdef BUILD_PY_URLREQUEST
-#include "urlrequest/manager.hpp"
-
 #if defined( _WIN32 )
 // MSVC's SDK leaves `#define interface struct` (rpcndr.h via d3d9.h / shlobj /
 // shlwapi / d3d10) live for the rest of the TU, which rewrites the
@@ -80,6 +77,10 @@
 #pragma push_macro( "interface" )
 #undef interface
 #endif
+
+#ifdef BUILD_PY_URLREQUEST
+#include "urlrequest/manager.hpp"
+
 #endif
 
 DECLARE_DEBUG_COMPONENT( 0 )

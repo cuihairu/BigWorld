@@ -10,9 +10,6 @@
 
 #include "network/bundle.hpp"
 
-#ifndef CODE_INLINE
-#include "cellapp.ipp"
-
 #if defined( _WIN32 )
 // MSVC's SDK leaves `#define interface struct` (rpcndr.h via d3d9.h / shlobj /
 // shlwapi / d3d10) live for the rest of the TU, which rewrites the
@@ -22,6 +19,10 @@
 #pragma push_macro( "interface" )
 #undef interface
 #endif
+
+#ifndef CODE_INLINE
+#include "cellapp.ipp"
+
 #endif
 
 

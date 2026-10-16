@@ -19,9 +19,6 @@
 
 #include <limits>
 
-#if defined( PLAYSTATION3 )
-#include "ps3_compatibility.hpp"
-
 #if defined( _WIN32 )
 // MSVC's SDK leaves `#define interface struct` (rpcndr.h via d3d9.h / shlobj /
 // shlwapi / d3d10) live for the rest of the TU, which rewrites the
@@ -31,6 +28,10 @@
 #pragma push_macro( "interface" )
 #undef interface
 #endif
+
+#if defined( PLAYSTATION3 )
+#include "ps3_compatibility.hpp"
+
 #endif
 
 DECLARE_DEBUG_COMPONENT2( "Network", 0 )

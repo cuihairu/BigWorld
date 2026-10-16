@@ -91,10 +91,10 @@ public:
 
 };
 typedef BW::map<
-	CallstackAddressType, 
-	CacheGrindEventInfo, 
+	CallstackAddressType,
+	CacheGrindEventInfo,
 	std::less<CallstackAddressType>,
-	detail::DebugStlAllocator< std::pair<CallstackAddressType, 
+	detail::DebugStlAllocator< std::pair<const CallstackAddressType,
 		CacheGrindEventInfo > > > CacheGrindEventMap;
 typedef BW::map<const char *, 
 	CacheGrindEventInfo, 
@@ -115,10 +115,10 @@ public:
 	CacheGrindCalleeEventMap events;
 };
 typedef BW::map<
-	CallstackAddressType, 
-	CacheGrindCalleeEventInfo, 
-	std::less<CallstackAddressType>, 
-	detail::DebugStlAllocator< std::pair<CallstackAddressType, 
+	CallstackAddressType,
+	CacheGrindCalleeEventInfo,
+	std::less<CallstackAddressType>,
+	detail::DebugStlAllocator< std::pair<const CallstackAddressType,
 		CacheGrindCalleeEventInfo > > > CacheGrindCalleeMap;
 
 class CacheGrindFrameInfo

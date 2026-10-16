@@ -153,7 +153,7 @@ bool PluginLibrary::loadAllFromDirRelativeToApp(
 
 	do
 	{
-		BW::string dllName = findData.cFileNameA;
+		BW::string dllName = findData.cFileName;
 
 		if ((dllName.length() < 4) ||
 			(dllName.substr( dllName.length()-4 ) != ".dle"))

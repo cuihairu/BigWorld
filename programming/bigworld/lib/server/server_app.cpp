@@ -15,12 +15,6 @@
 #include "server/signal_processor.hpp"
 
 #include <signal.h>
-// procfs fd scan and rlimit handling live in the !_WIN32 arm of
-// numFileDescriptorsOpen below; neither header exists on MSVC (C1083 in the
-// root superproject build).
-#if !defined( _WIN32 )
-#include <dirent.h>
-#include <sys/resource.h>
 
 #if defined( _WIN32 )
 // MSVC's SDK leaves `#define interface struct` (rpcndr.h via d3d9.h / shlobj /
@@ -31,6 +25,13 @@
 #pragma push_macro( "interface" )
 #undef interface
 #endif
+// procfs fd scan and rlimit handling live in the !_WIN32 arm of
+// numFileDescriptorsOpen below; neither header exists on MSVC (C1083 in the
+// root superproject build).
+#if !defined( _WIN32 )
+#include <dirent.h>
+#include <sys/resource.h>
+
 #endif // !defined( _WIN32 )
 
 DECLARE_DEBUG_COMPONENT2( "Server", 0 );
@@ -444,7 +445,13 @@ const char * ServerApp::startDate() const
 
 	if (buf[0] == 0)
 	{
+#if defined( _WIN32 )
+		// MSVC's CRT has no ctime_r (C3861 in the root superproject build);
+		// ctime_s is the same thread-safe rendering with a size argument.
+		ctime_s( buf, sizeof( buf ), &startTime_ );
+#else
 		ctime_r( &startTime_, buf );
+#endif
 
 		// Remove trailing '\n'
 		char * tail = strchr( buf, '\n' );
@@ -553,7 +560,10 @@ void ServerApp::onSignalled( int sigNum )
 		// It would probably be better to just revert to SIG_DFL straight after
 		// Py_Initialize in Script::init().
 		signal( sigNum, SIG_DFL );
-		kill( getpid(), sigNum );
+		// kill(getpid(), sigNum) is the POSIX spelling; raise() is the C99
+		// equivalent MSVC actually declares (C3861 in the root superproject
+		// build).
+		raise( sigNum );
 		break;
 
 	default:

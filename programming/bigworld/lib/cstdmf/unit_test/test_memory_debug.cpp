@@ -1,5 +1,6 @@
 #include "pch.hpp"
 
+#include <type_traits>
 #include <vector>
 
 #include "cstdmf/allocator.hpp"
@@ -233,6 +234,62 @@ TEST( MemoryDebug_testDebugStlAllocator )
 
 	testAllocator.destroy( pFirst );
 	testAllocator.deallocate( pFirst, 4 );
+}
+
+
+TEST( MemoryDebug_testDebugStlAllocatorValueType )
+{
+	// An associative container's value_type puts const on the key, so the
+	// allocator a map is declared with has to be spelled over that same
+	// const-key pair. memory_debug.cpp built its cachegrind maps with the
+	// non-const spelling while passing
+	// DebugStlAllocator< CacheGrindEventMap::value_type > to their
+	// constructors (MSVC C3852 under /std:c++20 in the root superproject
+	// build). This drives the same shape - allocator spelled over the
+	// const-key pair, ctor fed key_compare + allocator - so the two
+	// spellings stay in step with the container.
+	FixedSizedAllocator fixedAllocator( 16, 64, "test_debug_stl_allocator_pair" );
+
+	typedef std::pair< const uint32, uint32 > ConstKeyValue;
+	typedef BW::detail::DebugStlAllocator< ConstKeyValue >
+		ConstKeyAllocator;
+	typedef BW::map< uint32, uint32, std::less< uint32 >, ConstKeyAllocator >
+		ConstKeyMap;
+
+	// The keys of a std::map are const, so the allocator a BW::map is
+	// declared with has to be spelled over that same pair - the container
+	// checks its own value_type against the allocator it was handed.
+	BW_STATIC_ASSERT( ( std::is_same< ConstKeyMap::value_type,
+		ConstKeyValue >::value ),
+		MapValueTypeMustHaveConstKey );
+	BW_STATIC_ASSERT( ( std::is_same< ConstKeyMap::allocator_type,
+		ConstKeyAllocator >::value ),
+		MapAllocatorMustMatchValueType );
+
+	ConstKeyAllocator mapAllocator( &fixedAllocator );
+	ConstKeyMap testMap( ConstKeyMap::key_compare(), mapAllocator );
+
+	CHECK_EQUAL( 0u, testMap.size() );
+
+	testMap[ 1 ] = 10;
+	testMap[ 2 ] = 20;
+	testMap.insert( ConstKeyMap::value_type( 3u, 30u ) );
+
+	CHECK_EQUAL( 3u, testMap.size() );
+	CHECK_EQUAL( 10u, testMap[ 1 ] );
+	CHECK_EQUAL( 20u, testMap[ 2 ] );
+
+	ConstKeyMap::iterator found = testMap.find( 2 );
+	CHECK( found != testMap.end() );
+	CHECK_EQUAL( 2u, found->first );
+	CHECK_EQUAL( 20u, found->second );
+
+	CHECK_EQUAL( 1u, testMap.erase( 1 ) );
+	CHECK_EQUAL( 2u, testMap.size() );
+	CHECK( testMap.find( 1 ) == testMap.end() );
+
+	testMap.clear();
+	CHECK_EQUAL( 0u, testMap.size() );
 }
 
 

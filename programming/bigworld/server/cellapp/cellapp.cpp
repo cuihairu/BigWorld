@@ -100,11 +100,6 @@
 #include <sys/types.h>
 #include <sys/wait.h> // for waitpid
 
-
-// #define MF_USE_VALGRIND
-#ifdef MF_USE_VALGRIND
-#include <valgrind/memcheck.h>
-
 #if defined( _WIN32 )
 // MSVC's SDK leaves `#define interface struct` (rpcndr.h via d3d9.h / shlobj /
 // shlwapi / d3d10) live for the rest of the TU, which rewrites the
@@ -114,6 +109,12 @@
 #pragma push_macro( "interface" )
 #undef interface
 #endif
+
+
+// #define MF_USE_VALGRIND
+#ifdef MF_USE_VALGRIND
+#include <valgrind/memcheck.h>
+
 #endif
 
 DECLARE_DEBUG_COMPONENT( 0 )

@@ -460,7 +460,7 @@ bool SharedData::delValue( const BW::string & key, bool isAck )
  */
 bool SharedData::addToStream( BinaryOStream & stream ) const
 {
-	uint32 size = PyDict_Size( pMap_ );
+	uint32 size = static_cast< uint32 >( PyDict_Size( pMap_ ) );
 	stream << size;
 
 	PyObject * pKey;

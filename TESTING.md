@@ -734,3 +734,73 @@ server_app.cpp kill/ctime_r 无 Windows 版；plugin_library
 字段）；nat_config inet_pton 与 address_resolver inet_ntop 的 ws2tcpip include
 生效性；smartpointer C2665 ConstSmartPointer<BW::Vector4Provider> 构造；
 shared_data C2220；C4244×1/C4229×1。
+
+**批次 42（2026-10-16）——探针 #10 普查解码、wrapper 错位根因修复与残余单点批（R1019）**
+
+探针 #10（run 38822218035，`7c7006a7`，job `continue-on-error`，conclusion
+无意义、以 log artifact 判读）：307→176。分族 C4430×46、C2065×33、C3646×26、
+C3861×19、LNK2019×16、C2143×11、C2039×6、C2664×4、C2238×4、C2059×4、
+C2440×3、LNK1120×2、C2504×2、C2332×2、C2220×2、C2146×2、C2144×2、C4596×1、
+C2761×1、C2665×1、C2334×1、C2338×1；按工程 cellapp_extension 140、
+lib/server 32、bwengine_xml 10、bwengine_mysql 8、network 3、pyscript 1、
+cstdmf 1。
+
+本轮主修：R1018 的 wrapper 插入脚本存在**错位根因**——「首个 include 连续
+块」遍历器把 `#if`/`#endif` 也当连续块成员，7/93 个文件的 push 落进了
+Windows 不活跃条件内（server_app.cpp 在 `#if !defined( _WIN32 )`、moo_dx.cpp
+在 `#ifdef ENABLE_DX_TRACKER`、packet_receiver.cpp 在
+`#if defined( PLAYSTATION3 )`、cellapp/cellapp.cpp 在
+`#ifdef MF_USE_VALGRIND`、cellappmgr/cellapp.cpp 在 `#ifndef CODE_INLINE`、
+dbapp.cpp 在 `#ifdef BUILD_PY_URLREQUEST`、add_to_cellappmgr_helper.hpp 的 pop
+紧贴 push）：Windows 下 `#undef` 不执行（宏整文件存活、interface 站点全灭）
+而单独 pop 触发 C4602——与探针 #10 的 server_app.cpp(104) C2332/C2447 和
+packet_receiver.cpp(1444) C4602 完全对上。修复：push 重定位到**无条件**
+include 之后（逐一验证 SDK 首达性：前序 include 已经
+xp_math.hpp→d3dx9math.h→d3d9.h 抵达，include guard 使包内再入为空操作），
+pop 统一移到文件尾；server_app.cpp 的修复脚本中途还把 pop 落进了
+numFileDescriptorsOpen 函数体（`#ifndef _WIN32` 支路内的 Windows 死代码），
+已纠正至 EOF。全量复核：93 文件 0 真实违例（2 个 flag 均为检查器误报：
+bwtracer.cpp 的 push 在 `#ifndef _WIN32` 的 `#else` 即 Windows 支路；
+watcher_nub.cpp 的 push 在 `#if ENABLE_WATCHERS`=1 的活跃块，移动反而违反
+SDK 首达性故不动）；#if/#endif 计数与 HEAD 逐文件全等。
+
+批内其余修复（探针 #10 残余单点）：
+
+- plugin_library.cpp：`_WIN32_FIND_DATAA` 字段是 `cFileName`（R1017 拼成
+  cFileNameA，MSVC 结构体无 A 后缀字段）。
+- service.cpp 三处：CommandLineToArgvW 第二参要 `int*`（局部 int 再回写
+  dwArgc）；SERVICE_DESCRIPTION::lpDescription 在 UNICODE 下是 LPWSTR（静态
+  TCHAR 数组承载 "BigWorld Daemon"）；control_handler 的缓冲改 TCHAR
+  （wsprintf/lstrlen 的 W 映射）。
+- server_app.cpp：`ctime_r`→`ctime_s`（`#if defined( _WIN32 )` 分支）；
+  `kill( getpid(), sig )`→`raise( sig )`（C99 等价、MSVC 声明）。
+- shared_data.cpp：`PyDict_Size` 返回 Py_ssize_t，显式 static_cast 收窄
+  （/WX 下 C4244→C2220）。
+- script_math.cpp：补 `Script::getData` 前置声明（R1017 只声明了 setData，
+  探针 #10 的 C2665 正是 stl_to_py.ipp:42 的 getData——两阶段查找下 MSVC
+  只见 Vector4Animation_Keyframe 重载，其 pair 元素转换
+  MatrixProviderPtr→Vector4ProviderPtr 不存在）。
+- BWStandardProject.cmake：`_WIN32_WINNT` 0x0501→0x0601（NTDDI 同步
+  0x06010000）。inet_pton/inet_ntop 在 ws2tcpip.h 是 `>=0x0600` 门控，XP 钉
+  死使 nat_config.cpp/address_resolver.cpp 的调用 C3861；VS 2026 工具集无
+  XP 能力、CPython 3.13 自身要求 8.1+，钉死本就虚构。pyconfig.h 仅在
+  `Py_BUILD_CORE*` 下且 `#ifndef` 包裹地自定这些宏（server 侧 TU 不受
+  影响，无 C4005 相撞面）；openssl/mongodb 等 third_party 的引用皆
+  `#ifndef` 自守卫。
+- memory_debug.cpp：两张 map 的 allocator value_type 非常量键
+  （`pair<CallstackAddressType,...>`→`pair<const ...>`）——C++20
+  [container.alloc.reqmts]/5 分配器一致性（MSVC 静态断言 C2338，
+  libstdc++ 静默容忍，门禁腿因此漏过；其余 unordered_map 用法
+  `pair<const void* const,...>` 形异但 MSVC 对 unordered 无此断言，不动）。
+
+门禁：全量 `make -s -rR bw-run-all-unit-tests`：21 模块 / 1505 用例 /
+0 失败（EXIT=0，与批次 41 同数——本轮无测试改动）。包装文件复核：93 文件
+`#if`-栈追踪器 0 真实违例；8 个改动文件 #if/#endif 计数与 HEAD 全等。
+
+**下一层已知头（卡点）**：cellapp_extension 140 错为 MSVC-only——Linux 以
+同宏集（MF_SERVER + 全套 Windows 宏面模拟）`g++ -E` 的 703 头闭包不含任何
+moo 客户端头（仅 moo/reload.hpp），Windows 分支扫描（直接 `#if _WIN32` 与
+间接 EXT_MATH/DIRECTX_MATH/D3D9 宏）亦 0 命中，base_texture.hpp 仍被 MSVC
+解析——本机不可解释，需探针加 `cl /showIncludes` 或 `/P` 判定真实 include
+路由；bwengine_xml(10)/bwengine_mysql(8) 的 LNK2019×16 为 server.lib 未产
+出的级联，预计随 server 腿转绿消失。
