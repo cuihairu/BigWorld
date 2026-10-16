@@ -76,12 +76,12 @@ docs 根目录收口状态（2026-10-16）：
 子目录缺口（判据与根目录轮一致：不重命名原件、对应件 `<原名>.en.md`、切换器在前 3 行内、命令/路径/专有名词不译）：
 
 - [x] docs/adr/：4 篇（index + adr-0001/0002/0003 决策记录）——2026-10-16 R1021PATROL 全配对（4 个 .en.md，中文 4 篇加切换器；`npm run docs:build` 绿，本提交）
-- [ ] docs/architecture/：28 篇（index/outline + 26 个架构章）——无任何 .en.md
+- [ ] docs/architecture/：28 篇（index/outline + 26 个架构章）——2026-10-17 PATROL1017B 已配对 2 篇（outline、modern-mmo-comparison；中文页加切换器；`npm run docs:build` 绿），余 26 篇
 - [x] docs/getting-started/：4 篇（index / build-from-source / project-structure / api-reference）——2026-10-16 R1021PATROL 全配对（4 个 .en.md，api-reference 全部 file:line 签名与代码块原样保留；本提交）
 - [x] docs/upgrade-plan/：7 篇（migration-status / python-upgrade-plan / python-c-api-guide / third-party-deps / build-system-modernization / hot-reload-productionization / packaging-and-daily-build）——2026-10-16 R1021PATROL 全配对（7 个 .en.md；历史规划件保留其写作时点口径，状态注同步翻译；命令/路径/标识符不译；本提交）
 - [x] docs/references/：1 篇（original-docs）——2026-10-16 R1021PATROL 配对（本提交）
 - [x] docs/analysis/：5 篇（overview / modules / build-and-runtime / risks / source-code-guide）——2026-10-16 R1021PATROL 全配对（5 个 .en.md；本提交）
-- 合计 49 篇：2026-10-16 R1021PATROL 后已配对 21 篇（adr 4 + getting-started 4 + upgrade-plan 7 + references 1 + analysis 5），余 28 篇全部在 docs/architecture/（约 9.7k 行，含逐章 file:line 证据，建议分批推进）。
+- 合计 49 篇：2026-10-16 R1021PATROL 后已配对 23 篇（adr 4 + getting-started 4 + upgrade-plan 7 + references 1 + analysis 5 + architecture 2），余 26 篇全部在 docs/architecture/（约 9.4k 行，含逐章 file:line 证据，建议分批推进）。
 
 关联剩余项：
 

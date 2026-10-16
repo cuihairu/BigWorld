@@ -1,5 +1,7 @@
 # MMO 架构边界对比
 
+> [English](modern-mmo-comparison.en.md) | **中文**
+
 <div class="arch-hero">
 
 本章不是给 BigWorld 套外部架构模板，而是把前面源码分析过的边界集中对照：哪些能力属于 BigWorld 的核心 MMO 语义，哪些只是资源层、工具层或外围工程问题。
