@@ -26,7 +26,15 @@ DebugFilter::FileInitWrapper BW_STATIC_INIT_PRIORITY( 1300 )
 bool DebugFilter::s_shouldWriteTimePrefix_ = false;
 bool DebugFilter::s_shouldOutputErrorBackTrace_ = false;
 
-#define BW_PLATFORM_SUPPORTS_CONSOLE (defined( MF_SERVER ) || defined( PLAYSTATION3 ) || defined( __APPLE__ ))
+// BIGWORLD_BEGIN(msvc port)
+// #if, not a macro body: see config.hpp for why defined() must not be
+// expanded out of a #define.
+#if defined( MF_SERVER ) || defined( PLAYSTATION3 ) || defined( __APPLE__ )
+#define BW_PLATFORM_SUPPORTS_CONSOLE 1
+#else
+#define BW_PLATFORM_SUPPORTS_CONSOLE 0
+#endif
+// BIGWORLD_END(msvc port)
 
 #if BW_PLATFORM_SUPPORTS_CONSOLE
 bool DebugFilter::s_shouldWriteToConsole_ = true;

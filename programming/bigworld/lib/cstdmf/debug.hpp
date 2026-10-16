@@ -362,7 +362,15 @@ int bwWatchDebugMessagePriority( DebugMessagePriority & value,				\
 #endif
 
 
-#define BW_BUILD_SUPPORTS_DEV_ASSERT (defined( MF_SERVER ) || defined ( EDITOR_ENABLED ) || !defined( _RELEASE ))
+// BIGWORLD_BEGIN(msvc port)
+// #if, not a macro body: see config.hpp for why defined() must not be
+// expanded out of a #define.
+#if defined( MF_SERVER ) || defined ( EDITOR_ENABLED ) || !defined( _RELEASE )
+#define BW_BUILD_SUPPORTS_DEV_ASSERT 1
+#else
+#define BW_BUILD_SUPPORTS_DEV_ASSERT 0
+#endif
+// BIGWORLD_END(msvc port)
 
 #if BW_BUILD_SUPPORTS_DEV_ASSERT
 /**
@@ -390,7 +398,11 @@ int bwWatchDebugMessagePriority( DebugMessagePriority & value,				\
 
 #endif // BW_BUILD_SUPPORTS_DEV_ASSERT
 
-#undef BW_BUILD_SUPPORTS_DEV_ASSERT
+// BIGWORLD_BEGIN(msvc port)
+// BW_BUILD_SUPPORTS_DEV_ASSERT is deliberately NOT #undef'd here: it is a
+// plain 0/1 build-property flag (like config.hpp's ENABLE_*), so any TU that
+// includes this header can query it in real code - the unit test pins it.
+// BIGWORLD_END(msvc port)
 
 /**
  *	An assertion which is only lethal when not in a production environment.

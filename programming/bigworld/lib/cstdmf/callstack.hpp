@@ -3,9 +3,18 @@
 
 #include "config.hpp"
 
-#define BW_ENABLE_STACKTRACE ENABLE_MEMORY_DEBUG &&	\
-	!BWENTITY_DLL &&								\
+// BIGWORLD_BEGIN(msvc port)
+// The defined() predicates are evaluated in a real #if line, not inside a
+// macro body: defined() reached through macro expansion is undefined
+// behaviour and MSVC's traditional preprocessor mis-evaluates it (see
+// config.hpp).
+#if ENABLE_MEMORY_DEBUG && !BWENTITY_DLL && \
 	(!defined( CSTDMF_EXPORT ) || defined( MF_SERVER ))
+#define BW_ENABLE_STACKTRACE 1
+#else
+#define BW_ENABLE_STACKTRACE 0
+#endif
+// BIGWORLD_END(msvc port)
 
 namespace BW
 {

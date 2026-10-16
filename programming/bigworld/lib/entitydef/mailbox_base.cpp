@@ -9,7 +9,15 @@
 #include "cstdmf/memory_stream.hpp"
 #include "pyscript/keyword_parser.hpp"
 
-#include <arpa/inet.h>
+#if defined( _WIN32 )
+	// Lean windows.h first, same order as endpoint.hpp; Winsock2 brings
+	// ntohs (used at the peer address below), which arpa/inet.h provides
+	// on POSIX.
+	#include "cstdmf/cstdmf_windows.hpp"
+	#include <Winsock2.h>
+#else
+	#include <arpa/inet.h>
+#endif
 
 DECLARE_DEBUG_COMPONENT2( "EntityDef", 0 )
 

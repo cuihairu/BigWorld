@@ -804,3 +804,112 @@ moo 客户端头（仅 moo/reload.hpp），Windows 分支扫描（直接 `#if _W
 解析——本机不可解释，需探针加 `cl /showIncludes` 或 `/P` 判定真实 include
 路由；bwengine_xml(10)/bwengine_mysql(8) 的 LNK2019×16 为 server.lib 未产
 出的级联，预计随 server 腿转绿消失。
+
+**批次 43（2026-10-16）——Linux CI 两条从未绿腿根因修复 + 探针 #11 普查（R2PATROL 第 2 轮）**
+
+一、entitydef 腿（自 workflow 建立起从未绿，7 连红）：**根因实证**——
+`game/` 整目录被 `.gitignore:17` 排除（0 tracked files），而
+`BaseResMgrUnitTestHarness`（`lib/unit_test_lib/base_resmgr_unit_test_harness.cpp:66-77`）
+按 `--root` 拼 `<root>/game/res/bigworld` 进 BWResource 路径；`Script::init`
+（`lib/pyscript/script.cpp:411`）经 `PyImportPaths` 把 `scripts/common`、
+`scripts/common/Lib`、`scripts/server_common/lib-dynload-<平台>` 挂上 sys.path
+（`script.cpp:460-490`），stdlib 纯 Py 源之外**还要 dlopen 59 个 CPython 扩展
+模块**（`pickle`→`_pickle`、`struct` 等即时命中）——该树由 make 链
+`third_party_python.mak` 的 `python_library` 目标装配（Lib→`scripts/common/Lib`、
+`lib/pyscript/bw_site.py`→`scripts/common/bw_site.py`、构建树 `Modules/*.so`
+59 个→`scripts/server_common/lib-dynload-el7`），cmake 样板从不装配。**最小
+充分集二分实证**（`--res` 直指工作副本后逐组件删除）：common/Lib +
+bw_site.py + lib-dynload-*.so 三者必需；site-packages（common/server_common
+两侧）与 __pycache__ 均可删（entitydef_test 不触及）。本地复现：藏
+`game/`→78 失败（与 CI 签名一致），恢复→380 全绿。**修复（`7d28b832`）**：
+`cmake/samples/python` 的 ExternalProject 改 `make all`（python.exe+共享模块，
+3.12+ 的 `check_extension_modules.py` 会 dlopen 校验并改名失败模块，故同时
+移植 make 链三 sed 中的两 sed——TERMNAM undef 与 LINKFORSHARED
+whole-archive openssl + `-u,BW_Py_memoryTrackingIgnore*`；sed 表达式在
+ExternalProject 生成串里不能带反斜杠引用，TERMNAM 按宏展开为三条、
+LINKFORSHARED 定界符换 `|`）；新增 `install_res.cmake` 装配
+`python-res/game/res/bigworld/scripts` 三件套（59 .so 全数 glob，排除
+`_failed` 改名）；`cmake/samples/entitydef` 的 add_test 从 `--root` 换
+`--res "<unit_test/res>:<python-res 树>"`。验证：本地 cmake 重配全量重建后，
+**藏 `game/`（=CI 干净检出等价）ctest 380/380 绿、恢复后仍绿**；python 样板
+头注"entitydef_test 从不 dlopen lib-dynload"的旧论断被二分证伪并改写。
+
+二、network 腿（同 7 连红）：`test_config.cpp:20` ConfigTest 断言
+`setBufferSize(SO_RCVBUF, 16777216)`，`Endpoint::setBufferSize`
+（`endpoint.cpp:604`）判 `getBufferSize >= size`；内核对 SO_RCVBUF 读取值
+×2 且钳到 `net.core.rmem_max`，GH ubuntu runner 默认 212992 → 需
+`rmem_max >= 8MiB`。环境前置而非代码缺陷。修复（`6415b0fb`）：ci.yml Test
+步前加条件步（matrix=network 时）`sysctl -w rmem_max=16777216
+wmem_max/wmem_default=1048576`。
+
+三、探针 #11（run 38837937153，`cc80f752`，58m46s）：job FAILURE（run 级
+"success" 为 continue-on-error 所致，判读以 job/log 为准）。普查 **141 C 错 +
+2 LNK1120**，按工程 cellapp_extension 140（首错 `base_texture.hpp(89,15)`
+C2039 'Colour'，与 #10 同起点）+ cstdmf 1（**memory_debug.cpp 第三张 map**：
+Key=`const char*`，分配器须 `pair<const char * const, V>`；批次 42 只修了两张
+`void*` 键 map——`const void*` 键在 #11 里通过、`const char*` 键漏网，修
+`aeb0494e`，门禁 21/1505/0）+ bwengine_xml/mysql 各 9/7 unresolved（含
+`bw_new`/`LogMsg`——**模块 DLL 零链接列表**；批次 42 的"server.lib 级联"
+假设反证：#11 server.lib 已产出仍报）。修 `74d39171`：两 DLL 补
+`BW_TARGET_LINK_LIBRARIES`（镜像 dbapp 链接集减 db）；mysql 五组件
+（bwengine_mysql/db_storage_mysql/sync_db/clear_auto_load/consolidate_dbs）
+按 make 链 `SYSTEM_HAS_MYSQL` 语义 `FIND_PATH mysql/mysql.h` 无 dev 即
+`RETURN()` 跳过（Windows runner 无 MySQL 且无 in-tree/manifest 客户端）。
+另记：MSBuild `-m:4` 遇失败即停调度新项目，chunk/scene/terrain/entitydef/
+dbapp/db_storage_mysql 从未进入 #11 日志——**#11 是阻塞清单的头、非全量**，
+三修后探针 #12（38852284641）推进下一层；cellapp_extension 卡点不变
+（Linux `g++ -H` 七宏集闭包零 moo 头、umbra 空文件、moo/reload.hpp MF_SERVER
+自足），`69d49d87` 给探针加了 `CL=/showIncludes` 单 TU 诊断步与 log 上传，
+待 #12 artifact 定位真实 include 路由。
+
+### 批次 44（2026-10-16，R1020）：探针 #12 决定性普查——cellapp_extension 百错根因闭合
+
+**Linux CI 双腿闭合（run 38852265405，HEAD 69d49d87）**：`network cmake sample` 与
+`entitydef cmake sample` 首次全绿（sysctl 步 + python res 树修复生效；entitydef 腿含
+CPython `make all` 全量构建）。ci.yml 自诞生起的两条红腿闭合。
+
+**探针 #12（run 38852284641，6m02s，job FAILURE）**：错误数 141→1699 但结构全同——
+cstdmf C2338 修复解锁 MSBuild 调度，chunk（11 TU）/entitydef/connection/moo/
+cellapp_extension（8 TU）首次真实编译，每 TU 均以 `base_texture.hpp(89)` 起步 140 错。
+TU 归属经错误档 `(compiling source file ...)` 精确解析确认。
+
+**决定性证据（`CL=/showIncludes` 单 TU 链，`cmake-showincludes-cellapp.log`）**：
+`bounce_grenade_extra.cpp → common/closest_triangle.hpp → chunk_obstacle.hpp →
+model/model.hpp → moo/visual.hpp → moo/managed_texture.hpp → moo/base_texture.hpp(89)`。
+同 TU 内 `chunk_obstacle.hpp:7 #if !defined(MF_SERVER)` 的 romp include 未触发
+（romp 头全链 0 次）⇒ MF_SERVER 已定义；而 `chunk_obstacle.hpp:12
+#if ENABLE_RELOAD_MODEL` 触发 ⇒ 宏体为真。两者矛盾的唯一解释：**MSVC 传统预处理器
+把宏展开产生的 `defined()` 按未定义求值**（标准明文 UB；GCC/Clang 就地求值故 Linux
+无恙）。config.hpp 全部 12 个宏体含 `defined()` 的 ENABLE_* 均受累：
+`ENABLE_MEMORY_DEBUG` 错误为 1 ⇒ `memory_debug.cpp`（整体在 `#if ENABLE_MEMORY_DEBUG`
+内，Linux 下空 TU）被编译 ⇒ `<map>` C2338 复现即独立旁证。
+
+**修复（config.hpp，语义真值表逐一保留）**：PROFILER/HITCH_DETECTION/ASSET_PIPE/
+MINI_DUMP/MEMORY_DEBUG/STACK_TRACKER/ALLOCATOR_STATISTICS/RELOAD_MODEL/
+FIXED_SIZED_POOL_ALLOCATOR/FIXED_SIZED_POOL_STATISTICS/
+REFERENCE_COUNT_THREADING_DEBUG/TRANSFORM_VALIDATION 十二宏全部重写——`defined()`
+判定上提为真实 `#if`，宏体成为纯表达式（`#if` 与真实代码两用）；补
+`FORCE_ENABLE_MEMORY_DEBUG`/`FORCE_ENABLE_ALLOCATOR_STATISTICS` 的 `#ifndef 0` 默认
+（原仅 `ENABLE_MEMTRACKER` 块定义、普通构建下是未定义标识符，`#if` 合法但真实代码
+非法）。`BWCLIENT_AS_PYTHON_MODULE`/`BW_EXPORTER`/`BW_EMBEDDED` 不可加默认值
+（`defined()` 调用点遍布 allocator.cpp/ned_allocator.hpp/bwresource.cpp 等），
+改为在宏体的 `#if` 条件里取值。
+
+**测试先行**：`test_config_values.cpp`（static_assert 钉服务端契约
+ENABLE_RELOAD_MODEL==0 等六项 + TEST 运行时镜像）在旧 config.hpp 下 GCC 直接拒绝
+编译（宏体 `defined()` 进真实代码即错）——天然红；修复后 make 轨 cstdmf_test
+451→452 全绿。教训：含 `defined()` 的宏体连「用作 C++ 表达式」都做不到，
+MSVC 更会静默错值——真值表进 `#if`、宏体进表达式是唯一两全结构。
+
+**#12 首见的 Windows 端口洞（真码层，非宏）**：`mailbox_base.cpp:12 <arpa/inet.h>`
+（TU 内零 arpa/inet 符号使用，vestigial）、`replay_header.cpp:7,68 <sys/time.h>+
+gettimeofday`（仅取 tv.tv_sec，秒分辨率足够）、`integer_data_type.cpp:53 ssize_t`
+（→ `intptr`，与 PRIzd 三平台精确匹配：POSIX long/_WIN64 __int64/_WIN32 int）。
+`moo/png.cpp:10 png.h C1083`：png 已迁 vcpkg（make 轨 `third_party_vcpkg.mak`），
+CMake 根的 libpng 映射仍指 VS2003 工程（`BWConfiguration_server.cmake:98
+third_party/png/projects/visualc71`）——Windows 根构建的 libpng 接线为独立设计件。
+探针 root build 步补 `_CL_=/WX-`（`BWCompilerAndLinkerOptions.cmake` 的 /WX 追加在
+命令行后，_CL_ 再后置故 /WX- 胜出；C4267 转换告警类清除，与模块腿偏差一致）。
+
+另记：push run 38852265330 的 cstdmf 门禁腿被探针 #12 dispatch 经并发组取消
+（skipped 腿仍占组），已 `gh run rerun --failed` 重跑。

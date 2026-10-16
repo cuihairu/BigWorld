@@ -15,7 +15,15 @@
 #define BW_FORMAT_ATTRIBUTE
 #endif
 
-#define BW_UNIX_BACKTRACE (defined( unix ) && !defined( __ANDROID__ ))
+// BIGWORLD_BEGIN(msvc port)
+// #if, not a macro body: see config.hpp for why defined() must not be
+// expanded out of a #define.
+#if defined( unix ) && !defined( __ANDROID__ )
+#define BW_UNIX_BACKTRACE 1
+#else
+#define BW_UNIX_BACKTRACE 0
+#endif
+// BIGWORLD_END(msvc port)
 
 
 BW_BEGIN_NAMESPACE

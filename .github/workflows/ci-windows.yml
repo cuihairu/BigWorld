@@ -316,6 +316,15 @@ jobs:
 
       - name: Build root superproject (Hybrid, all targets)
         shell: pwsh
+        env:
+          # The root's BWCompilerAndLinkerOptions.cmake appends /WX (a
+          # VS2008-era setting); _CL_ appends AFTER the command line, so
+          # /WX- wins. This keeps the probe a compile gate - the
+          # size_t-conversion warnings in legacy server code (e.g.
+          # server_super_model.hpp:74 C4267) are a separate follow-up - and
+          # matches the /WX- deviation the module-standalone legs carry in
+          # their CMAKE_CXX_FLAGS.
+          _CL_: "/WX-"
         run: |
           # ALL in dependency order: MSBuild builds what failed first, so
           # the log localises the head of the blocker list. ExternalProject

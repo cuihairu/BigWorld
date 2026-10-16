@@ -18,6 +18,7 @@ cxxSource =						\
 	test_bw_util				\
 	test_checksum_stream 		\
 	test_circular_queue			\
+	test_config_values			\
 	test_concurrency			\
 	test_debug					\
 	test_dependency_graph	 	\
