@@ -1,5 +1,7 @@
 # ADR-0003：make 主链 + 按组件 CMake 样板双轨并存
 
+> [English](adr-0003-make-cmake-dual-track.en.md) | **中文**
+
 - **状态**：已接受（2026-10-12 cstdmf 样板落地，2026-10-14 resmgr + network + CI matrix）
 - **范围**：`programming/bigworld/build/make/`、`cmake/samples/`、
   `scripts/build-*-cmake.sh`、`.github/workflows/ci.yml`、

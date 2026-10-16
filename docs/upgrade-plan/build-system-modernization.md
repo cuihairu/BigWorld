@@ -1,5 +1,7 @@
 # 构建系统现代化
 
+> [English](build-system-modernization.en.md) | **中文**
+
 <div class="arch-hero">
 
 BigWorld 的构建系统混合了 Make、CMake 和平台脚本，版本老旧。本文档规划构建系统的现代化路径。

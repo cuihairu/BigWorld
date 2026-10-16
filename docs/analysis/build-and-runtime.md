@@ -1,5 +1,7 @@
 # 构建与运行体系
 
+> [English](build-and-runtime.en.md) | **中文**
+
 ## 构建入口
 
 BigWorld 同时保留 Make、vcpkg、CMake、批处理脚本和容器脚本。源码分析时不要把这些入口理解成互相等价，它们服务的平台和目标不同。

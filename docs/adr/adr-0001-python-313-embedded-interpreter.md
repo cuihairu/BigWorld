@@ -1,5 +1,7 @@
 # ADR-0001：嵌入式解释器 Python 2.7 → 3.13
 
+> [English](adr-0001-python-313-embedded-interpreter.en.md) | **中文**
+
 - **状态**：已接受（2026-09-26 起分批落地，2026-10-12 升至 3.13.16）
 - **范围**：`programming/bigworld/third_party/python`（vendored CPython）、
   `lib/pyscript`、构建链 `third_party_python.mak`、运行期资源树

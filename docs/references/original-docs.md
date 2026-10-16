@@ -1,5 +1,7 @@
 # 原始 PDF 文档
 
+> [English](original-docs.en.md) | **中文**
+
 以下文件为仓库原有资料，建议与本分析站点配合阅读：
 
 - [BigWorld Technology Server Whitepaper.pdf](/pdf/BigWorld%20Technology%20Server%20Whitepaper.pdf)

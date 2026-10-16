@@ -1,5 +1,7 @@
 # 源码导读
 
+> [English](source-code-guide.en.md) | **中文**
+
 <div class="arch-hero">
 
 本章给出 BigWorld 源码的阅读地图。重点不是罗列目录，而是把进程入口、消息注册、EntityDef、数据库、客户端通信和 Cell 迁移串成可验证的源码链。

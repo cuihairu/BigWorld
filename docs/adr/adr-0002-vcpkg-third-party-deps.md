@@ -1,5 +1,7 @@
 # ADR-0002：第三方依赖从 vendored 源码树切换到 vcpkg manifest
 
+> [English](adr-0002-vcpkg-third-party-deps.en.md) | **中文**
+
 - **状态**：已接受（2026-10-12 落地，`2bdfc5aa` 切换、`1180ece6` 钉 baseline）
 - **范围**：`programming/bigworld/third_party/`、`third_party_*.mak`、
   `build/cmake/FindBW*.cmake`、CI/每日构建工作流

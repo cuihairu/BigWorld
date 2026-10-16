@@ -1,5 +1,7 @@
 # 热重载生产化设计
 
+> [English](hot-reload-productionization.en.md) | **中文**
+
 <div class="arch-hero">
 
 `BigWorld.reloadScript` 当前定位为开发期工具（源码注释原话 "never in a production environment"）。本文档基于对 reload 链路的逐行审计，给出将其生产化所需的五件套设计：版本化 schema、双版本兼容窗口、dry-run、失败回滚、跨进程一致性屏障，以及分期落地路径与测试承载。

@@ -1,5 +1,7 @@
 # 第三方依赖升级清单
 
+> [English](third-party-deps.en.md) | **中文**
+
 <div class="arch-hero">
 
 BigWorld 内嵌了大量第三方库，版本普遍老旧。本文档盘点当前依赖状态，提供升级建议。

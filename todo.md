@@ -75,17 +75,17 @@ docs 根目录收口状态（2026-10-16）：
 
 子目录缺口（判据与根目录轮一致：不重命名原件、对应件 `<原名>.en.md`、切换器在前 3 行内、命令/路径/专有名词不译）：
 
-- [ ] docs/adr/：4 篇（index + adr-0001/0002/0003 决策记录）——无任何 .en.md
+- [x] docs/adr/：4 篇（index + adr-0001/0002/0003 决策记录）——2026-10-16 R1021PATROL 全配对（4 个 .en.md，中文 4 篇加切换器；`npm run docs:build` 绿，本提交）
 - [ ] docs/architecture/：28 篇（index/outline + 26 个架构章）——无任何 .en.md
-- [ ] docs/getting-started/：4 篇（index / build-from-source / project-structure / api-reference）——无任何 .en.md
-- [ ] docs/upgrade-plan/：7 篇（migration-status / python-upgrade-plan / python-c-api-guide / third-party-deps / build-system-modernization / hot-reload-productionization / packaging-and-daily-build）——无任何 .en.md
-- [ ] docs/references/：1 篇（original-docs）——无 .en.md
-- [ ] docs/analysis/：5 篇（原任务清单未列，盘点补登：overview / modules / build-and-runtime / risks / source-code-guide）——无任何 .en.md
-- 合计 49 篇中文实质文档待配对。
+- [x] docs/getting-started/：4 篇（index / build-from-source / project-structure / api-reference）——2026-10-16 R1021PATROL 全配对（4 个 .en.md，api-reference 全部 file:line 签名与代码块原样保留；本提交）
+- [x] docs/upgrade-plan/：7 篇（migration-status / python-upgrade-plan / python-c-api-guide / third-party-deps / build-system-modernization / hot-reload-productionization / packaging-and-daily-build）——2026-10-16 R1021PATROL 全配对（7 个 .en.md；历史规划件保留其写作时点口径，状态注同步翻译；命令/路径/标识符不译；本提交）
+- [x] docs/references/：1 篇（original-docs）——2026-10-16 R1021PATROL 配对（本提交）
+- [x] docs/analysis/：5 篇（overview / modules / build-and-runtime / risks / source-code-guide）——2026-10-16 R1021PATROL 全配对（5 个 .en.md；本提交）
+- 合计 49 篇：2026-10-16 R1021PATROL 后已配对 21 篇（adr 4 + getting-started 4 + upgrade-plan 7 + references 1 + analysis 5），余 28 篇全部在 docs/architecture/（约 9.7k 行，含逐章 file:line 证据，建议分批推进）。
 
 关联剩余项：
 
-- VitePress nav/sidebar（`docs/.vitepress/config.mjs`）目前只挂中文页路由，5 个 .en.md（cpp23 / doc-consistency-audit / vcpkg / index / python-313 占位）全部无侧栏入口，仅能靠页内切换器互达；若要侧栏可见需另行设计双语挂载（rewrites 或按语言分路由前缀），本轮未动。
+- VitePress nav/sidebar（`docs/.vitepress/config.mjs`）目前只挂中文页路由，全部 .en.md（根目录 5 个 + 子目录 21 个）均无侧栏入口，仅能靠页内切换器互达；若要侧栏可见需另行设计双语挂载（rewrites 或按语言分路由前缀），本轮未动。
 - python-313-migration.md 全量翻译的技术门槛：file:line 引用、标识符与实测数值密集，单遍翻译易降质；如后续决定翻译，建议按 §1–§6 / §7.1–§7.18 / §7.19–§7.35 分段推进并逐段核数。
 
 本节事项开工时逐条打勾并附 commit hash，维护规则同前。

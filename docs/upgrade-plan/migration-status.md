@@ -1,5 +1,7 @@
 # 迁移与覆盖率现状
 
+> [English](migration-status.en.md) | **中文**
+
 <div class="arch-hero">
 
 本页是 Python 3.13 迁移与覆盖率补强工程的**单一现状仪表**：当前推进到哪、各模块覆盖到多少、哪些面已登记为不可达。逐批的完整过程、代码证据与陷阱记录在 [Python 3.13 迁移全量台账](/python-313-migration)，本页只回答“现在是什么状态”。

@@ -1,5 +1,7 @@
 # 项目结构
 
+> [English](project-structure.en.md) | **中文**
+
 <div class="arch-hero">
 
 BigWorld 是一个大型 C/C++ MMO 引擎，本文档说明项目的目录布局和职责划分。
