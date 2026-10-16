@@ -336,6 +336,22 @@ jobs:
           Write-Host "build exit: $LASTEXITCODE"
           exit $LASTEXITCODE
 
+      - name: Dump cellapp_extension include tree on failure
+        if: failure()
+        shell: pwsh
+        run: |
+          # bounce_grenade_extra.cpp compiles clean on the Linux make track
+          # under MF_SERVER but on MSVC pulls client moo headers
+          # (base_texture.hpp(89): C2039 'Colour' is not a member of 'BW::Moo')
+          # through a route that is not reachable in the source include graph.
+          # Inject /showIncludes via the CL env var, touch the TU, and rebuild
+          # just its project so MSVC prints the exact include chain it used.
+          $env:CL = "/showIncludes"
+          (Get-Item programming/bigworld/examples/cellapp_extension/bounce_grenade_extra.cpp).LastWriteTime = Get-Date
+          cmake --build "build/win_root_build" --config Hybrid `
+                --target cellapp_extension 2>&1 | `
+                Tee-Object -FilePath cmake-showincludes-cellapp.log
+
       - name: Upload build logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -344,6 +360,7 @@ jobs:
           path: |
             cmake-configure-root.log
             cmake-build-root.log
+            cmake-showincludes-cellapp.log
             build/win_root_build/**/*BUILD*.log
           if-no-files-found: ignore
           retention-days: 7
