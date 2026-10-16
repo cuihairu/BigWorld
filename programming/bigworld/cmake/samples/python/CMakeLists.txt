@@ -16,21 +16,30 @@
 # options: the options below are copied verbatim from third_party_python.mak's
 # pythonConfigureOpts.
 #
-# Only libpython3.13.a is produced. The sed post-processing in
-# third_party_python.mak (TERMNAM undefs in pyconfig.h, LINKFORSHARED
-# whole-archive OpenSSL + -u,BW_Py_memoryTrackingIgnore* on the interpreter
-# link) only affects python.exe and the shared extension modules, and this
-# sample builds neither: CMake-track consumers link the interpreter statically
-# and do not execute extension modules (entitydef_test initializes Python and
-# runs script code but never dlopens lib-dynload).
+# The sed post-processing in third_party_python.mak (TERMNAM undefs in
+# pyconfig.h, LINKFORSHARED whole-archive OpenSSL + -u,BW_Py_memoryTrackingIgnore*
+# on the interpreter link) is replicated here because it gates the shared
+# extension modules: CPython 3.12+ runs Tools/build/check_extension_modules.py
+# as part of `make all`, which dlopens every module from the fresh interpreter
+# and renames any that fail to import to <name>_failed<EXT_SUFFIX>. _hashlib
+# calls BW_Py_memoryTrackingIgnoreBegin/End (Python/bwhooks.o inside
+# libpython3.13.a) and _ssl/_hashlib bind OpenSSL from the interpreter image;
+# without the sed the check would rename them away.
 #
-# The interpreter still resolves its stdlib at runtime relative to the
-# configure-time --prefix (<prefix>/lib/python3.13), which in the make chain is
-# populated by `make install`. Installing just the source Lib/ tree (what
-# libinstall copies, minus the optional bytecode compile) is enough: the
-# initial import of encodings and everything entitydef_test touches is pure
-# Python, and building python.exe/lib-dynload to run a full `make install`
-# would drag in the sed hacks above for no benefit.
+# CMake-track consumers link the interpreter statically (they link with
+# -rdynamic/--export-dynamic, e.g. entitydef_test) and DO dlopen the extension
+# modules: pyscript's Script::init resolves its stdlib through BWResource, and
+# plain stdlib imports (pickle -> _pickle, struct, ...) fail without
+# scripts/server_common/lib-dynload-<platform>. So besides libpython3.13.a the
+# sample builds python.exe + sharedmods (`make all`) and installs the make
+# chain's python_library res tree (stdlib sources, bw_site.py, lib-dynload)
+# into <build>/python-res for consumers to put on BWResource's path.
+#
+# The interpreter still resolves its stdlib at startup relative to the
+# configure-time --prefix (<prefix>/lib/python3.13) — populated below with the
+# source Lib/ tree, which is what `make install` libinstall copies minus the
+# optional bytecode compile; this only serves the initial encodings import
+# before pyscript replaces sys.path.
 #
 # libpython3.13.a contains Python/bwhooks.o (ar t), so linking it is all
 # pyscript needs — pyscript references the BW_Py_* symbols, which pulls
@@ -90,6 +99,32 @@ if(NOT DEFINED CMAKE_BUILD_PARALLEL_LEVEL OR CMAKE_BUILD_PARALLEL_LEVEL STREQUAL
 	set(CMAKE_BUILD_PARALLEL_LEVEL 4)
 endif()
 
+# --- sed post-processing: verbatim from third_party_python.mak ---------------
+# TERMNAM: functions marked dangerous in man pages are undef'd so CPython uses
+# its own implementations (third_party_python.mak does this with one regex
+# s/#define (HAVE_T(E)*MPNAM(_R)?) 1/...; written out per macro here because
+# ExternalProject embeds the command in a generated cmake string where the
+# backslash backreference is not representable).
+set(BW_PYTHON_SED_TERMNAM
+	"sed;-r;-i;-e;s,#define HAVE_TEMPNAM 1,/* #undef HAVE_TEMPNAM */,;-e;s,#define HAVE_TMPNAM 1,/* #undef HAVE_TMPNAM */,;-e;s,#define HAVE_TMPNAM_R 1,/* #undef HAVE_TMPNAM_R */,;${BW_PYTHON_BUILD_DIR}/pyconfig.h")
+# LINKFORSHARED: the interpreter links the same static vcpkg OpenSSL that the
+# BW binaries link (whole-archive) and force-loads bwhooks.o via the -u flags
+# so check_extension_modules.py does not rename _ssl/_hashlib away (see header
+# note). The make chain names them -lbwssl/-lbwcrypto; the cmake track links
+# the same vcpkg archives under their stock names.
+set(BW_PYTHON_LINKFORSHARED_EXTRA
+	"-L${BW_PYTHON_VCPKG_INSTALLED}/lib -Wl,--whole-archive -lssl -lcrypto -Wl,--no-whole-archive -Wl,-u,BW_Py_memoryTrackingIgnoreBegin -Wl,-u,BW_Py_memoryTrackingIgnoreEnd")
+set(BW_PYTHON_SED_LINKFORSHARED
+	"sed;-r;-i;-e;s|^LINKFORSHARED=.*|LINKFORSHARED= -Xlinker -export-dynamic ${BW_PYTHON_LINKFORSHARED_EXTRA}|;${BW_PYTHON_BUILD_DIR}/Makefile")
+
+# --- runtime res tree installed for embedding consumers -----------------------
+# Mirrors third_party_python.mak's python_library target (game/res/bigworld/
+# scripts layout); consumers put ${BW_PYTHON_RES_TREE}/game/res/bigworld on
+# their BWResource path (see lib/pyscript/script.cpp Script::init and
+# lib/cstdmf/bw_platform_info.cpp DEBIAN_EQUIVALENT_PLATFORM for the el7 name).
+set(BW_PYTHON_RES_TREE "${CMAKE_CURRENT_BINARY_DIR}/python-res" CACHE INTERNAL
+	"BigWorld runtime Python res tree (game/res/bigworld/scripts layout)")
+
 ExternalProject_Add(bwpython313
 	SOURCE_DIR "${BW_PYTHON_SRC_DIR}"
 	BINARY_DIR "${BW_PYTHON_BUILD_DIR}"
@@ -100,12 +135,23 @@ ExternalProject_Add(bwpython313
 		--prefix=${CMAKE_CURRENT_BINARY_DIR}/python3.13
 		--disable-test-modules
 		CPPFLAGS=-I${BW_PYTHON_VCPKG_INSTALLED}/include
+	COMMAND ${BW_PYTHON_SED_TERMNAM}
+	COMMAND ${BW_PYTHON_SED_LINKFORSHARED}
+	# make all = libpython3.13.a + python.exe + sharedmods (the make chain's
+	# sourcePythonSharedModSentinel rule builds the same `all`)
 	BUILD_COMMAND "${BW_MAKE_EXECUTABLE}" -j${CMAKE_BUILD_PARALLEL_LEVEL}
-		libpython3.13.a EXTRA_CFLAGS=-m64\ -fPIC
-	# stdlib the runtime resolves under <prefix>/lib/python3.13 (see header
-	# note); a full `make install` would also build python.exe + lib-dynload
+		all EXTRA_CFLAGS=-m64\ -fPIC
+	# 1) stdlib under the configure prefix for the startup encodings import
+	#    (see header note)
+	# 2) the runtime res tree for embedding consumers (install_res.cmake)
 	INSTALL_COMMAND ${CMAKE_COMMAND} -E copy_directory
 		"${BW_PYTHON_SRC_DIR}/Lib" "${CMAKE_CURRENT_BINARY_DIR}/python3.13/lib/python3.13"
+	COMMAND ${CMAKE_COMMAND}
+		-DBW_PYTHON_SRC_DIR=${BW_PYTHON_SRC_DIR}
+		-DBW_PYTHON_BUILD_DIR=${BW_PYTHON_BUILD_DIR}
+		-DBW_PYSCRIPT_DIR=${CMAKE_CURRENT_LIST_DIR}/../../../lib/pyscript
+		-DBW_PYTHON_RES_TREE=${BW_PYTHON_RES_TREE}
+		-P ${CMAKE_CURRENT_LIST_DIR}/install_res.cmake
 	BUILD_BYPRODUCTS "${BW_PYTHON_ARCHIVE}"
 	LOG_CONFIGURE TRUE
 	LOG_BUILD TRUE

@@ -108,7 +108,8 @@ set(BW_THIRD_PARTY_DIR "${CMAKE_CURRENT_LIST_DIR}/../../../third_party")
 include_directories("${BW_LIB_DIR}" "${BW_THIRD_PARTY_DIR}")
 
 # --- vendored CPython (BWHooks symbols for pyscript) -------------------------
-# Builds libpython3.13.a via configure+make and exposes BWPython::Python
+# Builds libpython3.13.a + the runtime Python res tree via configure+make and
+# exposes BWPython::Python
 # (includes + archive + SCRIPT_PYTHON). Included as a subdirectory so this
 # sample builds standalone; cmake/samples/python/CMakeLists.txt skips its own
 # project() when included this way.
@@ -634,9 +635,19 @@ target_link_libraries(entitydef_test PRIVATE
 # (backtrace() symbol names in callstack.cpp depend on it)
 target_link_options(entitydef_test PRIVATE -rdynamic -Wl,--export-dynamic)
 
-get_filename_component(BW_REPO_ROOT "${CMAKE_CURRENT_LIST_DIR}/../../../../.." ABSOLUTE)
+# The harness builds its res path from --root as
+#   <root>/programming/bigworld/lib/entitydef/unit_test/res
+#   <root>/game/res/bigworld
+# but game/ is gitignored: the make chain populates game/res/bigworld/scripts
+# with the runtime Python res tree (third_party_python.mak python_library),
+# which Script::init needs — stdlib sources, bw_site.py and the lib-dynload
+# extension modules (pickle -> _pickle, struct, ... are dlopen'd from there).
+# A fresh checkout has none of it, so the test points --res at the tree the
+# python sample installs into its build dir instead (with --res the harness
+# passes the paths straight to BWResource::init).
 enable_testing()
 add_test(NAME entitydef_test
-	COMMAND entitydef_test --root "${BW_REPO_ROOT}"
+	COMMAND entitydef_test --res
+		"${BW_LIB_DIR}/entitydef/unit_test/res:${BW_PYTHON_RES_TREE}/game/res/bigworld"
 	WORKING_DIRECTORY "${BW_LIB_DIR}/entitydef/unit_test"
 )
