@@ -11,6 +11,13 @@ INCLUDE_DIRECTORIES( ${BW_SOURCE_DIR}/third_party/python/PC )
 # C1083 on the first root superproject build).
 INCLUDE_DIRECTORIES( ${BW_SOURCE_DIR}/third_party/zip )
 
+# The vendored libpng (1.6.2, the same major/minor the make chain gets from
+# vcpkg). lib/moo/png.cpp includes <png.h>, but libpng is a plain static
+# library built from projects/visualc71 with no interface includes, so its
+# header directory has to be supplied here like zip's (MSVC C1083 on the
+# root superproject build).
+INCLUDE_DIRECTORIES( ${BW_SOURCE_DIR}/third_party/png )
+
 # Python.h includes pyconfig.h, which PCbuild generates into pythoncore's own
 # IntDir (PCbuild/pyproject.props:14) - the vendored tree ships no pyconfig.h,
 # so this directory only comes into being when pythoncore is built by the

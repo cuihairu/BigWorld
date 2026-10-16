@@ -201,9 +201,9 @@ BW_TARGET_LINK_LIBRARIES( cellapp
 	chunk
 	scene
 	terrain
-	pysics2
+	physics2
 	moo
-	png
+	libpng
 	delegate_interface
 	urlrequest
 	network

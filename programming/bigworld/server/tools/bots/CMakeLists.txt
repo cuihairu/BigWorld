@@ -70,7 +70,7 @@ BW_TARGET_LINK_LIBRARIES( bots
 	connection_model
 	connection
 	moo
-	png
+	libpng
 )
 
 BW_PROJECT_CATEGORY( bots "Tools" )

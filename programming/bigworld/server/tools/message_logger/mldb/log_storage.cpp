@@ -4,7 +4,11 @@
 #include "../mlutil.hpp"
 #include "../log_entry.hpp"
 
-#include <libgen.h>
+#if defined( _WIN32 )
+	#include "../posix_compat.hpp"
+#else
+	#include <libgen.h>
+#endif
 
 
 BW_BEGIN_NAMESPACE

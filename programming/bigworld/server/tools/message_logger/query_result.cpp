@@ -6,6 +6,10 @@
 
 #include "cstdmf/debug_message_source.hpp"
 
+#if defined( _WIN32 )
+	// localtime_r shim for the timestamp formatting below.
+	#include "posix_compat.hpp"
+#endif
 
 BW_BEGIN_NAMESPACE
 

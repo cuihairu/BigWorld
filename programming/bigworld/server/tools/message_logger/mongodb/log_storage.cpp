@@ -10,6 +10,11 @@
 #include "tasks/add_server_start_task.hpp"
 #include "tasks/flush_task.hpp"
 #include "tasks/roll_task.hpp"
+
+#if defined( _WIN32 )
+	// gettimeofday shim.
+	#include "../posix_compat.hpp"
+#endif
 #include "tasks/reconnect_task.hpp"
 #include "tasks/update_appid_task.hpp"
 #include "tasks/write_appid_task.hpp"

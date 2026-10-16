@@ -4,15 +4,20 @@
 
 #include "../hostnames_validator.hpp"
 
+#if defined( _WIN32 )
+	// in_addr/inet_ntoa (Winsock2).
+	#include "../posix_compat.hpp"
+#else
+	#include <sys/socket.h>
+	#include <netinet/in.h>
+	#include <arpa/inet.h>
+#endif
+
 #include "cstdmf/bw_string.hpp"
 #include "cstdmf/bgtask_manager.hpp"
 
 #include "tasks/update_id_string_pair_task.hpp"
 #include "tasks/write_id_string_pair_task.hpp"
-
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
 
 
 BW_BEGIN_NAMESPACE

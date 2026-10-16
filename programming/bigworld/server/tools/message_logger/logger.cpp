@@ -8,6 +8,11 @@
 #include "mongodb/log_storage.hpp"
 #endif
 
+#if defined( _WIN32 )
+	// in_addr/inet_ntoa for the interface formatting below.
+	#include "posix_compat.hpp"
+#endif
+
 #include "server/bwconfig.hpp"
 #include "server/bwservice.hpp"
 #include "server/config_reader.hpp"

@@ -5,11 +5,15 @@
 #include "cstdmf/debug.hpp"
 #include "cstdmf/bw_util.hpp"
 
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <sys/socket.h>
-#include <netdb.h>
+#if defined( _WIN32 )
+	// in_addr/inet_ntoa (Winsock2) plus the rmdir shim.
+	#include "../posix_compat.hpp"
+#else
+	#include <sys/socket.h>
+	#include <netinet/in.h>
+	#include <arpa/inet.h>
+	#include <netdb.h>
+#endif
 #include <string.h>
 #include <sys/stat.h>
 

@@ -1,7 +1,11 @@
 #include "log_common.hpp"
 #include "../constants.hpp"
 
-#include <dirent.h>
+#if defined( _WIN32 )
+	#include "../posix_compat.hpp"
+#else
+	#include <dirent.h>
+#endif
 
 
 BW_BEGIN_NAMESPACE

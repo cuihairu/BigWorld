@@ -1,10 +1,17 @@
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <sys/socket.h>
-#include <netdb.h>
-#include <string.h>
-#include <sys/stat.h>
+#if defined( _WIN32 )
+	// in_addr/inet_ntoa/gethostbyaddr (Winsock2) plus the mkdir shim.
+	#include "posix_compat.hpp"
+	#include <string.h>
+	#include <sys/stat.h>
+#else
+	#include <sys/socket.h>
+	#include <netinet/in.h>
+	#include <arpa/inet.h>
+	#include <sys/socket.h>
+	#include <netdb.h>
+	#include <string.h>
+	#include <sys/stat.h>
+#endif
 
 #include "cstdmf/debug.hpp"
 #include "cstdmf/bw_util.hpp"

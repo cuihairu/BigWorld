@@ -5,6 +5,10 @@
 #include "user_segment_reader.hpp"
 #include "mlutil.hpp"
 
+#if defined( _WIN32 )
+	// scandir shim for the segment scan below.
+	#include "posix_compat.hpp"
+#endif
 
 BW_BEGIN_NAMESPACE
 
