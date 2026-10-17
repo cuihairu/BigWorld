@@ -140,6 +140,31 @@ ENDIF()
 
 BW_ADD_EXECUTABLE( message_logger ${ALL_SRCS} )
 
+# jsoncpp comes from vcpkg on the make chain (third_party_vcpkg.mak, the
+# jsoncpp port) and nothing vendors it in-tree; metadata.hpp includes
+# <json/json.h> (C1083 in the root superproject build, run 39016799505).
+# Probe like the mongodb backend above; the workflow hands the include dir
+# over as a cache entry.
+FIND_PATH( BW_JSONCPP_INCLUDE_DIR json/json.h )
+MARK_AS_ADVANCED( BW_JSONCPP_INCLUDE_DIR )
+IF( BW_JSONCPP_INCLUDE_DIR )
+	INCLUDE_DIRECTORIES( ${BW_JSONCPP_INCLUDE_DIR} )
+
+	# metadata.cpp drives Json::Reader / Json::FastWriter, so the headers
+	# alone leave LNK2019s behind. The vcpkg layout keeps the linkable
+	# (import) library one level below the include dir: lib/ on every
+	# triplet, next to the make chain's libjsoncpp.a.
+	FIND_LIBRARY( BW_JSONCPP_LIBRARY jsoncpp
+		HINTS ${BW_JSONCPP_INCLUDE_DIR}/../lib )
+	MARK_AS_ADVANCED( BW_JSONCPP_LIBRARY )
+	IF( BW_JSONCPP_LIBRARY )
+		BW_TARGET_LINK_LIBRARIES( message_logger ${BW_JSONCPP_LIBRARY} )
+	ENDIF()
+ELSE()
+	MESSAGE( STATUS "jsoncpp headers not found. "
+		"message_logger needs BW_JSONCPP_INCLUDE_DIR (vcpkg jsoncpp)." )
+ENDIF()
+
 
 BW_TARGET_LINK_LIBRARIES( message_logger
 	build
