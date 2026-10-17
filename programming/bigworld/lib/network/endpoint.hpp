@@ -66,8 +66,13 @@ typedef int			socket_t;
 
 	/// A 16 bit unsigned integer.
 	typedef u_short u_int16_t;
-	/// A 32 bit unsigned integer.
-	typedef u_long u_int32_t;
+	/// A 32 bit unsigned integer. Aliased to uint32_t (not u_long like the
+	/// neighbouring u_int16_t is to u_short) so that it is the same type as
+	/// BW::uint32 and can bind to the same reference parameters; under MSVC
+	/// unsigned long is a distinct type and every uint32 argument failed to
+	/// convert (C2664 on transfer_db.cpp, run 39021844438). The Unix branch
+	/// below sys/types.h gives exactly this aliasing.
+	typedef uint32_t	u_int32_t;
 
 	typedef SOCKET socket_t;
 #endif
