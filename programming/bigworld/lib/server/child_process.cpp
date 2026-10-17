@@ -34,14 +34,10 @@ const int BW_NO_FD = -1;
 }
 
 /*
- * Documentation in the header file.
+ * IChildProcess::onExecFailure now lives inline in the header: its TU is
+ * compiled away on MSVC but the base vtable is emitted wherever a derived
+ * object is constructed.
  */
-void IChildProcess::onExecFailure( int result )
-{
-	ERROR_MSG( "ChildProcess::onExecFailure: Unable to execv: %s\n",
-		strerror( errno ) );
-	exit( EXIT_FAILURE );
-}
 
 
 

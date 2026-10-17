@@ -444,7 +444,15 @@ SqliteDatabase::~SqliteDatabase()
 			SECONDARYDB_ERROR_MSG( "SqliteDatabase::~SqliteDatabase: "
 					"Failed to delete unregistered database '%s': %s\n",
 				path_.c_str(),
+#if defined( _WIN32 )
+				// MSVC spells strerror_r's buffer form strerror_s; it
+				// returns an errno code, so hand the buffer to the
+				// formatter through a comma expression.
+				( strerror_s( errnoBuf, sizeof( errnoBuf ), errno ),
+					errnoBuf ) );
+#else
 				strerror_r( errno, errnoBuf, sizeof( errnoBuf ) ) );
+#endif
 		}
 	}
 

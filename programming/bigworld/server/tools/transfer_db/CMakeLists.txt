@@ -20,6 +20,8 @@ BW_TARGET_LINK_LIBRARIES( transfer_db
 	build
 	db
 	server
+	network
+	resmgr
 	sqlite
 )
 

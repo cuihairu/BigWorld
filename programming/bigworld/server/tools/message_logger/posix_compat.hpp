@@ -249,6 +249,50 @@ inline int mkdir( const char * path, int /*mode*/ )
 	return _mkdir( path );
 }
 
+inline char * mkdtemp( char * tmpl )
+{
+	// POSIX mkdtemp: substitute the trailing Xs with a unique suffix,
+	// create the directory 0700 and return the path pointer, NULL on
+	// failure. Windows has no equivalent; probe candidate suffixes with
+	// _mkdir the same way glibc does (EEXIST just means try again).
+	size_t len = strlen( tmpl );
+	size_t xs = len;
+	while ((xs > 0) && (tmpl[ xs - 1 ] == 'X'))
+	{
+		--xs;
+	}
+
+	if ((len - xs) < 6)
+	{
+		errno = EINVAL;
+		return NULL;
+	}
+
+	static const char LETTERS[] =
+		"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+
+	for (int attempt = 0; attempt < 1000; ++attempt)
+	{
+		for (size_t i = xs; i < len; ++i)
+		{
+			tmpl[ i ] = LETTERS[ rand() % (sizeof( LETTERS ) - 1) ];
+		}
+
+		if (_mkdir( tmpl ) == 0)
+		{
+			return tmpl;
+		}
+
+		if (errno != EEXIST)
+		{
+			return NULL;
+		}
+	}
+
+	errno = EEXIST;
+	return NULL;
+}
+
 inline int gettimeofday( struct timeval * tv, void * /*tz*/ )
 {
 	// FILETIME is 100ns units since 1601-01-01 UTC; shift the epoch to
