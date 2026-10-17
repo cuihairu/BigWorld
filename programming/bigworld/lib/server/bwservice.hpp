@@ -358,11 +358,14 @@ void bwNarrowToTCHAR( const char * src, TCHAR * dest, size_t count )
 #endif
 }
 
+#endif // !defined( BW_NO_SERVICE_MAIN )
+
 BW_END_NAMESPACE
 
 // The CRT entry __scrt_common_main_seh looks up global main; defined inside
 // BW this was BW::main and nothing satisfied it (LNK2001 'main' in the root
 // superproject build, run 39006994918).
+#if !defined( BW_NO_SERVICE_MAIN )
 int __cdecl main( int argc, char * argv[] )
 {
 	using namespace BW;
