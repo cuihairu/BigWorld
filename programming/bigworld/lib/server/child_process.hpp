@@ -10,8 +10,14 @@
 
 // pid_t. The implementation TU compiles away on MSVC (child_process.cpp's
 // top guard), but consolidator.cpp includes this header on Windows too and
-// both platforms name the type here (MSVC's sys/types.h defines it).
+// only names the type. MSVC's sys/types.h ships no pid_t, so take the same
+// route as CPython's PC/pyconfig.h: a plain int. Identical duplicate
+// typedefs are legal when both headers end up in one TU.
+#if defined( _WIN32 )
+typedef int pid_t;
+#else
 #include <sys/types.h>
+#endif
 
 
 BW_BEGIN_NAMESPACE
