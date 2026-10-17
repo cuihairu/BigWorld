@@ -95,6 +95,23 @@ IF( NOT BW_IS_SERVER )
 		resource_modification_listener.hpp
 	)
 ENDIF()
+IF( BW_IS_SERVER AND BW_PLATFORM_WINDOWS )
+	# The server exclusion above only ever held on the make chain: it never
+	# compiles win_file_system.cpp, so nothing there referenced these. A
+	# Windows server build does - win_file_system.obj constructs
+	# FilenameCaseChecker in its ctor/copyFileOrDirectory/correctCaseOfPath,
+	# and bwresource.cpp's removeModificationListener calls
+	# cancelReloadTasks inside #if defined( _WIN32 ) (LNK2019 x4 in the
+	# resmgr.lib consumers, run 38993504232). filename_case_checker.cpp is
+	# whole-file WIN32-guarded; resource_modification_listener.cpp compiles
+	# on any platform.
+	LIST( APPEND FILESYSTEM_SRCS
+		filename_case_checker.cpp
+		filename_case_checker.hpp
+		resource_modification_listener.cpp
+		resource_modification_listener.hpp
+	)
+ENDIF()
 IF ( BW_PLATFORM_WINDOWS )
 	LIST( APPEND FILESYSTEM_SRCS
 		win_file_system.cpp

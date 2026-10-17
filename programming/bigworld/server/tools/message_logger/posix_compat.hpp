@@ -27,6 +27,7 @@
 // struct timeval for the gettimeofday shim below.
 #include "cstdmf/cstdmf_windows.hpp"
 #include <Winsock2.h>
+#include <ws2tcpip.h>	// inet_pton, for the inet_aton shim below
 
 #include <regex>	// std::regex, for the <regex.h> shims below
 
@@ -47,6 +48,15 @@ typedef intptr_t ssize_t;
 inline int geteuid( void )
 {
 	return 0;
+}
+
+// Winsock has no inet_aton. inet_pton performs the same dotted-decimal
+// parse with the same 0-on-failure contract the tool's address validation
+// uses (hostnames.cpp's handleLine); normalised to exactly 1/0 because
+// inet_pton also returns -1 for a bad address family.
+inline int inet_aton( const char * cp, struct in_addr * pin )
+{
+	return inet_pton( AF_INET, cp, pin ) == 1;
 }
 
 struct dirent

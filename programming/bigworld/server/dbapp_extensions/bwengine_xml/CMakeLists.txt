@@ -22,7 +22,12 @@ BW_ADD_LIBRARY( bwengine_xml MODULE
 # entry: every static lib in the set (pyscript, script, entitydef, chunk)
 # references the Python C-API, and a MODULE target must carry the interpreter
 # import archive itself (LNK2001 on _Py_NoneStruct/PyType_Type without it).
+# db is here for the same host-resolution reason: db_storage_xml's
+# xml_database.obj calls DBConfig::get(), defined in lib/db/db_config.cpp -
+# the make chain's .so resolves it at load time from the dbapp process, a
+# MODULE target needs the definition at link (LNK2019, run 38993504232).
 BW_TARGET_LINK_LIBRARIES( bwengine_xml
+	db
 	db_storage
 	db_storage_xml
 	server

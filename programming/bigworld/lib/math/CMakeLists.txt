@@ -90,6 +90,20 @@ IF( NOT BW_IS_SERVER )
 		sphere.ipp
 	)
 ENDIF()
+IF( BW_IS_SERVER AND BW_PLATFORM_WINDOWS )
+	# The server exclusion above only ever held on the make chain: its math
+	# list never carried blend_transform and its .so links resolve at load
+	# time. A Windows server build links pyscript, whose script_math.obj
+	# constructs BlendTransform unguarded (BlendTransform(Matrix) in
+	# MatrixAnimation::matrix), and a MODULE/static link needs the
+	# definition (LNK2019 from pyscript.lib, run 38993504232). The file is
+	# unguarded pure math with only cstdmf dependencies, so it compiles on
+	# any platform.
+	LIST( APPEND ALL_SRCS
+		blend_transform.cpp
+		blend_transform.hpp
+	)
+ENDIF()
 SOURCE_GROUP( "" FILES ${ALL_SRCS} )
 
 BW_BLOB_SOURCES( BLOB_SRCS ${ALL_SRCS} )
