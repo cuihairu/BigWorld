@@ -272,6 +272,22 @@ ENDMACRO( BW_ADD_LIBRARY )
 MACRO( BW_ADD_EXECUTABLE _PROJNAME )
 	ADD_EXECUTABLE( ${_PROJNAME} ${ARGN} )
 
+	# Every exe that links the server libs pulls Python.h in transitively,
+	# and CPython's generated pyconfig.h embeds
+	# #pragma comment( lib, "python313.lib" ) into each of those objects -
+	# a bare-name link input resolved via LINK_DIRECTORIES against the
+	# ExternalProject's PCbuild/amd64 output. Exes that link neither script
+	# nor pyscript had no ordering edge on bwpython313, so their links raced
+	# the per-invocation pythoncore rebuild and died with LNK1104 on the
+	# half-written archive (run 39016799505: cellappmgr, baseappmgr, dbappmgr
+	# and the link-only tool failures). Serialise every exe behind the
+	# python build; the guard keeps standalone module configures working
+	# where no bwpython313 target exists. Precedent:
+	# examples/cellapp_extension/CMakeLists.txt.
+	IF( TARGET bwpython313 )
+		ADD_DEPENDENCIES( ${_PROJNAME} bwpython313 )
+	ENDIF()
+
 	IF (BW_IS_REMOTE_BUILD)
 		BW_CHECK_REMOTE_BUILD( ${_PROJNAME} ${ARGN} )
 	ENDIF()

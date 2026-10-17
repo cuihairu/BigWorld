@@ -73,7 +73,14 @@ IF( MSVC )
 		)
 
 	# Flags used by C and C++ compilers for Hybrid builds
-	SET( BW_COMPILER_FLAGS_HYBRID ${BW_COMPILER_FLAGS_OPTIMIZED} )
+	# _HYBRID rides on the config flags: the COMPILE_DEFINITIONS_HYBRID
+	# directory property below never reached a single target (a Ninja
+	# Multi-Config sandbox shows no -D_HYBRID on any command line, root
+	# directory property or not), so every TU that includes
+	# cstdmf/build_config.hpp hit its #error (C1189 on dbapp.cpp and
+	# reviver.cpp in the root superproject build, run 39016799505). _DEBUG
+	# needs no counterpart - /MDd defines it natively.
+	SET( BW_COMPILER_FLAGS_HYBRID ${BW_COMPILER_FLAGS_OPTIMIZED} -D_HYBRID )
 
 	# Flags used by C and C++ compilers for Consumer_Release builds
 	SET( BW_COMPILER_FLAGS_CONSUMER_RELEASE ${BW_COMPILER_FLAGS_OPTIMIZED} )
