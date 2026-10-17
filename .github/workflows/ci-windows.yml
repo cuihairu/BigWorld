@@ -409,6 +409,67 @@ jobs:
           if ($stage1Exit -ne 0) { exit $stage1Exit }
           exit $exeLaneExit
 
+      - name: Package server products (runtime set)
+        if: always()
+        shell: pwsh
+        run: |
+          # L39 (exe packaging) evidence step, first probe iteration: gather
+          # the runtime file set a server deployment needs from THIS clean
+          # runner - the Hybrid executables, the Hybrid runtime DLLs (BW
+          # Python modules: _bwlog.dll, bwengine_xml.dll, ...) and the
+          # interpreter bits the embedder loads (python313.dll plus the
+          # PCbuild extension modules). Two facts go to the manifest rather
+          # than the archive: the BW core libs are static on this track (no
+          # cstdmf.dll / network.dll ships), and the Python stdlib is the
+          # in-repo third_party/python/Lib tree every checkout already
+          # carries. Products are workflow ARTIFACTS only (7-day retention),
+          # never releases or tags.
+          $stage = "build/products"
+          New-Item -ItemType Directory -Force $stage | Out-Null
+          Get-ChildItem -Recurse -Filter *.exe "build/win_root_build" |
+            Where-Object { $_.FullName -match '\\Hybrid\\' } |
+            Copy-Item -Destination $stage -Force
+          Get-ChildItem -Recurse -Filter *.dll "build/win_root_build" |
+            Where-Object { $_.FullName -match '\\Hybrid\\' } |
+            Copy-Item -Destination $stage -Force
+          $pybin = "programming/bigworld/third_party/python/PCbuild/amd64"
+          if (Test-Path "$pybin/python313.dll") {
+            Copy-Item "$pybin/python313.dll" $stage -Force
+            Get-ChildItem "$pybin" -Filter *.pyd |
+              Copy-Item -Destination $stage -Force
+          }
+          $manifest = @()
+          Get-ChildItem $stage | Sort-Object Name | ForEach-Object {
+            $sha = (Get-FileHash $_.FullName -Algorithm SHA256).Hash
+            $manifest += "{0}  {1,12:N0}  {2}" -f $sha, $_.Length, $_.Name
+          }
+          $manifest += ""
+          $stdlib = "programming/bigworld/third_party/python/Lib"
+          if (Test-Path $stdlib) {
+            $files = (Get-ChildItem -Recurse -File $stdlib |
+              Measure-Object).Count
+            $manifest += "python stdlib (in-repo, not packaged): $stdlib ($files files)"
+          } else {
+            $manifest += "python stdlib MISSING: $stdlib"
+          }
+          $manifest | Out-File -FilePath products-manifest.txt -Encoding utf8
+          Get-Content products-manifest.txt
+          if ((Get-ChildItem $stage | Measure-Object).Count -gt 0) {
+            Compress-Archive -Path "$stage/*" `
+              -DestinationPath bw-windows-server-products.zip -Force
+          }
+
+      - name: Upload server products
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-windows-root-products-${{ github.run_id }}
+          path: |
+            products-manifest.txt
+            bw-windows-server-products.zip
+          if-no-files-found: ignore
+          retention-days: 7
+
       - name: Dump cellapp_extension include tree on failure
         if: failure()
         shell: pwsh
