@@ -39,6 +39,13 @@ IF( MSVC AND EXISTS "${BW_SOURCE_DIR}/third_party/python/Include/patchlevel.h" )
 		SET( _bw_py_arch "win32" )
 	ENDIF()
 	INCLUDE_DIRECTORIES( "${BW_SOURCE_DIR}/third_party/python/PCbuild/obj/${_bw_py_major}${_bw_py_minor}${_bw_py_arch}_Release/pythoncore" )
+
+	# Python.h inclusion is gated on this (script/first_include.hpp); the
+	# make chain defines it for every usePython binary
+	# (common_footer_config.mak). The cmake track never defined it, so TUs
+	# whose header chain has no other route to Python.h lost the Py API
+	# (C2065 'PyExc_ValueError' on bots/patrol_graph.cpp, run 39021844438).
+	ADD_DEFINITIONS( -DSCRIPT_PYTHON )
 ENDIF()
 
 # Add include directories for remote build system header files
