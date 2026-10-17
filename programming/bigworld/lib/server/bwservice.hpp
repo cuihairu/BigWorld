@@ -331,8 +331,8 @@ void bwNarrowToTCHAR( const char * src, TCHAR * dest, size_t count )
 int __cdecl main( int argc, char * argv[] )
 {
 	// parse basic command line here.
-	char* pServiceName = NULL;
-	char* pDisplayName = NULL;
+	const char* pServiceName = NULL;
+	const char* pDisplayName = NULL;
 
 	bool bRun = false;
 	bool fromMachineD = false;

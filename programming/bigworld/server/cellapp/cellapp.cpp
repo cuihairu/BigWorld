@@ -127,6 +127,29 @@ DECLARE_DEBUG_COMPONENT( 0 )
 
 BW_BEGIN_NAMESPACE
 
+#if defined( _WIN32 )
+// Windows has no gettimeofday. It is used here only as a wall clock for the
+// stamp-counter sanity cross-check in calcTickPeriod (C3861 in the root
+// superproject build, run 39003541338); the same FILETIME-to-Unix-epoch
+// conversion the message_logger compat shim carries.
+namespace
+{
+	void wallClockTimeval( timeval * tv )
+	{
+		FILETIME ft;
+		GetSystemTimeAsFileTime( &ft );
+		ULARGE_INTEGER ticks;
+		ticks.LowPart = ft.dwLowDateTime;
+		ticks.HighPart = ft.dwHighDateTime;
+		// FILETIME counts 100ns units from 1601; shift to the Unix epoch.
+		const uint64 EPOCH_DIFF = 116444736000000000ULL;
+		uint64 sinceEpoch100ns = ticks.QuadPart - EPOCH_DIFF;
+		tv->tv_sec = (long)( sinceEpoch100ns / 10000000ULL );
+		tv->tv_usec = (long)( ( sinceEpoch100ns / 10ULL ) % 1000000ULL );
+	}
+}
+#endif // _WIN32
+
 extern int Math_token;
 extern int ResMgr_token;
 extern int PyScript_token;
@@ -826,7 +849,11 @@ void CellApp::startGameTime()
 							"GameTick" );
 
 	lastGameTickTime_ = timestamp();
+#if defined( _WIN32 )
+	wallClockTimeval( &oldTimeval_ );
+#else
 	gettimeofday( &oldTimeval_, NULL );
+#endif
 	mainDispatcher_.clearSpareTime();
 	this->calcTransientLoadTime();
 
@@ -1019,7 +1046,11 @@ uint64 CellApp::calcTickPeriod()
 	lastGameTickTime_ = newTime;
 
 	timeval newTimeval;
+#if defined( _WIN32 )
+	wallClockTimeval( &newTimeval );
+#else
 	gettimeofday( &newTimeval, NULL );
+#endif
 
 	if (time_ % 20 == 0)
 	{
@@ -1138,6 +1169,12 @@ void CellApp::checkTickWarnings( double persistentLoadTime,
 
 	if ((persistentLoadTime < 0.f) || (lastTickPeriod < persistentLoadTime))
 	{
+		// BWTimingMethod/g_timingMethod exist only in cstdmf's __linux__
+		// timestamp branch (timestamp.hpp); the Windows port times through
+		// QueryPerformanceCounter, which has no unsynchronised-TSC failure
+		// mode, so only the generic warning remains there (C2065 in the
+		// root superproject build, run 39003541338).
+#if !defined( _WIN32 )
 		if (g_timingMethod == RDTSC_TIMING_METHOD)
 		{
 			CRITICAL_MSG( "CellApp::checkTickWarnings: "
@@ -1148,6 +1185,7 @@ void CellApp::checkTickWarnings( double persistentLoadTime,
 				lastTickPeriod );
 		}
 		else
+#endif
 		{
 			CRITICAL_MSG( "CellApp::checkTickWarnings: "
 				"Invalid timing result %.3f.\n", lastTickPeriod );
