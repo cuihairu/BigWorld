@@ -17,7 +17,9 @@
 #include "server/util.hpp"
 
 #include <sys/types.h>
+#if !defined( _WIN32 )
 #include <sys/wait.h>
+#endif
 
 #include <string.h>
 #include <errno.h>

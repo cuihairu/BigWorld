@@ -30,8 +30,15 @@
 #include "cstdmf/timestamp.hpp"
 
 #include <time.h>
+// Only setrlimit() below needs sys/resource.h, and syslog.h is included
+// for nothing at all (its sole textual mention is a comment); neither
+// header exists under MSVC (C1083 in the root superproject build, run
+// 39016799505). The rest of the tree's POSIX calls go through
+// posix_compat.hpp.
+#if !defined( _WIN32 )
 #include <sys/resource.h>
 #include <sys/syslog.h>
+#endif
 
 #if defined( __unix__ )
 #include "pwd.h"
@@ -866,6 +873,9 @@ bool Logger::init( int argc, char * argv[] )
 		return false;
 	}
 
+	// No RLIMIT_CORE knob on Windows (the SDK's default is no core files,
+	// which is what this call aims for anyway).
+#if !defined( _WIN32 )
 	rlimit rlimitData = { RLIM_INFINITY, RLIM_INFINITY };
 	if (setrlimit( RLIMIT_CORE, &rlimitData ) == -1)
 	{
@@ -873,6 +883,7 @@ bool Logger::init( int argc, char * argv[] )
 				strerror( errno ) );
 		return false;
 	}
+#endif
 
 	return true;
 }

@@ -36,7 +36,9 @@
 #include "server/util.hpp"
 #include "server/writedb.hpp"
 
+#if !defined( _WIN32 )
 #include <pwd.h>
+#endif
 #include <signal.h>
 
 #include <sys/types.h>

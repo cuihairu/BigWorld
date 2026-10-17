@@ -8,6 +8,11 @@
 #include <sstream>
 #include "cstdmf/bw_string.hpp"
 
+// pid_t. The implementation TU compiles away on MSVC (child_process.cpp's
+// top guard), but consolidator.cpp includes this header on Windows too and
+// both platforms name the type here (MSVC's sys/types.h defines it).
+#include <sys/types.h>
+
 
 BW_BEGIN_NAMESPACE
 
