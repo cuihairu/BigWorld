@@ -1,5 +1,7 @@
 # 登录、会话与 Proxy 接管
 
+> [English](login-session-proxy-flow.en.md) | **中文**
+
 <div class="arch-hero">
 
 BigWorld 的登录链路不是“验证账号然后直接进游戏”。它是 LoginApp、DBApp、BaseAppMgr、BaseApp、Proxy、客户端二次握手共同完成的会话接管流程。这个流程同时体现了安全、限流、RPC、实体创建、NAT、SessionKey 和 Channel 绑定。
