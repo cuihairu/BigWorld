@@ -974,3 +974,57 @@ Windows MODULE（DLL）链接期必须全解析，需 cellapp 侧 `__declspec(dl
 导出故事（引擎现无 exe 导出机制）。解锁条件 = 为 cellapp 宿主符号定导出方案
 （`.def`/dllexport 宏/改托管接口三选一），属独立设计件；Py/cstdmf 符号族
 （同目标内）探针 #16 由 linkdeps 判定后另行收敛。
+
+### 批次 46（2026-10-18）：exe 车道全绿——探针 #16→#31 递降至 11/11
+
+**范围**：root build 探针加 exe 车道（`c2d8a8c7`：`cmake --build --target` 逐目标
+lane，11 个可执行 + `cmake-build-root-exes.log` 落盘）起，至 **探针 #31（run
+39065790752，`d3a2336a`）11/11 全绿** 收口。每轮落地前本地门
+`bw-run-all-unit-tests` 21 模块全 result 0 / EXIT=0。
+
+**清点口径**：`cmake-build-root-exes.log` 按 MSBuild banner（`^MSBuild version`）
+分 11 节，一节一 lane（sec01 cellapp … sec11 message_logger）；该 job
+`continue-on-error: true`（ci-windows.yml:277）使 run 级 conclusion 恒 success，
+真绿只认分节清点。
+
+**推进轨迹（分节清点）**：#26（`a52dcbb3`）5/11 → #27（`1ec3a0a8`）7 →
+#28（`6b3a4cf3`）9 → #29（`b395ed75`）10 → #30（`42108b2c`）10 →
+#31（`d3a2336a`）**11/11**（0 错，11 个 .exe 全产出；余 3 处 LNK4098
+LIBCMT defaultlib 冲突警告，cellapp/baseapp/dbapp，非错误）。
+
+**终点五批修复类**（file:line 与错误形态见 todo.md R3 条目同轮追记）：
+
+1. **DEFINE_INTERFACE_HERE/DEFINE_SERVER_HERE 双重定义病**：接口头的两路
+   全量定义在 make 链靠「归档成员已定义不拉」活下来，MSVC 把两 obj 无条件
+   放上链接行 → LNK2005（dbapp ×40、baseapp ×211）。修法 = exe 源表删本地
+   `*_interface.cpp` 留 .hpp；dbappmgr 的保留（其 message_handlers.cpp 只对
+   dbappmgr_interface.hpp 做 DEFINE_SERVER_HERE）。
+2. **bwservice.hpp 服务入口三定义**：Windows 臂把 usage/bwNarrowToTCHAR/
+   全局 `__cdecl main` 放头文件 out-of-line，双 TU 包含即 LNK2005 'main'。
+   `BW_NO_SERVICE_MAIN` opt-out；首版整段守卫误把 `BW_END_NAMESPACE`
+   一起编译掉（C2888/C2039 ×105，自省回归），终版两段守卫夹命名空间收口。
+   教训：**抑制守卫绝不可跨 namespace close**。
+3. **resmgr/network 族补链**：dbappmgr/transfer_db/message_logger 的
+   `BW_TARGET_LINK_LIBRARIES` 缺 resmgr（BWResource ctor/dtor/init/getPath/
+   getPathNum/fileExists/openSection/purge、DataSection::openSection/
+   readString/writeString、DataSectionIterator、Singleton<BWResource>::
+   s_pInstance）与 network（WatcherNub、LoggerMessageForwarder、
+   Mercury::EventDispatcher、MachineDaemon::queryForInternalInterface、
+   Endpoint::convertAddress、FileStream::error、Logger::init、
+   MachineGuardMessage）；make 链 Makefile 同表逐条佐证。
+4. **MSVC base vtable 非 pure 槽**：IChildProcess 唯一非纯虚
+   `onExecFailure` 的定义 TU（child_process.cpp）整 TU `#if !defined(_WIN32)`
+   编译掉，构造派生对象即 LNK2001（base vtable 照发）——改头内联。
+5. **POSIX 面收口**：strerror_r→strerror_s（errno_t 返回，逗号表达式递
+   buffer）、link(2)→CreateHardLinkA（参数序相反，posix_compat.hpp）、
+   mkdtemp shim（glibc 式 _mkdir 探测）、transfer_db consolidate CD_* 宏
+   （_open/_O_RDONLY|_O_BINARY——text 模式会毁 sqlite 字节；ssize_t→int）、
+   snapshot.cpp 整 TU Windows 桩（fork/exec + rsync 未移植，同 Consolidator
+   先例，init/transfer* 报不支持）、sqlite_database statfs 块 POSIX 守卫
+   （CIFS 超级块魔数属 Unix 挂载面，Windows 恒 true）、server_app
+   fileDescriptorLimit→_getmaxstdio、baseapp usleep→Sleep、
+   g_timingMethod/RDTSC 守卫。
+
+**余留（均已知设计件，不入增量）**：cellapp_extension 宿主符号族
+（stage-1 ALL build 的 LNK——exe 导出机制 .def/dllexport/改托管接口三选一）；
+3 处 LNK4098 LIBCMT 警告（cosmetic，后续 /NODEFAULTLIB 评估）。
