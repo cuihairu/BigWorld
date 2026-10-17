@@ -343,6 +343,32 @@ jobs:
                 --parallel 4 2>&1 | `
                 Tee-Object -FilePath cmake-build-root.log
           Write-Host "build exit: $LASTEXITCODE"
+          $stage1Exit = $LASTEXITCODE
+
+          # Stage 2, exe lane: every MODULE now links green (_bw_profile,
+          # _bwlog, bwengine_xml; run 38996693306) except cellapp_extension,
+          # whose 33 unresolved externals are all cellapp-exe-owned symbols
+          # (Entity::*, Controller::*, RealEntity::*, EntityType::description
+          # in server/cellapp/entity_type.cpp, g_entityMovementCallback,
+          # Singleton<CellApp>::s_pInstance) - load-time resolution that
+          # Unix .so gets by default and a Windows DLL link does not; the
+          # export story (.def / dllexport macros / hosted-interface
+          # redesign) is a separate design item on the R3 ledger. MSBuild
+          # stops scheduling new projects after a failure, so the failing
+          # MODULE also hides the never-attempted exe stratum behind it.
+          # This lane links the server executables directly - same tree,
+          # same config - so the next blocker list localises there without
+          # waiting on the design item.
+          cmake --build "build/win_root_build" --config Hybrid `
+                --target cellapp cellappmgr baseapp baseappmgr dbapp dbappmgr loginapp reviver bwmachined bots clear_auto_load consolidate_dbs snapshot_helper sync_db transfer_db message_logger `
+                --parallel 4 2>&1 | `
+                Tee-Object -FilePath cmake-build-root-exes.log
+          Write-Host "exe lane exit: $LASTEXITCODE"
+          # Stage 1's ALL build remains the run's verdict; the exe lane is
+          # a probe-within-the-probe and must not mask an ALL failure - once
+          # the export story lands and ALL is green, this step goes green
+          # again too.
+          if ($stage1Exit -ne 0) { exit $stage1Exit }
           exit $LASTEXITCODE
 
       - name: Dump cellapp_extension include tree on failure
@@ -384,6 +410,7 @@ jobs:
           path: |
             cmake-configure-root.log
             cmake-build-root.log
+            cmake-build-root-exes.log
             cmake-showincludes-cellapp.log
             cmake-linkdeps-root.log
             build/win_root_build/**/*BUILD*.log
