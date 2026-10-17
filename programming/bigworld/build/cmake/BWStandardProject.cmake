@@ -147,14 +147,20 @@ ENDIF()
 # Ideally this definition should only be enabled in project which depend on python
 # But since in BW nearly everything depends on python it's enabled for every project
 IF( NOT BW_PYTHON_AS_SOURCE )
-	IF( BW_ARCH_32 ) 
+	IF( BW_ARCH_32 )
 		LINK_DIRECTORIES( ${BW_SOURCE_DIR}/third_party/python/PCbuild )
 	ELSEIF( BW_ARCH_64 )
 		LINK_DIRECTORIES( ${BW_SOURCE_DIR}/third_party/python/PCbuild/amd64 )
 	ENDIF()
-ELSE()
-	ADD_DEFINITIONS( -DPy_BUILD_CORE )
 ENDIF()
+# The old Py_BUILD_CORE define for the AS_SOURCE branch is gone: it comes from
+# the era when the Python sources were compiled into the consuming image, and
+# under the ExternalProject/DLL model it marks every CPython API declaration
+# __declspec(dllexport) instead of dllimport in every TU. Data symbols
+# (_Py_NoneStruct, PyType_Type, PyExc_*) then cannot resolve from
+# python313.lib at MODULE link time (run 38985715421; the import archive was
+# verified present on every link line by the linkdeps dump of 38990281409).
+# The make chain never defines it, and no engine source references it.
 
 IF( NOT BW_NO_UNICODE )
 	ADD_DEFINITIONS( -DUNICODE -D_UNICODE )
