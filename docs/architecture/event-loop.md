@@ -1,5 +1,7 @@
 # 主循环、Tick 与事件分发
 
+> [English](event-loop.en.md) | **中文**
+
 <div class="arch-hero">
 
 BigWorld 每个主要服务进程不是“每个玩家一个线程”，而是以主 Reactor 线程驱动网络、定时器、统计和频繁任务。理解主循环顺序，是研究线程模型、网络公平性、Tick 抖动和热路径瓶颈的前提。
