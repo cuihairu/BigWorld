@@ -1,5 +1,7 @@
 # AOI、Witness 与 Ghost
 
+> [English](aoi-witness-ghost.en.md) | **中文**
+
 <div class="arch-hero">
 
 BigWorld 的 AOI 不是简单的“半径内广播”。Witness 维护客户端视野、带宽预算、实体别名、可靠位置更新和 SpaceData 同步；Ghost 维护跨 Cell 边界副本，为 AOI 和实体迁移提供连续性。
