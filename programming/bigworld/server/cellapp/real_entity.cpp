@@ -49,7 +49,11 @@ int g_numRealEntities;
 int g_numRealEntitiesEver;
 }
 
-#if (__cplusplus < 201103L) 
+// MSVC reports __cplusplus as 199711L unless /Zc:__cplusplus is passed,
+// even in C++17 mode, so this legacy shim would rewrite decltype back to
+// the GNU typeof extension there (C3861 'typeof' in the root superproject
+// build, run 38999627798). Gate it off for MSVC, which has real decltype.
+#if (__cplusplus < 201103L) && !defined( _MSC_VER )
 #define decltype typeof
 #endif
 

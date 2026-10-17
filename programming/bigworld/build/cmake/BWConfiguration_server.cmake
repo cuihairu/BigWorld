@@ -1,5 +1,13 @@
 ADD_DEFINITIONS( -DMF_SERVER )
 
+# START_MSG and the service banners print the config name through
+# MF_CONFIG. The make chain defines it as a string
+# (build/make/Makefile:210, -DMF_CONFIG="$(BW_CONFIG)"); without this
+# define the header fallback `#define MF_CONFIG Unknown` names an enum
+# member no Windows TU has (C2065 'Unknown' at bwservice.hpp:55, run
+# 38999627798). Hybrid is the root server build's canonical configuration.
+ADD_DEFINITIONS( -DMF_CONFIG="Hybrid" )
+
 # Add commands for start, stop, status
 BW_TARGET_LINUX_COMMAND( start_server 
 	"python ${BW_LINUX_DIR}/../tools/server/control_cluster.py start ${BW_LINUX_HOST}" )

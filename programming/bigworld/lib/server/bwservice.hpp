@@ -180,7 +180,7 @@ realBWMain( int argc, char * argv[] );						\
 int bwMain( int argc, char * argv[] )						\
 {															\
 	BWResource bwresource;									\
-	BWResource::init( argc, argv );							\
+	BWResource::init( argc, (const char **)argv );			\
 	BWConfig::init( argc, argv );							\
 	bwParseCommandLine( argc, argv );						\
 	return realBWMain( argc, argv );						\
@@ -204,7 +204,10 @@ BW_BEGIN_NAMESPACE
 
 int bwMain( int argc, char * argv[] );
 void bwStop();
-extern char szServiceDependencies[];
+// szServiceDependencies (only bots ever supplied a value, "machined") had no
+// default definition for any other exe, so an extern here is one unresolved
+// symbol per BIGWORLD_MAIN consumer at link time; main() passes a local
+// empty string instead. bots/main.cpp keeps its array unused.
 
 class BigWorldService : public CService
 {
@@ -260,7 +263,35 @@ class BigWorldService : public CService
 					(LPTHREAD_START_ROUTINE) StopThreadProc,
 					this, 0, &tid );
 
-				bwMain( (int) dwArgc, lpArgv );
+				// The service command line arrives as TCHAR (wide in a
+				// UNICODE build, which the root CMake server build is)
+				// while bwMain and everything under it speak char
+				// (C2664 'TCHAR **' to 'char *[]' in the root superproject
+				// build, run 38999627798). Convert once here; an ANSI
+				// build copies the pointers unchanged.
+				BW::vector< BW::string > narrowArgs;
+				BW::vector< char* > narrowArgv;
+#ifdef UNICODE
+				for ( DWORD i = 0; i < dwArgc; ++i )
+				{
+					int len = WideCharToMultiByte( CP_ACP, 0,
+							lpArgv[ i ], -1, NULL, 0, NULL, NULL );
+					narrowArgs.push_back( BW::string( len > 0 ? len : 1, '\0' ) );
+					WideCharToMultiByte( CP_ACP, 0, lpArgv[ i ], -1,
+							&narrowArgs.back()[ 0 ],
+							(int)narrowArgs.back().size(), NULL, NULL );
+				}
+				for ( size_t i = 0; i < narrowArgs.size(); ++i )
+				{
+					narrowArgv.push_back( &narrowArgs[ i ][ 0 ] );
+				}
+#else
+				for ( DWORD i = 0; i < dwArgc; ++i )
+				{
+					narrowArgv.push_back( lpArgv[ i ] );
+				}
+#endif
+				bwMain( (int) dwArgc, dwArgc ? &narrowArgv[ 0 ] : NULL );
 				UpdateStatus( SERVICE_STOP_PENDING, 3000 );
 			}
 
@@ -280,6 +311,21 @@ void usage()
 	 printf( "  -install [serviceName] [DisplayName] to install the service\n");
 	 printf( "  -remove  [serviceName]			   to remove the service\n" );
 	 printf( "\n" );
+}
+
+// The service classes speak TCHAR while main()'s command line and registry
+// strings are char. The legacy VS builds compiled ANSI, where this reduces
+// to a copy; the root CMake server build defines UNICODE and widens
+// (C2664 x16 across main() in the root superproject build, run
+// 38999627798).
+void bwNarrowToTCHAR( const char * src, TCHAR * dest, size_t count )
+{
+#ifdef UNICODE
+	MultiByteToWideChar( CP_ACP, 0, src, -1, dest, (int)count );
+#else
+	strncpy( dest, src, count );
+	dest[ count - 1 ] = '\0';
+#endif
 }
 
 int __cdecl main( int argc, char * argv[] )
@@ -320,8 +366,14 @@ int __cdecl main( int argc, char * argv[] )
 			}
 
 			// create the servce with the appropriate names
-			BigWorldService svc( pServiceName, pDisplayName );
-			svc.Install(  szServiceDependencies,
+			TCHAR tServiceName[ MAX_PATH ];
+			TCHAR tDisplayName[ MAX_PATH ];
+			bwNarrowToTCHAR( pServiceName, tServiceName, MAX_PATH );
+			bwNarrowToTCHAR( pDisplayName, tDisplayName, MAX_PATH );
+			BigWorldService svc( tServiceName, tDisplayName );
+			TCHAR tDependencies[ 128 ];
+			bwNarrowToTCHAR( "", tDependencies, 128 );
+			svc.Install(  tDependencies,
 						  SERVICE_WIN32_OWN_PROCESS | SERVICE_INTERACTIVE_PROCESS
 						);
 
@@ -329,8 +381,8 @@ int __cdecl main( int argc, char * argv[] )
 			DWORD disp;
 			HKEY hkey = NULL;
 			char szBuf[MAX_PATH];
-			wsprintf( szBuf, "SYSTEM\\CurrentControlSet\\Services\\EventLog\\Application\\%s", pServiceName );
-			if ( ERROR_SUCCESS == RegCreateKeyEx( HKEY_LOCAL_MACHINE,
+			wsprintfA( szBuf, "SYSTEM\\CurrentControlSet\\Services\\EventLog\\Application\\%s", pServiceName );
+			if ( ERROR_SUCCESS == RegCreateKeyExA( HKEY_LOCAL_MACHINE,
 												szBuf,
 												0, NULL, REG_OPTION_NON_VOLATILE, KEY_READ | KEY_WRITE, NULL,
 												&hkey, &disp ) &&
@@ -338,12 +390,12 @@ int __cdecl main( int argc, char * argv[] )
 			{
 
 				char szPath[512];
-				DWORD length = GetModuleFileName( NULL, szPath, 512 );
+				DWORD length = GetModuleFileNameA( NULL, szPath, 512 );
 				if ( length > 0 )
 				{
 					DWORD dwType = 7;
-					if ( RegSetValueEx( hkey, "EventMessageFile", 0, REG_EXPAND_SZ, (const BYTE*)szPath, length ) ||
-							RegSetValueEx( hkey, "TypesSupported", 0, REG_DWORD, (LPBYTE)&dwType, sizeof(dwType) ) )
+					if ( RegSetValueExA( hkey, "EventMessageFile", 0, REG_EXPAND_SZ, (const BYTE*)szPath, length ) ||
+							RegSetValueExA( hkey, "TypesSupported", 0, REG_DWORD, (LPBYTE)&dwType, sizeof(dwType) ) )
 					{
 						printf( "Service was not able to add eventviewer registry entries\n" );
 					}
@@ -366,12 +418,16 @@ int __cdecl main( int argc, char * argv[] )
 			}
 
 			// don't worry about a bogus display name
-			BigWorldService svc( pServiceName, pServiceName );
+			TCHAR tServiceName[ MAX_PATH ];
+			TCHAR tDisplayName[ MAX_PATH ];
+			bwNarrowToTCHAR( pServiceName, tServiceName, MAX_PATH );
+			bwNarrowToTCHAR( pServiceName, tDisplayName, MAX_PATH );
+			BigWorldService svc( tServiceName, tDisplayName );
 			svc.Remove();
 
 			char szBuf[MAX_PATH];
 			wsprintfA( szBuf, "SYSTEM\\CurrentControlSet\\Services\\EventLog\\Application\\%s", pServiceName );
-			RegDeleteKey( HKEY_LOCAL_MACHINE, szBuf );
+			RegDeleteKeyA( HKEY_LOCAL_MACHINE, szBuf );
 
 		}
 		else if ( ( _stricmp( "-?", argv[1] ) == 0 ) ||  ( _stricmp( "-help", argv[1] ) == 0 )  ||  ( _stricmp( "--help", argv[1] ) == 0 ) )
@@ -393,14 +449,14 @@ int __cdecl main( int argc, char * argv[] )
 		pServiceName = argv[0];
 
 		char szBuf[MAX_PATH];
-		wsprintf( szBuf, "SYSTEM\\CurrentControlSet\\Services\\%s", pServiceName );
+		wsprintfA( szBuf, "SYSTEM\\CurrentControlSet\\Services\\%s", pServiceName );
 		HKEY hkey = NULL;
-		if ( ( ERROR_SUCCESS == RegOpenKeyEx( HKEY_LOCAL_MACHINE, szBuf,
+		if ( ( ERROR_SUCCESS == RegOpenKeyExA( HKEY_LOCAL_MACHINE, szBuf,
 												0, KEY_READ, &hkey ) ) && hkey )
 		{
 			DWORD type;
 			DWORD size = sizeof(szBuf);
-			if ( ERROR_SUCCESS == RegQueryValueEx(hkey, "DisplayName", NULL, &type, (LPBYTE)szBuf, &size) && (type == REG_SZ) )
+			if ( ERROR_SUCCESS == RegQueryValueExA(hkey, "DisplayName", NULL, &type, (LPBYTE)szBuf, &size) && (type == REG_SZ) )
 			{
 				pDisplayName = szBuf;
 			}
@@ -423,7 +479,7 @@ int __cdecl main( int argc, char * argv[] )
 					if ( szPath[len] == '\\' )
 					{
 						szPath[len] = '\0';
-						SetCurrentDirectory(szPath);
+						SetCurrentDirectoryA(szPath);
 						break;
 					}
 				}
@@ -431,7 +487,11 @@ int __cdecl main( int argc, char * argv[] )
 		}
 
 
-		BigWorldService svc( pServiceName, pDisplayName );
+		TCHAR tServiceName[ MAX_PATH ];
+		TCHAR tDisplayName[ MAX_PATH ];
+		bwNarrowToTCHAR( pServiceName, tServiceName, MAX_PATH );
+		bwNarrowToTCHAR( pDisplayName, tDisplayName, MAX_PATH );
+		BigWorldService svc( tServiceName, tDisplayName );
 		if ( fromMachineD )
 			svc.NeverService();
 		svc.Start(argc, argv);

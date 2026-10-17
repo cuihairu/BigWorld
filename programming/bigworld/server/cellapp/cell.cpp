@@ -916,7 +916,14 @@ bool Cell::Entities::add( Entity * pEntity )
 	// Choose random existing entity to swap with to randomise the list.
 	// Processes iterating through this collection (such as entity backup)
 	// will be effectively randomised.
+	// MSVC has no glibc random(); rand() only ever changes which element
+	// the swap pick lands on (C3861 'random' in the root superproject
+	// build, run 38999627798).
+#if defined( _MSC_VER )
+	EntityPtr pSwapEntity = collection_[rand() % collection_.size()];
+#else
 	EntityPtr pSwapEntity = collection_[random() % collection_.size()];
+#endif
 	this->swapWithBack( pSwapEntity.get() );
 
 	return true;

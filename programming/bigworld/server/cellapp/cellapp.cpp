@@ -98,7 +98,12 @@
 
 #include <algorithm>
 #include <sys/types.h>
+#if !defined( _WIN32 )
+// waitpid is never actually called here - the include is a leftover from a
+// fork-based variant of this file that only ever existed on POSIX (C1083
+// 'sys/wait.h' in the root superproject build, run 38999627798).
 #include <sys/wait.h> // for waitpid
+#endif
 
 #if defined( _WIN32 )
 // MSVC's SDK leaves `#define interface struct` (rpcndr.h via d3d9.h / shlobj /

@@ -16,7 +16,13 @@
 
 #include "cstdmf/debug_message_categories.hpp"
 
+#if defined( _WIN32 )
+// inet_ntop below is ws2tcpip.h, available for _WIN32_WINNT >= 0x0600
+// (set project-wide for the root CMake build).
+#include <ws2tcpip.h>
+#else
 #include <arpa/inet.h>
+#endif
 #include <errno.h>
 
 #if defined( _WIN32 )
