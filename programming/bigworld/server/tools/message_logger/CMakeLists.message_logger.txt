@@ -170,6 +170,7 @@ BW_TARGET_LINK_LIBRARIES( message_logger
 	build
 	network
 	server
+	resmgr
 )
 
 IF( BW_MONGODB_INCLUDE_DIR )
