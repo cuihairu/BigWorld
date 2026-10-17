@@ -913,3 +913,64 @@ third_party/png/projects/visualc71`）——Windows 根构建的 libpng 接线�
 
 另记：push run 38852265330 的 cstdmf 门禁腿被探针 #12 dispatch 经并发组取消
 （skipped 腿仍占组），已 `gh run rerun --failed` 重跑。
+
+### 批次 45（2026-10-17）：探针 #13→#15 三层递降——message_logger MSVC 移植与 MODULE 链接层
+
+**探针 #13（run 38871089923）→ 1699→23 C + 227 LNK**：批次 44 的 defined() 修复
+在 Windows 上得到验证，真码层错误全部暴露。
+
+**批次 `13eed37d`（全量门禁 21 模块 / 1506 用例 / 0 失败后提交）**：
+- `message_logger/posix_compat.hpp`（新）：目录枚举（opendir/readdir/closedir/
+  scandir——FindFirstFileA 承载，scandir 比较器仅占签名、调用方按段起始时间自排）、
+  unlink/getcwd/dirname/rmdir/mkdir(0777)/gettimeofday（FILETIME 1970 纪元换算）/
+  localtime_r/gmtime_r（_s 变参序相反，wrapper 归位）/getline（NULL/0 起步、保换行、
+  调用方 free——全部按 POSIX 语义）。
+- 26 处 include 平台化（`#if defined( _WIN32 )` + shim / `#else` 原 POSIX 树）；
+  复检新抓三漏网：根 `metadata.cpp` vestigial unistd（删）、根 `hostnames_validator.cpp`
+  与 `mongodb/hostnames.cpp` socket 块换轨（前者 inet_ntoa/gethostbyaddr 在用，
+  非 vestigial）。
+- `BWStandardProject.cmake`：vendored png 1.6.2 头目录全局 include（同 zip 先例）——
+  png 卡点以最简路径闭合，`lib/moo/png.cpp:10 png.h C1083` 探针 #14 实证已清；
+  `cellapp`/`bots` 链接表 `png`→`libpng`、`pysics2`→`physics2` 笔误修复。
+- `cellapp_extension` 显式链接表（MODULE 目标零符号容忍，对齐 cellapp 链接集 +
+  libpython）。
+- `bw_profile.cpp` `access/W_OK`→`_access/2`（`_W_OK` 被 nonstdc guard 挡，
+  C2065，探针 #14 实证）。
+- `CMakeLists.message_logger.txt`：mongodb 后端按 make 链同款探针门控
+  （`FIND_PATH(mongo/client/dbclient.h)`，缺即弃源不定义 `HAS_MONGODB_SUPPORT`；
+  原文件无条件编 mongodb TUs，Windows runner 必 C1083）。
+
+**探针 #14（run 38883400603）→ 20 条**：regex.h×11（`query_params.hpp:28`，_bwlog）、
+mlutil stat/geteuid×6、`_W_OK`×1、re2.lib LNK1181、python3.13.lib LNK1181。
+
+**批次 `cc2fe51d`**：posix_compat.hpp 增 std::regex 承载的 regex shim（工具只问
+"是否匹配"，regmatch_t 全免）；`BWConfiguration_server.cmake` 补 `re2 third_party/re2`
+（vendored 树自带仓内定制 CMakeLists，漏配而已）；`python${MAJOR}${MINOR}.lib`
+（`python3.13.lib` 带点拼写必 LNK1181，PCbuild 契约无点）。
+
+**探针 #15（run 38985715421）→ 1 C + 326 LNK（bwengine_xml 117 / _bw_profile 29 /
+cellapp_extension 180）**，全部修复在 **`a7003cdc`**（门禁 21/1506/0 后提交）：
+- C2664 `hostnames.cpp:49`：Winsock `gethostbyaddr` 首参 `const char*`（POSIX 为
+  `const void*`）——加 `(const char*)` 转换（双向兼容）；`hostnames_validator.cpp:187`
+  同款 latent 修（其所在 exe 探针 #15 未编到，属预防）。
+- **cstdmf server 配置三缺口**（`IF( NOT BW_IS_SERVER )` 源表在 Linux make 轨成立、
+  Windows server 根构建即炸）：`memory_load.cpp`（log_msg.obj 的
+  win32GenerateCriticalMsg 需要）、`ned_allocator.cpp`（allocator.cpp:40
+  `#define SystemAllocator BW::NedAllocator` 无守卫）、`critical_message_box.cpp`
+  （critical_error_handler.cpp 的 Windows ask() 需要）——server+Windows 分支补齐，
+  nedalloc 链接同扩（`BWConfiguration_server.cmake` 增 vendored `nedalloc` 目标）。
+- `_bw_profile`/`bwengine_xml` MODULE 目标直链 `libpython`（本轨 Python 符号从
+  不经宿主进程加载期解析，必须自带 import 归档）。
+- 探针 workflow 增「Dump module link lines」步（vcxproj 的
+  `<AdditionalDependencies>` 全量落盘 `cmake-linkdeps-root.log`）：/v:m 控制台
+  永不回显 link.exe 命令行，libpython 是否真达 MODULE 链接行此前不可判定
+  ——探针 #16 以此给硬证。
+
+**余留实证卡点（cellapp_extension 180 LNK 中的宿主符号族）**：`Entity::id/
+position/isReal`、`Controller::*`、`g_entityMovementCallback`（file:line：
+`examples/cellapp_extension/speed_extra.cpp:296/327`、`speed_controller.cpp:96`）
+是 cellapp 可执行体独有符号——Linux `.so` 扩展靠加载期解析（宿主进程内即有），
+Windows MODULE（DLL）链接期必须全解析，需 cellapp 侧 `__declspec(dllexport)`
+导出故事（引擎现无 exe 导出机制）。解锁条件 = 为 cellapp 宿主符号定导出方案
+（`.def`/dllexport 宏/改托管接口三选一），属独立设计件；Py/cstdmf 符号族
+（同目标内）探针 #16 由 linkdeps 判定后另行收敛。
