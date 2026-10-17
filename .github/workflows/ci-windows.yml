@@ -359,17 +359,33 @@ jobs:
           # This lane links the server executables directly - same tree,
           # same config - so the next blocker list localises there without
           # waiting on the design item.
-          cmake --build "build/win_root_build" --config Hybrid `
-                --target cellapp cellappmgr baseapp baseappmgr dbapp dbappmgr loginapp reviver bwmachined bots clear_auto_load consolidate_dbs snapshot_helper sync_db transfer_db message_logger `
-                --parallel 4 2>&1 | `
-                Tee-Object -FilePath cmake-build-root-exes.log
-          Write-Host "exe lane exit: $LASTEXITCODE"
+          # One msbuild invocation stops at its first failing project (run
+          # 39013952226: cellappmgr's two C2131s hid the other 13 exes behind
+          # it), so build each exe in its own invocation and keep going.
+          $exeFailures = 0
+          foreach ($t in @('cellapp','cellappmgr','baseapp','baseappmgr',
+                           'dbapp','dbappmgr','loginapp','reviver','bwmachined',
+                           'bots','clear_auto_load','consolidate_dbs',
+                           'snapshot_helper','sync_db','transfer_db',
+                           'message_logger')) {
+            Write-Host "=== exe target: $t ==="
+            cmake --build "build/win_root_build" --config Hybrid --target $t `
+                  --parallel 4 2>&1 | `
+                  Tee-Object -FilePath cmake-build-root-exes.log -Append
+            if ($LASTEXITCODE -ne 0)
+            {
+              Write-Host "exe target $t FAILED (exit $LASTEXITCODE)"
+              $exeFailures++
+            }
+          }
+          Write-Host "exe lane: $exeFailures target(s) failed"
+          $exeLaneExit = [int]($exeFailures -gt 0)
           # Stage 1's ALL build remains the run's verdict; the exe lane is
           # a probe-within-the-probe and must not mask an ALL failure - once
           # the export story lands and ALL is green, this step goes green
           # again too.
           if ($stage1Exit -ne 0) { exit $stage1Exit }
-          exit $LASTEXITCODE
+          exit $exeLaneExit
 
       - name: Dump cellapp_extension include tree on failure
         if: failure()
