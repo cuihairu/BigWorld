@@ -55,6 +55,7 @@ BW_ADD_EXECUTABLE( consolidate_dbs ${ALL_SRCS} )
 
 
 BW_TARGET_LINK_LIBRARIES( consolidate_dbs
+	build
 	chunk
 	db_storage
 	db_storage_mysql

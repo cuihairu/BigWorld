@@ -93,6 +93,13 @@ SET( BW_LIBRARY_PROJECTS
 	entitydef_script	lib/entitydef_script
 	scene				lib/scene
 
+	# CellApp
+	# Server-mode speedtree is collision-cache only (speedtree_collision.cpp,
+	# the make chain's whole lib); chunk's server_chunk_tree.obj references
+	# getBSPTree unguarded (LNK2019 in the root superproject build, run
+	# 39006994918).
+	speedtree			lib/speedtree
+
 	# BaseApp + CellApp + DBMgr
 	entitydef			lib/entitydef
 	pyscript			lib/pyscript

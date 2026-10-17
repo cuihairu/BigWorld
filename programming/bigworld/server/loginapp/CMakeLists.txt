@@ -33,6 +33,7 @@ TARGET_INCLUDE_DIRECTORIES( loginapp PRIVATE ${BW_SOURCE_DIR} )
 TARGET_INCLUDE_DIRECTORIES( loginapp PRIVATE ${BW_SOURCE_DIR}/server )
 
 BW_TARGET_LINK_LIBRARIES( loginapp
+	build
 	connection
 	server
 	network

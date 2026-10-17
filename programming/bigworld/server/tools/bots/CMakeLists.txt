@@ -58,6 +58,7 @@ SOURCE_GROUP( "" FILES ${ALL_SRCS} )
 BW_ADD_EXECUTABLE( bots ${ALL_SRCS} )
 
 BW_TARGET_LINK_LIBRARIES( bots
+	build
 	entitydef
 	pyscript
 	script

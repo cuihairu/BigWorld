@@ -31,6 +31,7 @@ SOURCE_GROUP( "" FILES ${ALL_SRCS} )
 BW_ADD_EXECUTABLE( sync_db ${ALL_SRCS} )
 
 BW_TARGET_LINK_LIBRARIES( sync_db
+	build
 	chunk
 	scene
 	db_storage

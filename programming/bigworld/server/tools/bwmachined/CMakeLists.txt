@@ -37,6 +37,7 @@ SOURCE_GROUP( "" FILES ${ALL_SRCS} )
 BW_ADD_EXECUTABLE( bwmachined ${ALL_SRCS} )
 
 BW_TARGET_LINK_LIBRARIES( bwmachined
+	build
 	server 
 	network 
 	cstdmf

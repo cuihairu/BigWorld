@@ -175,9 +175,13 @@ int bwMain
 
 #else
 
+// The two definitions must land in BW: BigWorldService::Main and onStop call
+// bwMain/bwStop at namespace scope, and a global-scope definition from the
+// expansion would be a different symbol (LNK2019 on 'bwMain' in the root
+// superproject build, run 39006994918).
 #define BIGWORLD_MAIN										\
-realBWMain( int argc, char * argv[] );						\
-int bwMain( int argc, char * argv[] )						\
+BW::realBWMain( int argc, char * argv[] );					\
+int BW::bwMain( int argc, char * argv[] )					\
 {															\
 	BWResource bwresource;									\
 	BWResource::init( argc, (const char **)argv );			\
@@ -185,16 +189,16 @@ int bwMain( int argc, char * argv[] )						\
 	bwParseCommandLine( argc, argv );						\
 	return realBWMain( argc, argv );						\
 }															\
-int realBWMain
+int BW::realBWMain
 
 #define BIGWORLD_MAIN_NO_RESMGR								\
-realBWMain( int argc, char * argv[] );						\
-int bwMain( int argc, char * argv[] )						\
+BW::realBWMain( int argc, char * argv[] );					\
+int BW::bwMain( int argc, char * argv[] )					\
 {															\
 	bwParseCommandLine( argc, argv );						\
 	return realBWMain( argc, argv );						\
 }															\
-int realBWMain
+int BW::realBWMain
 
 BW_END_NAMESPACE
 
@@ -203,7 +207,17 @@ BW_END_NAMESPACE
 BW_BEGIN_NAMESPACE
 
 int bwMain( int argc, char * argv[] );
-void bwStop();
+int realBWMain( int argc, char * argv[] );
+// Nothing ever defined this outside bots' global-scope raise( SIGINT ) in
+// its main.cpp - which never matched this namespace-scoped declaration - so
+// every BIGWORLD_MAIN exe but bots carried an unresolved reference (LNK2019
+// in the root superproject build, run 39006994918). The Windows service-stop
+// path only needs the process to end.
+inline void bwStop()
+{
+	ERROR_MSG( "bwStop: stopping process\n" );
+	ExitProcess( 0 );
+}
 // szServiceDependencies (only bots ever supplied a value, "machined") had no
 // default definition for any other exe, so an extern here is one unresolved
 // symbol per BIGWORLD_MAIN consumer at link time; main() passes a local
@@ -328,8 +342,14 @@ void bwNarrowToTCHAR( const char * src, TCHAR * dest, size_t count )
 #endif
 }
 
+BW_END_NAMESPACE
+
+// The CRT entry __scrt_common_main_seh looks up global main; defined inside
+// BW this was BW::main and nothing satisfied it (LNK2001 'main' in the root
+// superproject build, run 39006994918).
 int __cdecl main( int argc, char * argv[] )
 {
+	using namespace BW;
 	// parse basic command line here.
 	const char* pServiceName = NULL;
 	const char* pDisplayName = NULL;
@@ -502,8 +522,6 @@ int __cdecl main( int argc, char * argv[] )
 }
 
 #endif // _WIN32
-
-BW_END_NAMESPACE
 
 
 #if defined( _WIN32 )

@@ -133,6 +133,7 @@ TARGET_INCLUDE_DIRECTORIES( baseapp PRIVATE ${BW_SOURCE_DIR} )
 TARGET_INCLUDE_DIRECTORIES( baseapp PRIVATE ${BW_SOURCE_DIR}/server )
 
 BW_TARGET_LINK_LIBRARIES( baseapp
+	build
 	chunk
 	scene
 	connection

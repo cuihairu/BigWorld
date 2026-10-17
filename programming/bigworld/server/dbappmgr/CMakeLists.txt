@@ -23,6 +23,7 @@ BW_ADD_EXECUTABLE( dbappmgr ${ALL_SRCS} )
 TARGET_INCLUDE_DIRECTORIES( dbappmgr PRIVATE ${BW_SOURCE_DIR}/server )
 
 BW_TARGET_LINK_LIBRARIES( dbappmgr
+	build
 	db
 	server
 	network

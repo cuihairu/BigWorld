@@ -23,6 +23,7 @@ SOURCE_GROUP( "" FILES ${ALL_SRCS} )
 BW_ADD_EXECUTABLE( clear_auto_load ${ALL_SRCS} )
 
 BW_TARGET_LINK_LIBRARIES( clear_auto_load
+	build
 	chunk
 	db_storage
 	db_storage_mysql

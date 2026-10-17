@@ -1,9 +1,16 @@
 CMAKE_MINIMUM_REQUIRED( VERSION 2.8 )
 PROJECT( speedtree )
 
-IF( NOT BW_SPEEDTREE_SUPPORT )
+IF( NOT BW_SPEEDTREE_SUPPORT AND NOT BW_IS_SERVER )
 	MESSAGE( FATAL_ERROR "Speedtree CMakeLists.txt was added but BW_SPEEDTREE_SUPPORT is OFF" )
 ENDIF()
+# A server build carries the same shape the make chain's speedtree library
+# has: speedtree_collision.cpp only (its Makefile.rules cxxSource list), which
+# builds and loads cached .bsp2 collision files with SPEEDTREE_SUPPORT off -
+# chunk's server_chunk_tree.obj references getBSPTree unguarded, and the make
+# chain's cellapp dependsOn includes speedtree. The SpeedTree SDK and the
+# client sources stay excluded (they are behind NOT BW_IS_SERVER below and
+# the SDK guard in pch.hpp never fires with PCH_SUPPORT off).
 
 INCLUDE( BWStandardProject )
 INCLUDE( BWStandardLibrary )

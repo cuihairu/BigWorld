@@ -142,6 +142,7 @@ BW_ADD_EXECUTABLE( message_logger ${ALL_SRCS} )
 
 
 BW_TARGET_LINK_LIBRARIES( message_logger
+	build
 	server
 )
 

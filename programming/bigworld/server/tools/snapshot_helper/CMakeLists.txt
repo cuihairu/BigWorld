@@ -13,6 +13,7 @@ BW_ADD_EXECUTABLE( snapshot_helper ${ALL_SRCS} )
 
 
 BW_TARGET_LINK_LIBRARIES( snapshot_helper
+	build
 	server
 )
 

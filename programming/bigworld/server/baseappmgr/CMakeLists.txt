@@ -34,6 +34,7 @@ TARGET_INCLUDE_DIRECTORIES( baseappmgr PRIVATE ${BW_SOURCE_DIR} )
 TARGET_INCLUDE_DIRECTORIES( baseappmgr PRIVATE ${BW_SOURCE_DIR}/server )
 
 BW_TARGET_LINK_LIBRARIES( baseappmgr
+	build
 	server
 	network
 	resmgr
