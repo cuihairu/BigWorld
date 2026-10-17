@@ -1,5 +1,7 @@
 # EntityDef 契约与协议生成
 
+> [English](entitydef-contract-generation.en.md) | **中文**
+
 <div class="arch-hero">
 
 EntityDef 不是普通配置文件。它把 `entities.xml`、实体 `.def`、组件 `.def`、脚本分布、属性标志、方法签名和网络消息范围合并成运行时协议契约。序列化章节解释“怎么写入流”，本章解释“哪些字段、方法和编号为什么存在”。
