@@ -331,6 +331,13 @@ bool init( Mercury::EventDispatcher & dispatcher,
 
 	return g_pPingManager->init();
 #endif // USE_PING_MANAGER
+
+	// Reached when USE_PING_MANAGER is off (it never is defined today, the
+	// ping destinations are stubs). MSVC's C4716 on this path is a hard
+	// error (run 39021844438), and the caller aborts startup on false, so
+	// report success for the disabled feature - which is also what the
+	// Linux build has been effectively doing off the end of this function.
+	return true;
 }
 
 

@@ -1172,7 +1172,10 @@ void LoginApp::probe( const Mercury::Address & source,
 
 #else
 	DWORD bsz = sizeof( buf );
-	if (!GetUserName( buf, &bsz ))
+	// GetUserNameA: the root build defines UNICODE, so the bare name
+	// resolves to GetUserNameW and the char buffer will not convert
+	// (C2664 in the root superproject build, run 39021844438).
+	if (!GetUserNameA( buf, &bsz ))
 	{
 		buf[ 0 ]=0;
 	}

@@ -89,7 +89,11 @@
 #include <algorithm>
 
 #include <sys/types.h>
+// Nothing in this TU waits on children (the include predates the Windows
+// port guards elsewhere); MSVC has no sys/wait.h (C1083, run 39021844438).
+#if !defined( _WIN32 )
 #include <sys/wait.h>
+#endif
 
 #if defined( _WIN32 )
 // MSVC's SDK leaves `#define interface struct` (rpcndr.h via d3d9.h / shlobj /

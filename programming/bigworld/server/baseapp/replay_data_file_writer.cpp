@@ -547,7 +547,15 @@ void ReplayDataFileWriter::finalise()
 	pWriter_->queueWriteBlob(
 		reinterpret_cast< const char *>( &numTicksWillBeWritten ),
 		sizeof(GameTime) );
+#if defined( _WIN32 )
+	// MSVC's sys/stat.h has none of the unix permission bits; the mode only
+	// ever feeds BackgroundFileWriterTask::doBackgroundChmod, which is
+	// POSIX-only anyway (it warns "Not supported" under MSVC), so hand over
+	// the CRT read bit to keep the world-readable intent.
+	pWriter_->queueChmod( _S_IREAD );
+#else
 	pWriter_->queueChmod( S_IRUSR | S_IRGRP | S_IROTH );
+#endif
 }
 
 
