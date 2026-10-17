@@ -381,13 +381,14 @@ jobs:
           # 39013952226: cellappmgr's two C2131s hid the other 13 exes behind
           # it), so build each exe in its own invocation and keep going.
           # bwmachined and snapshot_helper are not on the list: both now
-          # RETURN() on Windows (Linux-only tools), so no such build target
-          # exists for cmake --build to name.
+          # RETURN() on Windows (Linux-only tools). Neither are
+          # clear_auto_load, consolidate_dbs and sync_db: all three skip on
+          # missing MySQL headers (their FIND_PATH gates) and leave no
+          # target to name - run 39021844438 died with MSB1009 on all three.
           $exeFailures = 0
           foreach ($t in @('cellapp','cellappmgr','baseapp','baseappmgr',
                            'dbapp','dbappmgr','loginapp','reviver',
-                           'bots','clear_auto_load','consolidate_dbs',
-                           'sync_db','transfer_db',
+                           'bots','transfer_db',
                            'message_logger')) {
             Write-Host "=== exe target: $t ==="
             cmake --build "build/win_root_build" --config Hybrid --target $t `
