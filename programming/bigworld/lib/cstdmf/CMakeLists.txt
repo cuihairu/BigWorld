@@ -109,7 +109,22 @@ IF( NOT BW_IS_SERVER )
 		memory_load.hpp
 		ned_allocator.cpp
 		ned_allocator.hpp
-	
+
+	)
+ENDIF()
+IF( BW_IS_SERVER AND BW_PLATFORM_WINDOWS )
+	# The server exclusion above only ever held on Linux: there the whole
+	# win32GenerateCriticalMsg path in log_msg.cpp compiles out and the
+	# default allocator never names NedAllocator. A Windows server build
+	# (root superproject) hits both - log_msg.obj needs Memory::memoryLoad
+	# and allocator.cpp's SystemAllocator IS NedAllocator (LNK2019, run
+	# 38985715421). memory_load.cpp is itself whole-file WIN32-guarded, so
+	# this append is inert for any Linux server configuration.
+	LIST( APPEND MEMORY_SRCS
+		memory_load.cpp
+		memory_load.hpp
+		ned_allocator.cpp
+		ned_allocator.hpp
 	)
 ENDIF()
 SOURCE_GROUP( "Memory" FILES ${MEMORY_SRCS} )
@@ -241,6 +256,19 @@ ELSEIF( BW_PLATFORM_WINDOWS )
 		resource_counters.cpp
 		resource_counters.hpp
 	)
+	IF( BW_IS_SERVER )
+		# critical_error_handler.cpp's Windows ask() constructs
+		# CriticalMsgBox, but the client-only list above is where
+		# critical_message_box.cpp normally enters the build - a Windows
+		# server build (root superproject) links without it and dies on
+		# LNK2019 CriticalMsgBox::* (run 38985715421). Inert on Linux: the
+		# referencing TU is whole-file _WIN32-guarded and this branch never
+		# runs there.
+		LIST( APPEND UTILITY_SRCS
+			critical_message_box.cpp
+			critical_message_box.hpp
+		)
+	ENDIF()
 ENDIF()
 SOURCE_GROUP( "Utility" FILES ${UTILITY_SRCS} )
 
@@ -269,7 +297,9 @@ IF ( BW_USE_CSTDMF_DLL )
 		BW_TARGET_LINK_LIBRARIES( cstdmf PRIVATE memhook )
 	ENDIF()
 
-	IF( NOT BW_IS_SERVER )
+	IF( ( NOT BW_IS_SERVER ) OR BW_PLATFORM_WINDOWS )
+		# Windows server builds compile ned_allocator.cpp into cstdmf (see
+		# the MEMORY_SRCS append), so they need the vendored driver too.
 		BW_TARGET_LINK_LIBRARIES( cstdmf PRIVATE nedalloc )
 	ENDIF()
 
@@ -289,7 +319,7 @@ ELSE()
 	ENDIF()
 
 	# TODO: Create a USE_NEDALLOC variable instead of tying to config type
-	IF( NOT BW_IS_SERVER AND NOT BW_IS_EXPORTERS )
+	IF( ( NOT BW_IS_SERVER AND NOT BW_IS_EXPORTERS ) OR BW_PLATFORM_WINDOWS )
 		BW_TARGET_LINK_LIBRARIES( cstdmf INTERFACE nedalloc )
 	ENDIF()
 

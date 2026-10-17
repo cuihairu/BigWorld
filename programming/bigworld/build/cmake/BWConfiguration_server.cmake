@@ -102,6 +102,10 @@ SET( BW_LIBRARY_PROJECTS
 	# from the server list: bwengine_xml's link then died with LNK1181 on
 	# re2.lib (run 38883400603).
 	re2					third_party/re2
+	# cstdmf links nedalloc on Windows (server or not) for the same reason
+	# every other configuration lists it: allocator.cpp's SystemAllocator is
+	# BW::NedAllocator there.
+	nedalloc			third_party/nedalloc
 	
 	# Unit test librarys
 	${BW_SERVER_UNIT_TEST_LIBRARIES}

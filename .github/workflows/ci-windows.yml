@@ -361,6 +361,21 @@ jobs:
                 --target cellapp_extension 2>&1 | `
                 Tee-Object -FilePath cmake-showincludes-cellapp.log
 
+      - name: Dump module link lines
+        if: always()
+        shell: pwsh
+        run: |
+          # The /v:m console log never prints link.exe command lines, so a
+          # LNK2001/LNK2019 stratum leaves no trace of which libraries a
+          # project actually received - the libpython question (import
+          # archive reaching the MODULE link lines or not) cannot be answered
+          # from it. The generated vcxproj carries the final resolved
+          # <AdditionalDependencies> per configuration; dump all of them.
+          Get-ChildItem -Recurse -Filter *.vcxproj "build/win_root_build" |
+            Select-String -Pattern "AdditionalDependencies" |
+            ForEach-Object { "$($_.Path): $($_.Line.Trim())" } |
+            Out-File -FilePath cmake-linkdeps-root.log -Encoding utf8
+
       - name: Upload build logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -370,6 +385,7 @@ jobs:
             cmake-configure-root.log
             cmake-build-root.log
             cmake-showincludes-cellapp.log
+            cmake-linkdeps-root.log
             build/win_root_build/**/*BUILD*.log
           if-no-files-found: ignore
           retention-days: 7

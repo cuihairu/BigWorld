@@ -46,7 +46,10 @@ GetHostResult Hostnames::getHostByAddr( MessageLogger::IPAddress addr,
 		return BW_GET_HOST_FOUND;
 	}
 
-	struct hostent *ent = gethostbyaddr( &addr, sizeof( addr ), AF_INET );
+	// Winsock's gethostbyaddr takes a const char* where POSIX takes a
+	// const void*; the cast suits both.
+	struct hostent *ent =
+		gethostbyaddr( (const char *)&addr, sizeof( addr ), AF_INET );
 
 	// Unable to resolve the hostname, store the IP address as a string
 	if (ent == NULL)

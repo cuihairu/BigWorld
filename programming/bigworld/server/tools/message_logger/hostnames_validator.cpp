@@ -183,8 +183,10 @@ HostnamesValidateResult HostnamesValidator::validateOneHostname
 	DEBUG_MSG( "HostnamesValidator::validateOneHostname: validating %s with "
 			"hostname %s\n", ipAddrStr.c_str(), oldName.c_str() );
 
+	// Winsock's gethostbyaddr takes a const char* where POSIX takes a
+	// const void*; the cast suits both.
 	struct hostent *pHostnameEntry =
-		gethostbyaddr( &addr, sizeof( addr ), AF_INET );
+		gethostbyaddr( (const char *)&addr, sizeof( addr ), AF_INET );
 
 	if (h_errno == TRY_AGAIN)
 	{
