@@ -11,6 +11,11 @@
 #if defined( _WIN32 )
 	// in_addr/inet_ntoa for the interface formatting below.
 	#include "posix_compat.hpp"
+	// resetFileDescriptors' open(2)/dup2(2) plumbing, none of it POSIX-named
+	// under MSVC.
+	#include <fcntl.h>
+	#include <io.h>
+	#include <sys/stat.h>
 #endif
 
 #include "server/bwconfig.hpp"
@@ -639,7 +644,7 @@ bool Logger::init( int argc, char * argv[] )
 	// the service is not started successfully.
 	if (!pidPath_.empty())
 	{
-		char *mode = "a+";
+		const char *mode = "a+";
 		// Make sure another logger isn't already running
 		if (!pid_.init( pidPath_.c_str(), mode, mf_getpid() ))
 		{
@@ -990,15 +995,29 @@ bool Logger::handleNextMessage()
  */
 bool Logger::resetFileDescriptors()
 {
+#if defined( _WIN32 )
+	// MSVC's CRT spells the POSIX open(2) surface with a leading underscore
+	// and its fcntl.h only carries the underscore flag macros; the unix
+	// permission bits collapse to the CRT read/write pair.
+	int defFlags = _O_APPEND | _O_CREAT | _O_WRONLY;
+	int defMode = _S_IREAD | _S_IWRITE;
+#define ML_OPEN( path, flags, mode )	_open( path, flags, mode )
+#define ML_DUP2( oldfd, newfd )			_dup2( oldfd, newfd )
+#define ML_CLOSE( fd )					_close( fd )
+#else
 	int defFlags = O_APPEND | O_CREAT | O_WRONLY;
 	mode_t defMode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
+#define ML_OPEN( path, flags, mode )	open( path, flags, mode )
+#define ML_DUP2( oldfd, newfd )			dup2( oldfd, newfd )
+#define ML_CLOSE( fd )					close( fd )
+#endif
 	bool status = true;
 
 	// TODO: should we test the open/append/create before daemon so we can
 	//      die with some message to stdout
 	if (outputFilename_.length())
 	{
-		int ofd = open( outputFilename_.c_str(), defFlags , defMode );
+		int ofd = ML_OPEN( outputFilename_.c_str(), defFlags , defMode );
 		if (ofd == -1)
 		{
 			ERROR_MSG( "Failed to open '%s' for redirecting stdout: %s\n",
@@ -1009,7 +1028,7 @@ bool Logger::resetFileDescriptors()
 		{
 			MF_ASSERT( ofd != 1 );
 			// dup2 will now shutdown stdout and duplicate the output file fd.
-			if (-1 == dup2( ofd, 1 ))
+			if (-1 == ML_DUP2( ofd, 1 ))
 			{
 				ERROR_MSG( "Failed to dup2 '%s' to stdout. %s.\n",
 							outputFilename_.c_str(), strerror(errno) );
@@ -1017,7 +1036,7 @@ bool Logger::resetFileDescriptors()
 			}
 
 			// shutdown the temporary fd now that stdout owns it
-			close(ofd);
+			ML_CLOSE(ofd);
 		}
 	}
 
@@ -1026,7 +1045,7 @@ bool Logger::resetFileDescriptors()
 	{
 		if (errorFilename_ == outputFilename_)
 		{
-			if (-1 == dup2( 1, 2 ))
+			if (-1 == ML_DUP2( 1, 2 ))
 			{
 				ERROR_MSG( "Failed to dup2 stdout to stderr. %s.\n",
 							strerror(errno) );
@@ -1035,7 +1054,7 @@ bool Logger::resetFileDescriptors()
 		}
 		else
 		{
-			int efd = open( errorFilename_.c_str(), defFlags, defMode );
+			int efd = ML_OPEN( errorFilename_.c_str(), defFlags, defMode );
 			if (efd == -1)
 			{
 				ERROR_MSG( "Failed to open '%s' for redirecting stderr: %s\n",
@@ -1048,7 +1067,7 @@ bool Logger::resetFileDescriptors()
 				MF_ASSERT( efd != 2 );
 				// dup2 will now shutdown stderr and duplicate
 				// the error file fd.
-				if (-1 == dup2( efd, 2 ))
+				if (-1 == ML_DUP2( efd, 2 ))
 				{
 					ERROR_MSG( "Failed to dup2 '%s' to stderr. %s.\n",
 								errorFilename_.c_str(), strerror(errno) );
@@ -1056,10 +1075,14 @@ bool Logger::resetFileDescriptors()
 				}
 
 				// shutdown the temporary fd now that stderr owns it
-				close(efd);
+				ML_CLOSE(efd);
 			}
 		}
 	}
+
+#undef ML_OPEN
+#undef ML_DUP2
+#undef ML_CLOSE
 
 	// Throw an error message so any syslog monitoring will catch the errors
 	if (!status)
