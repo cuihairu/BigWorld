@@ -27,6 +27,7 @@ BW_TARGET_LINK_LIBRARIES( dbappmgr
 	db
 	server
 	network
+	resmgr
 	cstdmf
 )
 

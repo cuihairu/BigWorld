@@ -735,6 +735,37 @@ void ServerApp::raiseFileDescriptorLimit( long limit )
 			strerror( errno ) );
 	}
 }
+
+
+/**
+ *	This method returns the process file descriptor limit.
+ *
+ *	Windows has no per-process descriptor limit queryable the way rlimit(2)
+ *	is; the closest observable cap is the stdio open-file maximum that
+ *	raiseFileDescriptorLimit above raises. bots uses this pair only for an
+ *	add-another-bot headroom check.
+ *
+ *	@return The process file descriptor limit.
+ */
+int ServerApp::fileDescriptorLimit() const
+{
+	return _getmaxstdio();
+}
+
+
+/**
+ *	This method returns the number of file descriptors opened by this
+ *	process.
+ *
+ *	Windows exposes no /proc-style scan of open descriptors; report zero so
+ *	the headroom check above compares against the stdio cap alone.
+ *
+ *	@return The number of file descriptors opened by this process.
+ */
+int ServerApp::numFileDescriptorsOpen() const
+{
+	return 0;
+}
 #else // !_WIN32
 /**
  *	Attempt to raise our file descriptor limit

@@ -1550,6 +1550,9 @@ void BaseApp::tickGameTime()
 
 	if ((spareTimeFraction < 0.f) || (1.f < spareTimeFraction))
 	{
+		// g_timingMethod only exists in the Unix arm of cstdmf/timestamp.hpp;
+		// the Windows timestamp() has no selectable timing method to diagnose.
+#if !defined( _WIN32 )
 		if (g_timingMethod == RDTSC_TIMING_METHOD)
 		{
 			CRITICAL_MSG( "BaseApp::tickGameTime: "
@@ -1560,6 +1563,7 @@ void BaseApp::tickGameTime()
 				spareTimeFraction );
 		}
 		else
+#endif // !defined( _WIN32 )
 		{
 			CRITICAL_MSG( "BaseApp::tickGameTime: "
 				"Invalid timing result %.3f.\n", spareTimeFraction );
@@ -2235,9 +2239,14 @@ void BaseApp::shutDown()
 
 		uint64 lastReport = timestamp();
 
-		while (!ReplayDataFileWriter::haveAllClosed()) 
+		while (!ReplayDataFileWriter::haveAllClosed())
 		{
+#if defined( _WIN32 )
+			// No usleep(3) in the MSVC CRT; Sleep takes milliseconds.
+			Sleep( int( BGTASK_MGR_TICK_TIME * 1000 ) );
+#else
 			usleep( int( BGTASK_MGR_TICK_TIME * 1000000 ) );
+#endif
 			bgTaskManager_.tick();
 
 			uint64 now = timestamp();

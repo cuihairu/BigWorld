@@ -52,11 +52,17 @@ SET( ALL_SRCS
 	../../common/py_network.hpp 
 	../../common/py_server_lib.cpp 
 	../../common/py_urlrequest.cpp
-	../../lib/db/dbappmgr_interface.cpp 
-	../../lib/db/dbappmgr_interface.hpp 
-	../../lib/db/dbapp_interface.cpp 
-	../../lib/db/dbapp_interface.hpp 
+	../../lib/db/dbappmgr_interface.cpp
+	../../lib/db/dbappmgr_interface.hpp
+	../../lib/db/dbapp_interface.hpp
 )
+
+# dbapp_interface.cpp is deliberately NOT compiled here: message_handlers.cpp
+# defines the whole DBAppInterface surface via DEFINE_SERVER_HERE, and a local
+# dbapp_interface.obj (DEFINE_INTERFACE_HERE) defines the same symbols again -
+# LNK2005 x40 on MSVC, which unlike the archive-member resolution the make
+# chain relies on puts both objects on the link line unconditionally. The db
+# library's copy backs any interface-only symbols.
 
 SOURCE_GROUP( "" FILES ${ALL_SRCS} )
 

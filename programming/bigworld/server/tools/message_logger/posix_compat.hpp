@@ -195,6 +195,20 @@ inline int unlink( const char * path )
 	return _unlink( path );
 }
 
+inline int link( const char * oldpath, const char * newpath )
+{
+	// CreateHardLink's argument order is (new, existing), the reverse of
+	// link(2)'s (existing, new); map the failure through errno so the
+	// callers' strerror reporting keeps working.
+	if (CreateHardLinkA( newpath, oldpath, NULL ))
+	{
+		return 0;
+	}
+
+	errno = (GetLastError() == ERROR_ALREADY_EXISTS) ? EEXIST : EIO;
+	return -1;
+}
+
 inline char * getcwd( char * buf, size_t size )
 {
 	return _getcwd( buf, int( size ) );

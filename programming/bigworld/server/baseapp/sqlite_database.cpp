@@ -11,7 +11,9 @@
 
 #include <errno.h>
 #include <string.h>
+#if !defined( _WIN32 )
 #include <sys/statfs.h>
+#endif
 
 
 BW_BEGIN_NAMESPACE
@@ -385,7 +387,8 @@ bool SqliteDatabase::init( const BW::string & checksum )
  */ 
 bool SqliteDatabase::checkFileSystemDevice()
 {
-	static const long BAD_MAGICS[] = { 
+#if !defined( _WIN32 )
+	static const long BAD_MAGICS[] = {
 		/* CIFS_MAGIC_NUMBER = */ 	0xFF534D42,
 		/* SMB_SUPER_MAGIC = */ 	0x517B,
 	};
@@ -409,7 +412,10 @@ bool SqliteDatabase::checkFileSystemDevice()
 			return false;
 		}
 	}
+#endif // !defined( _WIN32 )
 
+	// No statfs(2) on Windows: the CIFS/SMB superblock magic probe is a
+	// Unix-mount concern, and the check reports a supported filesystem.
 	return true;
 }
 
