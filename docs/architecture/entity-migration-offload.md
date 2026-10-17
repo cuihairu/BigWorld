@@ -1,5 +1,7 @@
 # 实体迁移与 Offload
 
+> [English](entity-migration-offload.en.md) | **中文**
+
 <div class="arch-hero">
 
 BigWorld 的实体迁移不是把对象 memcpy 到另一个进程。它是 Real/Ghost 状态转换、脚本回调、属性序列化、Channel 迁移、Ghost sign-off、buffered messages 和 Cell 边界控制共同完成的状态机。
