@@ -19,6 +19,11 @@
 #endif
 
 #include "server/bwconfig.hpp"
+// START_MSG is all this TU wants from the service header; its Windows arm
+// also defines the service entry machinery (global main + usage +
+// bwNarrowToTCHAR), which this binary's main.cpp owns - without this a
+// second including TU collides (LNK2005 in the root superproject build).
+#define BW_NO_SERVICE_MAIN
 #include "server/bwservice.hpp"
 #include "server/config_reader.hpp"
 

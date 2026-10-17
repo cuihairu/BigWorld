@@ -325,6 +325,15 @@ class BigWorldService : public CService
 
 };
 
+// The service entry machinery below (usage, bwNarrowToTCHAR and the global
+// main) is defined once per executable. Tools that include this header only
+// for its common part - message_logger's logger.cpp wants START_MSG, while
+// that binary's main.cpp owns the service entry - define
+// BW_NO_SERVICE_MAIN before including this header: on the Windows arm these
+// are out-of-line definitions and a second including TU collides
+// (LNK2005 'main' in the root superproject build, run 39041320832).
+#if !defined( BW_NO_SERVICE_MAIN )
+
 void usage()
 {
 	 printf( "\narguments:\n" );
@@ -527,6 +536,8 @@ int __cdecl main( int argc, char * argv[] )
 
 	ExitProcess(0);
 }
+
+#endif // !defined( BW_NO_SERVICE_MAIN )
 
 #endif // _WIN32
 

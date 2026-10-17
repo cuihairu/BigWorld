@@ -168,6 +168,7 @@ ENDIF()
 
 BW_TARGET_LINK_LIBRARIES( message_logger
 	build
+	network
 	server
 )
 
