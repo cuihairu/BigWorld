@@ -18,10 +18,14 @@ DECLARE_DEBUG_COMPONENT2( "SecondaryDB", 0 )
 
 BW_USE_NAMESPACE
 
+// BIGWORLD_MAIN rather than a plain main: under MSVC bwservice.hpp already
+// defines the process entry (the Windows service main), and a second
+// definition in this TU collided with it (C2084 in the root superproject
+// build, run 39021844438). The macro's wrapper also covers the resource and
+// config setup this file used to do itself.
 int
-main( int argc, char **argv )
+BIGWORLD_MAIN( int argc, char **argv )
 {
-	BW_SYSTEMSTAGE_MAIN();
 	bool isVerbose = true;
 
 	// Args parsing
@@ -31,10 +35,6 @@ main( int argc, char **argv )
 	//
 
 	DebugFilter::shouldWriteToConsole( isVerbose );
-
-	BWResource bwresource;
-	BWResource::init( argc, const_cast< const char ** >( argv ) );
-	BWConfig::init( argc, argv );
 
 	TransferDB transferDB;
 	if (!transferDB.init( isVerbose ))
