@@ -301,6 +301,21 @@ jobs:
           $dir = ($PWD.ProviderPath -replace '\\','/') + "/$root"
           "DXSDK_DIR=$dir" | Out-File -FilePath $env:GITHUB_ENV -Append
 
+      - name: Install jsoncpp (vcpkg)
+        shell: pwsh
+        run: |
+          # message_logger's metadata backend is jsoncpp; the make chain
+          # takes it from vcpkg too (third_party_vcpkg.mak port list,
+          # Makefile.message_logger's useJSON := 1) and nothing vendors it
+          # in-tree. The runner's preinstalled vcpkg carries x64-windows.
+          & "$env:VCPKG_INSTALLATION_ROOT/vcpkg.exe" `
+                install jsoncpp --triplet x64-windows
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $jsoncppInc = `
+            "$env:VCPKG_INSTALLATION_ROOT/installed/x64-windows/include"
+          "VCPKG_JSONCPP_INCLUDE=$jsoncppInc" | `
+            Out-File -FilePath $env:GITHUB_ENV -Append
+
       - name: Configure root superproject (server target)
         shell: pwsh
         env:
@@ -308,10 +323,13 @@ jobs:
         run: |
           $repo = ((Resolve-Path programming/bigworld).Path -replace '\\','/')
           # Same configure as root-configure-probe, its own build dir: the
-          # jobs do not share a workspace.
+          # jobs do not share a workspace. BW_JSONCPP_INCLUDE_DIR
+          # pre-seeds message_logger's FIND_PATH cache entry (headers only;
+          # the lib is found via its HINTS on the include dir).
           cmake -S "$repo" -B "build/win_root_build" `
                 -G "Visual Studio 18 2026" -A x64 `
-                -DBW_CMAKE_TARGET=server 2>&1 | `
+                -DBW_CMAKE_TARGET=server `
+                -DBW_JSONCPP_INCLUDE_DIR="$env:VCPKG_JSONCPP_INCLUDE" 2>&1 | `
                 Tee-Object -FilePath cmake-configure-root.log
 
       - name: Build root superproject (Hybrid, all targets)
@@ -362,11 +380,14 @@ jobs:
           # One msbuild invocation stops at its first failing project (run
           # 39013952226: cellappmgr's two C2131s hid the other 13 exes behind
           # it), so build each exe in its own invocation and keep going.
+          # bwmachined and snapshot_helper are not on the list: both now
+          # RETURN() on Windows (Linux-only tools), so no such build target
+          # exists for cmake --build to name.
           $exeFailures = 0
           foreach ($t in @('cellapp','cellappmgr','baseapp','baseappmgr',
-                           'dbapp','dbappmgr','loginapp','reviver','bwmachined',
+                           'dbapp','dbappmgr','loginapp','reviver',
                            'bots','clear_auto_load','consolidate_dbs',
-                           'snapshot_helper','sync_db','transfer_db',
+                           'sync_db','transfer_db',
                            'message_logger')) {
             Write-Host "=== exe target: $t ==="
             cmake --build "build/win_root_build" --config Hybrid --target $t `
