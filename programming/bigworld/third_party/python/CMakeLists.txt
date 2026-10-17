@@ -102,8 +102,14 @@ if(BW_ARCH_64 OR CMAKE_SIZEOF_VOID_P EQUAL 8)
 else()
 	set(_bw_py_arch "win32")
 endif()
+# The import archive is python<major><minor>.lib - no dot between the version
+# numbers (PCbuild/pythoncore.vcxproj's TargetName, python.props). Spelling it
+# python${BW_PYTHON_VERSION}.lib yields python3.13.lib, which the build never
+# produces: every link against libpython then dies with LNK1181 (run
+# 38883400603). The pyconfig.h directory below concatenates for the same
+# reason (BWStandardProject.cmake:41).
 set(BW_PYTHONCORE_ARCHIVE
-	"${BW_PYTHON_PCBUILD}/${_bw_py_arch}/python${BW_PYTHON_VERSION}.lib")
+	"${BW_PYTHON_PCBUILD}/${_bw_py_arch}/python${BW_PYTHON_MAJOR}${BW_PYTHON_MINOR}.lib")
 
 # pyproject.props:14 - pythoncore.vcxproj regenerates pyconfig.h into its own
 # IntDir, which is the only copy in the tree, at

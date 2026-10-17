@@ -96,6 +96,12 @@ SET( BW_LIBRARY_PROJECTS
 	libpython			third_party/python
 	zip 				third_party/zip
 	libpng				third_party/png/projects/visualc71
+	# lib/resmgr links re2 (lib/resmgr/CMakeLists.txt:149) and every other
+	# configuration lists it here, so the vendored tree - which ships its own
+	# repo-tailored CMakeLists and builds on MSVC as-is - was simply missing
+	# from the server list: bwengine_xml's link then died with LNK1181 on
+	# re2.lib (run 38883400603).
+	re2					third_party/re2
 	
 	# Unit test librarys
 	${BW_SERVER_UNIT_TEST_LIBRARIES}

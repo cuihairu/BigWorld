@@ -9,10 +9,14 @@
 #include "cstdmf/debug.hpp"
 
 #if defined( _WIN32 )
-// access()/W_OK are POSIX; _access/_W_OK (io.h) are the same check.
+// access()/W_OK are POSIX; _access with the write mode (io.h) is the same
+// check. The mode constants are written out rather than using _W_OK: MSVC
+// keeps that name behind its nonstdc-names guard, so it is not declared in
+// a C++ TU and using it here failed with C2065 (run 38883400603). 2 is the
+// value io.h uses for the write check (_W_OK).
 #include <io.h>
 #define BW_ACCESS _access
-#define BW_W_OK _W_OK
+#define BW_W_OK 2
 #else
 #include <unistd.h>
 #define BW_ACCESS access

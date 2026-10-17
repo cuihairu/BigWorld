@@ -18,6 +18,8 @@
 #include <string.h>
 #include <time.h>
 
+#include <sys/stat.h>
+
 #include <direct.h>	// _mkdir
 #include <io.h>		// _unlink, _rmdir
 
@@ -26,7 +28,26 @@
 #include "cstdmf/cstdmf_windows.hpp"
 #include <Winsock2.h>
 
+#include <regex>	// std::regex, for the <regex.h> shims below
+
 typedef intptr_t ssize_t;
+
+// Windows struct stat carries only the file-type bits in st_mode, so the
+// POSIX permission macros have no meaningful mapping. The tool's checks are
+// "is this a directory" and "can I read/write it", which on Windows map to
+// the always-granted defaults _S_IREAD/_S_IWRITE.
+#ifndef S_ISDIR
+	#define S_ISDIR( m ) ( ((m) & _S_IFMT) == _S_IFDIR )
+#endif
+#define S_IROTH _S_IREAD
+#define S_IRWXU ( _S_IREAD | _S_IWRITE | _S_IEXEC )
+
+// st_uid is 0 in Windows struct stat, so the tool's ownership check against
+// the effective uid always passes.
+inline int geteuid( void )
+{
+	return 0;
+}
 
 struct dirent
 {
@@ -289,6 +310,93 @@ inline ssize_t getline( char ** linePtr, size_t * n, FILE * stream )
 
 	(*linePtr)[ used ] = '\0';
 	return ssize_t( used );
+}
+
+
+// <regex.h> shims over std::regex. The reader side (query_params) uses the
+// POSIX API with REG_EXTENDED|REG_NOSUB(+REG_ICASE) and only ever asks
+// "does this string match", so the full regmatch_t machinery is not needed;
+// regexec's nmatch/pmatch arguments are accepted and ignored. REG_NEWLINE
+// has no exact std::regex equivalent under the extended grammar - it only
+// matters for multi-line subjects, which the tool never passes (each log
+// message is a single line).
+#define REG_EXTENDED	0x01
+#define REG_ICASE		0x02
+#define REG_NEWLINE		0x04
+#define REG_NOSUB		0x08
+
+#define REG_NOMATCH		1
+#define REG_BADPAT		2
+
+struct regex_t
+{
+	std::regex * re;
+	char error[ 128 ];
+};
+
+inline int regcomp( regex_t * preg, const char * pattern, int cflags )
+{
+	std::regex::flag_type flags = std::regex::extended;
+	if (cflags & REG_ICASE)
+	{
+		flags |= std::regex::icase;
+	}
+
+	preg->re = NULL;
+	preg->error[ 0 ] = '\0';
+
+	try
+	{
+		preg->re = new std::regex( pattern, flags );
+		return 0;
+	}
+	catch ( const std::regex_error & e )
+	{
+		strncpy( preg->error, e.what(), sizeof( preg->error ) - 1 );
+		preg->error[ sizeof( preg->error ) - 1 ] = '\0';
+		return REG_BADPAT;
+	}
+}
+
+inline int regexec( const regex_t * preg, const char * string,
+		size_t /*nmatch*/, void * /*pmatch*/, int /*eflags*/ )
+{
+	if ((preg == NULL) || (preg->re == NULL))
+	{
+		return REG_NOMATCH;
+	}
+
+	try
+	{
+		return std::regex_search( string, *preg->re ) ? 0 : REG_NOMATCH;
+	}
+	catch ( ... )
+	{
+		return REG_NOMATCH;
+	}
+}
+
+inline size_t regerror( int /*errcode*/, const regex_t * preg,
+		char * errbuf, size_t errbufSize )
+{
+	const char * message = "invalid regular expression";
+	if ((preg != NULL) && (preg->error[ 0 ] != '\0'))
+	{
+		message = preg->error;
+	}
+
+	if ((errbuf != NULL) && (errbufSize > 0))
+	{
+		strncpy( errbuf, message, errbufSize - 1 );
+		errbuf[ errbufSize - 1 ] = '\0';
+	}
+	return strlen( message );
+}
+
+inline void regfree( regex_t * preg )
+{
+	delete preg->re;
+	preg->re = NULL;
 }
 
 #endif // defined( _WIN32 )
