@@ -173,6 +173,13 @@ int main( int argc, char * argv[] )							\
 }															\
 int bwMain
 
+// Close what BW_BEGIN_NAMESPACE above opened: everything from the #else to
+// the matching #endif near the bottom of this file (the Windows service
+// machinery) is compiled out here, and the non-Windows path had no other
+// closing brace - dbapp/main.cpp and transfer_db/main.cpp died with
+// "expected '}' at end of input" on the make chain.
+BW_END_NAMESPACE
+
 #else
 
 // The two definitions must land in BW: BigWorldService::Main and onStop call
