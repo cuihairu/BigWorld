@@ -1,5 +1,7 @@
 # 通信抽象与 RPC
 
+> [English](communication-rpc.en.md) | **中文**
+
 <div class="arch-hero">
 
 Mercury 的通信层不是 gRPC 式 IDL 生成体系，而是 C++ 宏接口、`InterfaceElement` 消息描述、`Bundle` 消息流和 `InputMessageHandler` 回调共同组成的进程间 RPC 机制。它服务的是 MMO 引擎内部的高频、低延迟、可混合可靠性的消息通信。
