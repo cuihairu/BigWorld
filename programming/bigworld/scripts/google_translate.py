@@ -16,6 +16,7 @@ from typing import Any
 
 
 GOOGLE_ENDPOINT = "https://translation.googleapis.com/language/translate/v2"
+RETRYABLE_STATUS_CODES = frozenset({429, 500, 502, 503, 504})
 
 
 @dataclass(frozen=True)
@@ -83,7 +84,41 @@ def translate_text(
     sleep: Any = time.sleep,
     opener: Any = urllib.request.build_opener(),
 ) -> str:
-    raise NotImplementedError("translation transport")
+    body = urllib.parse.urlencode(
+        {
+            "q": text,
+            "source": source,
+            "target": target,
+            "format": "text",
+            "key": api_key,
+        }
+    ).encode("utf-8")
+    request = urllib.request.Request(
+        GOOGLE_ENDPOINT,
+        data=body,
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        method="POST",
+    )
+
+    delay = backoff.initial_delay
+    for attempt in range(1, backoff.max_attempts + 1):
+        try:
+            with opener.open(request, timeout=timeout) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+            translations = payload.get("data", {}).get("translations", [])
+            if not translations or not isinstance(translations[0].get("translatedText"), str):
+                raise ValueError("unexpected Google Translate response schema")
+            return translations[0]["translatedText"]
+        except urllib.error.HTTPError as error:
+            if attempt == backoff.max_attempts or error.code not in RETRYABLE_STATUS_CODES:
+                raise
+            sleep(min(delay, backoff.max_delay))
+            delay *= 2
+        except urllib.error.URLError as error:
+            if attempt == backoff.max_attempts:
+                raise
+            sleep(min(delay, backoff.max_delay))
+            delay *= 2
 
 
 def build_parser() -> argparse.ArgumentParser:
