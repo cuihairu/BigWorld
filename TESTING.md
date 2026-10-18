@@ -1028,3 +1028,42 @@ LIBCMT defaultlib 冲突警告，cellapp/baseapp/dbapp，非错误）。
 **余留（均已知设计件，不入增量）**：cellapp_extension 宿主符号族
 （stage-1 ALL build 的 LNK——exe 导出机制 .def/dllexport/改托管接口三选一）；
 3 处 LNK4098 LIBCMT 警告（cosmetic，后续 /NODEFAULTLIB 评估）。
+
+### 批次 47（2026-10-18）：L39 exe 打包——产品车道落地（探针 #32 实测 + daily Windows 车道）
+
+**探针 #32（run 39075113978，`14ebd63a`）**：exe 车道 11/11 复绿（0 实错，
+11 个 .exe 全产出），首个产品 artifact `ci-windows-root-products-*` 实测
+定盘——11 .exe + Hybrid .dll（_bwlog / bwengine_xml / _bw_profile）+
+python313.dll（7.2 MB）+ 39 个 .pyd 全数在列；cellapp_extension.dll 缺席
+（已知设计件，manifest 记录）；stdlib in-repo 2338 文件。构建 18m41s、
+job 全程 20m20s（比首估 ~1h 低三倍，CI 经济无忧）。
+
+**布局决策（源码证据）**：全仓无 `Py_SetPythonHome`/`Py_SetPath` 调用 →
+解释器以 python313.dll 所在目录为 home、期望旁边 `Lib/`（PCbuild 自身
+布局）→ **扁平 zip**：exes + BW Python 模块 dll + python313.dll + *.pyd +
+`Lib/` 同目录自足。bin/python 分离会让全部 import 失败。
+
+**共享脚本化（两条车道同一路径）**：
+- `scripts/build-windows-server.ps1`：configure + 11 exe 车道逐目标构建
+  （单次 msbuild 在首个失败工程即停，会把其余 10 个藏起来——run
+  39013952226 教训）；`-SkipConfigure` 供探针保留自己的 configure/stage-1
+  分节与日志契约。
+- `scripts/package-daily-windows.ps1`：收产物 + SHA256 manifest（头部记
+  toolset/UCRT 假设/stdlib 计数/cellapp_extension 缺席原因）+ zip；版本串
+  镜像 `package-daily.sh`（vcpkg.json "version" + `+daily<UTC 日期>.<短
+  sha>`），写 `out/pkg-version.txt` 供 artifact 命名。
+- 调用方：daily-build.yml `windows-products` job（交付面）与 ci-windows.yml
+  探针 job（验证车）——探针绿即交付面绿，无第二套逻辑。
+
+**daily-build.yml `windows-products`**：windows-latest、timeout 90、48h
+新鲜度门与 Linux 车道一致（workflow_dispatch 无条件）、**无
+continue-on-error**（构建红即 job 红）、upload-artifact 14 天保留
+（`bigworld-daily-<ver>-windows-x64`），无 tag 无 release（发版红线）。
+
+**本轮写后即审修掉的三个脚本 bug（未经 runner，探针 #33 判定）**：
+manifest 哈希循环的管道输出没有收进 `$manifest` 数组（manifest 只剩头部）、
+相对 `$stage` 对绝对 `FullName` 做 `Substring` 会切错（改 `$stage` 建目录后
+即转绝对）、`$PyBin` 参数定义未用（改为从 `$BaseDir` 推导）。
+
+**余留**：探针 #33 验证脚本改造后的同路径（含 manifest 哈希行回归）；
+daily 车道首跑实证；bundle 运行时冒烟（exe 启动级，需 Windows 侧）未做。

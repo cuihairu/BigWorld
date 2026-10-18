@@ -5,8 +5,9 @@ name: CI Windows (MSVC compile gate)
 #
 # Goal: prove the platform-agnostic libraries (math, cstdmf) still compile
 # with MSVC, so the Windows track cannot silently rot while Linux-only CI
-# keeps passing. No artifacts are published and nothing is tagged or
-# released from this job - it only builds.
+# keeps passing. Nothing is tagged or released from this job - it only builds
+# and uploads logs plus (root-build-probe, L39) a products zip as workflow
+# ARTIFACTS with a retention window; artifacts are not releases.
 #
 # Why a module-level configure instead of the root superproject:
 # the root (CMakeLists.txt, cmake_minimum_required 2.8.12) aggregates every
@@ -268,7 +269,9 @@ jobs:
   # the configure probe did for configure. workflow_dispatch-only via the
   # job-level if below: a ~1h build must not ride along on every push, and
   # promoting it to a push/schedule job is a decision for after it is green.
-  # Nothing is published, tagged or released from this job - it only builds.
+  # Nothing is published, tagged or released from this job - it only builds
+  # and uploads logs plus a products zip as workflow artifacts (retention
+  # window; artifacts are not releases).
   root-build-probe:
     name: root build (R3 probe, manual)
     runs-on: windows-latest
@@ -363,45 +366,27 @@ jobs:
           Write-Host "build exit: $LASTEXITCODE"
           $stage1Exit = $LASTEXITCODE
 
-          # Stage 2, exe lane: every MODULE now links green (_bw_profile,
-          # _bwlog, bwengine_xml; run 38996693306) except cellapp_extension,
-          # whose 33 unresolved externals are all cellapp-exe-owned symbols
-          # (Entity::*, Controller::*, RealEntity::*, EntityType::description
-          # in server/cellapp/entity_type.cpp, g_entityMovementCallback,
-          # Singleton<CellApp>::s_pInstance) - load-time resolution that
-          # Unix .so gets by default and a Windows DLL link does not; the
-          # export story (.def / dllexport macros / hosted-interface
-          # redesign) is a separate design item on the R3 ledger. MSBuild
-          # stops scheduling new projects after a failure, so the failing
-          # MODULE also hides the never-attempted exe stratum behind it.
-          # This lane links the server executables directly - same tree,
-          # same config - so the next blocker list localises there without
-          # waiting on the design item.
-          # One msbuild invocation stops at its first failing project (run
-          # 39013952226: cellappmgr's two C2131s hid the other 13 exes behind
-          # it), so build each exe in its own invocation and keep going.
-          # bwmachined and snapshot_helper are not on the list: both now
-          # RETURN() on Windows (Linux-only tools). Neither are
-          # clear_auto_load, consolidate_dbs and sync_db: all three skip on
-          # missing MySQL headers (their FIND_PATH gates) and leave no
-          # target to name - run 39021844438 died with MSB1009 on all three.
-          $exeFailures = 0
-          foreach ($t in @('cellapp','cellappmgr','baseapp','baseappmgr',
-                           'dbapp','dbappmgr','loginapp','reviver',
-                           'bots','transfer_db',
-                           'message_logger')) {
-            Write-Host "=== exe target: $t ==="
-            cmake --build "build/win_root_build" --config Hybrid --target $t `
-                  --parallel 4 2>&1 | `
-                  Tee-Object -FilePath cmake-build-root-exes.log -Append
-            if ($LASTEXITCODE -ne 0)
-            {
-              Write-Host "exe target $t FAILED (exit $LASTEXITCODE)"
-              $exeFailures++
-            }
-          }
-          Write-Host "exe lane: $exeFailures target(s) failed"
-          $exeLaneExit = [int]($exeFailures -gt 0)
+          # Stage 2, exe lane, now scripts/build-windows-server.ps1 - shared
+          # with the daily-build.yml windows job so both lanes build and
+          # package exactly the same targets. -SkipConfigure here: this step
+          # configured already, and stage 1 above sits between the configure
+          # and the lane.
+          #
+          # Why the lane exists at all: every MODULE links green now except
+          # cellapp_extension, whose unresolved externals are all
+          # cellapp-exe-owned symbols (Entity::*, Controller::*,
+          # RealEntity::*, EntityType::description in server/cellapp/
+          # entity_type.cpp, g_entityMovementCallback,
+          # Singleton<CellApp>::s_pInstance) - load-time resolution a Unix
+          # .so gets by default and a Windows DLL link does not; the export
+          # story (.def / dllexport / hosted interface) is a design item on
+          # the R3 ledger. MSBuild stops scheduling after a failure, so the
+          # failing MODULE also hides the exe stratum behind it.
+          & ".\scripts\build-windows-server.ps1" `
+              -Repo "programming/bigworld" `
+              -BuildDir "build/win_root_build" `
+              -SkipConfigure
+          $exeLaneExit = $LASTEXITCODE
           # Stage 1's ALL build remains the run's verdict; the exe lane is
           # a probe-within-the-probe and must not mask an ALL failure - once
           # the export story lands and ALL is green, this step goes green
@@ -413,51 +398,19 @@ jobs:
         if: always()
         shell: pwsh
         run: |
-          # L39 (exe packaging) evidence step, first probe iteration: gather
-          # the runtime file set a server deployment needs from THIS clean
-          # runner - the Hybrid executables, the Hybrid runtime DLLs (BW
-          # Python modules: _bwlog.dll, bwengine_xml.dll, ...) and the
-          # interpreter bits the embedder loads (python313.dll plus the
-          # PCbuild extension modules). Two facts go to the manifest rather
-          # than the archive: the BW core libs are static on this track (no
-          # cstdmf.dll / network.dll ships), and the Python stdlib is the
-          # in-repo third_party/python/Lib tree every checkout already
-          # carries. Products are workflow ARTIFACTS only (7-day retention),
-          # never releases or tags.
-          $stage = "build/products"
-          New-Item -ItemType Directory -Force $stage | Out-Null
-          Get-ChildItem -Recurse -Filter *.exe "build/win_root_build" |
-            Where-Object { $_.FullName -match '\\Hybrid\\' } |
-            Copy-Item -Destination $stage -Force
-          Get-ChildItem -Recurse -Filter *.dll "build/win_root_build" |
-            Where-Object { $_.FullName -match '\\Hybrid\\' } |
-            Copy-Item -Destination $stage -Force
-          $pybin = "programming/bigworld/third_party/python/PCbuild/amd64"
-          if (Test-Path "$pybin/python313.dll") {
-            Copy-Item "$pybin/python313.dll" $stage -Force
-            Get-ChildItem "$pybin" -Filter *.pyd |
-              Copy-Item -Destination $stage -Force
-          }
-          $manifest = @()
-          Get-ChildItem $stage | Sort-Object Name | ForEach-Object {
-            $sha = (Get-FileHash $_.FullName -Algorithm SHA256).Hash
-            $manifest += "{0}  {1,12:N0}  {2}" -f $sha, $_.Length, $_.Name
-          }
-          $manifest += ""
-          $stdlib = "programming/bigworld/third_party/python/Lib"
-          if (Test-Path $stdlib) {
-            $files = (Get-ChildItem -Recurse -File $stdlib |
-              Measure-Object).Count
-            $manifest += "python stdlib (in-repo, not packaged): $stdlib ($files files)"
-          } else {
-            $manifest += "python stdlib MISSING: $stdlib"
-          }
-          $manifest | Out-File -FilePath products-manifest.txt -Encoding utf8
-          Get-Content products-manifest.txt
-          if ((Get-ChildItem $stage | Measure-Object).Count -gt 0) {
-            Compress-Archive -Path "$stage/*" `
-              -DestinationPath bw-windows-server-products.zip -Force
-          }
+          # L39 (exe packaging) evidence step - now the shared
+          # scripts/package-daily-windows.ps1, which daily-build.yml's windows
+          # job runs too, so the probe validates the delivery lane's exact
+          # layout: the Hybrid executables, python313.dll plus the PCbuild
+          # extension modules and the BigWorld Python modules (_bwlog.dll,
+          # bwengine_xml.dll, _bw_profile.dll), and the CPython stdlib
+          # copied in so the bundle is self-contained. Layout is flat because
+          # nothing in the embedder calls Py_SetPythonHome - the interpreter
+          # resolves Lib/ next to python313.dll's own directory. Products are
+          # workflow ARTIFACTS only (7-day retention), never releases or tags.
+          & ".\scripts\package-daily-windows.ps1" `
+              -Repo . -BuildDir "build/win_root_build" `
+              -OutDir "build/products"
 
       - name: Upload server products
         if: always()
@@ -465,8 +418,8 @@ jobs:
         with:
           name: ci-windows-root-products-${{ github.run_id }}
           path: |
-            products-manifest.txt
-            bw-windows-server-products.zip
+            build/products/products-manifest.txt
+            build/products/*.zip
           if-no-files-found: ignore
           retention-days: 7
 

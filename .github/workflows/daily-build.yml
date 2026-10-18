@@ -1,6 +1,7 @@
 name: Daily Build
 
-# Daily build + full unit-test gate + packaging (tar.gz / deb / rpm).
+# Daily build + full unit-test gate + packaging: linux (tar.gz / deb / rpm)
+# and windows (server executables, self-contained zip).
 #
 # Constraints honoured by this workflow (repo rules):
 #   * no git tags are created;
@@ -150,3 +151,111 @@ jobs:
       - name: Skip notice (no commits in 48 hours)
         if: steps.freshness.outputs.stale == 'true'
         run: echo "Daily build skipped by the 48-hour freshness rule — nothing to do."
+
+  # Windows server products lane (L39, 2026-10-18): the root superproject's
+  # Hybrid server build as one deployable bundle. The 48-hour gate is the same
+  # one as the linux job above, so both lanes skip together on a quiet branch
+  # and both run on workflow_dispatch. Measured 20m20s end to end on a clean
+  # runner (probe run 39075113978: 18m41s for the ALL build plus the 11 exe
+  # lanes), so the lane costs the daily run a third of an hour only when the
+  # branch has moved. No continue-on-error: a red build is a failed job.
+  # Artifacts only, no tags and no releases (repo rule).
+  windows-products:
+    name: Windows server products
+    runs-on: windows-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          # full history: the 48-hour freshness check counts commits by date
+          fetch-depth: 0
+
+      - name: Check for commits in the last 48 hours
+        id: freshness
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "stale=false" >> "$GITHUB_OUTPUT"
+            echo "Manual dispatch: build unconditionally."
+            exit 0
+          fi
+          count="$(git rev-list --count --since='48 hours ago' HEAD)"
+          echo "commits in last 48h: $count"
+          if [ "$count" -eq 0 ]; then
+            echo "stale=true" >> "$GITHUB_OUTPUT"
+            echo "No commits in the last 48 hours — skipping the Windows lane."
+          else
+            echo "stale=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Fetch legacy D3DX SDK
+        if: steps.freshness.outputs.stale != 'true'
+        shell: pwsh
+        run: |
+          # lib/math's Windows vector types are D3DX typedefs and server
+          # modules compile them through math headers. Same pinned NuGet
+          # package as ci-windows.yml, so no runner image needs the SDK.
+          $root = "build/dxsdk"
+          New-Item -ItemType Directory -Force $root | Out-Null
+          Invoke-WebRequest `
+            -Uri "https://www.nuget.org/api/v2/package/Microsoft.DXSDK.D3DX/9.29.952.8" `
+            -OutFile "$root/pkg.zip"
+          Expand-Archive -Path "$root/pkg.zip" -DestinationPath "$root/pkg" -Force
+          New-Item -ItemType Directory -Force "$root/Include", "$root/Lib/x64" | Out-Null
+          Copy-Item "$root/pkg/build/native/include/*" "$root/Include/" -Recurse -Force
+          Copy-Item "$root/pkg/build/native/release/lib/x64/*" "$root/Lib/x64/" -Recurse -Force
+          $dir = ($PWD.ProviderPath -replace '\\','/') + "/$root"
+          "DXSDK_DIR=$dir" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Install jsoncpp (vcpkg)
+        if: steps.freshness.outputs.stale != 'true'
+        shell: pwsh
+        run: |
+          # message_logger's metadata backend is jsoncpp; the make chain takes
+          # it from vcpkg too and nothing vendors it in-tree.
+          & "$env:VCPKG_INSTALLATION_ROOT/vcpkg.exe" `
+                install jsoncpp --triplet x64-windows
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $jsoncppInc = `
+            "$env:VCPKG_INSTALLATION_ROOT/installed/x64-windows/include"
+          "VCPKG_JSONCPP_INCLUDE=$jsoncppInc" | `
+            Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Build server executables (Hybrid)
+        if: steps.freshness.outputs.stale != 'true'
+        shell: pwsh
+        run: |
+          # Shared with ci-windows.yml's probe job, so this lane and the probe
+          # configure, build and package exactly the same thing. The script
+          # builds one executable per MSBuild invocation (a single
+          # invocation stops at its first failing project, which hid the other
+          # 10 behind one failure).
+          & ".\scripts\build-windows-server.ps1" `
+              -Repo "programming/bigworld" -BuildDir "build/win_root_build"
+
+      - name: Package (zip + manifest)
+        if: steps.freshness.outputs.stale != 'true'
+        id: pkg
+        shell: pwsh
+        run: |
+          & ".\scripts\package-daily-windows.ps1" `
+              -Repo . -BuildDir "build/win_root_build" -OutDir out
+          "ver=$(Get-Content out/pkg-version.txt)" | `
+            Add-Content $env:GITHUB_OUTPUT
+
+      - name: Upload Windows packages
+        if: steps.freshness.outputs.stale != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: bigworld-daily-${{ steps.pkg.outputs.ver }}-windows-x64
+          path: |
+            out/bigworld-windows-server-*.zip
+            out/products-manifest.txt
+          retention-days: 14
+          if-no-files-found: error
+
+      - name: Skip notice (no commits in 48 hours)
+        if: steps.freshness.outputs.stale == 'true'
+        shell: pwsh
+        run: Write-Host "Windows lane skipped by the 48-hour freshness rule."
