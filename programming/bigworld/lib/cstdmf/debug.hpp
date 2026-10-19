@@ -8,6 +8,13 @@
 
 #include <assert.h>
 
+// MF_DEBUGPRINT_NOALLOC below calls OutputDebugStringA on Windows. The root
+// superproject builds lib/cstdmf with precompiled headers turned off
+// (BWConfiguration_server.cmake), so no TU is handed windows.h by a pch and
+// this header has to carry its own include, like critical_message_box.hpp
+// (MSVC C3861 on the first root superproject build). A no-op outside Windows.
+#include "cstdmf_windows.hpp"
+
 
 /**
  *	This macro is a helper used by the *_MSG macros.
@@ -355,7 +362,15 @@ int bwWatchDebugMessagePriority( DebugMessagePriority & value,				\
 #endif
 
 
-#define BW_BUILD_SUPPORTS_DEV_ASSERT (defined( MF_SERVER ) || defined ( EDITOR_ENABLED ) || !defined( _RELEASE ))
+// BIGWORLD_BEGIN(msvc port)
+// #if, not a macro body: see config.hpp for why defined() must not be
+// expanded out of a #define.
+#if defined( MF_SERVER ) || defined ( EDITOR_ENABLED ) || !defined( _RELEASE )
+#define BW_BUILD_SUPPORTS_DEV_ASSERT 1
+#else
+#define BW_BUILD_SUPPORTS_DEV_ASSERT 0
+#endif
+// BIGWORLD_END(msvc port)
 
 #if BW_BUILD_SUPPORTS_DEV_ASSERT
 /**
@@ -383,7 +398,11 @@ int bwWatchDebugMessagePriority( DebugMessagePriority & value,				\
 
 #endif // BW_BUILD_SUPPORTS_DEV_ASSERT
 
-#undef BW_BUILD_SUPPORTS_DEV_ASSERT
+// BIGWORLD_BEGIN(msvc port)
+// BW_BUILD_SUPPORTS_DEV_ASSERT is deliberately NOT #undef'd here: it is a
+// plain 0/1 build-property flag (like config.hpp's ENABLE_*), so any TU that
+// includes this header can query it in real code - the unit test pins it.
+// BIGWORLD_END(msvc port)
 
 /**
  *	An assertion which is only lethal when not in a production environment.

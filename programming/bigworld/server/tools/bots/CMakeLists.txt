@@ -57,7 +57,15 @@ SOURCE_GROUP( "" FILES ${ALL_SRCS} )
 
 BW_ADD_EXECUTABLE( bots ${ALL_SRCS} )
 
+# The common/ sources above (simple_client_entity.cpp, py_timer.cpp) include
+# repo-root headers unqualified ("common/space_data_types.hpp",
+# "common/py_timer.hpp", C1083 x9 in the root superproject build, run
+# 39016799505); cellapp carries the same two lines for its common/ sources.
+TARGET_INCLUDE_DIRECTORIES( bots PRIVATE ${BW_SOURCE_DIR} )
+TARGET_INCLUDE_DIRECTORIES( bots PRIVATE ${BW_SOURCE_DIR}/server )
+
 BW_TARGET_LINK_LIBRARIES( bots
+	build
 	entitydef
 	pyscript
 	script
@@ -70,7 +78,7 @@ BW_TARGET_LINK_LIBRARIES( bots
 	connection_model
 	connection
 	moo
-	png
+	libpng
 )
 
 BW_PROJECT_CATEGORY( bots "Tools" )

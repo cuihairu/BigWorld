@@ -19,6 +19,9 @@
 #include <fcntl.h>
 #include <stdio.h>
 #include <windows.h>
+// CommandLineToArgvW lives in shellapi.h, which windows.h does not pull in
+// even in full mode (C3861 in the root superproject build).
+#include <shellapi.h>
 #include <cassert>
 #include "service.hpp"
 
@@ -350,7 +353,9 @@ DWORD CService::Start( int argc, char** argv )
     else
     {
 #ifdef UNICODE
-        lpArgv = ::CommandLineToArgvW(::GetCommandLineW(), &(dwArgc) );
+        int wargc = 0;
+        lpArgv = ::CommandLineToArgvW(::GetCommandLineW(), &wargc );
+        dwArgc = (DWORD)wargc;
 #else
         dwArgc = argc;
         lpArgv = argv;
@@ -685,7 +690,8 @@ DWORD CService::Install(LPTSTR pDependencies /* = NULL */,
         if ( schService )
         {
 			SERVICE_DESCRIPTION desc;
-			desc.lpDescription = "BigWorld Daemon";
+			static TCHAR serviceDescription[] = TEXT("BigWorld Daemon");
+			desc.lpDescription = serviceDescription;
 			ChangeServiceConfig2( schService, SERVICE_CONFIG_DESCRIPTION, &desc );
 
             TCHAR szBuf[256];
@@ -1017,7 +1023,9 @@ DWORD CService::CheckSIDs(void)
                             if ( AllocConsole() )
                             {
                                 // Now re-map the C Runtime STDIO handles
-                                int hCrt = ::_open_osfhandle((long) GetStdHandle(STD_OUTPUT_HANDLE), _O_TEXT);
+                                int hCrt = ::_open_osfhandle(
+						reinterpret_cast< intptr_t >(
+							GetStdHandle(STD_OUTPUT_HANDLE) ), _O_TEXT);
 
                                 *stdout = *(::_fdopen(hCrt, "w"));
                                 ::setvbuf(stdout, NULL, _IONBF, 0);
@@ -1141,7 +1149,7 @@ DWORD CService::CheckSIDs(void)
 BOOL WINAPI CService::control_handler ( DWORD dwCtrlType )
 {
     ASSERT( g_pService );
-    char szBuf[256];
+    TCHAR szBuf[256];
     DWORD bytes;
 
     switch( dwCtrlType )

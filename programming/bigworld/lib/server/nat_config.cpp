@@ -1,6 +1,41 @@
 #include "nat_config.hpp"
 
-#include <arpa/inet.h>
+// Winsock2 provides AF_INET and struct in_addr; inet_pton itself lives in
+// ws2tcpip.h (C3861 in the root superproject build), so only the include
+// list differs from POSIX (same split as lib/network/address_resolver.cpp).
+#if defined( _WIN32 )
+	#include "cstdmf/cstdmf_windows.hpp"
+	#include <Winsock2.h>
+	#include <ws2tcpip.h>
+#else
+	#include <arpa/inet.h>
+	#include <netinet/in.h>
+#endif
+
+BW_BEGIN_NAMESPACE
+
+namespace
+{
+
+// inet_addr's return type differs per platform (in_addr_t on POSIX, struct
+// in_addr on Windows) and it is deprecated under /WX on MSVC (C4996), so the
+// three lookups below go through inet_pton instead. INADDR_NONE preserves
+// inet_addr's "not a dotted quad" sentinel for the ERROR_MSG callers.
+uint32 inetAddressFromString( const BW::string & address )
+{
+	struct in_addr parsed;
+
+	if (::inet_pton( AF_INET, address.c_str(), &parsed ) != 1)
+	{
+		return INADDR_NONE;
+	}
+
+	return parsed.s_addr;
+}
+
+} // anonymous namespace
+
+BW_END_NAMESPACE
 
 // These need to be defined before including server_app_option_macros.hpp
 #define BW_CONFIG_CLASS NATConfig
@@ -72,7 +107,7 @@ bool NATConfig::postInit()
 		}
 	}
 
-	s_externalIP_ = inet_addr( externalAddress().c_str() );
+	s_externalIP_ = inetAddressFromString( externalAddress() );
 
 	DataSectionPtr pExternalAddresses =
 		BWConfig::getSection( "networkAddressTranslation/externalAddresses" );
@@ -84,8 +119,8 @@ bool NATConfig::postInit()
 		while (iter != pExternalAddresses->end())
 		{
 			DataSectionPtr pDS = *iter;
-			uint32 intIP = inet_addr( pDS->readString( "internal" ).c_str() );
-			uint32 extIP = inet_addr( pDS->readString( "external" ).c_str() );
+			uint32 intIP = inetAddressFromString( pDS->readString( "internal" ) );
+			uint32 extIP = inetAddressFromString( pDS->readString( "external" ) );
 
 			s_externalIPs_[ intIP ] = extIP;
 

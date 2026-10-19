@@ -17,7 +17,9 @@
 #include "server/util.hpp"
 
 #include <sys/types.h>
+#if !defined( _WIN32 )
 #include <sys/wait.h>
+#endif
 
 #include <string.h>
 #include <errno.h>
@@ -59,10 +61,15 @@ Consolidator::Consolidator( DBApp & dbApp ) :
  */
 Consolidator::~Consolidator()
 {
+	// The delete would reference ChildProcess's out-of-line destructor,
+	// whose TU compiles away on MSVC; no child ever starts there anyway
+	// (see startConsolidation), so the pointer is always NULL.
+#if !defined( _WIN32 )
 	if (pChildProcess_)
 	{
 		delete pChildProcess_;
 	}
+#endif
 }
 
 
@@ -71,6 +78,10 @@ Consolidator::~Consolidator()
  */
 void Consolidator::onChildComplete( int status, ChildProcess * process )
 {
+	// Only reachable when a consolidation child was fork()'d; none ever
+	// starts on Windows (see startConsolidation), and the wait macros the
+	// decode needs are sys/wait.h-only there.
+#if !defined( _WIN32 )
 	bool consolidationSucceeded = false;
 
 	consolidationSucceeded = (WIFEXITED( status ) &&
@@ -127,6 +138,7 @@ void Consolidator::onChildComplete( int status, ChildProcess * process )
 
 	// Notify DBApp that consolidation has finished.
 	dbApp_.onConsolidateProcessEnd( consolidationSucceeded );
+#endif // !defined( _WIN32 )
 }
 
 
@@ -166,6 +178,11 @@ Mercury::EventDispatcher & Consolidator::dispatcher()
  */
 bool Consolidator::startConsolidation()
 {
+	// Consolidation forks and execs consolidate_dbs (ChildProcess), and
+	// neither has a Windows port - consolidate_dbs itself does not build
+	// off Linux. Report the operation as unavailable there rather than
+	// reference fork/exec-only symbols from this TU.
+#if !defined( _WIN32 )
 	MF_ASSERT( pChildProcess_ == NULL );
 
 	pChildProcess_ = new ChildProcess( this->dispatcher(), this,
@@ -198,6 +215,11 @@ bool Consolidator::startConsolidation()
 
 	return pChildProcess_->startProcessWithPipe( /*shouldPipeStdOut:*/ false,
 		/*shouldPipeStdErr:*/ true );
+#else
+	SECONDARYDB_ERROR_MSG( "Consolidator::startConsolidation: "
+			"Consolidation is not supported on this platform.\n" );
+	return false;
+#endif // !defined( _WIN32 )
 }
 
 

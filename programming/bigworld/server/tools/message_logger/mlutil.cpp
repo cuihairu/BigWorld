@@ -1,9 +1,13 @@
 #include <stdio.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <unistd.h>
 #include <string.h>
 #include <errno.h>
+
+#if defined( _WIN32 )
+	// mkdir shim for the log directory creation below.
+	#include "posix_compat.hpp"
+#endif
 
 #include "cstdmf/debug.hpp"
 #include "server/config_reader.hpp"

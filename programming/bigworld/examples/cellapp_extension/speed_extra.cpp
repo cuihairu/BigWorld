@@ -156,8 +156,9 @@ void SpeedExtra::onMovement( const Vector3 & oldPosition )
 
 		// No need for both velocity_ and speed_ but this is just as an
 		// example.
-		velocity_ = (entity_.position() - oldPosition)/delta;
-		speed_ = velocity_.length()/delta;
+		velocity_ = (entity_.position() - oldPosition)/
+			static_cast< float >( delta );
+		speed_ = static_cast< float >( velocity_.length()/delta );
 	}
 
 	lastTime_ = thisTime;

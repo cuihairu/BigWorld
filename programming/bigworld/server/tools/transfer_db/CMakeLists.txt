@@ -17,8 +17,11 @@ SOURCE_GROUP( "" FILES ${ALL_SRCS} )
 BW_ADD_EXECUTABLE( transfer_db ${ALL_SRCS} )
 
 BW_TARGET_LINK_LIBRARIES( transfer_db
+	build
 	db
 	server
+	network
+	resmgr
 	sqlite
 )
 

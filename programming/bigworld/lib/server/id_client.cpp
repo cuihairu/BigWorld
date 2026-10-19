@@ -283,7 +283,8 @@ void IDClient::getMoreIDs( Mercury::ReplyMessageHandler * pHandler )
 
 		bundle.startRequest( *pGetMoreMethod_, pHandler );
 
-		int numIDs = desiredSize_ - readyIDs_.size();
+		int numIDs =
+			static_cast< int >( desiredSize_ - readyIDs_.size() );
 		bundle << numIDs;
 		pendingRequest_ = true;
 		pChannelOwner_->send();

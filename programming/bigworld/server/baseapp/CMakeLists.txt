@@ -26,10 +26,14 @@ SET( ALL_SRCS
 	baseapp_config.hpp 
 	initial_connection_filter.cpp
 	initial_connection_filter.hpp
-	baseapp_int_interface.cpp
+	# baseapp_int_interface.cpp is deliberately NOT compiled here:
+	# message_handlers.cpp defines the whole interface via
+	# DEFINE_SERVER_HERE, and a local obj compiled with
+	# DEFINE_INTERFACE_HERE defines the same symbols again - LNK2005 x211
+	# on MSVC, which puts both objects on the link line unconditionally.
 	baseapp_int_interface.hpp
-	baseappmgr_gateway.cpp 
-	baseappmgr_gateway.hpp 
+	baseappmgr_gateway.cpp
+	baseappmgr_gateway.hpp
 	bases.cpp 
 	bases.hpp 
 	bwtracer.cpp 
@@ -133,6 +137,7 @@ TARGET_INCLUDE_DIRECTORIES( baseapp PRIVATE ${BW_SOURCE_DIR} )
 TARGET_INCLUDE_DIRECTORIES( baseapp PRIVATE ${BW_SOURCE_DIR}/server )
 
 BW_TARGET_LINK_LIBRARIES( baseapp
+	build
 	chunk
 	scene
 	connection

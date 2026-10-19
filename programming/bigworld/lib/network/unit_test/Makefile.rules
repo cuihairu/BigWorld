@@ -25,10 +25,12 @@ cxxSource =							\
 	test_fragment					\
 	test_interface					\
 	test_log_on_params				\
+	test_logger_message_forwarder	\
 	test_login_challenge			\
 	test_login_challenge_task		\
 	test_login_request_protocol	\
 	test_machine_guard				\
+	test_machine_guard_messages		\
 	test_mangle						\
 	test_movement_filter			\
 	test_msgtypes					\
@@ -40,6 +42,7 @@ cxxSource =							\
 	test_replay_header				\
 	test_replay_tick_loader			\
 	test_network_checksum_schemes	\
+	test_request_failure			\
 	test_server_finder				\
 	test_snprintf 					\
 	test_stream						\
@@ -53,6 +56,8 @@ cxxSource =							\
 	test_cuckoo_cycle_login_challenge	\
 	test_replay_metadata			\
 	test_piggybacks_longer_than_normal	\
+	test_virtual_clock				\
+	test_event_stall				\
 
 useOpenSSL = 1
 

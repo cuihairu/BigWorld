@@ -20,9 +20,12 @@
 #include <limits.h>
 #include <time.h>
 
-#ifdef MF_SERVER
+// First-allocation timing is POSIX-only, the same split memory_debug.hpp now
+// uses for CallstackStats::firstTime. MF_SERVER alone does not exclude MSVC:
+// the root superproject defines it for every module (BWConfiguration_server.cmake).
+#if defined( MF_SERVER ) && !defined( _WIN32 )
 #include <sys/time.h>
-#endif // MF_SERVER
+#endif // defined( MF_SERVER ) && !defined( _WIN32 )
 
 namespace BW
 {
@@ -88,15 +91,21 @@ public:
 
 };
 typedef BW::map<
-	CallstackAddressType, 
-	CacheGrindEventInfo, 
+	CallstackAddressType,
+	CacheGrindEventInfo,
 	std::less<CallstackAddressType>,
-	detail::DebugStlAllocator< std::pair<CallstackAddressType, 
+	detail::DebugStlAllocator< std::pair<const CallstackAddressType,
 		CacheGrindEventInfo > > > CacheGrindEventMap;
-typedef BW::map<const char *, 
-	CacheGrindEventInfo, 
-	std::less<const char *>, 
-	detail::DebugStlAllocator< std::pair<const char *, 
+// BIGWORLD_BEGIN(msvc port)
+// Key is const char*, so the allocator's value_type must be
+// pair<const char* const, V> - the pointer itself is const inside the map.
+// pair<const char*, V> (const char, non-const pointer) fails MSVC's
+// _ENFORCE_MATCHING_ALLOCATORS static assert in <map> (C2338) under
+// _MSVC_STL; libstdc++ accepts both spellings.
+typedef BW::map<const char *,
+	CacheGrindEventInfo,
+	std::less<const char *>,
+	detail::DebugStlAllocator< std::pair<const char * const,
 		CacheGrindEventInfo > > > CacheGrindCalleeEventMap;
 
 class CacheGrindCalleeEventInfo
@@ -112,10 +121,10 @@ public:
 	CacheGrindCalleeEventMap events;
 };
 typedef BW::map<
-	CallstackAddressType, 
-	CacheGrindCalleeEventInfo, 
-	std::less<CallstackAddressType>, 
-	detail::DebugStlAllocator< std::pair<CallstackAddressType, 
+	CallstackAddressType,
+	CacheGrindCalleeEventInfo,
+	std::less<CallstackAddressType>,
+	detail::DebugStlAllocator< std::pair<const CallstackAddressType,
 		CacheGrindCalleeEventInfo > > > CacheGrindCalleeMap;
 
 class CacheGrindFrameInfo
@@ -849,9 +858,9 @@ std::pair< const MemoryDebug::CallstackHeader * const,
 		memcpy( newHdr, tempHdr, totalSize );
 		CallstackStats stats;
 		stats.allocCount = 0;
-#ifdef MF_SERVER
+#if defined( MF_SERVER ) && !defined( _WIN32 )
 		gettimeofday( &stats.firstTime, NULL );
-#endif // MF_SERVER
+#endif // defined( MF_SERVER ) && !defined( _WIN32 )
 		std::pair< CallstackMap::iterator, bool > insert = 
 			callstacks_->insert( std::make_pair( newHdr, stats ) );
 		MF_ASSERT_NOALLOC( insert.second );
@@ -978,9 +987,9 @@ struct CallstackReport
 	uint32 leakSize;
 	uint32 numAllocations;
 	uint32 numIgnoredAllocations;
-#ifdef MF_SERVER
+#if defined( MF_SERVER ) && !defined( _WIN32 )
 		timeval firstTime;	// first time the allocation was performed
-#endif // MF_SERVER
+#endif // defined( MF_SERVER ) && !defined( _WIN32 )
 };
 
 //-----------------------------------------------------------------------------
@@ -1523,9 +1532,9 @@ size_t MemoryDebug::printLiveAllocations()
 			CallstackReport report;
 			report.callstack = csHdr;
 			report.leakSize = info.sizeUsed;
-#ifdef MF_SERVER
+#if defined( MF_SERVER ) && !defined( _WIN32 )
 			report.firstTime = csItr->second.firstTime;
-#endif // MF_SERVER
+#endif // defined( MF_SERVER ) && !defined( _WIN32 )
 
 			if ((info.flags & AF_ALLOCATION_IGNORELEAK) == 0)
 			{
@@ -1628,11 +1637,11 @@ size_t MemoryDebug::printLiveAllocations()
 				builder.appendf( " (%d ignored)", report.numIgnoredAllocations );
 			}
 
-#ifdef MF_SERVER
+#if defined( MF_SERVER ) && !defined( _WIN32 )
 			char timebuff[32];
 			convertTime( timebuff, sizeof( timebuff ), &report.firstTime );
 			builder.appendf( ", first time allocated %s", timebuff );
-#endif // MF_SERVER
+#endif // defined( MF_SERVER ) && !defined( _WIN32 )
 			builder.appendf( "\n\n" );
 			dprintf( builder.string() );
 		}

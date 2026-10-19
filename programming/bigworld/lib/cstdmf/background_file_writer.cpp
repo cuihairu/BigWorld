@@ -268,17 +268,21 @@ bool BackgroundFileWriterTask::doBackgroundSeek( long offset, int whence )
  */
 bool BackgroundFileWriterTask::doBackgroundChmod( int mode )
 {
-#if defined( MF_SERVER )
+// POSIX only: fchmod has no Windows counterpart. MF_SERVER alone does not
+// exclude MSVC - the root superproject defines it for every module, so the
+// bare guard hit MSVC with an unknown identifier (MSVC C3861 in the root
+// superproject build).
+#if defined( MF_SERVER ) && !defined( _WIN32 )
 	if (0 != fchmod( bw_fileno( fp_ ), mode ))
 	{
 		errno_ = errno;
 		return false;
 	}
-#else // !defined( MF_SERVER )
+#else
 	WARNING_MSG( "BackgroundFileWriterTask::doBackgroundChmod: "
 			"Not supported (path = \"%s\")\n",
 		pPath_->path().c_str() );
-#endif // defined( MF_SERVER )
+#endif // defined( MF_SERVER ) && !defined( _WIN32 )
 
 	return true;
 }
@@ -317,20 +321,22 @@ bool BackgroundFileWriterTask::openFile()
 		return false;
 	}
 
-#if defined( MF_SERVER )
+// POSIX only, same reason as doBackgroundChmod above: mode_t, S_IWUSR and
+// this flavour of chmod are not in the MSVC CRT.
+#if defined( MF_SERVER ) && !defined( _WIN32 )
 	mode_t mode = outputFileStat.st_mode;
 
-	if (fileExists && 
-			((mode & S_IWUSR) == 0) && 
+	if (fileExists &&
+			((mode & S_IWUSR) == 0) &&
 			(-1 == chmod( pPath_->path().c_str(), mode | S_IWUSR )))
 	{
 		ERROR_MSG( "BackgroundFileWriterTask::openFile: "
-				"Cannot change mode of existing file %s: %s\n", 
+				"Cannot change mode of existing file %s: %s\n",
 			pPath_->path().c_str(), strerror( errno ) );
 
 		return false;
 	}
-#endif // defined( MF_SERVER )
+#endif // defined( MF_SERVER ) && !defined( _WIN32 )
 
 	const char * fileOpenMode = (shouldTruncate_ || !fileExists) ?
 		"w+b" : "r+b";

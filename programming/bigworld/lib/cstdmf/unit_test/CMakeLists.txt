@@ -24,6 +24,7 @@ SET( ALL_SRCS
 	test_bw_util.cpp
 	test_checksum_stream.cpp
 	test_circular_queue.cpp
+	test_config_values.cpp
 	test_concurrency.cpp
 	#test_cstring.cpp
 	test_debug.cpp

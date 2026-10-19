@@ -237,7 +237,7 @@ public:
 	EntityCache * find( const Entity & e ) const;
 	EntityCache * find( EntityID id ) const;
 
-	uint32 size() const	{ return set_.size(); }
+	uint32 size() const	{ return static_cast< uint32 >( set_.size() ); }
 
 	void writeToStream( BinaryOStream & stream ) const;
 

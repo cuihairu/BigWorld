@@ -8,6 +8,21 @@
 #include "cstdmf/profiler.hpp"
 #include "cstdmf/debug.hpp"
 
+#if defined( _WIN32 )
+// access()/W_OK are POSIX; _access with the write mode (io.h) is the same
+// check. The mode constants are written out rather than using _W_OK: MSVC
+// keeps that name behind its nonstdc-names guard, so it is not declared in
+// a C++ TU and using it here failed with C2065 (run 38883400603). 2 is the
+// value io.h uses for the write check (_W_OK).
+#include <io.h>
+#define BW_ACCESS _access
+#define BW_W_OK 2
+#else
+#include <unistd.h>
+#define BW_ACCESS access
+#define BW_W_OK W_OK
+#endif
+
 
 #if ENABLE_PROFILER
 
@@ -193,7 +208,7 @@ static PyObject * _bw_profile_setJsonDumpDir( PyObject *self, PyObject *args )
 		return NULL;
 	}
 
-	if (access( dir, W_OK ) < 0)
+	if (BW_ACCESS( dir, BW_W_OK ) < 0)
 	{
 		BW::string errMessage = (char *)( "Unable to write to JSON dump directory: " );
 		errMessage += dir;

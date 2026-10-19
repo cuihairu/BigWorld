@@ -7,6 +7,10 @@ cxxSource =									\
 	main									\
 	../profile								\
 	test_buffered_ghost_messages			\
+	test_entity_message_log_scope			\
+	test_entity_message_routing				\
+	test_entity_type_migration				\
+	test_reload_script_plan					\
 	../buffered_ghost_message				\
 	../buffered_ghost_message_queue			\
 	../buffered_ghost_messages				\

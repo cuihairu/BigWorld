@@ -28,6 +28,16 @@
 #include "baseapp/baseapp_int_interface.hpp"
 #include "passengers.hpp"
 
+#if defined( _WIN32 )
+// MSVC's SDK leaves `#define interface struct` (rpcndr.h via d3d9.h / shlobj /
+// shlwapi / d3d10) live for the rest of the TU, which rewrites the
+// `interface`-named declarations in this file into syntax errors (C2332/C2027
+// in the root superproject build). Off for this file only; the pop below
+// restores it for whatever SDK COM header comes later in the TU.
+#pragma push_macro( "interface" )
+#undef interface
+#endif
+
 DECLARE_DEBUG_COMPONENT( 0 );
 
 
@@ -39,7 +49,11 @@ int g_numRealEntities;
 int g_numRealEntitiesEver;
 }
 
-#if (__cplusplus < 201103L) 
+// MSVC reports __cplusplus as 199711L unless /Zc:__cplusplus is passed,
+// even in C++17 mode, so this legacy shim would rewrite decltype back to
+// the GNU typeof extension there (C3861 'typeof' in the root superproject
+// build, run 38999627798). Gate it off for MSVC, which has real decltype.
+#if (__cplusplus < 201103L) && !defined( _MSC_VER )
 #define decltype typeof
 #endif
 
@@ -1458,3 +1472,7 @@ BW_END_NAMESPACE
 
 
 // real_entity.cpp
+
+#if defined( _WIN32 )
+#pragma pop_macro( "interface" )
+#endif

@@ -17,6 +17,9 @@
 #include <stdio.h>
 #include <string.h>
 #include <fcntl.h>
+#if defined( _WIN32 )
+#include <io.h>
+#endif
 
 DECLARE_DEBUG_COMPONENT2( "Script", 0 )
 
@@ -244,7 +247,14 @@ void TraceBack::startFrame()
 			BWResource::instance().fileSystem()->getAbsolutePath( pFilename );
 
 	MF_ASSERT( fd_ == -1 );
+	// MSVC's open() is _open with _O_RDONLY, and Windows has no nonblocking
+	// mode for disk files so O_NONBLOCK has no equivalent there (C2065/C2660
+	// in the root superproject build).
+#if defined( _WIN32 )
+	fd_ = _open( absFilePath.c_str(), _O_RDONLY );
+#else
 	fd_ = open( absFilePath.c_str(), O_RDONLY | O_NONBLOCK );
+#endif
 
 	if (fd_ == -1)
 	{
@@ -310,7 +320,14 @@ int TraceBack::processInput( int fd )
 		}
 
 		// Half fill the buffer
+		// MSVC has no ssize_t and its _read takes an unsigned count (C2065 /
+		// C4267 in the root superproject build); _read returns int there.
+#if defined( _WIN32 )
+		int numBytesRead =
+			_read( fd_, lineBufUpTo_, static_cast< unsigned int >( toRead ) );
+#else
 		ssize_t numBytesRead = read( fd_, lineBufUpTo_, toRead );
+#endif
 
 		if (numBytesRead == -1)
 		{
@@ -403,7 +420,12 @@ void TraceBack::closeFile()
 		isRegistered_ = false;
 	}
 
+	// _close is MSVC's spelling; close is the POSIX one.
+#if defined( _WIN32 )
+	_close( fd_ );
+#else
 	close( fd_ );
+#endif
 	fd_ = -1;
 }
 

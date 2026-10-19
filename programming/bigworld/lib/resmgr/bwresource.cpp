@@ -33,6 +33,16 @@
 #include <errno.h>
 #include <memory>
 
+#ifdef MF_SERVER
+// Canonical path buffer size: PATH_MAX on POSIX, _MAX_PATH on MSVC.
+#if defined( _WIN32 )
+	#define _MAX_CANONICAL_PATH _MAX_PATH
+#else
+	#include <climits>
+	#define _MAX_CANONICAL_PATH PATH_MAX
+#endif
+#endif // MF_SERVER
+
 DECLARE_DEBUG_COMPONENT2( "ResMgr", 0 )
 
 BW_BEGIN_NAMESPACE
@@ -2090,15 +2100,26 @@ void BWResource::addPaths( const BW::StringRef& path, const char* desc, const BW
 
 #ifdef MF_SERVER
 		// Convert the res path to an absolute string if it isn't already
-		if (formattedPath.size() > 0 && formattedPath[0] != '/')
+		if (formattedPath.size() > 0 &&
+				formattedPath[0] != '/' && formattedPath[0] != '\\')
 		{
 			// get the executable path and load the config file from it
 			BW::string tmpPath = BWUtil::executableDirectory() + '/' + formattedPath + '\0';
 
-			char buf[PATH_MAX + 1];
+			char buf[ _MAX_CANONICAL_PATH + 1 ];
 			memset( buf, 0, sizeof( buf ) );
 			strncpy( buf, tmpPath.c_str(), tmpPath.size() );
 
+#if defined( _WIN32 )
+			// MSVC has neither PATH_MAX nor canonicalize_file_name (C2065/
+			// C3861 in the root superproject build); _fullpath is its
+			// canonicaliser and works in the caller's buffer.
+			char absPath[ _MAX_CANONICAL_PATH + 1 ];
+			if (_fullpath( absPath, buf, sizeof( absPath ) ) != NULL)
+			{
+				formattedPath = absPath;
+			}
+#else
 			// canonicalise (that is, remove redundant relative path info)
 			char *absPath = canonicalize_file_name( buf );
 			if (absPath)
@@ -2108,6 +2129,7 @@ void BWResource::addPaths( const BW::StringRef& path, const char* desc, const BW
 				// malloc'ed in canonicalize_file_name() above.
 				raw_free( absPath );
 			}
+#endif
 		}
 #endif
 

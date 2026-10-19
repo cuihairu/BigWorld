@@ -278,7 +278,7 @@ void PythonConnection::handleChar()
 {
 	// @todo: Optimise redraw
 	currentLine_.insert(charPos_, 1, (char)readBuffer_.front());
-	int len = currentLine_.length() - charPos_;
+	int len = static_cast< int >( currentLine_.length() - charPos_ );
 	this->write(currentLine_.substr(charPos_, len).c_str());
 
 	for(int i = 0; i < len - 1; i++)
@@ -392,7 +392,7 @@ void PythonConnection::handleDel()
 		currentLine_.erase(charPos_ - 1, 1);
 		this->write("\b" ERASE_EOL);
 		charPos_--;
-		int len = currentLine_.length() - charPos_;
+		int len = static_cast< int >( currentLine_.length() - charPos_ );
 		this->write(currentLine_.substr(charPos_, len).c_str());
 
 		for(int i = 0; i < len; i++)
@@ -418,7 +418,7 @@ void PythonConnection::handleUp()
 		this->write("\r" ERASE_EOL);
 		this->writePrompt();
 		this->write(currentLine_.c_str());
-		charPos_ = currentLine_.length();
+		charPos_ = static_cast< unsigned int >( currentLine_.length() );
 	}
 }
 
@@ -442,7 +442,7 @@ void PythonConnection::handleDown()
 		this->write("\r" ERASE_EOL);
 		this->writePrompt();
 		this->write(currentLine_.c_str());
-		charPos_ = currentLine_.length();
+		charPos_ = static_cast< unsigned int >( currentLine_.length() );
 	}
 }
 
@@ -480,7 +480,7 @@ void PythonConnection::handleRight()
  */
 void PythonConnection::write(const char* str)
 {
-	int len = strlen( str );
+	int len = static_cast< int >( strlen( str ) );
 	send( socket_.fileno(), str, len, 0 );
 }
 
@@ -733,7 +733,8 @@ int PythonServer::handleInputNotification( int fd )
 	sockaddr_in addr;
 	socklen_t size = sizeof(addr);
 
-	int socket = accept( listener_.fileno(), (sockaddr *)&addr, &size );
+	int socket = static_cast< int >(
+		accept( listener_.fileno(), (sockaddr *)&addr, &size ) );
 
 
 	if (socket == -1)

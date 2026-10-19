@@ -94,8 +94,13 @@ void EntityBoundLevels::mergeTwoBranches(
 
 	const int mergedArraySize = entityBounds_.size();
 
-	float bounds[ mergedArraySize ];
-	float loads[ mergedArraySize ];
+	// The sizes come from config at runtime, and MSVC has no VLAs (C2131
+	// in the root superproject build, run 39013952226). The arrays are
+	// scratch - the final loop reads them only below currWrittenLevel,
+	// which the while loop has written - so heap storage changes nothing
+	// observable; the zero initialization is never read unassigned.
+	BW::vector< float > bounds( mergedArraySize );
+	BW::vector< float > loads( mergedArraySize );
 	int currWrittenLevel = 0;
 
 	int leftCurrLevel = left.entityBounds_.size() - 1;

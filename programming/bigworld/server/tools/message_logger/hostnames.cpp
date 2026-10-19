@@ -3,11 +3,15 @@
 
 #include "cstdmf/debug.hpp"
 
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <sys/socket.h>
-#include <netdb.h>
+#if defined( _WIN32 )
+	// in_addr/inet_ntoa (Winsock2).
+	#include "posix_compat.hpp"
+#else
+	#include <sys/socket.h>
+	#include <netinet/in.h>
+	#include <arpa/inet.h>
+	#include <netdb.h>
+#endif
 #include <string.h>
 
 
@@ -42,7 +46,10 @@ GetHostResult Hostnames::getHostByAddr( MessageLogger::IPAddress addr,
 		return BW_GET_HOST_FOUND;
 	}
 
-	struct hostent *ent = gethostbyaddr( &addr, sizeof( addr ), AF_INET );
+	// Winsock's gethostbyaddr takes a const char* where POSIX takes a
+	// const void*; the cast suits both.
+	struct hostent *ent =
+		gethostbyaddr( (const char *)&addr, sizeof( addr ), AF_INET );
 
 	// Unable to resolve the hostname, store the IP address as a string
 	if (ent == NULL)

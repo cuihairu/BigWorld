@@ -22,7 +22,14 @@ BW_END_NAMESPACE
 #include "network/file_stream.hpp"
 
 #include <stdlib.h>
-#include <dirent.h>
+
+#if defined( _WIN32 )
+	// Provides struct dirent (and the tool's other POSIX shims) on
+	// Windows; the POSIX tree's <dirent.h> include used to sit here.
+	#include "posix_compat.hpp"
+#else
+	#include <dirent.h>
+#endif
 
 #include "cstdmf/bw_string.hpp"
 

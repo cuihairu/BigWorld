@@ -4,6 +4,11 @@
 #include "network/bundle.hpp"
 #include "network/machined_utils.hpp"
 
+#if defined( _WIN32 )
+// Sleep for the registration stagger below
+#include "cstdmf/cstdmf_windows.hpp"
+#endif // defined( _WIN32 )
+
 
 BW_BEGIN_NAMESPACE
 
@@ -37,7 +42,14 @@ bool ManagerAppGateway::init( const char * interfaceName, int numRetries, float 
 					"Delaying process start for %f s.\n",
 				maxMgrRegisterStagger, delay / MICROSECONDS_IN_SECOND );
 
+			// Same split as NetworkInterface::finaliseChannels: MSVC has no
+			// usleep (C3861 in the root superproject build), and Sleep's
+			// millisecond resolution is plenty for a seconds-scale stagger.
+#if defined( _WIN32 )
+			Sleep( delay / 1000 );
+#else
 			usleep( delay );
+#endif
 		}
 	}
 

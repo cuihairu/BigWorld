@@ -1,5 +1,6 @@
 # BigWorld 第三方依赖切换到 vcpkg
 
+> [English](vcpkg-migration.en.md) | **中文**
 > 任务：把 `programming/bigworld/third_party` 中可由 vcpkg 提供的库改为通过
 > vcpkg manifest 引入；Make 链与 CMake 链改用 vcpkg toolchain/产物。
 > 分支：dev。与 [python-313-migration.md](python-313-migration.md) 衔接
@@ -140,6 +141,159 @@ vcpkg 静态库的传递依赖在 BW 链接行内闭合：curl→ssl/crypto+zlib
   cstdmf_test 用例数一致；make 侧回归复跑同样 398 全绿。
 - CI 侧由 `.github/workflows/ci.yml` 在每次 push/PR 上以干净环境跑同一样板
   （vcpkg 按 baseline 克隆 + binary cache + ctest），防 manifest 与样板漂移。
+
+### 3.2 resmgr 样板（自下而上第二块，2026-10-13）
+
+`cmake/samples/resmgr/CMakeLists.txt` 是第二个样板，复用 3.1 的
+`CppUnitLite2` + `unit_test_lib` + `cstdmf` 源码清单，自下而上叠加
+`math`（12 TU）、`zip`（vcpkg zlib，make 里 staged 成 `libzip.a`）、
+`resmgr`（25 TU，`HAVE_ZIP` + `BWENTITY_DLL_EXPORT`）与 `resmgr_test`
+（12 TU）。编译选项/宏逐字取自 `make -n -B bw-run-test-resmgr` 实测命令行
+（含 `-fPIC`、`-Wfloat-equal`，测试侧**不**加 `-Wno-float-equal`——与 3.1
+不同，以 make 为准）；`-rdynamic -Wl,--export-dynamic` 与链接序
+（`unit_test_lib CppUnitLite2 resmgr cstdmf math ZLIB::ZLIB m pthread`）与
+make 链接行一致。本地一条命令 `scripts/build-resmgr-cmake.sh`。
+
+两个样板级要点：
+
+- `unit_test_lib` 的 `base_resmgr_unit_test_harness.cpp` 引用 `BWResource`
+  符号，但静态库成员仅在最终链接需要时才会被拉入——所以 3.1 的 cstdmf
+  样板不带 resmgr 也能链，而 resmgr 样板必须带 resmgr（与 make 的
+  `--start-group` 同构）。
+- resmgr 测试基类（`test_harness.hpp`）把 `--root` 直接拼成
+  `<repo>/programming/bigworld/lib/resmgr/unit_test/res` 与
+  `<repo>/game/res/bigworld`，因此样板的 `--root` 必须精确指向仓库根；
+  3.1 的 `get_filename_component(BW_REPO_ROOT ...)` 原写 6 段 `..`（多一级，
+  指向 `workspaces/`）——cstdmf 测试基类不读 `--root` 故一直无感，resmgr
+  样板把两个样板一并修正为 5 段（仓库根），cstdmf 侧同步修正。
+
+验证（2026-10-13）：两个样板各自 configure/build 通过；`ctest` 全绿，
+`cstdmf_test` **427** 用例、`resmgr_test` **88** 用例，与 make 链同口径
+（make 侧 `bw-run-test-cstdmf` 427 / `bw-run-test-resmgr` 88）。CI 的
+`cmake-samples` job 改为 matrix（`[cstdmf, resmgr]`，`fail-fast: false`），
+每组件独立步骤与日志。后续 network/connection/entitydef 按同一模式叠加
+（connection 目前**无** unit_test，entitydef 依赖 8 个库，均需单独处理）。
+
+### 3.3 network 样板（自下而上第三块，2026-10-14）
+
+`cmake/samples/network/CMakeLists.txt` 是第三个样板，复用 3.1/3.2 的
+`CppUnitLite2` + `unit_test_lib` + `cstdmf` + `math` + `resmgr` 源码清单，
+再叠加三块：`connection`（26 TU——CMake 轨首次纳入；它**无** unit_test，
+此前只能靠 network 的链接面间接覆盖）、`network`（78 TU）、
+`network_test`（49 TU）。编译选项/宏逐字取自 `make -n -B bw-run-test-network`
+实测命令行；本地一条命令 `scripts/build-network-cmake.sh`。
+
+与 3.1/3.2 的三处差异（均以 make 实测为准，不是"顺手统一"）：
+
+- **`USE_OPENSSL`**：`lib/connection` 与 `lib/network` 两个 Makefile.rules
+  都是 `useOpenSSL = 1`，所以它进了全局宏面（其余样板没有）。make 把 vcpkg
+  OpenSSL staged 成 `libbwssl.a`/`libbwcrypto.a`，样板侧等价映射为
+  `find_package(OpenSSL REQUIRED)` + `OpenSSL::SSL`/`OpenSSL::Crypto`
+  ——同一份 vcpkg 产物，只是链接名不同。
+- **`-Wno-float-equal` 在库侧也有**：3.2 记录的是 resmgr 测试侧**不**加；
+  network 则是**库与测试两侧都加**——`lib/network/Makefile.rules` 的
+  `cxxFlags_$(binName) += -Wno-float-equal` 针对库本身（`bsd_snprintf.cpp`
+  有浮点 `==` 比较），漏掉会让 `-Werror=float-equal` 直接红门禁。
+  connection 侧没有该旗标（`client_interface.cpp` 之外的 26 TU 无浮点比较），
+  保持不加。
+- **静态库单次扫描链接序**：make 的链接行用
+  `-Wl,--start-group ... -Wl,--end-group` 包住整个库组
+  （`unit_test_lib CppUnitLite2 network connection resmgr math cstdmf zip
+  bwssl bwcrypto`），因为 `connection` 引用 `network` 符号
+  （`DeferredBundle`、`CompressionIStream`）而 `network` 引用 `resmgr` 符号
+  （`DataSection::readInt`）——两种引用同时存在时**任何线性序都解不开**。
+  样板侧不能用 `$<LINK_GROUP>`（CMake 3.24+ 才引入，且不接受普通目标），
+  改为在 `target_link_libraries` 里写原始链接旗标项 `-Wl,--start-group` /
+  `-Wl,--end-group`（CMake 对以 `-` 开头的项按字面透传，位置与库项一致），
+  与 make 的拼法逐字对应。`connection` 在 CMake 里仍显式依赖 `network`，
+  保证依赖图记录正确。
+
+排除面（与 make 清单逐条对照）：`network` 排除 `net_360.cpp`（Xbox 360）
+与 `pch.cpp`；`connection` 排除 `client_interface.cpp`（Windows/MFC 客户端
+连接）与 `pch.cpp`；测试侧排除 `pch.cpp`。
+
+验证（2026-10-14）：configure/build 通过，`ctest` 全绿，`network_test`
+**210** 用例，与 make 侧同口径（make 产出的 `network_test` 同为 **210**
+用例全绿）。network 用例耗时较重（单跑约 200 s，含真实 socket 与定时
+时序），CI job 的 120 分钟超时留有充足余量。CI matrix 扩展为
+`[cstdmf, resmgr, network]`。剩余 entitydef 依赖 14 个库，其中 Python 一腿
+（vendored CPython 无 CMake 构建系统）先由 §3.4 铺路，见 §3.5。
+
+### 3.4 vendored CPython 3.13 样板（entitydef 的前置，2026-10-14）
+
+`cmake/samples/python/CMakeLists.txt` 是 CMake 轨第一块**非 BW 库**样板，
+也是 3.1–3.3 与 §3.5 的共同地基。CPython 上游只提供 PCbuild（Windows）与
+autotools（Unix），没有 CMake 构建系统，所以这里用 `ExternalProject` 包住
+make 链本来就在跑的 configure+make，而不是手抄约 250 个 `.c`：
+
+- configure 选项逐字取自 `build/make/third_party_python.mak` 的
+  `pythonConfigureOpts`（`--with-openssl=` / `--with-bz2=` 指向 vcpkg manifest
+  安装目录、`--with-suffix=.exe`、`--disable-test-modules`、`CPPFLAGS`），
+  两者只有一个权威来源：改 make 侧选项必须同步此清单。
+- 只构建 `libpython3.13.a EXTRA_CFLAGS="-m64 -fPIC"`。make 链在 archive 之外
+  还有一段 sed 后处理（`pyconfig.h` 的 TERNAM undef、
+  共享扩展模块的 `LINKFORSHARED` whole-archive + `-u,BW_Py_*`）——那些只影响
+  `python.exe` 与扩展模块，样板两者都不建，因此整段跳过。
+- **`INSTALL_COMMAND` 拷 stdlib**：`Py_Initialize` 按可执行文件前缀解析
+  标准库，只出 archive 时嵌入解释器会在 `encodings` 处直接中止。样板把
+  vendored `Lib/` 拷到 `<build>/bwpython-sample/python3.13/lib/python3.13`，
+  等价于 make 链 `make install` 提供的同一棵树（entitydef_test 不 dlopen
+  `lib-dynload`，故不需要共享模块）。
+- **`BWPython::Python` 必须是 `IMPORTED GLOBAL`**：CMake 的 IMPORTED 目标默认
+  只在创建它的目录可见，被 entitydef 样板 `add_subdirectory` 引入后会解析成
+  未知目标——这一处不带 GLOBAL 就是 configure 期硬错。
+- `check_symbols.cmake`（`-P` 脚本模式）作为构建门禁核对 8 个 BWHooks 符号
+  （`BW_Py_malloc/free/calloc/realloc/getHooks/setHooks/memoryTrackingIgnoreBegin/End`）
+  仍是归档内的定义符号。它们来自归档成员 `bwhooks.o`（`Python/bwhooks.c`），
+  正是 vcpkg `python3` port 无法替代 vendored 解释器的唯一原因；一旦消失
+  entitydef 样板就失去 Python，构建即失败。
+
+本地一条命令：`scripts/build-python-cmake.sh`（并额外校验归档存在与
+`bwhooks.o` 在内）。
+
+### 3.5 entitydef 样板（自下而上第四块，2026-10-14）
+
+`cmake/samples/entitydef/CMakeLists.txt` 是第四个样板，复用 3.1–3.3 已验证的
+`CppUnitLite2` + `unit_test_lib` + `cstdmf` + `math` + `resmgr` + `network` +
+`connection` 清单，`add_subdirectory` 纳入 3.4，再叠加 8 个新库：`physics2`
+（7 TU）、`moo`（2 TU，`usePNG=1`）、`terrain`（18 TU）、`scene`（14 TU，
+`pch.cpp` 在 make 清单内故保留）、`chunk`（34 TU，`usePython=1`）、`script`
+（4 TU）、`pyscript`（18 TU）、`entitydef`（55 TU），以及 `entitydef_test`
+（15 TU）。本地一条命令：`scripts/build-entitydef-cmake.sh`。
+
+四样板共有的导出面（Linux 上不是装饰：`bwentity_api.hpp` 按这些宏在
+`template class` 与 `extern template class` 之间分叉，取错会得到重复实例化
+或缺失符号）。宏面逐个照 `Makefile.rules` 的 `exportFor` 推导：
+`cstdmf`（`exportFor = cstdmf`）用 `CSTDMF_EXPORT`；
+`entitydef` / `script` / `pyscript` / `network` / `connection` / `resmgr` /
+`math`（`exportFor := bwentity`）用 `BWENTITY_DLL_EXPORT` + `CSTDMF_IMPORT`；
+`chunk` / `scene` / `terrain` / `moo` / `physics2` / `unit_test_lib` /
+`CppUnitLite2`（无 `exportFor`）两侧都 IMPORT；测试侧只 `CSTDMF_IMPORT`。
+
+其余样板级要点：
+
+- **vendored `png` / `zip` 两棵树已不在构建面**：`third_party/Makefile.rules`
+  只递归 `CppUnitLite2/src`，所以 `third_party/png`、`third_party/zip` 的
+  `Makefile.rules` 是死清单，`lib/moo/png.cpp` 与 `lib/resmgr/zip_*.cpp`
+  实际链接的是 make 链 staging 的 `libpng.a`/`libzip.a`（vcpkg 产物）。
+  样板侧等价映射为 `find_package(PNG REQUIRED)` +
+  `find_package(ZLIB REQUIRED)`，与 3.2/3.3 一致。
+- **链接组跨全部 14 个 BW 库**：3.3 记录了 `--start-group` 的原因（`connection`
+  与 `network` 互相引用）。entitydef 侧引用面更宽——`chunk` 引用 `entitydef`
+  的 vtable、`pyscript` 引用 `resmgr`/`math`、测试面同时触及两侧，所以整组
+  包在 `--start-group` 内，`BWPython::Python` + `dl`/`m`/`pthread`/`util`
+  放组外，与 `common_footer_config.mak` 的链接行同形。
+- `-rdynamic -Wl,--export-dynamic`（`callstack.cpp` 的 `backtrace()` 符号名
+  依赖它）、`-Wno-float-equal`（`pyscript` 与 `network` 库侧、测试侧）照 3.3
+  的做法以 make 实测为准，不做"顺手统一"。
+
+验证（2026-10-14）：`scripts/build-entitydef-cmake.sh` 一条命令 configure /
+build / ctest 全通过，`entitydef_test` **318 用例全绿**，与 make 侧同口径
+（`bw-run-test-entitydef` 同为 **318** 用例 0 失败）；make 侧全量门禁同步复跑
+21 模块 / 1355 用例 / 0 失败。CI matrix 扩展为
+`[cstdmf, resmgr, network, entitydef]`。至此 CMake 轨已覆盖
+cstdmf/resmgr/network/entitydef 四条自下而上的链。
+
 
 ## 4. 引擎源码适配
 

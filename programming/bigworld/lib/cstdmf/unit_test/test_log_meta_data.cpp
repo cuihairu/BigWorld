@@ -515,6 +515,246 @@ TEST( LogMetaData_AddType_json )
 // from an array of type, value, expected
 
 
+// -----------------------------------------------------------------------------
+// Section: LogCorrelation
+// -----------------------------------------------------------------------------
+
+namespace
+{
+/**
+ *	Reads a metadata object back as key/value pairs, assuming every value is
+ *	a long long. Asserts on the stream contents belong in the calling TEST
+ *	bodies; this helper only unpacks data.
+ */
+void readCorrelationPairs( const LogMetaData & lmd,
+	BW::string keys[], long long values[], int maxPairs, int & numPairs )
+{
+	numPairs = 0;
+
+	MemoryOStream * pStream = const_cast< MemoryOStream * >( lmd.pData() );
+	if (pStream == NULL)
+	{
+		return;
+	}
+
+	MemoryIStream is( pStream->data(), pStream->size() );
+	while ((is.remainingLength() > 0) && (numPairs < maxPairs))
+	{
+		LogMetaData::MessageLoggerValueType keyType;
+		LogMetaData::MessageLoggerValueType valueType;
+		is >> keyType >> keys[ numPairs ] >> valueType >> values[ numPairs ];
+
+		if ((keyType != LogMetaData::MLVT_STRING) ||
+				(valueType != LogMetaData::MLVT_LONG_LONG_INT))
+		{
+			numPairs = -1;
+			return;
+		}
+
+		++numPairs;
+	}
+}
+
+} // anonymous namespace
+
+
+TEST( LogCorrelation_DefaultsEmpty )
+{
+	LogCorrelation::clearAll();
+	CHECK( !LogCorrelation::hasFields() );
+
+	LogMetaData lmd;
+	LogCorrelation::appendTo( lmd );
+
+	CHECK( lmd.pData() == NULL );
+}
+
+
+TEST( LogCorrelation_SetAndAppend )
+{
+	LogCorrelation::clearAll();
+
+	LogCorrelation::set( "entityID", 42 );
+	LogCorrelation::set( "spaceID", 7 );
+	CHECK( LogCorrelation::hasFields() );
+
+	LogMetaData lmd;
+	LogCorrelation::appendTo( lmd );
+
+	BW::string keys[ 8 ];
+	long long values[ 8 ];
+	int numPairs = 0;
+	readCorrelationPairs( lmd, keys, values, 8, numPairs );
+
+	CHECK_EQUAL( 2, numPairs );
+	CHECK_EQUAL( 0, strcmp( "entityID", keys[ 0 ].c_str() ) );
+	CHECK_EQUAL( 42, values[ 0 ] );
+	CHECK_EQUAL( 0, strcmp( "spaceID", keys[ 1 ].c_str() ) );
+	CHECK_EQUAL( 7, values[ 1 ] );
+
+	LogCorrelation::clearAll();
+}
+
+
+TEST( LogCorrelation_ReplaceSameKey )
+{
+	LogCorrelation::clearAll();
+
+	LogCorrelation::set( "entityID", 1 );
+	LogCorrelation::set( "entityID", 2 );
+
+	LogMetaData lmd;
+	LogCorrelation::appendTo( lmd );
+
+	BW::string keys[ 8 ];
+	long long values[ 8 ];
+	int numPairs = 0;
+	readCorrelationPairs( lmd, keys, values, 8, numPairs );
+
+	CHECK_EQUAL( 1, numPairs );
+	CHECK_EQUAL( 2, values[ 0 ] );
+
+	LogCorrelation::clearAll();
+}
+
+
+TEST( LogCorrelation_ClearAndClearAll )
+{
+	LogCorrelation::clearAll();
+
+	LogCorrelation::set( "entityID", 1 );
+	LogCorrelation::set( "spaceID", 2 );
+
+	// Clearing an absent key is a no-op.
+	LogCorrelation::clear( "channel" );
+	CHECK( LogCorrelation::hasFields() );
+
+	LogCorrelation::clear( "entityID" );
+	CHECK( LogCorrelation::hasFields() );
+
+	LogMetaData lmd;
+	LogCorrelation::appendTo( lmd );
+
+	BW::string keys[ 8 ];
+	long long values[ 8 ];
+	int numPairs = 0;
+	readCorrelationPairs( lmd, keys, values, 8, numPairs );
+
+	CHECK_EQUAL( 1, numPairs );
+	CHECK_EQUAL( 0, strcmp( "spaceID", keys[ 0 ].c_str() ) );
+
+	LogCorrelation::clearAll();
+	CHECK( !LogCorrelation::hasFields() );
+}
+
+
+TEST( LogCorrelation_EmptyKeyIgnored )
+{
+	LogCorrelation::clearAll();
+
+	LogCorrelation::set( NULL, 1 );
+	LogCorrelation::set( "", 1 );
+	CHECK( !LogCorrelation::hasFields() );
+}
+
+
+TEST( LogCorrelation_LongKeyTruncated )
+{
+	LogCorrelation::clearAll();
+
+	const char * pLongKey = "0123456789012345678901234567890123456789";
+	LogCorrelation::set( pLongKey, 5 );
+
+	LogMetaData lmd;
+	LogCorrelation::appendTo( lmd );
+
+	BW::string keys[ 8 ];
+	long long values[ 8 ];
+	int numPairs = 0;
+	readCorrelationPairs( lmd, keys, values, 8, numPairs );
+
+	CHECK_EQUAL( 1, numPairs );
+	CHECK_EQUAL( LogCorrelation::MAX_KEY_LENGTH, keys[ 0 ].length() );
+	CHECK_EQUAL( 0, strncmp( pLongKey, keys[ 0 ].c_str(),
+		LogCorrelation::MAX_KEY_LENGTH ) );
+	CHECK_EQUAL( 5, values[ 0 ] );
+
+	LogCorrelation::clearAll();
+}
+
+
+TEST( LogCorrelation_OverflowDropped )
+{
+	LogCorrelation::clearAll();
+
+	char key[ 16 ];
+	for (int i = 0; i <= LogCorrelation::MAX_FIELDS; ++i)
+	{
+		bw_snprintf( key, sizeof( key ), "key%d", i );
+		LogCorrelation::set( key, i );
+	}
+
+	LogMetaData lmd;
+	LogCorrelation::appendTo( lmd );
+
+	BW::string keys[ 16 ];
+	long long values[ 16 ];
+	int numPairs = 0;
+	readCorrelationPairs( lmd, keys, values, 16, numPairs );
+
+	CHECK_EQUAL( LogCorrelation::MAX_FIELDS, numPairs );
+	// The first fields survive, the excess is dropped.
+	CHECK_EQUAL( 0, strcmp( "key0", keys[ 0 ].c_str() ) );
+	CHECK_EQUAL( 0, strcmp( "key7", keys[ LogCorrelation::MAX_FIELDS - 1 ].
+		c_str() ) );
+
+	LogCorrelation::clearAll();
+}
+
+
+TEST( LogCorrelation_ScopedRestore )
+{
+	LogCorrelation::clearAll();
+
+	LogCorrelation::set( "entityID", 1 );
+
+	{
+		ScopedLogCorrelation scope;
+
+		LogCorrelation::set( "entityID", 2 );
+		LogCorrelation::set( "channel", 3 );
+		CHECK( LogCorrelation::hasFields() );
+
+		LogMetaData inner;
+		LogCorrelation::appendTo( inner );
+
+		BW::string keys[ 8 ];
+		long long values[ 8 ];
+		int numPairs = 0;
+		readCorrelationPairs( inner, keys, values, 8, numPairs );
+
+		CHECK_EQUAL( 2, numPairs );
+		CHECK_EQUAL( 2, values[ 0 ] );
+		CHECK_EQUAL( 3, values[ 1 ] );
+	}
+
+	// The outer context is intact after the scope.
+	LogMetaData outer;
+	LogCorrelation::appendTo( outer );
+
+	BW::string keys[ 8 ];
+	long long values[ 8 ];
+	int numPairs = 0;
+	readCorrelationPairs( outer, keys, values, 8, numPairs );
+
+	CHECK_EQUAL( 1, numPairs );
+	CHECK_EQUAL( 0, strcmp( "entityID", keys[ 0 ].c_str() ) );
+	CHECK_EQUAL( 1, values[ 0 ] );
+
+	LogCorrelation::clearAll();
+}
+
+
 BW_END_NAMESPACE
 
 // test_log_meta_data.cpp

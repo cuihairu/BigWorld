@@ -6,7 +6,11 @@
 #include <string.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <unistd.h>
+#if defined( _WIN32 )
+	#include "posix_compat.hpp"
+#else
+	#include <unistd.h>
+#endif
 
 
 BW_BEGIN_NAMESPACE

@@ -68,8 +68,19 @@
 #include "server/util.hpp"
 #include "server/writedb.hpp"
 
+#if defined( _WIN32 )
+// MSVC's SDK leaves `#define interface struct` (rpcndr.h via d3d9.h / shlobj /
+// shlwapi / d3d10) live for the rest of the TU, which rewrites the
+// `interface`-named declarations in this file into syntax errors (C2332/C2027
+// in the root superproject build). Off for this file only; the pop below
+// restores it for whatever SDK COM header comes later in the TU.
+#pragma push_macro( "interface" )
+#undef interface
+#endif
+
 #ifdef BUILD_PY_URLREQUEST
 #include "urlrequest/manager.hpp"
+
 #endif
 
 DECLARE_DEBUG_COMPONENT( 0 )
@@ -941,12 +952,36 @@ void DBApp::initSecondaryDBPrefix()
     // across daylight savings transitions but good enough.
     time_t epochTime = ::time( NULL );
     tm timeAndDate;
+#if defined( _WIN32 )
+    // MSVC names it localtime_s and swaps the argument order.
+    localtime_s( &timeAndDate, &epochTime );
+#else
     localtime_r( &epochTime, &timeAndDate );
+#endif
 
-    // Get username for run ID
+    // Get username for run ID. POSIX reads it out of the password database;
+    // Windows asks the process token, like loginapp's probe does.
+    BW::string username;
+#if defined( _WIN32 )
+    char usernameBuf[ 256 ];
+    DWORD usernameLen = sizeof( usernameBuf );
+    if (GetUserNameA( usernameBuf, &usernameLen ))
+    {
+        username = usernameBuf;
+    }
+    else
+    {
+        SECONDARYDB_WARNING_MSG( "DBApp::initSecondaryDBPrefix: "
+            "Using '%lu' as the username due to user name lookup failure\n",
+            GetLastError() );
+
+        BW::stringstream ss;
+        ss << GetLastError();
+        username = ss.str();
+    }
+#else
     uid_t       uid = getuid();
     passwd *    pUserDetail = getpwuid( uid );
-    BW::string username;
 
     if (pUserDetail)
     {
@@ -962,6 +997,7 @@ void DBApp::initSecondaryDBPrefix()
         ss << uid;
         username = ss.str();
     }
+#endif
 
     // Really generate run ID
     char runIDBuf[ BUFSIZ ];
@@ -2820,3 +2856,7 @@ bool DBApp::registerCheckoutCompletionListener( EntityTypeID typeID,
 BW_END_NAMESPACE
 
 // dbapp.cpp
+
+#if defined( _WIN32 )
+#pragma pop_macro( "interface" )
+#endif

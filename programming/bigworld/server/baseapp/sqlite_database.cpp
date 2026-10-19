@@ -11,7 +11,9 @@
 
 #include <errno.h>
 #include <string.h>
+#if !defined( _WIN32 )
 #include <sys/statfs.h>
+#endif
 
 
 BW_BEGIN_NAMESPACE
@@ -385,7 +387,8 @@ bool SqliteDatabase::init( const BW::string & checksum )
  */ 
 bool SqliteDatabase::checkFileSystemDevice()
 {
-	static const long BAD_MAGICS[] = { 
+#if !defined( _WIN32 )
+	static const long BAD_MAGICS[] = {
 		/* CIFS_MAGIC_NUMBER = */ 	0xFF534D42,
 		/* SMB_SUPER_MAGIC = */ 	0x517B,
 	};
@@ -409,7 +412,10 @@ bool SqliteDatabase::checkFileSystemDevice()
 			return false;
 		}
 	}
+#endif // !defined( _WIN32 )
 
+	// No statfs(2) on Windows: the CIFS/SMB superblock magic probe is a
+	// Unix-mount concern, and the check reports a supported filesystem.
 	return true;
 }
 
@@ -438,7 +444,15 @@ SqliteDatabase::~SqliteDatabase()
 			SECONDARYDB_ERROR_MSG( "SqliteDatabase::~SqliteDatabase: "
 					"Failed to delete unregistered database '%s': %s\n",
 				path_.c_str(),
+#if defined( _WIN32 )
+				// MSVC spells strerror_r's buffer form strerror_s; it
+				// returns an errno code, so hand the buffer to the
+				// formatter through a comma expression.
+				( strerror_s( errnoBuf, sizeof( errnoBuf ), errno ),
+					errnoBuf ) );
+#else
 				strerror_r( errno, errnoBuf, sizeof( errnoBuf ) ) );
+#endif
 		}
 	}
 

@@ -251,7 +251,7 @@ target_link_libraries(cstdmf_test PRIVATE
 # (backtrace() symbol names in callstack.cpp depend on it)
 target_link_options(cstdmf_test PRIVATE -rdynamic -Wl,--export-dynamic)
 
-get_filename_component(BW_REPO_ROOT "${CMAKE_CURRENT_LIST_DIR}/../../../../../.." ABSOLUTE)
+get_filename_component(BW_REPO_ROOT "${CMAKE_CURRENT_LIST_DIR}/../../../../.." ABSOLUTE)
 enable_testing()
 add_test(NAME cstdmf_test
 	COMMAND cstdmf_test --root "${BW_REPO_ROOT}"

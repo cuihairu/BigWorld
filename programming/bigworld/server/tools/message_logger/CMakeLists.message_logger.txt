@@ -113,11 +113,70 @@ SET( MONGODB_SRCS
 )
 SOURCE_GROUP( "MongoDB" FILES ${MONGODB_SRCS} )
 
-BW_ADD_EXECUTABLE( message_logger ${ALL_SRCS} ${MONGODB_SRCS} )
+# The MongoDB backend needs the legacy C++ driver: <mongo/client/dbclient.h> to
+# compile and -lmongoclient to link. The make chain probes for it at configure
+# time (build/make/test_mongodb.sh behind SYSTEM_HAS_MONGODB in
+# build/make/platform_*.mak) and drops both the mongodb/ sources and
+# -DHAS_MONGODB_SUPPORT from message_logger when it is missing; this file built
+# them unconditionally, so every host without the driver - the Windows CI runner
+# included - died with C1083 on the header. Probe the same way (db_storage_mysql's
+# FIND_PATH precedent) so the two tracks stay in step. The vendored
+# third_party/mongodb headers sit under a nonstandard prefix that neither probe
+# searches (and the driver library itself is not built there), so nothing local
+# satisfies the probe and the backend stays out as it already is on the make
+# track.
+FIND_PATH( BW_MONGODB_INCLUDE_DIR mongo/client/dbclient.h )
+MARK_AS_ADVANCED( BW_MONGODB_INCLUDE_DIR )
+IF( BW_MONGODB_INCLUDE_DIR )
+	LIST( APPEND ALL_SRCS ${MONGODB_SRCS} )
+	INCLUDE_DIRECTORIES( ${BW_MONGODB_INCLUDE_DIR} )
+	# logger.cpp keys its mongodb paths off this; see
+	# Makefile.message_logger:60 for the make-chain equivalent.
+	ADD_DEFINITIONS( -DHAS_MONGODB_SUPPORT )
+ELSE()
+	MESSAGE( STATUS "MongoDB C++ driver headers not found. "
+		"Building message_logger without the MongoDB backend." )
+ENDIF()
+
+BW_ADD_EXECUTABLE( message_logger ${ALL_SRCS} )
+
+# jsoncpp comes from vcpkg on the make chain (third_party_vcpkg.mak, the
+# jsoncpp port) and nothing vendors it in-tree; metadata.hpp includes
+# <json/json.h> (C1083 in the root superproject build, run 39016799505).
+# Probe like the mongodb backend above; the workflow hands the include dir
+# over as a cache entry.
+FIND_PATH( BW_JSONCPP_INCLUDE_DIR json/json.h )
+MARK_AS_ADVANCED( BW_JSONCPP_INCLUDE_DIR )
+IF( BW_JSONCPP_INCLUDE_DIR )
+	INCLUDE_DIRECTORIES( ${BW_JSONCPP_INCLUDE_DIR} )
+
+	# metadata.cpp drives Json::Reader / Json::FastWriter, so the headers
+	# alone leave LNK2019s behind. The vcpkg layout keeps the linkable
+	# (import) library one level below the include dir: lib/ on every
+	# triplet, next to the make chain's libjsoncpp.a.
+	FIND_LIBRARY( BW_JSONCPP_LIBRARY jsoncpp
+		HINTS ${BW_JSONCPP_INCLUDE_DIR}/../lib )
+	MARK_AS_ADVANCED( BW_JSONCPP_LIBRARY )
+	IF( BW_JSONCPP_LIBRARY )
+		BW_TARGET_LINK_LIBRARIES( message_logger ${BW_JSONCPP_LIBRARY} )
+	ENDIF()
+ELSE()
+	MESSAGE( STATUS "jsoncpp headers not found. "
+		"message_logger needs BW_JSONCPP_INCLUDE_DIR (vcpkg jsoncpp)." )
+ENDIF()
 
 
 BW_TARGET_LINK_LIBRARIES( message_logger
+	build
+	network
 	server
+	resmgr
 )
+
+IF( BW_MONGODB_INCLUDE_DIR )
+	# As on the make chain (useMongoDB := 1 in Makefile.message_logger:61),
+	# headers are taken to imply a linkable driver.
+	BW_TARGET_LINK_LIBRARIES( message_logger mongoclient )
+ENDIF()
 
 BW_PROJECT_CATEGORY( message_logger "Tools" )

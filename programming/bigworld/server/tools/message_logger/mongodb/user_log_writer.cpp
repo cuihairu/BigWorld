@@ -11,6 +11,11 @@
 
 #include <time.h>
 
+#if defined( _WIN32 )
+	// gmtime_r shim.
+	#include "../posix_compat.hpp"
+#endif
+
 
 BW_BEGIN_NAMESPACE
 

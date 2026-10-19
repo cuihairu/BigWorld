@@ -5,6 +5,15 @@
 	#ifdef _XBOX360
 		#include <winsockx.h>
 	#else
+		// Pull windows.h lean BEFORE Winsock2.h: this is the first
+		// windows-bearing include in much of the Mercury chain, and a full
+		// windows.h drags in ole2/objbase, whose `#define interface struct`
+		// rewrites every later interface()-named declaration into a syntax
+		// error (observed as MSVC C2059/C2332 on db_engine_creator.hpp in
+		// the root superproject build). Lean windows.h skips ole2 and skips
+		// winsock.h, so Winsock2.h after it is the documented order-safe
+		// combination. A no-op outside Windows.
+		#include "cstdmf/cstdmf_windows.hpp"
 		#include <Winsock2.h> // for fdset
 	#endif
 #endif
@@ -14,6 +23,8 @@
 #include "cstdmf/bw_vector.hpp"
 #include "cstdmf/timestamp.hpp"
 #include "cstdmf/watcher.hpp"
+
+#include <functional>
 
 // #include "cstdmf/time_queue.hpp"
 
@@ -39,7 +50,22 @@ class FrequentTasks;
 class EventDispatcher
 {
 public:
+	/**
+	 *	A source of TimeStamp values driving this dispatcher's timers and
+	 *	wait computations. The default is the real-time clock (timestamp());
+	 *	tests can inject a manual clock to drive timers without sleeping
+	 *	(see unit_test/test_virtual_clock.cpp).
+	 */
+	typedef std::function< uint64() > ClockFn;
+
+	/// The default clock source: the real-time stamps of timestamp().
+	static uint64 realClock();
+
+	/// The clock source driving this dispatcher (see ClockFn).
+	const ClockFn & clock() const	{ return clock_; }
+
 	EventDispatcher();
+	explicit EventDispatcher( const ClockFn & clock );
 	~EventDispatcher();
 
 	void prepareForShutdown();
@@ -83,8 +109,64 @@ public:
 	void clearSpareTime();
 	double proportionalSpareTime() const;
 
+	/**
+	 *	The greatest lateness this dispatcher's timer queue has seen, in
+	 *	stamps: how far past its deadline the worst late timer actually ran.
+	 *	Zero means every timer so far has been delivered on time.
+	 *
+	 *	This is the event loop stall signal for a dispatcher: a background
+	 *	task that hogs the thread (a long script callback, a blocking I/O
+	 *	call, a starved thread) delays this dispatcher's timers, and the
+	 *	delay shows up here. It is what todo.md's GIL starvation scenario
+	 *	asserts on - see unit_test/test_event_stall.cpp.
+	 */
+	TimeStamp maxTimerLateness() const;
+
+	/**
+	 *	How many timers this dispatcher has run late, since construction or
+	 *	since the last resetTimerLateness().
+	 */
+	uint32 numLateTimers() const;
+
+	/**
+	 *	Discards the accumulated lateness so the next reading covers only
+	 *	what happens from here on. Pending timers are unaffected.
+	 */
+	void resetTimerLateness();
+
+	/**
+	 *	The dispatcher's clock source. Lets a caller see the same stamps the
+	 *	dispatcher's timers are being scheduled against, whether that is the
+	 *	real clock or one a test injected.
+	 */
+	INLINE TimeStamp now() const;
+
 	INLINE double maxWait() const;
 	INLINE void maxWait( double seconds );
+
+	/**
+	 *	The worst wall-clock cost of a single network tick, in stamps: the
+	 *	real time processNetwork() took, minus the idle wait the poller
+	 *	counts as spare time. A tick that spends too long handling packets
+	 *	or socket events shows up here.
+	 */
+	uint64 maxNetworkTime() const;
+
+	/**
+	 *	How many network ticks have run past the network time budget since
+	 *	construction or the last resetNetworkTimeStats().
+	 */
+	uint32 numOverBudgetTicks() const;
+
+	/**
+	 *	Discards the accumulated network time record so the next reading
+	 *	covers only what happens from here on.
+	 */
+	void resetNetworkTimeStats();
+
+	/// The per-tick network processing budget, in seconds.
+	double networkTimeBudget() const;
+	void networkTimeBudget( double seconds );
 
 	ErrorReporter & errorReporter()	{ return *pErrorReporter_; }
 	
@@ -97,6 +179,26 @@ public:
 #if ENABLE_WATCHERS
 	static WatcherPtr pTimingWatcher();
 	static WatcherPtr pWatcher();
+
+	/**
+	 *	Watchable form of maxTimerLateness(), in seconds.
+	 */
+	double maxTimerLatenessSeconds() const;
+
+	/**
+	 *	Watchable form of numLateTimers().
+	 */
+	uint32 lateTimerCount() const;
+
+	/**
+	 *	Watchable form of maxNetworkTime(), in seconds.
+	 */
+	double maxNetworkTimeSeconds() const;
+
+	/**
+	 *	Watchable form of numOverBudgetTicks().
+	 */
+	uint32 overBudgetTickCount() const;
 #endif
 
 private:
@@ -118,6 +220,13 @@ private:
 
 	bool breakProcessing_;
 
+	/**
+	 *	Clock source driving processTimers(), processStats(), timer
+	 *	registration and calculateWait(). prepareForShutdown() deliberately
+	 *	stays on the real clock so shutdown always drains in wall time.
+	 */
+	ClockFn clock_;
+
 	TimeQueue64 * pTimeQueue_;
 
 	FrequentTasks * pFrequentTasks_;
@@ -131,6 +240,11 @@ private:
 	uint32 numTimerCalls_;
 
 	double maxWait_;
+
+	// Per-tick network processing record; see maxNetworkTime().
+	uint64			maxNetworkTime_;
+	uint64			networkTimeBudget_;
+	uint32			numOverBudgetTicks_;
 
 	DispatcherCoupling * pCouplingToParent_;
 

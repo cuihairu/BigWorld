@@ -1,4 +1,28 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <!-- This is intentionally left blank but exists to avoid being imported from some directory above -->
+
+  <!-- BIGWORLD_BEGIN
+       Compile the BigWorld allocator hooks (Python/bwhooks.c) into pythoncore.
+
+       PCbuild's extension modules (_hashlib.pyd, _sqlite3.pyd, ...) link only
+       python313.lib and call BW_Py_memoryTrackingIgnoreBegin/End, which live
+       in bwhooks.c. Upstream's pythoncore.vcxproj does not compile that file,
+       so a plain build.bat leaves every extension module with LNK2001 on the
+       BW_Py_* entry points (observed on the first Windows root build).
+
+       Directory.Build.targets is MSBuild's per-project late extension point:
+       every vcxproj under PCbuild imports it after its own body, so appending
+       a ClCompile item here adds bwhooks.c to pythoncore without forking
+       pythoncore.vcxproj. The BW_PY_BUILDING_PYTHONCORE define turns
+       BW_PY_EXPORT in Include/bwhooks.h into __declspec(dllexport), which is
+       what lands the entry points in python313.lib - the Windows analogue of
+       the -fvisibility fix the Linux carrier needed. Other projects see the
+       ClCompile condition and stay untouched. -->
+  <ItemGroup Condition="'$(MSBuildProjectName)' == 'pythoncore'">
+    <ClCompile Include="$(PySourcePath)Python\bwhooks.c">
+      <PreprocessorDefinitions>BW_PY_BUILDING_PYTHONCORE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemGroup>
+  <!-- BIGWORLD_END -->
 </Project>

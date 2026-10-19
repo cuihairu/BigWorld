@@ -1,5 +1,7 @@
 # 核心 API 参考
 
+> [English](api-reference.en.md) | **中文**
+
 <div class="arch-hero">
 
 BigWorld 核心库的 API 参考，覆盖网络、实体定义、脚本绑定、实体、数据库五大子系统。

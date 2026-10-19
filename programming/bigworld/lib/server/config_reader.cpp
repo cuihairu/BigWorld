@@ -20,6 +20,58 @@
 
 BW_BEGIN_NAMESPACE
 
+namespace
+{
+
+#if defined( _WIN32 )
+// MSVC's CRT has no POSIX getline (C3861 in the root superproject build);
+// this replacement keeps the same contract: grows a malloc'ed buffer in
+// *line/*len, returns the bytes of the line read or -1 at EOF with nothing
+// read. The caller frees the buffer.
+int getline( char ** line, size_t * len, FILE * fp )
+{
+	if (*line == NULL || *len < 2)
+	{
+		*len = 128;
+		*line = static_cast< char * >( realloc( *line, *len ) );
+
+		if (*line == NULL)
+		{
+			return -1;
+		}
+	}
+
+	size_t used = 0;
+	for (;;)
+	{
+		if (fgets( *line + used, static_cast< int >( *len - used ), fp )
+				== NULL)
+		{
+			return (used == 0) ? -1 : static_cast< int >( used );
+		}
+
+		used += strlen( *line + used );
+
+		if (used + 1 < *len || (*line)[ used - 1 ] == '\n')
+		{
+			return static_cast< int >( used );
+		}
+
+		*len *= 2;
+		char * grown = static_cast< char * >( realloc( *line, *len ) );
+
+		if (grown == NULL)
+		{
+			return -1;
+		}
+
+		*line = grown;
+	}
+}
+#endif // defined( _WIN32 )
+
+} // anonymous namespace
+
 ConfigReader::ConfigReader( const char *filename ) :
 	filename_( filename ),
 	separator_( '=' )

@@ -1,5 +1,7 @@
 # 测试体系与可控时间
 
+> [English](testing-time-control.en.md) | **中文**
+
 <div class="arch-hero">
 
 BigWorld 有单元测试、网络协议测试和多进程测试辅助，但它的时间系统主要依赖真实 `timestamp()` 与 `EventDispatcher` Timer。对学习引擎架构来说，这正是一个重要边界：很多 MMO 关键行为难以完全确定性重放。

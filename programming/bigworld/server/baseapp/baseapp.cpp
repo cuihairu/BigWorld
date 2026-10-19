@@ -89,7 +89,21 @@
 #include <algorithm>
 
 #include <sys/types.h>
+// Nothing in this TU waits on children (the include predates the Windows
+// port guards elsewhere); MSVC has no sys/wait.h (C1083, run 39021844438).
+#if !defined( _WIN32 )
 #include <sys/wait.h>
+#endif
+
+#if defined( _WIN32 )
+// MSVC's SDK leaves `#define interface struct` (rpcndr.h via d3d9.h / shlobj /
+// shlwapi / d3d10) live for the rest of the TU, which rewrites the
+// `interface`-named declarations in this file into syntax errors (C2332/C2027
+// in the root superproject build). Off for this file only; the pop below
+// restores it for whatever SDK COM header comes later in the TU.
+#pragma push_macro( "interface" )
+#undef interface
+#endif
 
 
 DECLARE_DEBUG_COMPONENT( 0 )
@@ -1536,6 +1550,9 @@ void BaseApp::tickGameTime()
 
 	if ((spareTimeFraction < 0.f) || (1.f < spareTimeFraction))
 	{
+		// g_timingMethod only exists in the Unix arm of cstdmf/timestamp.hpp;
+		// the Windows timestamp() has no selectable timing method to diagnose.
+#if !defined( _WIN32 )
 		if (g_timingMethod == RDTSC_TIMING_METHOD)
 		{
 			CRITICAL_MSG( "BaseApp::tickGameTime: "
@@ -1546,6 +1563,7 @@ void BaseApp::tickGameTime()
 				spareTimeFraction );
 		}
 		else
+#endif // !defined( _WIN32 )
 		{
 			CRITICAL_MSG( "BaseApp::tickGameTime: "
 				"Invalid timing result %.3f.\n", spareTimeFraction );
@@ -2221,9 +2239,14 @@ void BaseApp::shutDown()
 
 		uint64 lastReport = timestamp();
 
-		while (!ReplayDataFileWriter::haveAllClosed()) 
+		while (!ReplayDataFileWriter::haveAllClosed())
 		{
+#if defined( _WIN32 )
+			// No usleep(3) in the MSVC CRT; Sleep takes milliseconds.
+			Sleep( int( BGTASK_MGR_TICK_TIME * 1000 ) );
+#else
 			usleep( int( BGTASK_MGR_TICK_TIME * 1000000 ) );
+#endif
 			bgTaskManager_.tick();
 
 			uint64 now = timestamp();
@@ -3244,3 +3267,7 @@ BW_END_NAMESPACE
 
 
 // baseapp.cpp
+
+#if defined( _WIN32 )
+#pragma pop_macro( "interface" )
+#endif

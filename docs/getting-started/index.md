@@ -2,6 +2,8 @@
 layout: doc
 ---
 
+> [English](index.en.md) | **中文**
+
 # 快速开始
 
 <div class="arch-hero">

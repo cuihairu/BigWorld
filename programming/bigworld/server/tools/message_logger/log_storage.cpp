@@ -1,5 +1,9 @@
 #include "log_storage.hpp"
 
+#if defined( _WIN32 )
+	// in_addr/inet_ntoa for the query IP formatting below.
+	#include "posix_compat.hpp"
+#endif
 
 BW_BEGIN_NAMESPACE
 

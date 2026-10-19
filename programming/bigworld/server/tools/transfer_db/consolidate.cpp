@@ -14,7 +14,23 @@
 #include <sys/stat.h>
 #include <errno.h>
 #include <string.h>
+#if defined( _WIN32 )
+// MSVC spells the POSIX unistd.h I/O surface with leading underscores, and
+// its open() is text-mode unless told otherwise - a translated read would
+// corrupt the sqlite file bytes this ships back to consolidateDBs.
+#include <fcntl.h>
+#include <io.h>
+#define CD_OPEN_RO( p )			_open( (p), _O_RDONLY | _O_BINARY )
+#define CD_READ( fd, b, n )		_read( (fd), (b), (unsigned)(n) )
+#define CD_CLOSE( fd )			_close( (fd) )
+#define CD_UNLINK( p )			_unlink( (p) )
+#else
 #include <unistd.h>
+#define CD_OPEN_RO( p )			open( (p), O_RDONLY )
+#define CD_READ( fd, b, n )		read( (fd), (b), (n) )
+#define CD_CLOSE( fd )			close( (fd) )
+#define CD_UNLINK( p )			unlink( (p) )
+#endif
 
 #include "cstdmf/bw_string.hpp"
 
@@ -222,7 +238,7 @@ bool Consolidate::readAndSendDB()
 {
 	// Open the secondary DB file to dump into memory and
 	// send back to consolidateDBs
-	int fd = open( sqliteFilename_.c_str(), O_RDONLY );
+	int fd = CD_OPEN_RO( sqliteFilename_.c_str() );
 	if (fd == -1)
 	{
 		this->error( "Unable to open sqlite file", strerror( errno ) );
@@ -255,13 +271,19 @@ bool Consolidate::readAndSendDB()
 
 
 	char workingBuffer[ 4096 ];
+#if defined( _WIN32 )
+	// _read() returns int; ssize_t lives only on the POSIX side of the
+	// CD_READ macros above.
+	int amountRead = 0;
+#else
 	ssize_t amountRead = 0;
+#endif
 	bool fatalError = false;
 
 	// Hard loop to read all the data in and send it straight to consolidateDBs
 	do
 	{
-		amountRead = read( fd, workingBuffer, sizeof( workingBuffer ) );
+		amountRead = CD_READ( fd, workingBuffer, sizeof( workingBuffer ) );
 		if (amountRead == -1)
 		{
 			switch (errno)
@@ -304,7 +326,7 @@ bool Consolidate::readAndSendDB()
 
 	} while (!fatalError && (amountRead != 0));
 
-	close( fd );
+	CD_CLOSE( fd );
 	fd = 0;
 
 	return !fatalError;
@@ -332,7 +354,7 @@ bool Consolidate::waitForDeleteCommand()
 	INFO_MSG( "Consolidate::waitForDeleteCommand: Deleting '%s'\n",
 		sqliteFilename_.c_str() );
 
-	if (unlink( sqliteFilename_.c_str() ) == -1)
+	if (CD_UNLINK( sqliteFilename_.c_str() ) == -1)
 	{
 		// ConsolidateDB has shutdown it's own end at this point so there
 		// is no point sending it an error message.

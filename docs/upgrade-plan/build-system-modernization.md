@@ -1,5 +1,7 @@
 # 构建系统现代化
 
+> [English](build-system-modernization.en.md) | **中文**
+
 <div class="arch-hero">
 
 BigWorld 的构建系统混合了 Make、CMake 和平台脚本，版本老旧。本文档规划构建系统的现代化路径。
@@ -136,14 +138,18 @@ add_compile_options(-fstack-protector-strong -D_FORTIFY_SOURCE=2)
 
 - `.github/workflows/ci.yml` —— **push/PR 门禁**：vcpkg manifest 钉版
   baseline 克隆 + binary cache（键=baseline+manifest 哈希）→ 配置/构建
-  cstdmf CMake 样板（[vcpkg-migration §3.1](/vcpkg-migration)）→ ctest。
-  步骤具名，失败时上传一个含 configure/build/ctest 三日志的 artifact
-  （`ci.yml:90-100`），失败可按步骤定位。
+  CMake 样板 matrix（`[cstdmf, resmgr, network, entitydef]`，`fail-fast: false`；
+  [vcpkg-migration §3.1–§3.5](/vcpkg-migration)）→ ctest。
+  步骤具名，失败时上传一个含 configure/build/ctest 三日志的 artifact，
+  失败可按步骤定位。
 - `.github/workflows/daily-build.yml` —— **每日构建**：48 小时新鲜度判定 →
   全量 make + 21 模块单测门禁 → tar.gz/deb/rpm 三格式打包，artifact 交付。
   详见[打包与每日构建](/upgrade-plan/packaging-and-daily-build)。
 
-本地等价命令：CMake 样板一条命令 `scripts/build-cstdmf-cmake.sh`；
+本地等价命令：CMake 样板各一条命令（`scripts/build-cstdmf-cmake.sh` /
+`scripts/build-resmgr-cmake.sh` / `scripts/build-network-cmake.sh` /
+`scripts/build-entitydef-cmake.sh`；vendored CPython 一腿另由
+`scripts/build-python-cmake.sh` 单独构建，被 entitydef 样板自动带入）；
 打包一条命令 `bash scripts/package-daily.sh <out-dir>`。
 
 ### Docker 构建

@@ -89,6 +89,80 @@ private:
 	const char * pRawJSON_;
 };
 
+
+/**
+ *	This class is the thread-local correlation context for log messages.
+ *
+ *	Fields set on a thread are appended to the metadata of every log message
+ *	that thread writes (see addMessageMetadataForScope), so cross-process
+ *	logs can be correlated back to the entity, space or channel the thread
+ *	was servicing. The context is empty until a field is set and only holds
+ *	numeric values with short string keys.
+ *
+ *	The storage is thread-local through the THREADLOCAL macro, so like the
+ *	rest of that macro's users it is only thread-local on platforms where
+ *	that macro maps to a real TLS declaration.
+ */
+class LogCorrelation
+{
+public:
+	/// Maximum number of fields the context holds.
+	static const int MAX_FIELDS = 8;
+	/// Maximum key length, excluding the terminator. Longer keys are
+	/// truncated.
+	static const int MAX_KEY_LENGTH = 31;
+
+	/// One correlation field. Kept trivial so the context can live in
+	/// thread-local storage.
+	struct Field
+	{
+		char key[ MAX_KEY_LENGTH + 1 ];
+		long long value;
+	};
+
+	/// Sets (or replaces) the field with this key on this thread's context.
+	/// Empty keys are ignored, as in LogMetaData::add.
+	CSTDMF_DLL static void set( const char * pKey, long long value );
+
+	/// Removes the field with this key. Absent keys are a no-op.
+	CSTDMF_DLL static void clear( const char * pKey );
+
+	/// Removes all fields from this thread's context.
+	CSTDMF_DLL static void clearAll();
+
+	/// Returns whether any field is set on this thread's context.
+	CSTDMF_DLL static bool hasFields();
+
+	/// Appends this thread's context fields to the given metadata.
+	CSTDMF_DLL static void appendTo( LogMetaData & metaData );
+
+	/// Snapshots the context, for ScopedLogCorrelation.
+	CSTDMF_DLL static void save( Field * pFields, int & count );
+
+	/// Restores a snapshot taken by save().
+	CSTDMF_DLL static void restore( const Field * pFields, int count );
+};
+
+
+/**
+ *	This class restores the correlation context on destruction to what it
+ *	was on construction, so scoped wiring (say, per entity message) does not
+ *	leak its fields into the outer scope.
+ */
+class ScopedLogCorrelation
+{
+public:
+	CSTDMF_DLL ScopedLogCorrelation();
+	CSTDMF_DLL ~ScopedLogCorrelation();
+
+private:
+	ScopedLogCorrelation( const ScopedLogCorrelation & );
+	ScopedLogCorrelation & operator=( const ScopedLogCorrelation & );
+
+	LogCorrelation::Field savedFields_[ LogCorrelation::MAX_FIELDS ];
+	int savedCount_;
+};
+
 BW_END_NAMESPACE
 
 #endif // BW_LOG_META_DATA_HPP

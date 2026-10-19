@@ -1,9 +1,9 @@
 name: CI
 
 # Linux CI for the CMake track (docs/vcpkg-migration.md §3.1): configure +
-# build the cstdmf CMake sample and run its unit tests on every push/PR.
+# build each CMake sample and run its unit tests on every push/PR.
 # The full make build + 21-module test gate stays on the daily build workflow
-# (.github/workflows/daily-build.yml); this job keeps the CMake sample and the
+# (.github/workflows/daily-build.yml); this job keeps the CMake samples and the
 # vcpkg manifest from drifting.
 #
 # Dependency versions are pinned by the manifest builtin-baseline: vcpkg is
@@ -34,10 +34,14 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  cstdmf-cmake:
-    name: cstdmf cmake sample (linux)
+  cmake-samples:
+    name: ${{ matrix.sample }} cmake sample (linux)
     runs-on: ubuntu-24.04
     timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        sample: [cstdmf, resmgr, network, entitydef]
     env:
       VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/vcpkg-bcache
 
@@ -83,28 +87,40 @@ jobs:
         shell: bash
         run: |
           mkdir -p "$VCPKG_DEFAULT_BINARY_CACHE"
-          cmake -S programming/bigworld/cmake/samples/cstdmf \
-                -B programming/bigworld/build/cmake-cstdmf \
+          cmake -S programming/bigworld/cmake/samples/${{ matrix.sample }} \
+                -B programming/bigworld/build/cmake-${{ matrix.sample }} \
                 -DCMAKE_TOOLCHAIN_FILE="$HOME/vcpkg/scripts/buildsystems/vcpkg.cmake" \
                 -DCMAKE_BUILD_TYPE=Release 2>&1 | tee cmake-configure.log
 
       - name: Build
         shell: bash
         run: |
-          cmake --build programming/bigworld/build/cmake-cstdmf \
+          cmake --build programming/bigworld/build/cmake-${{ matrix.sample }} \
             -j"$(nproc)" 2>&1 | tee cmake-build.log
 
-      - name: Test (cstdmf_test, 398 cases)
+      # network_test's ConfigTest asserts a 16 MiB SO_RCVBUF
+      # (lib/network/unit_test/test_config.cpp:20); the kernel doubles the
+      # requested size against net.core.rmem_max, so the host sysctl must
+      # allow >= 8 MiB. GH-hosted runners default to 212992 and the test
+      # reports the exact commands below. Skipped for non-network samples.
+      - name: Raise socket buffer limits (network)
+        if: matrix.sample == 'network'
+        run: |
+          sudo sysctl -w net.core.rmem_max=16777216
+          sudo sysctl -w net.core.wmem_max=1048576
+          sudo sysctl -w net.core.wmem_default=1048576
+
+      - name: Test (${{ matrix.sample }}_test)
         shell: bash
         run: |
-          ctest --test-dir programming/bigworld/build/cmake-cstdmf \
+          ctest --test-dir programming/bigworld/build/cmake-${{ matrix.sample }} \
             --output-on-failure 2>&1 | tee ctest.log
 
       - name: Upload logs on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: ci-logs-${{ github.run_id }}
+          name: ci-logs-${{ github.run_id }}-${{ matrix.sample }}
           path: |
             cmake-configure.log
             cmake-build.log

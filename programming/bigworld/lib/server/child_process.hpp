@@ -8,6 +8,23 @@
 #include <sstream>
 #include "cstdmf/bw_string.hpp"
 
+#include "cstdmf/debug.hpp"
+
+#include <errno.h>
+#include <stdlib.h>
+#include <string.h>
+
+// pid_t. The implementation TU compiles away on MSVC (child_process.cpp's
+// top guard), but consolidator.cpp includes this header on Windows too and
+// only names the type. MSVC's sys/types.h ships no pid_t, so take the same
+// route as CPython's PC/pyconfig.h: a plain int. Identical duplicate
+// typedefs are legal when both headers end up in one TU.
+#if defined( _WIN32 )
+typedef int pid_t;
+#else
+#include <sys/types.h>
+#endif
+
 
 BW_BEGIN_NAMESPACE
 
@@ -41,7 +58,18 @@ public:
 	 *
 	 *	@param result  The result from the call to execv().
 	 */
-	virtual void onExecFailure( int result );
+	// Inline body: constructing any IChildProcess-derived object emits the
+	// base vtable, whose non-pure slot is the only out-of-line target this
+	// class has - and the TU that defined it compiles away on MSVC
+	// (child_process.cpp's top guard), leaving nothing to satisfy the slot
+	// (LNK2001 on consolidator.obj in the root superproject build).
+	virtual void onExecFailure( int result )
+	{
+		ERROR_MSG( "ChildProcess::onExecFailure: Unable to execv: %s\n",
+			strerror( errno ) );
+
+		exit( EXIT_FAILURE );
+	}
 
 
 	//

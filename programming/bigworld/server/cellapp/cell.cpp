@@ -40,6 +40,16 @@
 
 #include <stdlib.h>
 
+#if defined( _WIN32 )
+// MSVC's SDK leaves `#define interface struct` (rpcndr.h via d3d9.h / shlobj /
+// shlwapi / d3d10) live for the rest of the TU, which rewrites the
+// `interface`-named declarations in this file into syntax errors (C2332/C2027
+// in the root superproject build). Off for this file only; the pop below
+// restores it for whatever SDK COM header comes later in the TU.
+#pragma push_macro( "interface" )
+#undef interface
+#endif
+
 DECLARE_DEBUG_COMPONENT( 0 )
 
 
@@ -906,7 +916,14 @@ bool Cell::Entities::add( Entity * pEntity )
 	// Choose random existing entity to swap with to randomise the list.
 	// Processes iterating through this collection (such as entity backup)
 	// will be effectively randomised.
+	// MSVC has no glibc random(); rand() only ever changes which element
+	// the swap pick lands on (C3861 'random' in the root superproject
+	// build, run 38999627798).
+#if defined( _MSC_VER )
+	EntityPtr pSwapEntity = collection_[rand() % collection_.size()];
+#else
 	EntityPtr pSwapEntity = collection_[random() % collection_.size()];
+#endif
 	this->swapWithBack( pSwapEntity.get() );
 
 	return true;
@@ -1160,3 +1177,7 @@ void Cell::tickProfilers( uint64 tickDtInStamps, float smoothingFactor )
 BW_END_NAMESPACE
 
 // cell.cpp
+
+#if defined( _WIN32 )
+#pragma pop_macro( "interface" )
+#endif

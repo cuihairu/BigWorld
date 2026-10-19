@@ -11,6 +11,16 @@
 #ifndef _WIN32  // WIN32PORT
 #else //ifndef _WIN32  // WIN32PORT
 #include <time.h>
+
+#if defined( _WIN32 )
+// MSVC's SDK leaves `#define interface struct` (rpcndr.h via d3d9.h / shlobj /
+// shlwapi / d3d10) live for the rest of the TU, which rewrites the
+// `interface`-named declarations in this file into syntax errors (C2332/C2027
+// in the root superproject build). Off for this file only; the pop below
+// restores it for whatever SDK COM header comes later in the TU.
+#pragma push_macro( "interface" )
+#undef interface
+#endif
 #endif //ndef _WIN32  // WIN32PORT
 
 DECLARE_DEBUG_COMPONENT(0)
@@ -649,3 +659,7 @@ void BWTracer::packetOut(const Mercury::Address& addr, const Mercury::Packet& pa
 BW_END_NAMESPACE
 
 // bwtracer.cpp
+
+#if defined( _WIN32 )
+#pragma pop_macro( "interface" )
+#endif

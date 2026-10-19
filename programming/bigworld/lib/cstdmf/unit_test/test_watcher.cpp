@@ -5,6 +5,8 @@
 #include "cstdmf/bw_map.hpp"
 #include "cstdmf/bw_vector.hpp"
 #include "cstdmf/concurrency.hpp"
+#include "cstdmf/debug_filter.hpp"
+#include "cstdmf/debug_message_callbacks.hpp"
 
 
 BW_BEGIN_NAMESPACE
@@ -1088,6 +1090,257 @@ TEST( Watcher_rootWatcher )
 
 	CHECK( root.removeChild( "testValue" ) );
 }
+
+// -----------------------------------------------------------------------------
+// Section: watcher write audit point
+// -----------------------------------------------------------------------------
+
+/**
+ *	Captures the "Watcher write audit" line a watcher write emits, via the
+ *	debug message callback every log line passes through. Returning true for
+ *	the audit line keeps it off the console; the test asserts on it.
+ */
+class AuditCaptureCallback : public DebugMessageCallback
+{
+public:
+	AuditCaptureCallback()
+	{
+		lastLine_[ 0 ] = '\0';
+	}
+
+	virtual bool handleMessage( DebugMessagePriority /*messagePriority*/,
+			const char * /*pCategory*/,
+			DebugMessageSource /*messageSource*/,
+			const LogMetaData & /*metaData*/, const char * pFormat,
+			va_list argPtr )
+	{
+		if (strstr( pFormat, "Watcher write audit" ) == NULL)
+		{
+			return false;
+		}
+
+		bw_vsnprintf( lastLine_, sizeof( lastLine_ ), pFormat, argPtr );
+		return true;
+	}
+
+	const char * lastLine() const	{ return lastLine_; }
+
+private:
+	char lastLine_[ 512 ];
+};
+
+
+/**
+ *	A write through WatcherPathRequestV1 lands in the audit record with its
+ *	path, value and outcome, and still takes effect.
+ */
+TEST( WatcherPathRequest_V1WriteIsAudited )
+{
+	int value = 0;
+	CHECK( Watcher::rootWatcher().addChild( "auditProbeInt",
+		new DataWatcher< int >( value, Watcher::WT_READ_WRITE ) ) );
+
+	const DebugMessagePriority prevThreshold =
+		DebugFilter::instance().filterThreshold();
+	DebugFilter::instance().filterThreshold( MESSAGE_PRIORITY_TRACE );
+
+	AuditCaptureCallback capture;
+	DebugFilter::instance().addMessageCallback( &capture );
+
+	WatcherPathRequestV1 request( "auditProbeInt" );
+	request.setValueData( "42" );
+
+	CHECK( request.setWatcherValue() );
+	CHECK_EQUAL( 42, value );
+
+	// The audit record names the path, the value and the outcome.
+	CHECK( strstr( capture.lastLine(), "auditProbeInt" ) != NULL );
+	CHECK( strstr( capture.lastLine(), "42" ) != NULL );
+	CHECK( strstr( capture.lastLine(), "accepted" ) != NULL );
+
+	DebugFilter::instance().deleteMessageCallback( &capture );
+	DebugFilter::instance().filterThreshold( prevThreshold );
+	CHECK( Watcher::rootWatcher().removeChild( "auditProbeInt" ) );
+}
+
+
+/**
+ *	A write a read-only watcher rejects is audited as rejected, and the
+ *	watched value is left alone.
+ */
+TEST( WatcherPathRequest_V1RejectedWriteIsAudited )
+{
+	int value = 7;
+	CHECK( Watcher::rootWatcher().addChild( "auditProbeReadOnly",
+		new DataWatcher< int >( value ) ) );
+
+	const DebugMessagePriority prevThreshold =
+		DebugFilter::instance().filterThreshold();
+	DebugFilter::instance().filterThreshold( MESSAGE_PRIORITY_TRACE );
+
+	AuditCaptureCallback capture;
+	DebugFilter::instance().addMessageCallback( &capture );
+
+	WatcherPathRequestV1 request( "auditProbeReadOnly" );
+	request.setValueData( "9" );
+
+	CHECK( !request.setWatcherValue() );
+	CHECK_EQUAL( 7, value );
+
+	CHECK( strstr( capture.lastLine(), "auditProbeReadOnly" ) != NULL );
+	CHECK( strstr( capture.lastLine(), "rejected" ) != NULL );
+
+	DebugFilter::instance().deleteMessageCallback( &capture );
+	DebugFilter::instance().filterThreshold( prevThreshold );
+	CHECK( Watcher::rootWatcher().removeChild( "auditProbeReadOnly" ) );
+}
+
+
+/**
+ *	The stream-based V2 write path emits the same audit record; the value
+ *	travels packed in the stream, so the line carries the path and outcome.
+ */
+TEST( WatcherPathRequest_V2WriteIsAudited )
+{
+	int value = 0;
+	CHECK( Watcher::rootWatcher().addChild( "auditProbeStream",
+		new DataWatcher< int >( value, Watcher::WT_READ_WRITE ) ) );
+
+	// Build the set value stream in watcher protocol format.
+	MemoryOStream valueStream;
+	watcherValueToStream( valueStream, 21, Watcher::WT_READ_WRITE );
+
+	const DebugMessagePriority prevThreshold =
+		DebugFilter::instance().filterThreshold();
+	DebugFilter::instance().filterThreshold( MESSAGE_PRIORITY_TRACE );
+
+	AuditCaptureCallback capture;
+	DebugFilter::instance().addMessageCallback( &capture );
+
+	WatcherPathRequestV2 request( "auditProbeStream" );
+	CHECK( request.setPacketData( valueStream ) );
+
+	CHECK( request.setWatcherValue() );
+	CHECK_EQUAL( 21, value );
+
+	CHECK( strstr( capture.lastLine(), "auditProbeStream" ) != NULL );
+	CHECK( strstr( capture.lastLine(), "accepted" ) != NULL );
+
+	DebugFilter::instance().deleteMessageCallback( &capture );
+	DebugFilter::instance().filterThreshold( prevThreshold );
+	CHECK( Watcher::rootWatcher().removeChild( "auditProbeStream" ) );
+}
+
+
+/**
+ *	With writes disabled, a V1 wire write is rejected before it reaches any
+ *	watcher and audited as blocked. Writes go through again once re-enabled.
+ */
+TEST( WatcherPathRequest_writePermissionBlocksV1 )
+{
+	int value = 0;
+	CHECK( Watcher::rootWatcher().addChild( "permProbeV1",
+		new DataWatcher< int >( value, Watcher::WT_READ_WRITE ) ) );
+
+	AuditCaptureCallback capture;
+	DebugFilter::instance().addMessageCallback( &capture );
+	const DebugMessagePriority prevThreshold =
+		DebugFilter::instance().filterThreshold();
+	DebugFilter::instance().filterThreshold( MESSAGE_PRIORITY_TRACE );
+
+	WatcherPathRequest::writesEnabled( false );
+
+	WatcherPathRequestV1 request( "permProbeV1" );
+	request.setValueData( "42" );
+
+	CHECK( !request.setWatcherValue() );
+	CHECK_EQUAL( 0, value );	// the write never reached the watcher
+
+	CHECK( strstr( capture.lastLine(), "permProbeV1" ) != NULL );
+	CHECK( strstr( capture.lastLine(), "blocked" ) != NULL );
+
+	// Re-enabled writes go through again.
+	WatcherPathRequest::writesEnabled( true );
+	WatcherPathRequestV1 retry( "permProbeV1" );
+	retry.setValueData( "42" );
+	CHECK( retry.setWatcherValue() );
+	CHECK_EQUAL( 42, value );
+
+	DebugFilter::instance().filterThreshold( prevThreshold );
+	DebugFilter::instance().deleteMessageCallback( &capture );
+	CHECK( Watcher::rootWatcher().removeChild( "permProbeV1" ) );
+}
+
+
+/**
+ *	With writes disabled, a V2 stream write is rejected (audited as blocked)
+ *	without reaching the watcher; the reply still completes.
+ */
+TEST( WatcherPathRequest_writePermissionBlocksV2 )
+{
+	int value = 0;
+	CHECK( Watcher::rootWatcher().addChild( "permProbeV2",
+		new DataWatcher< int >( value, Watcher::WT_READ_WRITE ) ) );
+
+	AuditCaptureCallback capture;
+	DebugFilter::instance().addMessageCallback( &capture );
+	const DebugMessagePriority prevThreshold =
+		DebugFilter::instance().filterThreshold();
+	DebugFilter::instance().filterThreshold( MESSAGE_PRIORITY_TRACE );
+
+	MemoryOStream valueStream;
+	watcherValueToStream( valueStream, 21, Watcher::WT_READ_WRITE );
+
+	WatcherPathRequest::writesEnabled( false );
+
+	WatcherPathRequestV2 request( "permProbeV2" );
+	CHECK( request.setPacketData( valueStream ) );
+
+	// V2 reports the request was handled; the set itself did not happen.
+	CHECK( request.setWatcherValue() );
+	CHECK_EQUAL( 0, value );
+
+	CHECK( strstr( capture.lastLine(), "permProbeV2" ) != NULL );
+	CHECK( strstr( capture.lastLine(), "blocked" ) != NULL );
+
+	WatcherPathRequest::writesEnabled( true );
+	DebugFilter::instance().filterThreshold( prevThreshold );
+	DebugFilter::instance().deleteMessageCallback( &capture );
+	CHECK( Watcher::rootWatcher().removeChild( "permProbeV2" ) );
+}
+
+
+/**
+ *	The permission toggle is itself exposed as a watcher ("watcherWrites/
+ *	allowed") and stays writable while writes are blocked, so the switch can
+ *	always be flipped back remotely.
+ */
+TEST( WatcherPathRequest_writePermissionToggleIsAlwaysWritable )
+{
+	AuditCaptureCallback capture;
+	DebugFilter::instance().addMessageCallback( &capture );
+	const DebugMessagePriority prevThreshold =
+		DebugFilter::instance().filterThreshold();
+	DebugFilter::instance().filterThreshold( MESSAGE_PRIORITY_TRACE );
+
+	// Arm the block (also mounts the toggle on the next write).
+	WatcherPathRequest::writesEnabled( false );
+	CHECK( !WatcherPathRequest::writesEnabled() );
+
+	// A wire write to the toggle path goes through despite the block ...
+	WatcherPathRequestV1 toggleOn( "watcherWrites/allowed" );
+	toggleOn.setValueData( "true" );
+	CHECK( toggleOn.setWatcherValue() );
+	CHECK( WatcherPathRequest::writesEnabled() );
+
+	// ... and it is audited like any other write.
+	CHECK( strstr( capture.lastLine(), "watcherWrites/allowed" ) != NULL );
+	CHECK( strstr( capture.lastLine(), "accepted" ) != NULL );
+
+	DebugFilter::instance().filterThreshold( prevThreshold );
+	DebugFilter::instance().deleteMessageCallback( &capture );
+}
+
 
 BW_END_NAMESPACE
 

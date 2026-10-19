@@ -4,6 +4,14 @@ PROJECT( sqlite )
 INCLUDE( BWStandardProject )
 INCLUDE( BWStandardLibrary )
 
+# The vendored amalgamation lives one level up; the make chain adds
+# third_party/sqlite to the include path (sqlite_connection.hpp includes
+# "sqlite3.h" while compiling this wrapper, C1083 in the root superproject
+# build, run 39016799505). The plain INCLUDE_DIRECTORIES covers this target;
+# consumers (baseapp/sqlite_database.cpp, transfer_db/consolidate.cpp, same
+# C1083 in run 39021844438) get it through the PUBLIC target include.
+INCLUDE_DIRECTORIES( ${BW_SOURCE_DIR}/third_party/sqlite )
+
 SET( ALL_SRCS
 	sqlite_connection.cpp
 	sqlite_connection.hpp
@@ -16,5 +24,7 @@ SOURCE_GROUP( "" FILES ${ALL_SRCS} )
 BW_ADD_LIBRARY( sqlite
 	${ALL_SRCS}
 )
+
+TARGET_INCLUDE_DIRECTORIES( sqlite PUBLIC ${BW_SOURCE_DIR}/third_party/sqlite )
 
 BW_PROJECT_CATEGORY( sqlite "BigWorld Server" )

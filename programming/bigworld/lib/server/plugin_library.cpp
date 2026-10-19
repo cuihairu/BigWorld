@@ -123,9 +123,13 @@ bool PluginLibrary::loadAllFromDirRelativeToApp(
 
 #elif defined( _WIN32 )
 
+	// The ANSI APIs are pinned by name: the global -DUNICODE -D_UNICODE
+	// from BWStandardProject.cmake maps the bare names to the W variants,
+	// but this arm is char (BW::string) end to end and is the only place
+	// plugin paths are built (C2664 in the root superproject build).
 	char moduleName[ 512 ];
 
-	GetModuleFileName( NULL, moduleName, sizeof( moduleName ) );
+	GetModuleFileNameA( NULL, moduleName, sizeof( moduleName ) );
 	BW::string dllDirName = BW::string( moduleName, strlen( moduleName ) - 4 );
 
 	if (!prefixWithAppName)
@@ -135,8 +139,8 @@ bool PluginLibrary::loadAllFromDirRelativeToApp(
 
 	dllDirName = dllDirName + partialDir + "\\*";
 
-	WIN32_FIND_DATA findData;
-	HANDLE firstFileHandle = FindFirstFile( dllDirName.c_str(), &findData );
+	WIN32_FIND_DATAA findData;
+	HANDLE firstFileHandle = FindFirstFileA( dllDirName.c_str(), &findData );
 
 	if (firstFileHandle == INVALID_HANDLE_VALUE)
 	{
@@ -160,7 +164,7 @@ bool PluginLibrary::loadAllFromDirRelativeToApp(
 		dllName = dllDirName.substr( 0, dllDirName.length() - 1 ) + dllName;
 		dllNames.insert( dllName );
 
-	} while (FindNextFile( firstFileHandle, &findData ));
+	} while (FindNextFileA( firstFileHandle, &findData ));
 
 	FindClose( firstFileHandle );
 
@@ -172,7 +176,7 @@ bool PluginLibrary::loadAllFromDirRelativeToApp(
 
 		TRACE_MSG( "PluginLibrary: Loading extension %s\n", dllName.c_str() );
 
-		HMODULE handle = LoadLibraryEx( dllName.c_str(), NULL,
+		HMODULE handle = LoadLibraryExA( dllName.c_str(), NULL,
 			LOAD_WITH_ALTERED_SEARCH_PATH );
 
 		if (handle == NULL)

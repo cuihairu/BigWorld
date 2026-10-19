@@ -2,7 +2,6 @@
 
 #include "log_entry.hpp"
 
-#include <dirent.h>
 #include "cstdmf/bw_string.hpp"
 
 

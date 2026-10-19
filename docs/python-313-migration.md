@@ -1,5 +1,6 @@
 # BigWorld 内嵌 Python 2.7.3 [3.13.15 迁移；2026-10-12 升 3.13.16]
 
+> [English](python-313-migration.en.md) | **中文**
 > 任务：把 BigWorld 集成的 Python 从 2.7.3 升级到 3.13.15（源码树整换 + 补丁重移植 + C-API/脚本全量迁移）。
 > 分支：dev（所有提交仅在 dev）。
 
@@ -33,7 +34,7 @@
   - libpython 的 OpenSSL 依赖与解释器 whole-archive `-lbwssl -lbwcrypto` 注入暂时摘除（无 _ssl 时无意义且 OpenSSL 1.0.0d 在 gcc15/C23 下无法编译），OpenSSL 升级后恢复
 - `build/make/discover_python.sh`：python2.4 → python3（优先 `python3.13-config`）
 - `build/xcode/build-python.sh`：版本 3.13、去 ucs4、`make all` 替代失效的 `make sharedmods`
-- `build/make/Makefile`：`third_party_python_modules.mak`（Twisted 11 / SQLAlchemy 0.6 / Zope 2.11 等 Py2 时代包安装）暂缓启用，包升级后恢复
+- `build/make/Makefile`：`third_party_python_modules.mak` 重新启用——包已整体换成 Py3 兼容版本（Twisted 24.7 / SQLAlchemy 1.4.54 / zope.interface 7 / Pympler 1.0 / pika 1.3.2 / msgpack 1.1.0，另含 setuptools、typing_extensions、attrs、constantly、incremental、Automat、hyperlink、idna），安装目标改为 `game/res/bigworld/scripts/{common,server_common}/site-packages`；验收脚本 `scripts/python-modules-smoke-import.py`（tarball 源树 + 安装后目录两相 import 冒烟）。oursql 无 Py3 移植、目标暂缓（见剩余风险 R2）
 - 构建工具脚本 Py3 化：`platform_info.py`（print + Debian→el7 平台等效映射）、`invoke_without_jobserver.py`（print/iteritems）、`check_eol_style.py`（print/except 语法）
 - 补齐 git 执行位：`build/make/*.sh *.py`、`third_party/openssl/Configure`
 - `build/make/third_party_openssl.mak`：拷贝后 `chmod -R +w` → `u+rwX`（保留脚本执行位）
@@ -67,7 +68,7 @@
 | # | 风险 | 影响 | 计划 |
 |---|---|---|---|
 | R1 | vendored OpenSSL 1.0.0d：低于 3.13 最低要求（1.1.1），且在 gcc 15（默认 C23）下无法编译（`bool` 关键字冲突） | `_ssl/_hashlib` 缺席 lib-dynload；依赖 py ssl 的工具受限 | **已解决**（见 [vcpkg-migration.md](vcpkg-migration.md)）：OpenSSL 3.6 经 vcpkg 引入后恢复 `--with-openssl`、共享模块列表、symbols 采集与 libpython 依赖。落地时另发现两个必须一并处理的点：① CPython 用 `-fvisibility=hidden` 编译自身对象，`BW_Py_*` 钩子符号在 `python.exe` 里是 STB_LOCAL，`-export-dynamic` 导不出去，`_hashlib.so` 导入失败并被 3.12+ 的 `check_extension_modules.py` 重命名成 `_hashlib_failed*.so` —— 已给 `bwhooks.h` 的声明加 `visibility("default")`，并用 `-Wl,-u,...` 强制把 `Python/bwhooks.o` 拉进解释器；② 2.7 靠 `obmalloc.c` 里的 `#define malloc` 引用钩子从而把 `bwhooks.o` 拉进链接，3.13 改用官方 `PyMem_SetAllocator` 后 libpython 内部不再引用钩子，这个引用关系没有了。 |
-| R2 | `third_party/python_modules` 全部为 Py2 生态包（Twisted 11、SQLAlchemy 0.6、Zope 2.11、oursql 等） | 集群监控/日志工具等运行时 Python 服务不可用 | 单独升级各包到 Py3 兼容版本后再启用 mak；不在编译验证关键路径 |
+| R2 | `third_party/python_modules` 全部为 Py2 生态包（Twisted 11、SQLAlchemy 0.6、Zope 2.11、oursql 等） | 集群监控/日志工具等运行时 Python 服务不可用 | **已解决**：14 个包换成 Py3 兼容版（Twisted 24.7 / SQLAlchemy 1.4.54 / zope.interface 7 / Pympler 1.0 / pika 1.3.2 / msgpack 1.1.0 + setuptools / typing_extensions / attrs / constantly / incremental / Automat / hyperlink / idna），`Makefile:351` 的 include 已恢复启用。遗留子项：oursql 是 Py2 C 扩展、无 Py3 移植，需另选 Py3 MySQL 连接器后才能恢复其目标；`Imaging-1.1.7`/`jpegsrc.v6b` 是 C 扩展树，服务 Windows `tools/` 轨，不在本次替换范围 |
 | R3 | Windows 构建（PCbuild/VS 工程）未迁移 | Windows 侧无法构建 | 后续批次 |
 | R4 | 客户端/大文件资源（FantasyDemo 等）未在 Linux 验证范围 | — | 按批次推进 |
 
@@ -83,6 +84,8 @@
 | 6 | 运行期初始化修复：补 `bw_site.py`（源码包缺失，随 pyscript 跟踪 + mak 安装规则）、`bw_platform_info.cpp` Debian→el7 回退对齐构建侧 | 全量单测（21 个模块）无失败；详见 §3.1 | `41fafefc` |
 | 7 | 覆盖率基线测量（插桩构建 + 全量单测 + gcovr，详见 §7） | 插桩套件与恢复正常构建后的复验套件均 21 模块 0 失败 | 本次提交（dev） |
 | 8 | 安全补丁升级 3.13.15 → 3.13.16（3.13 系列安全维护版本；vendored 树按 v3.13.16 git tag 重同步，裁剪面/行尾约定保持，Makefile.pre.in 与 _hashopenssl.c 补丁原样重放） | `make libbwpython3.13` 全链通过 + 全量单测 21 模块全绿 | 见本次提交（dev） |
+| 9 | `third_party/python_modules` 整体换 Py3 兼容版本并重新启用安装规则（R2 收尾）：删 7 个 Py2 包，vendor 14 个 Py3 源（Twisted 24.7 / SQLAlchemy 1.4.54 / zope.interface 7 / Pympler 1.0 / pika 1.3.2 / msgpack 1.1.0 + setuptools / typing_extensions / attrs / constantly / incremental / Automat / hyperlink / idna）；`third_party_python_modules.mak` 重写为每包单规则（tar 解包 → cp 到 site-packages → .pth 标记）；`Makefile:351` include 恢复启用；新增验收脚本 `scripts/python-modules-smoke-import.py` | ① 14 个包 tar 解包后逐一 import 全通过；② `make -rR python_*` 安装后 `game/res/bigworld/scripts/{common,server_common}/site-packages` 下 15 个模块逐一 import 全通过（内嵌 3.13.16）；③ 全量单测 21 模块 / 1355 用例 / 0 失败 | 见本次提交（dev） |
+| 10 | vendored CPython 3.13 的 CMake 样板 `cmake/samples/python`（CMake 轨前置，见 vcpkg-migration §3.4）：`ExternalProject` 包住 configure+make（选项逐字取自 `third_party_python.mak`），只出 `libpython3.13.a`，拷 `Lib/` 作 stdlib，导出 `BWPython::Python`（GLOBAL），构建门禁核对 8 个 BWHooks 符号 | ① `scripts/build-python-cmake.sh` 构建通过（`libpython3.13.a` 66M）；② `check_symbols.cmake` 确认 8 个 `BW_Py_*` 符号齐全、归档含 `bwhooks.o`；③ 作为 entitydef CMake 样板的子目录被实际拉起并跑出 318 用例全绿 | 见本次提交（dev） |
 
 ---
 
@@ -854,3 +857,142 @@ TODO 表两个候选同时落位（bwresource 386/746 48%、method_description 3
 **门禁记录**：精准口径 **bwresource 322/746 → 464/746（62%）**、**method_description 153/466 → 329/466（70%）**；残余 bwresource 282 行（impl 初始化 188-484、purge 递归 551-564、searchPathsForFile/searchForFile 1179-1378、EDITOR_ENABLED 死区 1389-1392/1493-1579、ensurePathExists 族 1886-1974、addPaths/addSubPaths 族 2054-2213、fixCommonRootPath 2285-2353、monitor 包装 2558-2640、overrideAppDirectory/dissolveFilename 2702-2883，以 el7 服务端构建结构性不可达面为主）与 method_description 137 行（PyDeferredResponse 58-135、copy/赋值 254-268、createErrorObject 带 func 288-298、parse 缺 name 347-348、object-with-id 636-646、handleException 族 747-798、callMethod 错误/returnValues 分支 850-923、网络发送路径 970-1071、2 参 createArgsFromStream 1163/1166、:1216）全数分类登记。删桩复验（gcda=0、4 个对象 gcov 符数=0）后全量 21 模块门禁 **1352** 全绿。下批首位候选 `network/machine_guard.cpp`（28%，bwmachined 面之外仍有可测面；受限大件 entitydef/entity_description.cpp 665 行、moo/image.ipp 589 行维持候选）。
 
 提交范围：`lib/resmgr/unit_test/test_bwresource_paths.cpp`（新）、`lib/resmgr/unit_test/Makefile.rules`、`lib/entitydef/unit_test/test_method_description_gaps.cpp`（新）、`lib/entitydef/unit_test/Makefile.rules`、`TESTING.md`、`docs/upgrade-plan/migration-status.md`、`README.md`、`todo.md`、本文档。
+
+### 7.29 覆盖率补强批次 29：entitydef/entity_description.cpp 直驱收口（2026-10-15）
+
+TODO 表候选 `entitydef/entity_description.cpp`（665 行）的「受限：需 EntityType/EntityDef XML 装载机全套」判定**被推翻**——生产侧唯一调用点 `entity_description_map.cpp:362` 经 `desc.parse( typeName, /*componentName*/ BW::string(), pDistributionDecider )` 传入，全程只依赖 BWResource 单例与 scripts/entity_defs 下的 fixture .def 树。新建 `test_entity_description.cpp` 30 用例（entitydef_test 318→348），精准插桩口径 **0% → 64%（424/663 实例行）**，门禁 1397→**1427**。
+
+**entity_description.cpp 0% → 64%（424/663）用例覆盖面**（30 用例）：
+
+1. **parse 最小形态与失败面**：最小 .def 解析、标量属性 Flags 各位与 Persistent、缺 .def 失败、parseComponents 下 property(0) 为实体自有属性（hp）、组件属性在其后。
+2. **方法三列表**：BaseMethods/CellMethods/ClientMethods；`<Exposed/>` 的两种正确形态（`<baseExposed><Exposed/></baseExposed>`）与 ClientMethods 内 `<Exposed/>` 恒拒绝；无 Client 脚本时 ClientMethods 拒绝。
+3. **继承与优先级**：Parent 递归继承与缺父失败、Volatile 优先级平方与 yaw≥pitch≥roll 校验、LoDLevels 标签匹配 detailLevel、parseDistribution 标签解析与 detail 三 arm。
+4. **decider 面**：Distribution 三 decider 位、ClientName 弃用告警、parseDecider 无 scripts 失败。
+5. **TempProperties / Components / Implements / parseService**：TempProperties 解析；Components 装载、缺 def 失败、重名失败；Implements 接口属性；parseService 的 Methods→base 列表映射与强制非持久化；无 base 失败。
+6. **checkExposedMethods 四象限**：proxy/非 proxy × 合法/非法；SupersedeSmoke。
+7. **getDataDomains 全映射**：BASE_ENTITY_BACKUP/OFFLOAD→BASE_DATA、CELL_CREATION/CELL_ENTITY_BACKUP/OFFLOAD→CELL_DATA、CELL_GHOST_CREATION→CELL_DATA|ONLY_OTHER_CLIENT_DATA、CLIENT_PLAYER_CREATION→FROM_BASE_TO_CLIENT_DATA、CLIENT_PLAYER_CELL_CREATION→FROM_CELL_TO_CLIENT_DATA、DATABASE_ENTITY→BASE_DATA|ONLY_PERSISTENT_DATA；CLIENT_ENTITY_CELL_CREATION/CLIENT_ENTITY_LOD_DATA 两个 CRITICAL_MSG 不可达臂登记。
+8. **shouldSkipPass 矩阵**：EXACT_MATCH 置位时仅当 dataDomains 与 PASS_JUMPER[pass] 精确相等才跑（4×4 矩阵逐位断言），否则按位重叠判定；shouldConsiderData 各 pass 过滤（PASS_FILTER 双位）与 ONLY_PERSISTENT_DATA 臂。
+9. **流往返**：addSectionToStream→readStreamToDict 往返与 addSectionToDictionary 直写 dict。
+
+**实测坑位**：`EntityDescription::parse` 第二参 componentName 生产恒传空串——传实体名会把全部属性标记为 componentised、fullName 带 "Entity." 前缀，addSectionToStream 按 fullName 找值落默认值 0（gdb + PyObject_Print 实证 dict = `{'batch29Stream.hp': 0}`）；Script 属性须用 `ScriptInt::check(ScriptObject)` + `ScriptInt(p.get()).asLong()`（无 isInteger()）；XMLSection 需 `#include "resmgr/xml_section.hpp"`；StreamContentType 枚举在 BW 命名空间而非 EntityDescription 内。
+
+**残余登记（239 行）**：readStreamToSection/readTaggedClientStreamToDict/addAttributesToStream/addDictionaryToStream 网络流读侧、MD5 族（addToMD5/addPersistentPropertiesToMD5）、setExposedMsgIDs、checkMethods、pIdentifier/isTempProperty/clientServerProperty 族访问器、getDataDomains 两个 CRITICAL_MSG 不可达臂与析构/模板实例暗区。
+
+提交范围：`lib/entitydef/unit_test/test_entity_description.cpp`（新）、`lib/entitydef/unit_test/Makefile.rules`、`cmake/samples/entitydef/CMakeLists.txt`、`TESTING.md`、`docs/upgrade-plan/migration-status.md`、`README.md`、`todo.md`、本文档（§7.29）。commit `9d9dc38b`。
+
+### 7.30 覆盖率补强批次 30：network/machine_guard.cpp 直驱收口（2026-10-15）
+
+TODO 表下批首位候选 `network/machine_guard.cpp`（批次17 登记的 28% 全量口径）。MGM 消息编解码面**不依赖 bwmachined**——全部 16+1 个消息类自持 wire 格式，写侧 readImpl/writeImpl 与读侧 `MachineGuardMessage::create` 配对即可直驱。新建 `test_machine_guard_messages.cpp` 27 用例（network_test 229→256），精准插桩口径 **28% → 87%（668/764 实例行）**，门禁 1427→**1454**。
+
+**machine_guard.cpp 28% → 87%（668/764）用例覆盖面**（27 用例）：
+
+1. **机器统计面**：HighPrecisionMachineMessage / WholeMachineMessage 全字段写-读往返（Low/High 两套 InterfaceStats 位宽差异钉死）+ c_str。
+2. **进程面**：ProcessMessage 全字段往返（含额外块：major/minor/patch/interfaceVersion/username/defDigest）、额外块前向兼容跳过（声明多 4 字节 + 追写 4 字节 dummy，consume 干净、无 error）、欠声明报错（声明 1 → 字段吃完 → is.error()）；matches 六参逐位断言（category/uid/pid/port/id/name，未置位忽略）；categoryToString 三臂（SERVER_COMPONENT/WATCHER_NUB/UNKNOWN）与 c_str 嵌入。
+3. **ProcessStats / Listener / Signal**：ProcessStats 往返 + c_str；Listener 往返 + c_str 的 RegBirthL/RegDeathL 两标签臂（按 PARAM_IS_MSGTYPE + ADD_BIRTH/DEATH_LISTENER 位）；Signal 往返 + setControlledShutdown=SIGUSR1 / setKill=SIGINT / setHardKill=SIGQUIT 三臂。
+4. **创建面**：Create 往返 + c_str（CreateMessage / c_str_name / uid 三形态）；CreateWithArgs 往返 + c_str 的 args 列表与空列表（`args=[]`）臂。
+5. **杂项消息**：Tags（count + exists_ + strings）、User（PARAM_CHECK_COREDUMPS 下 CoreDump 三元组 / PARAM_GET_VERSION 下 versionString / 无 flag 时双空）、init(struct passwd&) + getConfFilename（`%s/.bwmachined.conf`）、matches 两参位、Reset、Pid、MachinedAnnounce（birth count / death addr union 双 arm + MachinedBirth/MachinedDeath）、MachinePlatform（直读 platformInfo_）、UnknownMessage（create 回显 0x55 + MESSAGE_NOT_UNDERSTOOD 位 + body 保留 + c_str "4 bytes long"）。
+6. **ReplyHandler 面**：RecordingReplyHandler 16 型分发矩阵（每个 on*Message 落位断言）+ 未知型默认臂（0x55 → onUnhandledMsg）；基类 ReplyHandler 16 个默认 on*Message 全落 onUnhandledMsg（返回 true 保持处理）。
+
+**实测坑位**：CppUnitLite2 的 `CHECK_EQUAL(const char*, const char*)` **比较指针**（45 处 assert 全部要 strcmp 化，否则报 "expected: 'x' but was: 'x'" 同文不同址）；`MachineGuardMessage::write` 非 const（roundTrip 助手取非 const 引用）；精准插桩在 libnetwork.a 场景须**重打包静态库**（instrumented obj 复制进 build 树 obj 后须 `make libnetwork` 重归档，否则链上的是旧库）；g++ 链接须**显式 `--coverage`** 才链 libgcov（否则 __gcov_exit/__gcov_merge_add 未定义）；gcda 落在**编译期 -o 路径**（/tmp 暂存目录）而非 build 树 obj 目录，gcovr 以该目录为根。
+
+**残余登记（96 行）**：sendto / sendAndRecv(Endpoint&) / sendAndRecv(srcip,destaddr) / sendAndRecvFromEndpointAddr 的 UDP 套接字面 83 行（需活 socket + 绑 PORT_MACHINED=20018 回环，引入环境依赖，登记不测）；typeStr 的 `** UNKNOWN **` 默认臂 12 行；seq ticker 回绕臂（s_seqTicker_ 达 0xffff 后 ++）1 行。
+
+提交范围：`lib/network/unit_test/test_machine_guard_messages.cpp`（新）、`lib/network/unit_test/Makefile.rules`、`lib/network/unit_test/CMakeLists.txt`、`TESTING.md`、`docs/upgrade-plan/migration-status.md`、`README.md`、`todo.md`、本文档（§7.29 补记 + §7.30）。
+
+### 7.31 覆盖率补强批次 31：entitydef/entity_description.cpp MD5 族直驱（2026-10-15）
+
+§7.29 残余登记中的 **MD5 族**（addToMD5 / addPersistentPropertiesToMD5，entity_description.cpp:1740-1822）本批直驱——这是 L36 热重载设计指定的 schema 版本原语（.def 变更检测以实体摘要为准）。既有 TU `test_entity_description.cpp` 追加 11 用例（entitydef_test 348→359），精准插桩口径 **64% → 70%（424/663 → 468/663 实例行）**，门禁 1454→**1465**。
+
+**摘要规则（从源码钉死）**：`addToMD5` = 名称 + 逐属性（仅 `isClientServerData()` 者：`clientServerFullIndex()` 原生序 int + `DataDescription::addToMD5`）+ client 方法**全部**（`method->addToMD5(md5, count++)`）+ base/cell 方法**仅 `isExposed()` 者**（且 count 只对入选者递增，非暴露方法不挤位）；`addPersistentPropertiesToMD5` = 名称 + 逐属性（仅 `isPersistent()` 者）。CELL_PUBLIC（DATA_GHOSTED）与 BASE（DATA_BASE）均不含 OTHER_CLIENT/OWN_CLIENT/REPLAY 位，`isClientServerData()` 为假——三分区：hp(CELL_PUBLIC) 双摘要零贡献、owner(BASE+Persistent) 只进持久摘要、nick(ALL_CLIENTS) 只进全量摘要。
+
+**entity_description.cpp MD5 族用例覆盖面**（11 用例）：
+
+1. **确定性**：同字节重解析，双摘要相等（回归守卫：摘要只依赖 schema 内容，无指针/解析顺序噪声）。
+2. **CELL_PUBLIC 零贡献**：hp 的类型 UINT16→FLOAT32 整体替换，双摘要均不动。
+3. **client-server 属性只进全量摘要**：加 nick(ALL_CLIENTS) → 全量摘要动、持久摘要不动。
+4. **BASE+Persistent 属性只进持久摘要**：hp 改 BASE+Persistent → 持久摘要动、全量摘要不动。
+5. **非持久属性对持久摘要零贡献**：加 nick(ALL_CLIENTS) 后持久摘要与空 def 相同（全量摘要不同作对照）。
+6. **未暴露 base 方法零贡献**：带非暴露 basePing 的摘要与无 BaseMethods 的摘要相等。
+7. **暴露 base 方法即入摘要**：`<Exposed/>` 使摘要变化（flags_ 暴露位 + 摘要收录双重效应）。
+8. **cell 方法同一暴露门控**：cellTick 非暴露不动、暴露即动。
+9. **client 方法无暴露门控**：`<Exposed/>` 在 ClientMethods 恒拒绝（parse 失败），方法一旦存在即进摘要。
+10. **暴露方法顺序敏感**：交换两个暴露 base 方法 → legacyExposedIndex 对调 → 摘要变化。
+11. **client-server 属性顺序敏感**：交换两个 ALL_CLIENTS 属性 → clientServerFullIndex 对调（parseProperties 按 def 顺序编号，entity_description.cpp:664-671）→ 全量摘要变化而持久摘要不动（持久摘要无 index）。
+
+**实测坑位**：① `BWResource::openSection` **先查 `DataSectionCensus` 再碰文件系统**（bwresource.cpp:614-625）——同一路径重写 .def 后重解析必须先 `BWResource::instance().purgeAll()` 驱逐，否则读到旧段（before/after 同名实体 fixture 的前置条件）；② CppUnitLite2 的 `CHECK` 宏展开为 `result_`/`m_name` 测试体成员，**自由助手函数里不可用**，用 `MF_VERIFY` 替代；③ `MD5::Digest` 默认构造不初始化字节（md5.hpp:29 `Digest() { }`），必须走 `Digest(MD5&)` 或 `operator=`；④ `BWResource::purgeAll()` 是成员函数非静态。
+
+**精准插桩补遗**：`make -n` 对**已存在且最新**的 obj 静默无输出（"is up to date"），须加 `-B` 强制重算才吐编译行。
+
+**残余登记（195 行）**：parseProperties 属性覆盖/override 臂、LoDLevels/Volatile/Implements/Components 解析面、addSectionToStream 流写侧、supersede 迁移面、watcher 面等。
+
+提交范围：`lib/entitydef/unit_test/test_entity_description.cpp`（既有 TU 追加）、`TESTING.md`、`docs/upgrade-plan/migration-status.md`、`README.md`、`todo.md`、本文档（§7.31）。
+
+### 7.32 覆盖率补强批次 32：entitydef/entity_description.cpp 流/访问器/暴露消息号直驱（2026-10-15）
+
+§7.31 残余登记中的**流写侧访客族 + 读侧 + 访问器 + 暴露消息号**四块本批直驱。既有 TU `test_entity_description.cpp` 追加 7 用例（entitydef_test 359→366），精准插桩口径 **70% → 89%（468/663 → 591/663 实例行）**，门禁 1465→**1472**。
+
+**摘要/流协议规则（从源码钉死）**：`addToStream` 助手循环 `NUM_PASSES = 4` 个 pass，`shouldSkipPass` 按 `PASS_JUMPER[4]` = {BASE、BASE|CLIENT、CELL|CLIENT、CELL}（EXACT_MATCH 置位时精确相等、否则位重叠）决定跑不跑；`shouldConsiderData` 的 `PASS_FILTER[4][2]` 是 isBaseData × isClientServerData 二维真值表 → hp(CELL_PUBLIC：非 base 非 CS) 落 pass3、owner(BASE：base 非 CS) 落 pass0、nick(ALL_CLIENTS：非 base 且 CS) 落 pass2、pass1（base 且 CS）在无此类属性时贡献 0 字节。`pDataSizes` 每个跑过的 pass 记 `stream.size() - 该 pass 前尺寸`，故**必须按 4 开数组**（`numDataSizes=3` 时 `MF_ASSERT_DEV(numDataSizes == actualPass-1)` 放行但第 4 pass 不记录）。`clientServerProperties_` 经 `allocateClientServerFullIndexes` **按 `streamSize()` 稳定排序**（定长升序在前、变长按名义尺寸升序在后，tie 保持 def 顺序）——`clientServerProperty(n)` 的 n 是排序后序号而非 def 顺序，`clientServerFullIndex()` 也是排序后的号，tagged client 流的 index 同理。
+
+**entity_description.cpp 流/访问器/暴露消息号用例覆盖面**（7 用例）：
+
+1. **addDictionaryToStream 往返**：dict{hp:5, owner:7, nick:"bob"} 三段域全开 → 逐 pass 尺寸 {4, 0, 4, 2} 且和等于流总长 → readStreamToDict 回读值全对且 `is.remainingLength()==0`（字典映射面 + pass 分派 + 尺寸记账三合一）。
+2. **缺键/错型/null mapping**：dict 只给 hp → owner 读回 0、nick 读回 ""（AddToStreamMapVisitor `isErrorOnNULL()==false` 走默认值）；hp 给 ScriptString（UINT16 期望 int）→ 换默认值后整体失败；null `ScriptMapping` → 前置拒绝。
+3. **addAttributesToStream 往返与双臂**：Python 实例属性 → 流 → dict 回读全对；对象缺属性 → AddToStreamAttributeVisitor `isErrorOnNULL()==true` → 失败；NULL 对象 → 前置拒绝。
+4. **readStreamToSection**：值 section → 流 → 新建 XML section，`readString("nick")=="bob"`、`readInt("secret")==9`。
+5. **readTaggedClientStreamToDict**：手工按 tagged 格式组流（count u8 + 逐项 [clientServerFullIndex u8 + 该属性 addToStream 输出]），覆盖 other-client 与 own-client 数据；顺带断言 clientServerProperty 的排序结果 [score, secret, nick]。
+6. **访问器**：pIdentifier（Identifier 属性须同时 `<Persistent>true</Persistent>`——parse 对 Indexed 默认为真，非持久 Indexed 直接 parse 失败）、isTempProperty、clientServerPropertyCount/clientServerProperty、无 Identifier 时 pIdentifier()==NULL。
+7. **setExposedMsgIDs + checkMethods**：唯一暴露 base 方法取 range(10,19) 首槽 msgID=10、未暴露方法保留 -1 哨兵读作 255（Mercury::MessageID uint8 回绕）；checkMethods 的 warnOnMissing 双臂与「Python 类缺方法即 false」。
+
+**实测坑位**：① `clientServerProperties_` 按流尺寸稳定排序（见上）——首个版本按 def 顺序取 index 0/1/2，把 ScriptString 喂给 UINT16 属性、ScriptInt 喂给 STRING 属性，`addToStream` 类型不匹配全红；② `NUM_PASSES=4` 而非常见猜测的 3，dataSizes 少开一个导致「逐 pass 尺寸和 8 ≠ 流总长 10」的假失败（未记录的第 4 pass 正好是 2 字节的 hp）；③ `MemoryOStream` 追加原始字节是 `addBlob`（无 `append`）；④ `XMLSection` 的 `asString`/`asInt` 是 **protected**，须经基类 `DataSectionPtr` 用 `readString`/`readInt`；⑤ `ScriptString` 取值用 `c_str()`（无 `asChar`）；⑥ **/tmp 配额**——精准插桩产出 187 MB 二进制，两轮插桩 + 多份 cp 副本很快把 tmpfs 写满（`cp: error writing … Disk quota exceeded`），插桩目录须随测随清。
+
+**残余登记（72 行）**：parse 错误/警告臂（307-357）、LoD/Volatile 缺省臂（416,419）、parseComponents 缺臂（508,511）、parseProperties 覆盖与 clientSafety 臂（598-728）、parseMethods 错误臂（937-977）、checkExposedMethods 臂（1061-1075）、访客 MF_EXIT/边界臂（1163-1312）、读侧边界臂（1590-1702）、访问器 MF_EXIT 臂（1864）与 watcher 面（1882,1884）——以失败/断言臂为主，直驱需逐一构造失败输入，边际收益低。
+
+提交范围：`lib/entitydef/unit_test/test_entity_description.cpp`（既有 TU 追加）、`TESTING.md`、`docs/upgrade-plan/migration-status.md`、`README.md`、`todo.md`、本文档（§7.32）。
+
+### 7.33 热重载回滚链 supersede 语义直驱（2026-10-15）
+
+todo C 档「server 侧 reload 迁移语义测试承载」的下一片：`Entity::migrate` 的 `__class__` 换/回滚本体仍需 Entity 实例与运行时（harness 不可达，缺口原样），但其回滚路径**依赖的可达语义体**——`EntityType::old` → 旧描述 `supersede(CELL)`——在 lib/entitydef 层可直接驱动。本批把这套语义钉死并产出热重载设计稿的 **F7** 失败模式。既有 TU `test_entity_description.cpp` 追加 4 用例（entitydef_test 366→**370**），门禁 1472→**1476**，覆盖率口径不动（supersede 臂批次 29 smoke 已过线，本批补的是功能效应断言）。
+
+**supersede 语义链（从源码钉死）**：`EntityMethodDescriptions::supersede`（entity_method_descriptions.cpp:218-231）清名→索引 map、全部方法改名 `old_` 前缀、按新名重建 map；`EntityDescription::supersede`（entity_description.cpp:892-904）按组件分派 BASE→base_、CELL→cell_、其余仅 WARNING。效果：`find(旧名)`→NULL、`find("old_"+名)`→同对象、`internalMethod`/`exposedMethod` 下标访问不受影响（走 exposedMethods_ 下标不查 map）。生产调用链：`Entity::migrate`（entity.cpp:4267，`pNewType->old(pOldType)` 先于 `__class__` 尝试 :4275）→ `EntityType::old`（entity_type.cpp:168-185，首设才生效，重复设不同值 dev 断言）→ 旧描述 `supersede(CELL)`；`__class__` 失败回滚 `pEntityType_ = pOldType`（entity.cpp:4287）**无 un-supersede**（全仓 grep 确认 supersede 仅 entity_description/entity_method_descriptions/entity_type 三处）。
+
+**用例覆盖面（4 用例）**：
+1. `EntityDescription_supersedeRenamesCellMethods`——supersede(CELL) 后 `find("cellTick")`/`find("cellHeal")`→NULL、`find("old_cellTick")` 可达且 `== internalMethod(0)`、`exposedMethod(0)` 仍解析且名字带 old_ 前缀（**msgID 派发面不受影响**的直接证据）；base/client 列不动。
+2. `EntityDescription_supersedeRenamesBaseMethods`——supersede(BASE) 同语义，cell/client 列不动。
+3. `EntityDescription_supersedeTwiceStacksPrefixes`——重复 supersede 前缀叠加（`old_old_cellTick`），印证 `EntityType::old` 首设守卫的必要性（重复调用是破坏性的）。
+4. `EntityDescription_supersedeChangesMd5`——supersede 后 `addToMD5` 漂移（暴露方法改名直接进 digest），**schema digest 必须在 supersede 前采集**；无属性实体 persistent digest 不变（只含实体名，对照面）。
+
+**F7（入 docs/upgrade-plan/hot-reload-productionization.md 失败模式清单）**：回滚"成功"的实体处于半残态——按名字的 mailbox 方法查找全断（`mailbox.cpp:122/240` `findMethod` → `description().cell()/base().find(attr)` → NULL → 脚本侧报错），按 msgID 的暴露派发仍活；设计稿「双版本兼容窗口」与「失败回滚」两节已按此修正（窗口只保得住下标/msgID 派发，按名补解析需另设计；逆操作必须同时回退 supersede 改名）。
+
+提交范围：`lib/entitydef/unit_test/test_entity_description.cpp`（既有 TU 追加）、`TESTING.md`、`docs/upgrade-plan/migration-status.md`、`docs/upgrade-plan/hot-reload-productionization.md`、`README.md`、`todo.md`、本文档（§7.33）。
+
+### 7.34 覆盖率批次 34：entitydef/method_description.cpp 纯助手族直驱（2026-10-15）
+
+已登记候选（残余 137 行）的**可驱面复核**结论：批次 28 分类中除纯助手族外全部维持受限（PyDeferredResponse 58-135 需两路调用上下文、handleException 族 747-798 与 callMethod 错误臂 850-923 需活 Mercury 通道或异常回复管线、网络发送 970-1071 需活通道、parse 空 name 臂 347-348 不可驱动——XML 段名不可为空、无合法构造路径；staticInitTwoWay 错误臂 254-298 需破坏 BWTwoWay 模块、环境操纵不做）。本批直驱四个**零覆盖**的纯助手（`test_method_description.cpp` 追加 5 用例，entitydef_test 370→**375**），精准插桩 329/466 70%→**337/466 72%**，门禁 1476→**1481**。
+
+**语义面（从源码钉死）**：
+- `extractSourceEntityID`（method_description.cpp:610-658）——Server→Server 调用约定核心：仅暴露 CELL 方法取参首槽作 sourceEntityID；int 直取（`convertTo` 成功路径）、None 记 NULL_ENTITY_ID、其余从 `.id` 属性回退（无属性报错返回空元组）；两种成功都**返回去头元组**喂 addToServerStream。非暴露/BASE 方法原样透传、sourceEntityID 不动。
+- `convertKeywordArgs`（:716-719 → method_args.cpp:389-442）——位置前缀原样拷贝，命名尾槽**按名**从 kwargs 取值；kwargs 按**个数**计数（total = 位置数 + kwargs 个数 必须恰等于形参数），缺名/计数不符报错。注意不是「剩余 kwargs 任意分配」——尾参必须按声明名命中。
+- `areValidReturnValues`（:941-951 → MethodArgs::checkValid）——按 `<ReturnValues>` 节校验元数与逐元素类型。
+- `createDictFromTuple`（:1238-1241 → method_args.cpp:448-472）——合法元组 → 以声明返回名为键的 dict。
+
+**实测坑位**：① `ScriptObject::operator==` 是**指针等价**（py_script_object.hpp:596，`obj1.get() == obj2.get()`）——值断言必须走 `ScriptString::check` + `c_str()` strcmp、`ScriptInt::check` + `asLong()`，任何 `obj == ScriptObject(ScriptString::create(...))` 形式都对临时对象比指针必败；② `ScriptDict` 无 `size()`（只有 next/getItem/setItem），dict 断言逐键 getItem；③ `<ReturnValues>` 节用命名子元素（`<name> STRING </name>`，MethodArgs::parse 默认旧样式、段名即参数名）；④ `ScriptTuple` 的 `size()` 返回 Py_ssize_t、`STANDARD_SCRIPT_OBJECT_IMP` 提供 `explicit ScriptTuple(const ScriptObject&)` 构造（check 后可安全转换）。
+
+残余 129 行维持批次 28 受限分类（PyDeferredResponse/handleException/callMethod 错误臂/网络发送/staticInit 错误臂/parse 空 name 臂）。
+
+提交范围：`lib/entitydef/unit_test/test_method_description.cpp`（既有 TU 追加）、`TESTING.md`、`docs/upgrade-plan/migration-status.md`、`README.md`、`todo.md`、本文档（§7.34）。
+
+### 7.35 覆盖率批次 35：cellapp 实体消息 EntityID/SpaceID 关联接线（2026-10-15）
+
+观测面 lane 的生产接线最后一步：进程内日志关联上下文（`LogCorrelation`，见 §7.31 链）在 channelID（`UDPBundleProcessor`）之上补齐**实体与空间两维**。新增头内联 RAII 载体 `EntityMessageLogScope`（`server/cellapp/entity_message_log_scope.hpp`：构造即 `LogCorrelation::set("entityID")`、`setSpaceID` 补 "spaceID"，析构经 `ScopedLogCorrelation` 恢复进入前快照；持有 ScopedLogCorrelation 故不可复制不可移动，须就地构造），接线在 `EntityMessageHandler::handleMessage` 4 参重载（`server/cellapp/message_handlers.cpp`，findEntity 之后、分支之前）——3 参输入侧重载与缓冲重放都汇入该重载，一处接线覆盖两条路径。
+
+**语义面（从源码钉死）**：
+- 接线点选 4 参重载而非 3 参入口：`EntityMessageHandler::handleMessage(src, header, data)` 只解包 entityID 就转发（message_handlers.cpp:92-99），缓冲消息重放也走 4 参；此处 entityID 已解包、findEntity 已完成，是全部下游分支（destroyed-ghost 丢弃/缓冲/REAL_ONLY 转发）的共同祖先。
+- spaceID 守卫 `pEntity != NULL && !pEntity->isDestroyed()`：destroy 后实体仍在 population 可 findEntity，但 `Entity::destroy` 先 `setDestroyed()`（entity.cpp:2959）再 `pSpace_->removeEntity(this)`（:2964）最后 `pSpace_ = NULL`（:2965）——而 `Entity::spaceID()`（entity.cpp:6116）是裸 `return pSpace_->id()`、无 NULL 检查，直取即崩；`Entity::isDestroyed()`（entity.hpp:213）是安全门。未知实体（pEntity==NULL）同样不取。
+- 上下文容量：`LogCorrelation` 上限 8 字段、超出静默丢弃（log_meta_data.cpp:268 WARNING）；channelID + entityID + spaceID 占 3，余量充足。
+- 载体只 set 不 clear：channelID 等外层字段在 scope 退出时由 ScopedLogCorrelation 整体恢复，嵌套 scope 互不泄漏。
+
+**测试承载（调用点不可达的处置）**：`message_handlers.cpp` 不编入 cellapp_test（Makefile.rules 只编低耦合 TU），运行时接线不可测——与 C 档「Entity 运行时承载缺口」同源，如实记录。wrapper 语义核心由新建 `server/cellapp/unit_test/test_entity_message_log_scope.cpp` 4 用例直驱（cellapp_test 8→**12**，全套 1481→**1485**）：仅 entityID（未知/销毁实体路径）、entityID+spaceID（活实体路径）、与 channelID 外层叠加且退出恢复、嵌套 scope 逐层恢复。读取走 `LogCorrelation::save` 快照 + 按 key 查找。
+
+**实测坑位**：① `ScopedLogCorrelation` 拷贝构造/赋值是 private 未定义（log_meta_data.hpp:159-160）——含它的类天然不可复制，工厂函数返回值路线（NRVO 依赖 C++17 保证）不可用，只能就地构造后 `setSpaceID` 补字段；② `LogCorrelation::set` 的值参数是 `long long`，EntityID/SpaceID 是 int32，隐式放宽转换无符号丢失；③ 测试里读上下文不能用 `hasFields`+遍历（无按 key getter），用 `save` 快照。
+
+提交范围：`server/cellapp/entity_message_log_scope.hpp`（新增头内联载体）、`server/cellapp/message_handlers.cpp`（接线）、`server/cellapp/unit_test/test_entity_message_log_scope.cpp`（新建 TU）、`server/cellapp/unit_test/Makefile.rules`（cxxSource 注册）、`TESTING.md`、`docs/upgrade-plan/migration-status.md`、`README.md`、`todo.md`、本文档（§7.35）。

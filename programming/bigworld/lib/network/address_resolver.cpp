@@ -1,9 +1,20 @@
 #include "address_resolver.hpp"
 
-#include <netdb.h>
-#include <arpa/inet.h>
-#include <sys/socket.h>
-#include <sys/types.h>
+#if defined( _WIN32 )
+	// Winsock2 provides the socket core (socket/bind, hostent/gethostbyname,
+	// AF_INET, sockaddr_in); getaddrinfo/freeaddrinfo and inet_ntop live in
+	// ws2tcpip.h (C3861 in the root superproject build), so only the include
+	// list differs from POSIX and the body below is shared. Lean windows.h
+	// first, same order as endpoint.hpp.
+	#include "cstdmf/cstdmf_windows.hpp"
+	#include <Winsock2.h>
+	#include <ws2tcpip.h>
+#else
+	#include <netdb.h>
+	#include <arpa/inet.h>
+	#include <sys/socket.h>
+	#include <sys/types.h>
+#endif
 
 BW_BEGIN_NAMESPACE
 

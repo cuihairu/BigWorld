@@ -19,6 +19,7 @@
 #include "id_config.hpp"
 #include "py_entities.hpp"
 #include "real_entity.hpp"
+#include "reload_script_plan.hpp"
 #include "replay_data_collector.hpp"
 #include "space.hpp"
 #include "spaces.hpp"
@@ -97,18 +98,57 @@
 
 #include <algorithm>
 #include <sys/types.h>
+#if !defined( _WIN32 )
+// waitpid is never actually called here - the include is a leftover from a
+// fork-based variant of this file that only ever existed on POSIX (C1083
+// 'sys/wait.h' in the root superproject build, run 38999627798).
 #include <sys/wait.h> // for waitpid
+#endif
+
+#if defined( _WIN32 )
+// MSVC's SDK leaves `#define interface struct` (rpcndr.h via d3d9.h / shlobj /
+// shlwapi / d3d10) live for the rest of the TU, which rewrites the
+// `interface`-named declarations in this file into syntax errors (C2332/C2027
+// in the root superproject build). Off for this file only; the pop below
+// restores it for whatever SDK COM header comes later in the TU.
+#pragma push_macro( "interface" )
+#undef interface
+#endif
 
 
 // #define MF_USE_VALGRIND
 #ifdef MF_USE_VALGRIND
 #include <valgrind/memcheck.h>
+
 #endif
 
 DECLARE_DEBUG_COMPONENT( 0 )
 
 
 BW_BEGIN_NAMESPACE
+
+#if defined( _WIN32 )
+// Windows has no gettimeofday. It is used here only as a wall clock for the
+// stamp-counter sanity cross-check in calcTickPeriod (C3861 in the root
+// superproject build, run 39003541338); the same FILETIME-to-Unix-epoch
+// conversion the message_logger compat shim carries.
+namespace
+{
+	void wallClockTimeval( timeval * tv )
+	{
+		FILETIME ft;
+		GetSystemTimeAsFileTime( &ft );
+		ULARGE_INTEGER ticks;
+		ticks.LowPart = ft.dwLowDateTime;
+		ticks.HighPart = ft.dwHighDateTime;
+		// FILETIME counts 100ns units from 1601; shift to the Unix epoch.
+		const uint64 EPOCH_DIFF = 116444736000000000ULL;
+		uint64 sinceEpoch100ns = ticks.QuadPart - EPOCH_DIFF;
+		tv->tv_sec = (long)( sinceEpoch100ns / 10000000ULL );
+		tv->tv_usec = (long)( ( sinceEpoch100ns / 10ULL ) % 1000000ULL );
+	}
+}
+#endif // _WIN32
 
 extern int Math_token;
 extern int ResMgr_token;
@@ -809,7 +849,11 @@ void CellApp::startGameTime()
 							"GameTick" );
 
 	lastGameTickTime_ = timestamp();
+#if defined( _WIN32 )
+	wallClockTimeval( &oldTimeval_ );
+#else
 	gettimeofday( &oldTimeval_, NULL );
+#endif
 	mainDispatcher_.clearSpareTime();
 	this->calcTransientLoadTime();
 
@@ -1002,7 +1046,11 @@ uint64 CellApp::calcTickPeriod()
 	lastGameTickTime_ = newTime;
 
 	timeval newTimeval;
+#if defined( _WIN32 )
+	wallClockTimeval( &newTimeval );
+#else
 	gettimeofday( &newTimeval, NULL );
+#endif
 
 	if (time_ % 20 == 0)
 	{
@@ -1121,6 +1169,12 @@ void CellApp::checkTickWarnings( double persistentLoadTime,
 
 	if ((persistentLoadTime < 0.f) || (lastTickPeriod < persistentLoadTime))
 	{
+		// BWTimingMethod/g_timingMethod exist only in cstdmf's __linux__
+		// timestamp branch (timestamp.hpp); the Windows port times through
+		// QueryPerformanceCounter, which has no unsynchronised-TSC failure
+		// mode, so only the generic warning remains there (C2065 in the
+		// root superproject build, run 39003541338).
+#if !defined( _WIN32 )
 		if (g_timingMethod == RDTSC_TIMING_METHOD)
 		{
 			CRITICAL_MSG( "CellApp::checkTickWarnings: "
@@ -1131,6 +1185,7 @@ void CellApp::checkTickWarnings( double persistentLoadTime,
 				lastTickPeriod );
 		}
 		else
+#endif
 		{
 			CRITICAL_MSG( "CellApp::checkTickWarnings: "
 				"Invalid timing result %.3f.\n", lastTickPeriod );
@@ -2325,64 +2380,99 @@ bool CellApp::reloadScript( bool isFullReload )
 				"reloadScript should be used with caution, and never in a "
 				"production environment.\n" );
 
-	// Load entity defs in new Python interpreter.
+	// Head of the sequence: the scratch interpreter is swapped in and the
+	// loads run inside it. These steps run before the plan can know their own
+	// outcomes; ReloadScript::planReload() carries them as sequence data and
+	// drives everything from the swap-back on.
 	PyThreadState* pNewPyIntrep = Script::createInterpreter();
 	PyThreadState* pOldPyIntrep = Script::swapInterpreter( pNewPyIntrep );
 
-	bool isOK = (isFullReload) ? EntityType::init( true/*isReload*/ ) :
-					EntityType::reloadScript();
+	const bool defsLoaded =
+		(isFullReload) ? EntityType::init( true/*isReload*/ ) :
+						EntityType::reloadScript();
 
 	// Load UDO modules
 	UserDataObjectTypes udoTypes;
 	UserDataObjectTypesInDifferentDomain udoTypesInDifferentDomain;
 
-	if (isOK)
-		isOK = UserDataObjectType::load( udoTypes, udoTypesInDifferentDomain );
-
-	if (isOK)
+	bool udoLoaded = false;
+	if (defsLoaded)
 	{
-		// Restore original Python interpreter. EntityType::init() got a copy
-		// of the loaded modules. And EntityType::migrate() will replace the
-		// modules in the original Python interpreter with new modules.
-		// __kyl__ (8/2/2006) Can't simply throw away old interpreter and
-		// use new interpreter since we are currently inside a Python call
-		// so the old interpreter is still on the callstack.
-		Script::swapInterpreter( pOldPyIntrep );
-		Script::destroyInterpreter( pNewPyIntrep );
-
-		EntityType::migrate( isFullReload );
-		UserDataObjectType::migrate( udoTypes, udoTypesInDifferentDomain );
-		ServerEntityMailBox::migrateMailBoxes();
-
-		// Migrate entities
-		for (EntityPopulation::const_iterator iter = Entity::population().begin();
-				iter != Entity::population().end(); ++iter)
-		{
-			MF_VERIFY( iter->second->migrate() );
-		}
-
-		EntityType::cleanupAfterReload( isFullReload );
-
-		return true;
+		udoLoaded = UserDataObjectType::load( udoTypes,
+			udoTypesInDifferentDomain );
 	}
-	else
+
+	const ReloadScript::PlanInputs planInputs = { isFullReload, defsLoaded,
+		udoLoaded };
+	const ReloadScript::ReloadPlan plan =
+		ReloadScript::planReload( planInputs );
+
+	for (int i = 0; i < plan.count; ++i)
 	{
-		// Restore original Python interpreter.
-		Script::swapInterpreter( pOldPyIntrep );
-
-		if (!isFullReload)
+		switch (plan.actions[ i ])
 		{
-			// Try using the old scripts again.
-			// NOTE: This works (mostly) because when we try to import a module
-			// that's already imported, it doesn't try to read it from the
-			// disk.
-			MF_VERIFY( EntityType::reloadScript( true ) );
-		}
+			// Head steps, already executed above.
+			case ReloadScript::SWAP_IN_INTERPRETER:
+			case ReloadScript::LOAD_ENTITY_DEFS:
+			case ReloadScript::LOAD_USER_DATA_OBJECTS:
+				break;
 
-		EntityType::cleanupAfterReload( isFullReload );
-		Script::destroyInterpreter( pNewPyIntrep );
-		return false;
+			case ReloadScript::SWAP_BACK_INTERPRETER:
+				// Restore original Python interpreter. EntityType::init() got a
+				// copy of the loaded modules. And EntityType::migrate() will
+				// replace the modules in the original Python interpreter with
+				// new modules.
+				// __kyl__ (8/2/2006) Can't simply throw away old interpreter
+				// and use new interpreter since we are currently inside a
+				// Python call so the old interpreter is still on the callstack.
+				Script::swapInterpreter( pOldPyIntrep );
+				break;
+
+			case ReloadScript::DESTROY_NEW_INTERPRETER:
+				Script::destroyInterpreter( pNewPyIntrep );
+				break;
+
+			case ReloadScript::MIGRATE_ENTITY_TYPES:
+				EntityType::migrate( isFullReload );
+				break;
+
+			case ReloadScript::MIGRATE_USER_DATA_OBJECT_TYPES:
+				UserDataObjectType::migrate( udoTypes,
+					udoTypesInDifferentDomain );
+				break;
+
+			case ReloadScript::MIGRATE_MAIL_BOXES:
+				ServerEntityMailBox::migrateMailBoxes();
+				break;
+
+			case ReloadScript::MIGRATE_ENTITIES:
+				// Migrate entities
+				for (EntityPopulation::const_iterator iter =
+						Entity::population().begin();
+					iter != Entity::population().end(); ++iter)
+				{
+					MF_VERIFY( iter->second->migrate() );
+				}
+				break;
+
+			case ReloadScript::CLEANUP_AFTER_RELOAD:
+				EntityType::cleanupAfterReload( isFullReload );
+				break;
+
+			case ReloadScript::RECOVER_OLD_SCRIPTS:
+				// Try using the old scripts again.
+				// NOTE: This works (mostly) because when we try to import a
+				// module that's already imported, it doesn't try to read it
+				// from the disk.
+				MF_VERIFY( EntityType::reloadScript( true ) );
+				break;
+
+			default:
+				break;
+		}
 	}
+
+	return plan.succeeded;
 }
 
 
@@ -3695,3 +3785,7 @@ SpaceEntryID CellApp::nextSpaceEntryID()
 BW_END_NAMESPACE
 
 // cellapp.cpp
+
+#if defined( _WIN32 )
+#pragma pop_macro( "interface" )
+#endif

@@ -50,7 +50,7 @@ bool IntegerDataType< INT_TYPE >::isSameType( ScriptObject pValue )
 	{
 		ERROR_MSG( "IntegerDataType::isSameType: "
 				"%" PRIzd " is out of range (truncated = %" PRIzd ").\n",
-			(ssize_t)intValue, ssize_t(value) );
+			(intptr)intValue, intptr(value) );
 
 		return false;
 	}

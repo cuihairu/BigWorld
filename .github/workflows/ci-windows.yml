@@ -1,0 +1,470 @@
+name: CI Windows (MSVC compile gate)
+
+# First leg of the R3 Windows build gate (todo: "R3 Windows 构建" /
+# "Windows CI runner" in todo.md §C).
+#
+# Goal: prove the platform-agnostic libraries (math, cstdmf) still compile
+# with MSVC, so the Windows track cannot silently rot while Linux-only CI
+# keeps passing. Nothing is tagged or released from this job - it only builds
+# and uploads logs plus (root-build-probe, L39) a products zip as workflow
+# ARTIFACTS with a retention window; artifacts are not releases.
+#
+# Why a module-level configure instead of the root superproject:
+# the root (CMakeLists.txt, cmake_minimum_required 2.8.12) aggregates every
+# server module, including libpython (a heavily patched CPython tree with no
+# CMake build system) and third_party/png/projects/visualc71 (a Visual
+# Studio 2003 project dir). Configuring those is the bulk of the remaining
+# R3 migration work. Each lib keeps its own CMakeLists.txt using
+# BWStandardProject, so they can be configured standalone by supplying the
+# globals the root would set:
+#   CMAKE_PROJECT_INCLUDE : build/cmake/BWMacros.cmake (root-only otherwise;
+#                           supplies BW_ADD_LIBRARY / BW_TARGET_LINK_LIBRARIES)
+#   CMAKE_MODULE_PATH     : build/cmake (supplies BWStandardProject)
+#   BW_SOURCE_DIR         : the source root BWStandardProject includes from
+#   BW_PLATFORM*          : what the root derives from WIN32 + pointer size
+#   PCH_SUPPORT           : the historical VS-project define that makes every
+#                           module's pch.hpp (41 of them, cstdmf first) actually
+#                           carry its includes - notably cstdmf_windows.hpp,
+#                           which supplies <windows.h> to TUs like
+#                           critical_error_handler.cpp. The CMake root's
+#                           server config turns it OFF
+#                           (BWConfiguration_server.cmake), but every cpp
+#                           still does '#include "pch.hpp"' and relies on it
+#                           textually, so the gate mirrors the canonical
+#                           VS-project build instead. It rides in
+#                           CMAKE_CXX_FLAGS: a bare -DPCH_SUPPORT cache entry
+#                           is read by nothing module-standalone, because the
+#                           IF that turns it into ADD_DEFINITIONS lives in the
+#                           root (CMakeLists.txt:168).
+#   CMAKE_POLICY_VERSION_MINIMUM : windows-latest ships CMake >= 3.27, which
+#                           hard-errors on the 2.8.12 minimum; 3.5 is the
+#                           compatibility floor it still honours.
+#
+# Every -D path is passed with forward slashes: CMake copies them verbatim
+# into the generated try_compile project, where a Windows backslash is an
+# invalid escape.
+#
+# The root (CMakeLists.txt:105) is the only place that includes
+# BWCompilerAndLinkerOptions.cmake, so a module-standalone configure gets no
+# compiler flags at all - including /DWIN32, without which
+# cstdmf/concurrency.hpp never includes <windows.h> (its guard tests
+# "WIN32", which only /DWIN32 defines; MSVC x64 defines _WIN32 but not
+# WIN32 on its own). The CMAKE_CXX_FLAGS below therefore mirrors
+# BW_COMPILER_FLAGS from that file.
+#
+# Two deliberate deviations from the repo's Windows flag profile, both local
+# to this job (the repo's CMake files are untouched):
+#   /WX-    BWCompilerAndLinkerOptions.cmake adds /WX (warnings as errors),
+#           a VS2008-era setting. Legacy code emits MSVC 19.x warnings;
+#           clearing them is separate follow-up work. /WX- keeps this job a
+#           compile gate rather than a warning gate.
+#   Release the root adds a custom "Hybrid" configuration; module-standalone
+#           mode only carries the standard VS configurations, so the job
+#           builds Release.
+#
+# The generator is "Visual Studio 18 2026". The windows-latest image
+# (Windows Server 2025, CMake 4.4.x) ships VS 18 only - vswhere on the image
+# reports 18.10.x and no 2022 install, so "Visual Studio 17 2022" fails with
+# "could not find any instance of Visual Studio" - and CMake 4.x dropped the
+# unversioned "Visual Studio" name. CMake locates the compiler through
+# vswhere itself, so no dev-shell setup or marketplace action is needed.
+#
+# The math leg additionally fetches the legacy D3DX SDK (pinned
+# Microsoft.DXSDK.D3DX package, June 2010 headers + import libraries) and
+# publishes it as DXSDK_DIR, which BWStandardProject.cmake consumes - see
+# the step comment. cstdmf needs none of it.
+
+on:
+  push:
+    branches: [dev, main]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "LICENSE"
+      - ".gitignore"
+      - "*.svg"
+      - ".editorconfig"
+  pull_request:
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "LICENSE"
+      - ".gitignore"
+      - "*.svg"
+      - ".editorconfig"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  msvc-compile:
+    name: ${{ matrix.library }} (MSVC x64)
+    runs-on: windows-latest
+    timeout-minutes: 60
+    # Gate legs run on push/pull_request only: a manual dispatch is a
+    # probe-only run, so its job set never shares a concurrency group with a
+    # push run and one can never cancel the other (the same-group
+    # cancel-in-progress below kept doing exactly that while dispatch also
+    # ran these legs - observed on two consecutive dispatches).
+    if: github.event_name != 'workflow_dispatch'
+    # Job-level groups, no workflow-level group: each lane cancels only
+    # itself on a newer same-ref run. The build probe lane (below) keeps
+    # cancel-in-progress false, so a manual build is never killed mid-flight
+    # and a second dispatch queues behind it instead.
+    concurrency:
+      group: ci-windows-msvc-${{ github.ref }}
+      cancel-in-progress: true
+    strategy:
+      fail-fast: false
+      matrix:
+        library: [math, cstdmf]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Show toolchain
+        shell: pwsh
+        run: |
+          cmake --version | Select-Object -First 1
+          # The "Visual Studio" generator locates the compiler through vswhere
+          # itself, so no dev-shell setup step is needed (and no marketplace
+          # action is required to resolve).
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          if (Test-Path $vswhere) {
+            & $vswhere -latest -products * -property installationPath `
+                     -property installationVersion
+          } else {
+            Write-Host "vswhere.exe not found at $vswhere"
+          }
+
+      - name: Fetch legacy D3DX SDK (math only)
+        if: ${{ matrix.library == 'math' }}
+        shell: pwsh
+        run: |
+          # lib/math's Windows vector types are D3DX typedefs (xp_math.hpp)
+          # and it links d3dx9 (lib/math/CMakeLists.txt), so the gate needs
+          # the retired DirectX SDK. BWStandardProject.cmake reads it from
+          # the DXSDK_DIR environment variable ($DXSDK_DIR/Include and
+          # $DXSDK_DIR/Lib/x64). Microsoft.DXSDK.D3DX is the official
+          # Microsoft package carrying the June 2010 headers and import
+          # libraries; the pinned version keeps the fetch reproducible, and
+          # the DXSDK_DIR layout BWStandardProject expects is synthesized
+          # from the NuGet layout. This is the "install the legacy SDK in
+          # CI" branch of the todo's three-way DXSDK decision - the repo
+          # itself vendors nothing and compiles nothing from this package.
+          $root = "build/dxsdk"
+          New-Item -ItemType Directory -Force $root | Out-Null
+          Invoke-WebRequest `
+            -Uri "https://www.nuget.org/api/v2/package/Microsoft.DXSDK.D3DX/9.29.952.8" `
+            -OutFile "$root/pkg.zip"
+          Expand-Archive -Path "$root/pkg.zip" -DestinationPath "$root/pkg" -Force
+          New-Item -ItemType Directory -Force "$root/Include", "$root/Lib/x64" | Out-Null
+          Copy-Item "$root/pkg/build/native/include/*" "$root/Include/" -Recurse -Force
+          Copy-Item "$root/pkg/build/native/release/lib/x64/*" "$root/Lib/x64/" -Force
+          $dir = ($PWD.ProviderPath -replace '\\','/') + "/$root"
+          "DXSDK_DIR=$dir" | Out-File -FilePath $env:GITHUB_ENV -Append
+          Get-ChildItem "$root/Include/d3dx9*.h" | Select-Object -ExpandProperty Name
+
+      - name: Configure (${{ matrix.library }})
+        shell: pwsh
+        env:
+          CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+        run: |
+          # CMake copies -D path values verbatim into the generated try_compile
+          # project, where a Windows backslash is an invalid escape
+          # ("Invalid character escape '\a'"); forward slashes are accepted
+          # everywhere on Windows.
+          $repo = ((Resolve-Path programming/bigworld).Path -replace '\\','/')
+          cmake -S "$repo/lib/${{ matrix.library }}" `
+                -B "build/win_${{ matrix.library }}" `
+                -Wno-dev `
+                -G "Visual Studio 18 2026" -A x64 `
+                -DCMAKE_PROJECT_INCLUDE="$repo/build/cmake/BWMacros.cmake" `
+                -DCMAKE_MODULE_PATH="$repo/build/cmake" `
+                -DBW_SOURCE_DIR="$repo" `
+                -DBW_PLATFORM_WINDOWS=ON -DBW_PLATFORM=win64 -DBW_ARCH_64=ON `
+                -DBW_COMPILER_TOKEN=msvc `
+                -DCMAKE_CONFIGURATION_TYPES="Debug;Release" `
+                '-DCMAKE_CXX_FLAGS=/DWIN32 /D_WINDOWS /DPCH_SUPPORT=1 /W3 /Zi /MP /Gy /w34302 /d2Zi+ /WX-' 2>&1 | Tee-Object -FilePath cmake-configure.log
+
+      - name: Build (${{ matrix.library }})
+        shell: pwsh
+        run: |
+          cmake --build "build/win_${{ matrix.library }}" --config Release `
+                --target ${{ matrix.library }} --parallel 2>&1 | `
+                Tee-Object -FilePath cmake-build.log
+
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-windows-logs-${{ github.run_id }}-${{ matrix.library }}
+          path: |
+            cmake-configure.log
+            cmake-build.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # R3 probe, not a gate: the root superproject configure (the CMake entry
+  # the Windows track is documented to use). This used to be the head of the
+  # R3 blocker list (libpython had no CMake carrier; the vendored
+  # png/zip/sqlite trees were referenced unconditionally) and is green since
+  # the libpython carrier landed - each push re-records that it STAYS green,
+  # because the two legs above only configure modules standalone.
+  # continue-on-error keeps the verified-green compile gate above as this
+  # workflow's verdict; the probe's own step status stays visible in the job
+  # log and the artifact.
+  root-configure-probe:
+    name: root configure (R3 probe)
+    runs-on: windows-latest
+    timeout-minutes: 30
+    # Push/pull_request only, same reasoning as the gate legs above.
+    if: github.event_name != 'workflow_dispatch'
+    continue-on-error: true
+    concurrency:
+      group: ci-windows-configure-probe-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Configure root superproject (server target)
+        shell: pwsh
+        env:
+          CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+        run: |
+          $repo = ((Resolve-Path programming/bigworld).Path -replace '\\','/')
+          # The root sets BW_SOURCE_DIR / CMAKE_MODULE_PATH itself and pulls
+          # BWCompilerAndLinkerOptions (so no flag mirroring here, unlike the
+          # module-standalone legs). Configure only - nothing is built and no
+          # artifacts leave this job.
+          cmake -S "$repo" -B "build/win_root_probe" `
+                -G "Visual Studio 18 2026" -A x64 `
+                -DBW_CMAKE_TARGET=server 2>&1 | `
+                Tee-Object -FilePath cmake-configure-root.log
+
+      - name: Upload probe log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-windows-root-probe-${{ github.run_id }}
+          path: cmake-configure-root.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # R3 probe, not a gate, and manual-only: the first REAL build of the root
+  # superproject on the Windows runner. The configure probe above proves the
+  # generate step only - the ExternalProject build steps it schedules have
+  # never executed, and their behaviour is carried as comments, not facts:
+  #   * libpython runs PCbuild\build.bat, whose default IncludeExternals=true
+  #     clones externals/ (openssl, zlib, libffi, bzip2, tcltk, sqlite, xz)
+  #     from the network - mandatory, pythoncore compiles $(zlibDir)\*.c;
+  #   * the vendored CPython 3.13 PCbuild has never seen MSVC 19.51 / VS 18;
+  #   * the 34 libraries + 39 executables get their first /DWIN32-style
+  #     full-superproject MSVC compile (the two legs above only build two
+  #     standalone modules).
+  # Building ALL in dependency order puts bwpython313 first, so the first
+  # failure localises the head of the build-phase blocker list the same way
+  # the configure probe did for configure. workflow_dispatch-only via the
+  # job-level if below: a ~1h build must not ride along on every push, and
+  # promoting it to a push/schedule job is a decision for after it is green.
+  # Nothing is published, tagged or released from this job - it only builds
+  # and uploads logs plus a products zip as workflow artifacts (retention
+  # window; artifacts are not releases).
+  root-build-probe:
+    name: root build (R3 probe, manual)
+    runs-on: windows-latest
+    if: github.event_name == 'workflow_dispatch'
+    timeout-minutes: 120
+    continue-on-error: true
+    concurrency:
+      group: ci-windows-root-build-${{ github.ref }}
+      cancel-in-progress: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Fetch legacy D3DX SDK
+        shell: pwsh
+        run: |
+          # lib/math's Windows vector types are D3DX typedefs and server
+          # modules compile them through math headers
+          # (bwengine_mysql/xml: "d3dx9math.h: No such file or directory",
+          # second dispatch). Same fetch as the math gate leg above.
+          $root = "build/dxsdk"
+          New-Item -ItemType Directory -Force $root | Out-Null
+          Invoke-WebRequest `
+            -Uri "https://www.nuget.org/api/v2/package/Microsoft.DXSDK.D3DX/9.29.952.8" `
+            -OutFile "$root/pkg.zip"
+          Expand-Archive -Path "$root/pkg.zip" -DestinationPath "$root/pkg" -Force
+          New-Item -ItemType Directory -Force "$root/Include", "$root/Lib/x64" | Out-Null
+          Copy-Item "$root/pkg/build/native/include/*" "$root/Include/" -Recurse -Force
+          Copy-Item "$root/pkg/build/native/release/lib/x64/*" "$root/Lib/x64/" -Force
+          $dir = ($PWD.ProviderPath -replace '\\','/') + "/$root"
+          "DXSDK_DIR=$dir" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Install jsoncpp (vcpkg)
+        shell: pwsh
+        run: |
+          # message_logger's metadata backend is jsoncpp; the make chain
+          # takes it from vcpkg too (third_party_vcpkg.mak port list,
+          # Makefile.message_logger's useJSON := 1) and nothing vendors it
+          # in-tree. The runner's preinstalled vcpkg carries x64-windows.
+          & "$env:VCPKG_INSTALLATION_ROOT/vcpkg.exe" `
+                install jsoncpp --triplet x64-windows
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $jsoncppInc = `
+            "$env:VCPKG_INSTALLATION_ROOT/installed/x64-windows/include"
+          "VCPKG_JSONCPP_INCLUDE=$jsoncppInc" | `
+            Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Configure root superproject (server target)
+        shell: pwsh
+        env:
+          CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+        run: |
+          $repo = ((Resolve-Path programming/bigworld).Path -replace '\\','/')
+          # Same configure as root-configure-probe, its own build dir: the
+          # jobs do not share a workspace. BW_JSONCPP_INCLUDE_DIR
+          # pre-seeds message_logger's FIND_PATH cache entry (headers only;
+          # the lib is found via its HINTS on the include dir).
+          cmake -S "$repo" -B "build/win_root_build" `
+                -G "Visual Studio 18 2026" -A x64 `
+                -DBW_CMAKE_TARGET=server `
+                -DBW_JSONCPP_INCLUDE_DIR="$env:VCPKG_JSONCPP_INCLUDE" 2>&1 | `
+                Tee-Object -FilePath cmake-configure-root.log
+
+      - name: Build root superproject (Hybrid, all targets)
+        shell: pwsh
+        env:
+          # The root's BWCompilerAndLinkerOptions.cmake appends /WX (a
+          # VS2008-era setting); _CL_ appends AFTER the command line, so
+          # /WX- wins. This keeps the probe a compile gate - the
+          # size_t-conversion warnings in legacy server code (e.g.
+          # server_super_model.hpp:74 C4267) are a separate follow-up - and
+          # matches the /WX- deviation the module-standalone legs carry in
+          # their CMAKE_CXX_FLAGS.
+          _CL_: "/WX-"
+        run: |
+          # ALL in dependency order: MSBuild builds what failed first, so
+          # the log localises the head of the blocker list. ExternalProject
+          # sub-logs (libpython/PCbuild) land under the build tree and are
+          # uploaded below alongside the tee'd console log.
+          #
+          # --config Hybrid, not Release: the root FORCE-sets
+          # CMAKE_CONFIGURATION_TYPES to Debug;Hybrid (CMakeLists.txt:22),
+          # so the generated projects carry no Release configuration at all
+          # and --config Release fails every target with MSB8013 (observed
+          # on the first dispatch, run 38745028827). Hybrid is the root's
+          # own canonical server configuration; libpython's ExternalProject
+          # still builds pythoncore in Release (build.bat -c Release) by
+          # design.
+          cmake --build "build/win_root_build" --config Hybrid `
+                --parallel 4 2>&1 | `
+                Tee-Object -FilePath cmake-build-root.log
+          Write-Host "build exit: $LASTEXITCODE"
+          $stage1Exit = $LASTEXITCODE
+
+          # Stage 2, exe lane, now scripts/build-windows-server.ps1 - shared
+          # with the daily-build.yml windows job so both lanes build and
+          # package exactly the same targets. -SkipConfigure here: this step
+          # configured already, and stage 1 above sits between the configure
+          # and the lane.
+          #
+          # Why the lane exists at all: every MODULE links green now except
+          # cellapp_extension, whose unresolved externals are all
+          # cellapp-exe-owned symbols (Entity::*, Controller::*,
+          # RealEntity::*, EntityType::description in server/cellapp/
+          # entity_type.cpp, g_entityMovementCallback,
+          # Singleton<CellApp>::s_pInstance) - load-time resolution a Unix
+          # .so gets by default and a Windows DLL link does not; the export
+          # story (.def / dllexport / hosted interface) is a design item on
+          # the R3 ledger. MSBuild stops scheduling after a failure, so the
+          # failing MODULE also hides the exe stratum behind it.
+          & ".\scripts\build-windows-server.ps1" `
+              -Repo "programming/bigworld" `
+              -BuildDir "build/win_root_build" `
+              -SkipConfigure
+          $exeLaneExit = $LASTEXITCODE
+          # Stage 1's ALL build remains the run's verdict; the exe lane is
+          # a probe-within-the-probe and must not mask an ALL failure - once
+          # the export story lands and ALL is green, this step goes green
+          # again too.
+          if ($stage1Exit -ne 0) { exit $stage1Exit }
+          exit $exeLaneExit
+
+      - name: Package server products (runtime set)
+        if: always()
+        shell: pwsh
+        run: |
+          # L39 (exe packaging) evidence step - now the shared
+          # scripts/package-daily-windows.ps1, which daily-build.yml's windows
+          # job runs too, so the probe validates the delivery lane's exact
+          # layout: the Hybrid executables, python313.dll plus the PCbuild
+          # extension modules and the BigWorld Python modules (_bwlog.dll,
+          # bwengine_xml.dll, _bw_profile.dll), and the CPython stdlib
+          # copied in so the bundle is self-contained. Layout is flat because
+          # nothing in the embedder calls Py_SetPythonHome - the interpreter
+          # resolves Lib/ next to python313.dll's own directory. Products are
+          # workflow ARTIFACTS only (7-day retention), never releases or tags.
+          & ".\scripts\package-daily-windows.ps1" `
+              -Repo . -BuildDir "build/win_root_build" `
+              -OutDir "build/products"
+
+      - name: Upload server products
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-windows-root-products-${{ github.run_id }}
+          path: |
+            build/products/products-manifest.txt
+            build/products/*.zip
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Dump cellapp_extension include tree on failure
+        if: failure()
+        shell: pwsh
+        run: |
+          # bounce_grenade_extra.cpp compiles clean on the Linux make track
+          # under MF_SERVER but on MSVC pulls client moo headers
+          # (base_texture.hpp(89): C2039 'Colour' is not a member of 'BW::Moo')
+          # through a route that is not reachable in the source include graph.
+          # Inject /showIncludes via the CL env var, touch the TU, and rebuild
+          # just its project so MSVC prints the exact include chain it used.
+          $env:CL = "/showIncludes"
+          (Get-Item programming/bigworld/examples/cellapp_extension/bounce_grenade_extra.cpp).LastWriteTime = Get-Date
+          cmake --build "build/win_root_build" --config Hybrid `
+                --target cellapp_extension 2>&1 | `
+                Tee-Object -FilePath cmake-showincludes-cellapp.log
+
+      - name: Dump module link lines
+        if: always()
+        shell: pwsh
+        run: |
+          # The /v:m console log never prints link.exe command lines, so a
+          # LNK2001/LNK2019 stratum leaves no trace of which libraries a
+          # project actually received - the libpython question (import
+          # archive reaching the MODULE link lines or not) cannot be answered
+          # from it. The generated vcxproj carries the final resolved
+          # <AdditionalDependencies> per configuration; dump all of them.
+          Get-ChildItem -Recurse -Filter *.vcxproj "build/win_root_build" |
+            Select-String -Pattern "AdditionalDependencies" |
+            ForEach-Object { "$($_.Path): $($_.Line.Trim())" } |
+            Out-File -FilePath cmake-linkdeps-root.log -Encoding utf8
+
+      - name: Upload build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-windows-root-build-${{ github.run_id }}
+          path: |
+            cmake-configure-root.log
+            cmake-build-root.log
+            cmake-build-root-exes.log
+            cmake-showincludes-cellapp.log
+            cmake-linkdeps-root.log
+            build/win_root_build/**/*BUILD*.log
+          if-no-files-found: ignore
+          retention-days: 7

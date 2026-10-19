@@ -22,7 +22,21 @@ bool isServiceApp( int argc, char * argv[] )
 	if (argc >= 0)
 	{
 		char * basec = strdup( argv[0] );
+
+#if defined( _WIN32 )
+		// No basename(3) under MSVC (C3861, run 39021844438); scan the
+		// duplicated path for the last separator of either flavour.
+		const char * bname = basec;
+		for (const char * p = basec; *p != '\0'; ++p)
+		{
+			if (*p == '/' || *p == '\\')
+			{
+				bname = p + 1;
+			}
+		}
+#else
 		char * bname = basename( basec );
+#endif
 
 		isServiceApp = (strcmp( bname, "serviceapp" ) == 0);
 

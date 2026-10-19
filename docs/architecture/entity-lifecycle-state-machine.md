@@ -1,5 +1,7 @@
 # 实体生命周期状态机
 
+> [English](entity-lifecycle-state-machine.en.md) | **中文**
+
 <div class="arch-hero">
 
 BigWorld 的 Entity 不是普通业务对象。它可以是 Base、Cell real、Cell ghost、Proxy、带 Witness 的客户端代表，也可以在 offload 中从 real 转 ghost，再在目标 CellApp onload 成 real。生命周期状态机是理解整个 MMO 架构的核心。

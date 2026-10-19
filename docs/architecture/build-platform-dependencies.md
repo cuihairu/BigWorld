@@ -1,5 +1,7 @@
 # 构建、平台与依赖治理
 
+> [English](build-platform-dependencies.en.md) | **中文**
+
 <div class="arch-hero">
 
 BigWorld 的构建约束不在单个依赖版本，而在构建系统、平台宏、第三方依赖、Python 嵌入方式、CMake/Makefile 双轨、服务端/客户端/工具链共存，以及老商业引擎遗留的可选中间件开关。

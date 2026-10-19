@@ -1,5 +1,7 @@
 # 打包与每日构建分析
 
+> [English](packaging-and-daily-build.en.md) | **中文**
+
 <div class="arch-hero">
 
 回答三个问题：打包是不是只有 RPM？Windows 能不能支持？每日构建怎么做？结论先行——**打包不欠构建只欠格式**（make 全量构建已产出完整安装树），**Windows 今天可用 WSL2、原生支持是分层工程**，**每日构建已落地为 GitHub Actions 工作流**（构建 + 21 模块单测门禁 + tar/deb/rpm 三格式产物）。

@@ -25,7 +25,13 @@ BW_END_NAMESPACE
 #include "cstdmf/stdmf.hpp"
 #include "cstdmf/debug_message_source.hpp"
 
-#include <regex.h> // regex_t
+#if defined( _WIN32 )
+	// regex_t plus the regcomp/regexec/regfree/regerror shims over
+	// std::regex.
+	#include "posix_compat.hpp"
+#else
+	#include <regex.h> // regex_t
+#endif
 
 
 BW_BEGIN_NAMESPACE

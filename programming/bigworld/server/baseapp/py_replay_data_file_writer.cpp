@@ -537,7 +537,13 @@ PyObject * PyReplayDataFileWriter::pyGet_lastChunkPosition()
 		Py_RETURN_NONE;
 	}
 
-	return Script::getReadOnlyData( pWriter_->lastChunkPosition() );
+	// off_t: signed long (i.e. int64) on Linux, plain long on MSVC. The cast
+	// pins the Script::getData overload on both platforms; unconverted, MSVC
+	// could only offer same-rank integer conversions and died with C2668 on
+	// the tie (root superproject build, run 39021844438). Linux resolved the
+	// same call to getData(int64), which this reproduces exactly.
+	return Script::getReadOnlyData(
+		static_cast< int64 >( pWriter_->lastChunkPosition() ) );
 }
 
 

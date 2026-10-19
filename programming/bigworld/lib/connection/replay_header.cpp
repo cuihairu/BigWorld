@@ -4,7 +4,7 @@
 
 #if defined( MF_SERVER )
 
-#include <sys/time.h>
+#include <ctime>
 
 namespace BWOpenSSL
 {
@@ -64,9 +64,9 @@ ReplayHeader::ReplayHeader(
 		static_cast<SignatureLength>( pChecksumScheme->streamSize() );
 
 #if defined( MF_SERVER )
-	timeval tv;
-	gettimeofday( &tv, NULL );
-	timestamp_ = static_cast<ReplayData::Timestamp>( tv.tv_sec );
+	// Second resolution (tv.tv_sec) is all this timestamp needs, and
+	// gettimeofday has no Windows equivalent; time() is portable.
+	timestamp_ = static_cast<ReplayData::Timestamp>( time( NULL ) );
 #endif
 
 	this->initNonce();

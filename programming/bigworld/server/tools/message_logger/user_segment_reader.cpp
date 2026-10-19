@@ -6,7 +6,11 @@
 #include "log_string_interpolator.hpp"
 #include "py_query_result.hpp"
 
-#include <dirent.h>
+#if defined( _WIN32 )
+	#include "posix_compat.hpp"
+#else
+	#include <dirent.h>
+#endif
 
 
 BW_BEGIN_NAMESPACE

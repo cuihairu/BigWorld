@@ -32,9 +32,19 @@ typedef struct
  * and 3.12+'s Tools/build/check_extension_modules.py renamed it to
  * _hashlib_failed...so. Marking them default visibility restores the 2.7
  * behaviour, where the hooks lived in the interpreter image where any module
- * could reach them. */
+ * could reach them.
+ *
+ * The Windows port has the same shape: PCbuild extension modules
+ * (_hashlib.pyd et al) link only python313.lib, so the hooks have to be
+ * exported from python313.dll itself. PCbuild/Directory.Build.targets compiles
+ * bwhooks.c into pythoncore with BW_PY_BUILDING_PYTHONCORE defined, which
+ * makes BW_PY_EXPORT dllexport here and lands every entry point in
+ * python313.lib. Consumers that see neither macro get plain declarations,
+ * unchanged. */
 #if defined( __GNUC__ ) && !defined( _WIN32 )
 #define BW_PY_EXPORT __attribute__( ( visibility( "default" ) ) )
+#elif defined( _MSC_VER ) && defined( BW_PY_BUILDING_PYTHONCORE )
+#define BW_PY_EXPORT __declspec( dllexport )
 #else
 #define BW_PY_EXPORT
 #endif

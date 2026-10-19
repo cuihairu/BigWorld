@@ -10,6 +10,11 @@
 
 #include "network/logger_message_forwarder.hpp"
 
+#if defined( _WIN32 )
+	// in_addr/inet_ntoa for the host formatting below.
+	#include "posix_compat.hpp"
+#endif
+
 #include "cstdmf/debug.hpp"
 #include "cstdmf/log_msg.hpp"
 

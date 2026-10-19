@@ -2,7 +2,11 @@
 
 #include "cstdmf/debug.hpp"
 
-#include <unistd.h>
+#if defined( _WIN32 )
+	#include "posix_compat.hpp"
+#else
+	#include <unistd.h>
+#endif
 #include <errno.h>
 #include <string.h>
 

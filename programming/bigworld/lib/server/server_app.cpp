@@ -15,8 +15,24 @@
 #include "server/signal_processor.hpp"
 
 #include <signal.h>
+
+#if defined( _WIN32 )
+// MSVC's SDK leaves `#define interface struct` (rpcndr.h via d3d9.h / shlobj /
+// shlwapi / d3d10) live for the rest of the TU, which rewrites the
+// `interface`-named declarations in this file into syntax errors (C2332/C2027
+// in the root superproject build). Off for this file only; the pop below
+// restores it for whatever SDK COM header comes later in the TU.
+#pragma push_macro( "interface" )
+#undef interface
+#endif
+// procfs fd scan and rlimit handling live in the !_WIN32 arm of
+// numFileDescriptorsOpen below; neither header exists on MSVC (C1083 in the
+// root superproject build).
+#if !defined( _WIN32 )
 #include <dirent.h>
 #include <sys/resource.h>
+
+#endif // !defined( _WIN32 )
 
 DECLARE_DEBUG_COMPONENT2( "Server", 0 );
 
@@ -81,7 +97,7 @@ ServerApp::ServerApp( Mercury::EventDispatcher & mainDispatcher,
 	time_( 0 ),
 	mainDispatcher_( mainDispatcher ),
 	interface_( interface ),
-	startTime_( ::time( NULL ) ),
+	startTime_( static_cast< int >( ::time( NULL ) ) ),
 	buildDate_(),
 	updatables_(),
 	lastAdvanceTime_( 0 ),
@@ -429,7 +445,13 @@ const char * ServerApp::startDate() const
 
 	if (buf[0] == 0)
 	{
+#if defined( _WIN32 )
+		// MSVC's CRT has no ctime_r (C3861 in the root superproject build);
+		// ctime_s is the same thread-safe rendering with a size argument.
+		ctime_s( buf, sizeof( buf ), &startTime_ );
+#else
 		ctime_r( &startTime_, buf );
+#endif
 
 		// Remove trailing '\n'
 		char * tail = strchr( buf, '\n' );
@@ -538,7 +560,10 @@ void ServerApp::onSignalled( int sigNum )
 		// It would probably be better to just revert to SIG_DFL straight after
 		// Py_Initialize in Script::init().
 		signal( sigNum, SIG_DFL );
-		kill( getpid(), sigNum );
+		// kill(getpid(), sigNum) is the POSIX spelling; raise() is the C99
+		// equivalent MSVC actually declares (C3861 in the root superproject
+		// build).
+		raise( sigNum );
 		break;
 
 	default:
@@ -710,6 +735,37 @@ void ServerApp::raiseFileDescriptorLimit( long limit )
 			strerror( errno ) );
 	}
 }
+
+
+/**
+ *	This method returns the process file descriptor limit.
+ *
+ *	Windows has no per-process descriptor limit queryable the way rlimit(2)
+ *	is; the closest observable cap is the stdio open-file maximum that
+ *	raiseFileDescriptorLimit above raises. bots uses this pair only for an
+ *	add-another-bot headroom check.
+ *
+ *	@return The process file descriptor limit.
+ */
+int ServerApp::fileDescriptorLimit() const
+{
+	return _getmaxstdio();
+}
+
+
+/**
+ *	This method returns the number of file descriptors opened by this
+ *	process.
+ *
+ *	Windows exposes no /proc-style scan of open descriptors; report zero so
+ *	the headroom check above compares against the stdio cap alone.
+ *
+ *	@return The number of file descriptors opened by this process.
+ */
+int ServerApp::numFileDescriptorsOpen() const
+{
+	return 0;
+}
 #else // !_WIN32
 /**
  *	Attempt to raise our file descriptor limit
@@ -808,3 +864,7 @@ int ServerApp::numFileDescriptorsOpen() const
 BW_END_NAMESPACE
 
 // server_app.cpp
+
+#if defined( _WIN32 )
+#pragma pop_macro( "interface" )
+#endif

@@ -1,5 +1,7 @@
 # 线程架构与后台任务
 
+> [English](threading-background-tasks.en.md) | **中文**
+
 <div class="arch-hero">
 
 BigWorld 服务端不是“每个玩家一个线程”，也不是把实体逻辑拆成全并行 job。源码呈现的是单 Reactor 主线程 + 后台任务池 + 少量专用线程。线程的主要职责是隔离阻塞 I/O、延迟任务和后台准备工作，而不是并发修改实体状态。

@@ -1,3 +1,11 @@
+// The synchronise machinery below is fork/exec/waitpid driven by
+// SIGCHLD/SIGHUP and sigwaitinfo, which has no Windows translation
+// (CreateProcess is a different model). The only consumer is
+// MySqlDatabase::syncTablesToDefs, so the whole body compiles away and the
+// public methods report failure there (C1083 sys/wait.h, C2065 'SIGHUP' and
+// C3861 'fork' in the root superproject build).
+#if !defined( _WIN32 )
+
 #include "table_synchroniser.hpp"
 
 #include "network/event_dispatcher.hpp"
@@ -243,5 +251,58 @@ void TableSynchroniser::execSyncDB( const BW::string & syncdbPath )
 }
 
 BW_END_NAMESPACE
+
+#endif // !defined( _WIN32 )
+
+#if defined( _WIN32 )
+
+// Windows stubs keeping the TableSynchroniser public contract, so
+// MySqlDatabase::syncTablesToDefs compiles and reports the failure through
+// its usual bool + ERROR_MSG path.
+#include "table_synchroniser.hpp"
+
+#include "cstdmf/debug.hpp"
+
+BW_BEGIN_NAMESPACE
+
+TableSynchroniser::~TableSynchroniser()
+{}
+
+bool TableSynchroniser::run( Mercury::EventDispatcher & /*dispatcher*/ )
+{
+	ERROR_MSG( "TableSynchroniser::run: "
+			"Not supported on this platform\n" );
+	return false;
+}
+
+void TableSynchroniser::onProcessExited( int /*status*/ )
+{}
+
+void TableSynchroniser::abort()
+{}
+
+bool TableSynchroniser::didExit() const
+{
+	return false;
+}
+
+int TableSynchroniser::exitCode() const
+{
+	return -1;
+}
+
+bool TableSynchroniser::wasSignalled() const
+{
+	return false;
+}
+
+int TableSynchroniser::signal() const
+{
+	return -1;
+}
+
+BW_END_NAMESPACE
+
+#endif // defined( _WIN32 )
 
 // table_synchroniser.cpp

@@ -11,12 +11,16 @@
 #include "sqlite/sqlite_connection.hpp"
 
 #include <sys/types.h>
+#if !defined( _WIN32 )
 #include <sys/wait.h>
+#endif
 
 #include <string.h>
 #include <errno.h>
 
 DECLARE_DEBUG_COMPONENT2( "SecondaryDB", 0 )
+
+#if !defined( _WIN32 )
 
 BW_BEGIN_NAMESPACE
 
@@ -646,5 +650,49 @@ bool Snapshot::transferSecondary( const BW::string & sqlitePath )
 }
 
 BW_END_NAMESPACE
+
+#else // defined( _WIN32 )
+
+BW_BEGIN_NAMESPACE
+
+// The snapshot machinery drives snapshot_helper and rsync through the
+// fork/exec ChildProcess machinery, which is not implemented on Windows
+// (child_process.cpp compiles away there), and neither helper binary exists
+// on that platform. Keep the TransferDB entry points linkable and refuse at
+// runtime - the same treatment Consolidator gets.
+Snapshot::Snapshot() :
+	pSignalProcessor_( nullptr )
+{
+}
+
+bool Snapshot::init( BW::string destinationIP, BW::string destinationPath,
+	BW::string limitKbps )
+{
+	ERROR_MSG( "Snapshot::init: "
+		"Snapshotting is not supported on this platform.\n" );
+	return false;
+}
+
+bool Snapshot::transferPrimary()
+{
+	ERROR_MSG( "Snapshot::transferPrimary: "
+		"Snapshotting is not supported on this platform.\n" );
+	return false;
+}
+
+bool Snapshot::transferSecondary( const BW::string & sqlitePath )
+{
+	ERROR_MSG( "Snapshot::transferSecondary: "
+		"Snapshotting is not supported on this platform.\n" );
+	return false;
+}
+
+void Snapshot::onChildAboutToExec()
+{
+}
+
+BW_END_NAMESPACE
+
+#endif // !defined( _WIN32 )
 
 // snapshot.cpp

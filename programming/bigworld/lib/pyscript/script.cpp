@@ -497,6 +497,17 @@ bool Script::init( const PyImportPaths & appPaths, const char * componentName )
 
 	// Initialise python
 	// Py_VerboseFlag = 2;
+
+	// These pre-init globals are deprecated in Python 3.13 in favour of
+	// PyConfig fields; migrating interpreter startup to Py_PreInitialize /
+	// PyConfig is a behaviour-level change tracked by the 3.13 migration
+	// ledger. The globals still work, and only MSVC's /WX turns CPython's
+	// deprecation marking into an error (C4996 in the root superproject
+	// build), so the warning is quieted locally rather than globally.
+#if defined( _MSC_VER )
+#pragma warning( push )
+#pragma warning( disable: 4996 )
+#endif
 	Py_FrozenFlag = 1; // Suppress errors from getpath.c
 
 	/* BIGWORLD_BEGIN(3.13 migration)
@@ -508,6 +519,9 @@ bool Script::init( const PyImportPaths & appPaths, const char * componentName )
 	/* BIGWORLD_END */
 	Py_NoSiteFlag = 1;
 	Py_IgnoreEnvironmentFlag = 1;
+#if defined( _MSC_VER )
+#pragma warning( pop )
+#endif
 
 	Py_Initialize();
 

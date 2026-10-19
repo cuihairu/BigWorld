@@ -1,5 +1,7 @@
 # 脚本热更新与迁移
 
+> [English](hot-reload-script-migration.en.md) | **中文**
+
 <div class="arch-hero">
 
 BigWorld 的 `reloadScript` 不是现代意义上的安全生产热更新，而是一个高风险的运行时迁移机制。它通过新 Python 解释器加载脚本和 EntityDef，再切回旧解释器迁移类型、Mailbox 和现有实体对象。

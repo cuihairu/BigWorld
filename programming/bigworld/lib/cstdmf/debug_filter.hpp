@@ -38,6 +38,17 @@ public:
 	bool shouldAcceptCategory( const char * pCategoryName,
 		DebugMessagePriority messagePriority );
 
+	/**
+	 *	Sampling decision for a category set to keep one message in every
+	 *	"ratio" stamps. Ratios of 0 and 1 keep everything. Stateless on
+	 *	purpose: the stamp residue is the only thing needed, so no shared
+	 *	per-message counter has to be guarded.
+	 */
+	static bool isSampled( uint64 stamp, int ratio )
+	{
+		return (ratio <= 1) || ((stamp % (uint64) ratio) == 0);
+	}
+
 	static bool shouldWriteTimePrefix();
 	static void shouldWriteTimePrefix( bool value );
 
@@ -83,6 +94,12 @@ public:
 	CSTDMF_DLL void setCategoryFilter( const BW::string & categoryName,
 		DebugMessagePriority minAcceptedPriorityLevel );
 
+	/// Sampling ratios, keyed by category: keep one message in every N
+	/// stamps. 0 and 1 mean no sampling. See isSampled() and
+	/// shouldAcceptCategory().
+	typedef BW::map< BW::string, int > SamplingMap;
+
+
 	static void consoleOutputFile( FILE * value );
 	CSTDMF_DLL static FILE * consoleOutputFile();
 
@@ -104,6 +121,7 @@ private:
 	// TODO: Improve this from using a ReadWriteLock
 	ReadWriteLock suppressedCategoriesLock_;
 	CategoriesMap suppressedCategories_;
+	SamplingMap sampleRatios_; //!< Guarded by suppressedCategoriesLock_.
 
 	static DebugFilter * s_instance_;
 

@@ -8,7 +8,22 @@
 #include "mongodb/log_storage.hpp"
 #endif
 
+#if defined( _WIN32 )
+	// in_addr/inet_ntoa for the interface formatting below.
+	#include "posix_compat.hpp"
+	// resetFileDescriptors' open(2)/dup2(2) plumbing, none of it POSIX-named
+	// under MSVC.
+	#include <fcntl.h>
+	#include <io.h>
+	#include <sys/stat.h>
+#endif
+
 #include "server/bwconfig.hpp"
+// START_MSG is all this TU wants from the service header; its Windows arm
+// also defines the service entry machinery (global main + usage +
+// bwNarrowToTCHAR), which this binary's main.cpp owns - without this a
+// second including TU collides (LNK2005 in the root superproject build).
+#define BW_NO_SERVICE_MAIN
 #include "server/bwservice.hpp"
 #include "server/config_reader.hpp"
 
@@ -25,14 +40,31 @@
 #include "cstdmf/timestamp.hpp"
 
 #include <time.h>
+// Only setrlimit() below needs sys/resource.h, and syslog.h is included
+// for nothing at all (its sole textual mention is a comment); neither
+// header exists under MSVC (C1083 in the root superproject build, run
+// 39016799505). The rest of the tree's POSIX calls go through
+// posix_compat.hpp.
+#if !defined( _WIN32 )
 #include <sys/resource.h>
 #include <sys/syslog.h>
+#endif
 
 #if defined( __unix__ )
 #include "pwd.h"
 #endif
 
 #include <algorithm>
+
+#if defined( _WIN32 )
+// MSVC's SDK leaves `#define interface struct` (rpcndr.h via d3d9.h / shlobj /
+// shlwapi / d3d10) live for the rest of the TU, which rewrites the
+// `interface`-named declarations in this file into syntax errors (C2332/C2027
+// in the root superproject build). Off for this file only; the pop below
+// restores it for whatever SDK COM header comes later in the TU.
+#pragma push_macro( "interface" )
+#undef interface
+#endif
 
 DECLARE_DEBUG_COMPONENT( 0 )
 
@@ -617,7 +649,7 @@ bool Logger::init( int argc, char * argv[] )
 	// the service is not started successfully.
 	if (!pidPath_.empty())
 	{
-		char *mode = "a+";
+		const char *mode = "a+";
 		// Make sure another logger isn't already running
 		if (!pid_.init( pidPath_.c_str(), mode, mf_getpid() ))
 		{
@@ -851,6 +883,9 @@ bool Logger::init( int argc, char * argv[] )
 		return false;
 	}
 
+	// No RLIMIT_CORE knob on Windows (the SDK's default is no core files,
+	// which is what this call aims for anyway).
+#if !defined( _WIN32 )
 	rlimit rlimitData = { RLIM_INFINITY, RLIM_INFINITY };
 	if (setrlimit( RLIMIT_CORE, &rlimitData ) == -1)
 	{
@@ -858,6 +893,7 @@ bool Logger::init( int argc, char * argv[] )
 				strerror( errno ) );
 		return false;
 	}
+#endif
 
 	return true;
 }
@@ -964,15 +1000,29 @@ bool Logger::handleNextMessage()
  */
 bool Logger::resetFileDescriptors()
 {
+#if defined( _WIN32 )
+	// MSVC's CRT spells the POSIX open(2) surface with a leading underscore
+	// and its fcntl.h only carries the underscore flag macros; the unix
+	// permission bits collapse to the CRT read/write pair.
+	int defFlags = _O_APPEND | _O_CREAT | _O_WRONLY;
+	int defMode = _S_IREAD | _S_IWRITE;
+#define ML_OPEN( path, flags, mode )	_open( path, flags, mode )
+#define ML_DUP2( oldfd, newfd )			_dup2( oldfd, newfd )
+#define ML_CLOSE( fd )					_close( fd )
+#else
 	int defFlags = O_APPEND | O_CREAT | O_WRONLY;
 	mode_t defMode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
+#define ML_OPEN( path, flags, mode )	open( path, flags, mode )
+#define ML_DUP2( oldfd, newfd )			dup2( oldfd, newfd )
+#define ML_CLOSE( fd )					close( fd )
+#endif
 	bool status = true;
 
 	// TODO: should we test the open/append/create before daemon so we can
 	//      die with some message to stdout
 	if (outputFilename_.length())
 	{
-		int ofd = open( outputFilename_.c_str(), defFlags , defMode );
+		int ofd = ML_OPEN( outputFilename_.c_str(), defFlags , defMode );
 		if (ofd == -1)
 		{
 			ERROR_MSG( "Failed to open '%s' for redirecting stdout: %s\n",
@@ -983,7 +1033,7 @@ bool Logger::resetFileDescriptors()
 		{
 			MF_ASSERT( ofd != 1 );
 			// dup2 will now shutdown stdout and duplicate the output file fd.
-			if (-1 == dup2( ofd, 1 ))
+			if (-1 == ML_DUP2( ofd, 1 ))
 			{
 				ERROR_MSG( "Failed to dup2 '%s' to stdout. %s.\n",
 							outputFilename_.c_str(), strerror(errno) );
@@ -991,7 +1041,7 @@ bool Logger::resetFileDescriptors()
 			}
 
 			// shutdown the temporary fd now that stdout owns it
-			close(ofd);
+			ML_CLOSE(ofd);
 		}
 	}
 
@@ -1000,7 +1050,7 @@ bool Logger::resetFileDescriptors()
 	{
 		if (errorFilename_ == outputFilename_)
 		{
-			if (-1 == dup2( 1, 2 ))
+			if (-1 == ML_DUP2( 1, 2 ))
 			{
 				ERROR_MSG( "Failed to dup2 stdout to stderr. %s.\n",
 							strerror(errno) );
@@ -1009,7 +1059,7 @@ bool Logger::resetFileDescriptors()
 		}
 		else
 		{
-			int efd = open( errorFilename_.c_str(), defFlags, defMode );
+			int efd = ML_OPEN( errorFilename_.c_str(), defFlags, defMode );
 			if (efd == -1)
 			{
 				ERROR_MSG( "Failed to open '%s' for redirecting stderr: %s\n",
@@ -1022,7 +1072,7 @@ bool Logger::resetFileDescriptors()
 				MF_ASSERT( efd != 2 );
 				// dup2 will now shutdown stderr and duplicate
 				// the error file fd.
-				if (-1 == dup2( efd, 2 ))
+				if (-1 == ML_DUP2( efd, 2 ))
 				{
 					ERROR_MSG( "Failed to dup2 '%s' to stderr. %s.\n",
 								errorFilename_.c_str(), strerror(errno) );
@@ -1030,10 +1080,14 @@ bool Logger::resetFileDescriptors()
 				}
 
 				// shutdown the temporary fd now that stderr owns it
-				close(efd);
+				ML_CLOSE(efd);
 			}
 		}
 	}
+
+#undef ML_OPEN
+#undef ML_DUP2
+#undef ML_CLOSE
 
 	// Throw an error message so any syslog monitoring will catch the errors
 	if (!status)
@@ -1834,3 +1888,7 @@ void Logger::Component::commandAttached( bool value )
 BW_END_NAMESPACE
 
 // logger.cpp
+
+#if defined( _WIN32 )
+#pragma pop_macro( "interface" )
+#endif

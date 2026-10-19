@@ -4,6 +4,17 @@ PROJECT( db_storage_mysql )
 INCLUDE( BWStandardProject )
 INCLUDE( BWStandardLibrary )
 
+# The MySQL client is a system dependency (make chain: SYSTEM_HAS_MYSQL,
+# third_party_mysql.mak - the component is skipped when the development
+# package is missing). Skipped here like bwengine_mysql above it, so the
+# consumers' link lists never reference an absent target.
+FIND_PATH( BW_MYSQL_INCLUDE_DIR mysql/mysql.h )
+MARK_AS_ADVANCED( BW_MYSQL_INCLUDE_DIR )
+IF( NOT BW_MYSQL_INCLUDE_DIR )
+	MESSAGE( STATUS "MySQL development headers not found. Skipping db_storage_mysql build." )
+	RETURN()
+ENDIF()
+
 SET( ALL_SRCS
 	buffered_entity_tasks.cpp 
 	buffered_entity_tasks.hpp 
@@ -142,5 +153,12 @@ SOURCE_GROUP( "" FILES ${ALL_SRCS} )
 BW_ADD_LIBRARY( db_storage_mysql
 	${ALL_SRCS}
 )
+
+# Public: consumers' TUs include <mysql/mysql.h> through the headers above,
+# and linkers need the client library (make chain: useMySQL = 1).
+TARGET_INCLUDE_DIRECTORIES( db_storage_mysql PUBLIC ${BW_MYSQL_INCLUDE_DIR} )
+FIND_LIBRARY( BW_MYSQL_LIBRARY NAMES mysqlclient libmysqlclient )
+MARK_AS_ADVANCED( BW_MYSQL_LIBRARY )
+TARGET_LINK_LIBRARIES( db_storage_mysql PUBLIC ${BW_MYSQL_LIBRARY} )
 
 BW_PROJECT_CATEGORY( db_storage_mysql "BigWorld Server" )

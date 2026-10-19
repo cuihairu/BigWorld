@@ -11,8 +11,18 @@ const upgradePlanSidebar = [
       { text: "第三方依赖切换到 vcpkg", link: "/vcpkg-migration" },
       { text: "C++23 迁移", link: "/cpp23-migration" },
       { text: "构建系统现代化", link: "/upgrade-plan/build-system-modernization" },
+      { text: "热重载生产化设计", link: "/upgrade-plan/hot-reload-productionization" },
       { text: "打包与每日构建分析", link: "/upgrade-plan/packaging-and-daily-build" },
       { text: "Python 3.13 迁移全量台账", link: "/python-313-migration" }
+    ]
+  },
+  {
+    text: "ADR 决策记录",
+    items: [
+      { text: "索引", link: "/adr/" },
+      { text: "0001 嵌入式 Python 2.7 → 3.13", link: "/adr/adr-0001-python-313-embedded-interpreter" },
+      { text: "0002 第三方依赖切换 vcpkg", link: "/adr/adr-0002-vcpkg-third-party-deps" },
+      { text: "0003 make/cmake 双轨构建", link: "/adr/adr-0003-make-cmake-dual-track" }
     ]
   }
 ]

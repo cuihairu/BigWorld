@@ -23,7 +23,15 @@
 #endif // __linux__ || defined( EMSCRIPTEN )
 
 
-#define	BW_PLATFORM_SUPPORTS_SYSLOG	(!defined( _WIN32 ) && !defined( PLAYSTATION3 ))
+// BIGWORLD_BEGIN(msvc port)
+// #if, not a macro body: see config.hpp for why defined() must not be
+// expanded out of a #define.
+#if !defined( _WIN32 ) && !defined( PLAYSTATION3 )
+#define	BW_PLATFORM_SUPPORTS_SYSLOG	1
+#else
+#define	BW_PLATFORM_SUPPORTS_SYSLOG	0
+#endif
+// BIGWORLD_END(msvc port)
 
 #if BW_PLATFORM_SUPPORTS_SYSLOG
 # include <syslog.h>

@@ -123,7 +123,7 @@ public:
 
 	Haunts::iterator hauntsBegin() { return haunts_.begin(); }
 	Haunts::iterator hauntsEnd() { return haunts_.end(); }
-	int numHaunts() const { return haunts_.size(); }
+	int numHaunts() const { return static_cast< int >( haunts_.size() ); }
 
 	void addHaunt( CellAppChannel & channel );
 	Haunts::iterator delHaunt( Haunts::iterator iter );

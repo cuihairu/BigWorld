@@ -1,5 +1,7 @@
 # 网络背压与故障注入
 
+> [English](network-backpressure-fault-injection.en.md) | **中文**
+
 <div class="arch-hero">
 
 BigWorld 的网络层不仅是 epoll + UDP。真正影响游戏服务器稳定性的，是接收预算、发送队列满、人工丢包/延迟、Channel overflow、可靠重发、rate limit 和 tick 公平性如何一起工作。这章专门分析背压和故障注入。

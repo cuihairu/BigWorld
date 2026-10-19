@@ -1,5 +1,7 @@
 # 从源码构建
 
+> [English](build-from-source.en.md) | **中文**
+
 <div class="arch-hero">
 
 本文按当前仓库中的 Makefile、CMakeLists 和 Dockerfile 说明 BigWorld 的构建入口。重点是明确真实源码边界，而不是把旧工程改写成现代通用构建流程。

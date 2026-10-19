@@ -119,6 +119,31 @@ public:
 	void adjustBy( TimeStamp adjustment )
 		{ timeQueue_.adjustBy( adjustment ); }
 
+	/**
+	 *	The greatest lateness seen so far, in stamps: for the worst late
+	 *	timer, how far past its deadline it actually ran. Zero when every
+	 *	timer so far has been delivered on time. This is the event loop
+	 *	stall signal - a large value means the owner of this queue was too
+	 *	busy to come back for it.
+	 */
+	TIME_STAMP maxLateness() const		{ return maxLateness_; }
+
+	/**
+	 *	How many timers have run late since construction, or since the last
+	 *	resetLateness().
+	 */
+	uint32 numLateTimers() const		{ return numLateTimers_; }
+
+	/**
+	 *	Discards the accumulated lateness, so the next reading covers only
+	 *	what happens from here on. Pending timers are not affected.
+	 */
+	void resetLateness()
+	{
+		maxLateness_ = 0;
+		numLateTimers_ = 0;
+	}
+
 private:
 	void purgeCancelledNodes();
 	void onCancel();
@@ -241,6 +266,10 @@ private:
 	Node * 			pProcessingNode_;
 	TimeStamp 		lastProcessTime_;
 	int				numCancelled_;
+
+	// Event loop stall record; see maxLateness().
+	TimeStamp		maxLateness_;
+	uint32			numLateTimers_;
 
 	// Cannot be copied.
 	TimeQueueT( const TimeQueueT & );

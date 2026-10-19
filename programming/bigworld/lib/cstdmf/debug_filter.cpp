@@ -9,6 +9,7 @@
 
 #include "cstdmf/bw_map.hpp"
 #include "cstdmf/bw_vector.hpp"
+#include "cstdmf/timestamp.hpp"
 
 BW_BEGIN_NAMESPACE
 
@@ -25,7 +26,15 @@ DebugFilter::FileInitWrapper BW_STATIC_INIT_PRIORITY( 1300 )
 bool DebugFilter::s_shouldWriteTimePrefix_ = false;
 bool DebugFilter::s_shouldOutputErrorBackTrace_ = false;
 
-#define BW_PLATFORM_SUPPORTS_CONSOLE (defined( MF_SERVER ) || defined( PLAYSTATION3 ) || defined( __APPLE__ ))
+// BIGWORLD_BEGIN(msvc port)
+// #if, not a macro body: see config.hpp for why defined() must not be
+// expanded out of a #define.
+#if defined( MF_SERVER ) || defined( PLAYSTATION3 ) || defined( __APPLE__ )
+#define BW_PLATFORM_SUPPORTS_CONSOLE 1
+#else
+#define BW_PLATFORM_SUPPORTS_CONSOLE 0
+#endif
+// BIGWORLD_END(msvc port)
 
 #if BW_PLATFORM_SUPPORTS_CONSOLE
 bool DebugFilter::s_shouldWriteToConsole_ = true;
@@ -227,6 +236,11 @@ void DebugFilter::setCategoryFilter( const BW::string & categoryName,
 
 	ReadWriteLock::WriteGuard writeGuard( suppressedCategoriesLock_ );
 	suppressedCategories_[ categoryName ] = minAcceptedPriorityLevel;
+
+	// Keep the sampling map in step so the category is tunable through the
+	// "logger/categorySampling" watcher too. The insert keeps any ratio that
+	// is already configured.
+	sampleRatios_.insert( SamplingMap::value_type( categoryName, 0 ) );
 }
 
 
@@ -249,8 +263,25 @@ bool DebugFilter::shouldAcceptCategory( const char * pCategoryName,
 				categoryAsString );
 
 		if (it != suppressedCategories_.end())
-		{ 
-			return messagePriority >= it->second;
+		{
+			if (messagePriority < it->second)
+			{
+				return false;
+			}
+
+			// Sampling: when the category has a ratio, keep one message in
+			// every N. The stamp is read without holding any extra state, so
+			// this stays wait-free; a ratio written concurrently just changes
+			// what the next message sees.
+			SamplingMap::const_iterator sampleIt = sampleRatios_.find(
+					categoryAsString );
+
+			if (sampleIt != sampleRatios_.end())
+			{
+				return isSampled( timestamp(), sampleIt->second );
+			}
+
+			return true;
 		}
 	}
 
@@ -258,6 +289,13 @@ bool DebugFilter::shouldAcceptCategory( const char * pCategoryName,
 		// NOTE: Unfortunately we can't use the iterator as a hint due
 		// as we would have to keep the read lock to keep the iterator valid
 		ReadWriteLock::WriteGuard writeGuard( suppressedCategoriesLock_ );
+
+		// Register the category for sampling configuration as well: the
+		// sampling watcher can only retune entries that exist, and a category
+		// that has logged once is exactly the one that may need tuning. The
+		// insert keeps any ratio that is already configured.
+		sampleRatios_.insert( SamplingMap::value_type( categoryAsString, 0 ) );
+
 		return messagePriority >= suppressedCategories_[ categoryAsString ];
 	}
 }
@@ -286,12 +324,49 @@ void DebugFilter::addWatchers()
 
 	pCategorySuppressionWatcher->addChild( "*", pChildWatcher );
 
-	WatcherPtr pReadWriteWatcher = new ReadWriteLockWatcher( 
+	WatcherPtr pReadWriteWatcher = new ReadWriteLockWatcher(
 		pCategorySuppressionWatcher, suppressedCategoriesLock_ );
 
 	MF_VERIFY( Watcher::rootWatcher().addChild( "logger/categorySupression",
 		pReadWriteWatcher ) );
-		
+
+	// Per-category sampling: one message in every N, 0 or 1 disables.
+	MapWatcher< DebugFilter::SamplingMap > * pSamplingWatcher =
+		new MapWatcher< DebugFilter::SamplingMap >( sampleRatios_ );
+
+	pSamplingWatcher->setComment( "Keep one message in every N for a "
+		"category; 0 or 1 disables sampling" );
+
+	DataWatcher< int > * pSamplingChildWatcher =
+		new DataWatcher< int >( *(int*)NULL, Watcher::WT_READ_WRITE );
+
+	pSamplingChildWatcher->setComment( "sampling ratio: keep one message "
+		"in every N stamps" );
+
+	pSamplingWatcher->addChild( "*", pSamplingChildWatcher );
+
+	WatcherPtr pSamplingLockWatcher = new ReadWriteLockWatcher(
+		pSamplingWatcher, suppressedCategoriesLock_ );
+
+	MF_VERIFY( Watcher::rootWatcher().addChild( "logger/categorySampling",
+		pSamplingLockWatcher ) );
+
+	// The threshold below which no message at all is accepted. Like the
+	// per-category levels above, it stays writable so a running process
+	// can be re-leveled without a restart.
+	//
+	// NB: "this", not DebugFilter::instance(). The instance pointer is only
+	// published once this constructor returns, so instance() here would build
+	// another DebugFilter, whose addWatchers collides with these mounts, logs,
+	// and re-enters instance() forever.
+	WatcherPtr pThresholdWatcher = makeNonRefWatcher( *this,
+		&DebugFilter::filterThreshold, &DebugFilter::filterThreshold,
+		"0:TRACE; 1:DEBUG; 2:INFO; 3:NOTICE; 4:WARNING; 5:ERROR; "
+		"6:CRITICAL; 7:HACK; 9:ASSET; 10:NOTHING" );
+
+	MF_VERIFY( Watcher::rootWatcher().addChild( "logger/filterThreshold",
+		pThresholdWatcher ) );
+
 	MF_WATCH( "logger/shouldOutputErrorBackTrace",
 		DebugFilter::s_shouldOutputErrorBackTrace_ );
 
@@ -315,6 +390,12 @@ void DebugFilter::removeWatchers() const
 
 	MF_VERIFY( Watcher::rootWatcher().removeChild(
 		"logger/categorySupression" ) );
+
+	MF_VERIFY( Watcher::rootWatcher().removeChild(
+		"logger/categorySampling" ) );
+
+	MF_VERIFY( Watcher::rootWatcher().removeChild(
+		"logger/filterThreshold" ) );
 
 	MF_VERIFY( Watcher::rootWatcher().removeChild(
 		"logger/shouldOutputErrorBackTrace" ) );

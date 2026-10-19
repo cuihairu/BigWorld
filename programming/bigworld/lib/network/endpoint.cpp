@@ -6,6 +6,16 @@
 #include "cstdmf/binary_stream.hpp"
 #include "cstdmf/bw_memory.hpp"
 
+#if defined( _WIN32 )
+// MSVC's SDK leaves `#define interface struct` (rpcndr.h via d3d9.h / shlobj /
+// shlwapi / d3d10) live for the rest of the TU, which rewrites the
+// `interface`-named declarations in this file into syntax errors (C2332/C2027
+// in the root superproject build). Off for this file only; the pop below
+// restores it for whatever SDK COM header comes later in the TU.
+#pragma push_macro( "interface" )
+#undef interface
+#endif
+
 #if defined( __unix__ ) || defined( __APPLE__ ) || defined( __ANDROID__ ) || \
 		defined( EMSCRIPTEN )
 
@@ -38,7 +48,11 @@ extern "C" {
 
 		unsigned int if_index;	/* 1, 2, ... */
 
-		char *if_name;			/* null terminated name: "eth0", ... */
+		// const: initialised from string literals below, which a
+		// char* member would reject since C++11 (MSVC C2440 under
+		// /std:c++20 in the root superproject build). The only
+		// non-POSIX consumer copies the name into a BW::string.
+		const char *if_name;	/* null terminated name: "eth0", ... */
 
 	};
 
@@ -64,7 +78,8 @@ extern "C" {
 
 		unsigned int if_index;	/* 1, 2, ... */
 
-		char *if_name;			/* null terminated name: "eth0", ... */
+		// const: same literal-initialisation constraint as the stub above.
+		const char *if_name;	/* null terminated name: "eth0", ... */
 
 	};
 
@@ -788,6 +803,11 @@ void finiNetwork()
 namespace
 {
 
+// POSIX only. Windows has no SIGPIPE, so there is nothing to ignore, and the
+// MSVC CRT's <signal.h> provides neither sigaction nor SIG_IGN (MSVC C2079,
+// C2065 in the root superproject build).
+#if !defined( _WIN32 )
+
 class StaticIniter
 {
 public:
@@ -803,9 +823,15 @@ public:
 
 StaticIniter g_staticIniter;
 
+#endif // !defined( _WIN32 )
+
 } // anonymous namespace
 #endif
 
 BW_END_NAMESPACE
 
 // endpoint.cpp
+
+#if defined( _WIN32 )
+#pragma pop_macro( "interface" )
+#endif

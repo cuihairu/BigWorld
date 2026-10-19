@@ -3,12 +3,29 @@
 #include "cstdmf/bw_map.hpp"
 
 #include "network_app.hpp"
+#include "common_interface.hpp"
 #include "test_channel_interfaces.hpp"
 
+#include "network/channel_finder.hpp"
 #include "network/channel_owner.hpp"
 #include "network/endpoint.hpp"
 #include "network/network_interface.hpp"
 #include "network/udp_channel.hpp"
+
+#include "cstdmf/debug_filter.hpp"
+#include "cstdmf/debug_message_callbacks.hpp"
+#include "cstdmf/log_meta_data.hpp"
+#include "cstdmf/memory_stream.hpp"
+
+#if defined( _WIN32 )
+// MSVC's SDK leaves `#define interface struct` (rpcndr.h via d3d9.h / shlobj /
+// shlwapi / d3d10) live for the rest of the TU, which rewrites the
+// `interface`-named declarations in this file into syntax errors (C2332/C2027
+// in the root superproject build). Off for this file only; the pop below
+// restores it for whatever SDK COM header comes later in the TU.
+#pragma push_macro( "interface" )
+#undef interface
+#endif
 
 
 BW_BEGIN_NAMESPACE
@@ -405,6 +422,204 @@ TEST( Channel_testLoss )
 #endif
 #endif
 
+
+// -----------------------------------------------------------------------------
+// Section: Log correlation
+// -----------------------------------------------------------------------------
+
+namespace
+{
+
+// The explicit id both sides give their channel, so the receiving channel's
+// id() is known when asserting the correlation field.
+const Mercury::ChannelID CORR_CHANNEL_ID = 42;
+
+// Bounds the non-idling delivery pump below; loopback delivery takes a
+// handful of polls.
+const int MAX_CORR_DELIVERY_PUMPS = 10000;
+
+static const char s_channelMarker[] = "Channel log correlation marker";
+
+
+/**
+ *	Captures the metadata of marker messages so tests can assert which
+ *	correlation fields a message dispatched on a channel carried.
+ */
+class ChannelCorrCapture : public DebugMessageCallback
+{
+public:
+	ChannelCorrCapture() : sawMetaData_( false ) {}
+
+	virtual bool handleMessage( DebugMessagePriority /*messagePriority*/,
+			const char * /*pCategory*/, DebugMessageSource /*messageSource*/,
+			const LogMetaData & metaData, const char * pFormat,
+			va_list /*argPtr*/ )
+	{
+		if (strstr( pFormat, s_channelMarker ) == NULL)
+		{
+			return false;
+		}
+
+		const MemoryOStream * pStream = metaData.pData();
+		if (pStream == NULL)
+		{
+			return true;
+		}
+
+		MemoryIStream is( const_cast< MemoryOStream * >( pStream )->data(),
+			pStream->size() );
+
+		while (is.remainingLength() > 0)
+		{
+			LogMetaData::MessageLoggerValueType keyType;
+			LogMetaData::MessageLoggerValueType valueType;
+			is >> keyType >> key_ >> valueType >> value_;
+
+			if ((keyType == LogMetaData::MLVT_STRING) &&
+					(valueType == LogMetaData::MLVT_LONG_LONG_INT))
+			{
+				sawMetaData_ = true;
+			}
+		}
+
+		return true;
+	}
+
+	bool sawMetaData() const				{ return sawMetaData_; }
+	const BW::string & key() const			{ return key_; }
+	long long value() const					{ return value_; }
+
+private:
+	bool sawMetaData_;
+	BW::string key_;
+	long long value_;
+};
+
+
+/**
+ *	A minimal in-process Mercury endpoint whose channel messages are
+ *	dispatched with a handler that logs a marker (mirrors the Endpoint
+ * pattern in test_request_failure.cpp).
+ */
+class CorrEndpoint : public CommonHandler
+{
+public:
+	CorrEndpoint( Mercury::EventDispatcher & dispatcher ) :
+		interface_( &dispatcher, Mercury::NETWORK_INTERFACE_INTERNAL ),
+		channelFinder_( pChannel_ ),
+		pChannel_( NULL ),
+		numReceived_( 0 )
+	{
+		CommonInterface::registerWithInterface( interface_ );
+		interface_.pExtensionData( this );
+		interface_.registerChannelFinder( &channelFinder_ );
+	}
+
+	~CorrEndpoint()
+	{
+		if (pChannel_)
+		{
+			pChannel_->destroy();
+			pChannel_ = NULL;
+		}
+	}
+
+	Mercury::NetworkInterface & interface()	{ return interface_; }
+	Mercury::Address address() const		{ return interface_.address(); }
+	int numReceived() const					{ return numReceived_; }
+
+	void initChannel( const Mercury::Address & addr )
+	{
+		MF_ASSERT( !pChannel_ );
+		pChannel_ = new Mercury::UDPChannel( interface_, addr,
+			Mercury::UDPChannel::INTERNAL, 1.f, NULL, CORR_CHANNEL_ID );
+		pChannel_->isLocalRegular( false );
+		pChannel_->isRemoteRegular( false );
+	}
+
+	Mercury::Bundle & channelBundle()		{ return pChannel_->bundle(); }
+	void sendOnChannel()					{ pChannel_->send(); }
+
+	// CommonHandler override: logs the marker inside the dispatch of a
+	// channel message. The marker must be the format string itself so that
+	// the capture callback sees it in pFormat.
+	void on_msg1( const Mercury::Address & /*srcAddr*/,
+			const CommonInterface::msg1Args & /*args*/ )
+	{
+		++numReceived_;
+		INFO_MSG( s_channelMarker );
+	}
+
+private:
+	class ChannelFinder : public Mercury::ChannelFinder
+	{
+	public:
+		ChannelFinder( Mercury::UDPChannel *& rpChannel ):
+			rpChannel_( rpChannel )
+		{}
+
+		virtual Mercury::UDPChannel * find( Mercury::ChannelID id,
+				const Mercury::Address & /*srcAddr*/,
+				const Mercury::Packet * /*pPacket*/,
+				bool & rHasBeenHandled )
+		{
+			if (id == CORR_CHANNEL_ID)
+			{
+				rHasBeenHandled = false;
+				return rpChannel_;
+			}
+
+			return NULL;
+		}
+
+	private:
+		Mercury::UDPChannel *& rpChannel_;
+	};
+
+	Mercury::NetworkInterface	interface_;
+	ChannelFinder				channelFinder_;
+	Mercury::UDPChannel *		pChannel_;
+	int							numReceived_;
+};
+
+
+/**
+ *	Every log written while a channel message is being dispatched carries the
+ *	id of the channel it arrived on.
+ */
+TEST( Channel_logCorrelation )
+{
+	Mercury::EventDispatcher dispatcher;
+	CorrEndpoint server( dispatcher );
+	CorrEndpoint client( dispatcher );
+
+	// Both endpoints need a channel so that packets can be acked.
+	client.initChannel( server.address() );
+	server.initChannel( client.address() );
+
+	ChannelCorrCapture capture;
+	DebugFilter::instance().addMessageCallback( &capture );
+
+	CommonInterface::msg1Args::start( client.channelBundle() );
+	client.sendOnChannel();
+
+	for (int i = 0; i < MAX_CORR_DELIVERY_PUMPS && server.numReceived() == 0;
+			++i)
+	{
+		dispatcher.processOnce( /*shouldIdle:*/ false );
+	}
+
+	DebugFilter::instance().deleteMessageCallback( &capture );
+
+	CHECK_EQUAL( 1, server.numReceived() );
+
+	CHECK( capture.sawMetaData() );
+	CHECK_EQUAL( 0, strcmp( "channelID", capture.key().c_str() ) );
+	CHECK_EQUAL( (long long)CORR_CHANNEL_ID, capture.value() );
+}
+
+} // end anonymous namespace
+
 BW_END_NAMESPACE
 
 
@@ -412,3 +627,7 @@ BW_END_NAMESPACE
 #include "test_channel_interfaces.hpp"
 
 // test_channel.cpp
+
+#if defined( _WIN32 )
+#pragma pop_macro( "interface" )
+#endif

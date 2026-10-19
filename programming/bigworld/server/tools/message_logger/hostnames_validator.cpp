@@ -1,10 +1,17 @@
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <sys/socket.h>
-#include <netdb.h>
-#include <string.h>
-#include <sys/stat.h>
+#if defined( _WIN32 )
+	// in_addr/inet_ntoa/gethostbyaddr (Winsock2) plus the mkdir shim.
+	#include "posix_compat.hpp"
+	#include <string.h>
+	#include <sys/stat.h>
+#else
+	#include <sys/socket.h>
+	#include <netinet/in.h>
+	#include <arpa/inet.h>
+	#include <sys/socket.h>
+	#include <netdb.h>
+	#include <string.h>
+	#include <sys/stat.h>
+#endif
 
 #include "cstdmf/debug.hpp"
 #include "cstdmf/bw_util.hpp"
@@ -176,8 +183,10 @@ HostnamesValidateResult HostnamesValidator::validateOneHostname
 	DEBUG_MSG( "HostnamesValidator::validateOneHostname: validating %s with "
 			"hostname %s\n", ipAddrStr.c_str(), oldName.c_str() );
 
+	// Winsock's gethostbyaddr takes a const char* where POSIX takes a
+	// const void*; the cast suits both.
 	struct hostent *pHostnameEntry =
-		gethostbyaddr( &addr, sizeof( addr ), AF_INET );
+		gethostbyaddr( (const char *)&addr, sizeof( addr ), AF_INET );
 
 	if (h_errno == TRY_AGAIN)
 	{

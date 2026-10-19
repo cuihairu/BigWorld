@@ -5,6 +5,12 @@
 
 #if BW_ENABLE_STACKTRACE
 
+// DbgHelp.h needs the windows.h base types. The legacy VS projects get them
+// through PCH_SUPPORT; the root superproject builds with PCH_SUPPORT off, so
+// this file carries its own - the pattern concurrency.hpp uses. A no-op
+// outside Windows.
+#include "cstdmf_windows.hpp"
+
 #pragma warning(push)
 #pragma warning(disable: 4091)
 #include <DbgHelp.h>

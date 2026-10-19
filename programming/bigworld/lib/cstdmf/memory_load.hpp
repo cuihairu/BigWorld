@@ -3,6 +3,14 @@
 
 #ifdef WIN32
 
+// Self-sufficient windows include: stdmf.hpp does not pull <windows.h> and
+// this header needs DWORDLONG. In the VS-project builds pch.hpp (which does
+// include cstdmf_windows.hpp) always precedes it, but the root superproject
+// turns PCH_SUPPORT off (BWConfiguration_server.cmake), pch.hpp compiles out
+// empty, and memory_load.cpp then dies on every MemSize declaration
+// (C4430/C2146 x121, run 38990281409).
+#include "cstdmf_windows.hpp"
+
 #include "stdmf.hpp"
 
 BW_BEGIN_NAMESPACE

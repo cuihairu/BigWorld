@@ -15,7 +15,15 @@
 #define BW_FORMAT_ATTRIBUTE
 #endif
 
-#define BW_UNIX_BACKTRACE (defined( unix ) && !defined( __ANDROID__ ))
+// BIGWORLD_BEGIN(msvc port)
+// #if, not a macro body: see config.hpp for why defined() must not be
+// expanded out of a #define.
+#if defined( unix ) && !defined( __ANDROID__ )
+#define BW_UNIX_BACKTRACE 1
+#else
+#define BW_UNIX_BACKTRACE 0
+#endif
+// BIGWORLD_END(msvc port)
 
 
 BW_BEGIN_NAMESPACE
@@ -162,10 +170,14 @@ private:
 	void xbox360Stack( const char stackTrace[] );
 #endif // defined( _XBOX360 )
 
+	/// addMessageMetadataForScope attaches this thread's correlation context
+	/// to messages written through the logging macros.
+	friend LogMsg & addMessageMetadataForScope( LogMsg & msg );
+
 	DebugMessagePriority priority_;
 	DebugMessageSource source_;
 	const char * pCategory_;
-	LogMetaData metaData_; 
+	LogMetaData metaData_;
 };
 
 

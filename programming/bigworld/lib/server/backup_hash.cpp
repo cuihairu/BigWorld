@@ -213,7 +213,7 @@ void BackupHash::diff( const BackupHash & other, DiffVisitor & visitor )
 void BackupHash::push_back( const Mercury::Address & addr )
 {
 	addrs_.push_back( addr );
-	this->handleSizeChange( addrs_.size() );
+	this->handleSizeChange( static_cast< uint32 >( addrs_.size() ) );
 }
 
 
@@ -229,7 +229,7 @@ bool BackupHash::erase( const Mercury::Address & addr )
 		*iter = addrs_.back();
 		addrs_.pop_back();
 
-		this->handleSizeChange( addrs_.size() );
+		this->handleSizeChange( static_cast< uint32 >( addrs_.size() ) );
 
 		return true;
 	}

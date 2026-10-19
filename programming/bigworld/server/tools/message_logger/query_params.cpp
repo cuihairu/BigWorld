@@ -8,7 +8,12 @@
 #include "mldb/log_reader.hpp"
 
 #include <sys/types.h>
-#include <regex.h>
+#if defined( _WIN32 )
+	// The regex_t shims live here instead of <regex.h>.
+	#include "posix_compat.hpp"
+#else
+	#include <regex.h>
+#endif
 
 
 BW_BEGIN_NAMESPACE

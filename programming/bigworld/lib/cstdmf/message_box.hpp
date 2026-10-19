@@ -3,6 +3,13 @@
 
 #include "bw_string.hpp"
 
+// HWND / WNDPROC below come from windows.h. The legacy VS projects get it
+// through PCH_SUPPORT, but the root superproject builds with PCH_SUPPORT off
+// (BWConfiguration_server.cmake), so this header has to carry its own
+// windows.h - the same pattern critical_message_box.hpp and
+// concurrency.hpp use. A no-op outside Windows.
+#include "cstdmf_windows.hpp"
+
 #include "cstdmf/bw_map.hpp"
 #include "cstdmf/bw_vector.hpp"
 

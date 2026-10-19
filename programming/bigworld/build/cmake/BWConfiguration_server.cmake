@@ -1,5 +1,13 @@
 ADD_DEFINITIONS( -DMF_SERVER )
 
+# START_MSG and the service banners print the config name through
+# MF_CONFIG. The make chain defines it as a string
+# (build/make/Makefile:210, -DMF_CONFIG="$(BW_CONFIG)"); without this
+# define the header fallback `#define MF_CONFIG Unknown` names an enum
+# member no Windows TU has (C2065 'Unknown' at bwservice.hpp:55, run
+# 38999627798). Hybrid is the root server build's canonical configuration.
+ADD_DEFINITIONS( -DMF_CONFIG="Hybrid" )
+
 # Add commands for start, stop, status
 BW_TARGET_LINUX_COMMAND( start_server 
 	"python ${BW_LINUX_DIR}/../tools/server/control_cluster.py start ${BW_LINUX_HOST}" )
@@ -85,6 +93,13 @@ SET( BW_LIBRARY_PROJECTS
 	entitydef_script	lib/entitydef_script
 	scene				lib/scene
 
+	# CellApp
+	# Server-mode speedtree is collision-cache only (speedtree_collision.cpp,
+	# the make chain's whole lib); chunk's server_chunk_tree.obj references
+	# getBSPTree unguarded (LNK2019 in the root superproject build, run
+	# 39006994918).
+	speedtree			lib/speedtree
+
 	# BaseApp + CellApp + DBMgr
 	entitydef			lib/entitydef
 	pyscript			lib/pyscript
@@ -96,6 +111,16 @@ SET( BW_LIBRARY_PROJECTS
 	libpython			third_party/python
 	zip 				third_party/zip
 	libpng				third_party/png/projects/visualc71
+	# lib/resmgr links re2 (lib/resmgr/CMakeLists.txt:149) and every other
+	# configuration lists it here, so the vendored tree - which ships its own
+	# repo-tailored CMakeLists and builds on MSVC as-is - was simply missing
+	# from the server list: bwengine_xml's link then died with LNK1181 on
+	# re2.lib (run 38883400603).
+	re2					third_party/re2
+	# cstdmf links nedalloc on Windows (server or not) for the same reason
+	# every other configuration lists it: allocator.cpp's SystemAllocator is
+	# BW::NedAllocator there.
+	nedalloc			third_party/nedalloc
 	
 	# Unit test librarys
 	${BW_SERVER_UNIT_TEST_LIBRARIES}

@@ -39,10 +39,21 @@ namespace Mercury
 #endif // _MSC_VER
 
 /**
- *	Constructor.
+ *	Constructor. Uses the real-time clock.
  */
 EventDispatcher::EventDispatcher() :
+	EventDispatcher( ClockFn( &EventDispatcher::realClock ) )
+{
+}
+
+
+/**
+ *	Constructor with an injectable clock source, for driving timers in tests
+ *	without sleeping.
+ */
+EventDispatcher::EventDispatcher( const ClockFn & clock ) :
 	breakProcessing_( false ),
+	clock_( clock ),
 	pTimeQueue_( new TimeQueue64 ),
 	pFrequentTasks_( new FrequentTasks ),
 	accSpareTime_( 0 ),
@@ -51,10 +62,23 @@ EventDispatcher::EventDispatcher() :
 	lastStatisticsGathered_( 0 ),
 	numTimerCalls_( 0 ),
 	maxWait_( 0.1 ),
+	maxNetworkTime_( 0 ),
+	networkTimeBudget_( uint64( TimeStamp::fromSeconds( 0.01 ) ) ),
+	numOverBudgetTicks_( 0 ),
 	pCouplingToParent_( NULL ),
 	pPoller_( EventPoller::create() ),
 	pErrorReporter_( new ErrorReporter( *this ) )
 {
+	MF_ASSERT( clock_ );
+}
+
+
+/**
+ *	The default clock source: real-time stamps.
+ */
+/*static*/ uint64 EventDispatcher::realClock()
+{
+	return timestamp();
 }
 
 #ifdef _MSC_VER
@@ -96,6 +120,8 @@ void EventDispatcher::prepareForShutdown()
 {
 	const uint64 SECONDS_TO_ATTEMPT_SEND = 2;
 
+	// Real clock on purpose: this bound is the last-resort drain guard, it
+	// must elapse in wall time even if an injected clock stands still.
 	const uint64 startTime = timestamp();
 	uint64 timePeriod = (stampsPerSecond() * SECONDS_TO_ATTEMPT_SEND);
 
@@ -276,7 +302,7 @@ TimerHandle EventDispatcher::addTimerCommon( int64 microseconds,
 			((double)microseconds) / 1000000.0 );
 
 	// TODO: Does not handle time wrap-around.
-	TimerHandle handle = pTimeQueue_->add( timestamp() + interval,
+	TimerHandle handle = pTimeQueue_->add( clock_() + interval,
 			recurrent ? interval : 0,
 			handler, arg, name );
 
@@ -340,7 +366,7 @@ void EventDispatcher::processFrequentTasks()
 void EventDispatcher::processTimers()
 {
 	PROFILER_SCOPED( processTimers );
-	numTimerCalls_ += pTimeQueue_->process( timestamp() );
+	numTimerCalls_ += pTimeQueue_->process( clock_() );
 }
 
 
@@ -348,12 +374,12 @@ void EventDispatcher::processStats()
 {
 	PROFILER_SCOPED( processStats );
 	// gather statistics if we haven't for a while
-	if (timestamp() - lastStatisticsGathered_ >= stampsPerSecond())
+	if (clock_() - lastStatisticsGathered_ >= stampsPerSecond())
 	{
 		oldSpareTime_ = totSpareTime_;
 		totSpareTime_ = accSpareTime_ + pPoller_->spareTime();
 
-		lastStatisticsGathered_ = timestamp();
+		lastStatisticsGathered_ = clock_();
 	}
 }
 
@@ -370,7 +396,30 @@ int EventDispatcher::processNetwork( bool shouldIdle )
 	// select for network activity until earliest timer
 	double maxWait = shouldIdle ? this->calculateWait() : 0.0;
 
-	return pPoller_->processPendingEvents( maxWait );
+	// Real clock on purpose: this measures what a network tick costs in wall
+	// time, so an injected test clock must not distort it.
+	const uint64 startSpare = pPoller_->spareTime();
+	const uint64 start = timestamp();
+	const int numEvents = pPoller_->processPendingEvents( maxWait );
+
+	// The poller charges its idle select wait to spare time, and that wait is
+	// not work: subtract it out so only the packet and socket-event handling
+	// time is left. An idle tick therefore stays inside any budget.
+	const uint64 idle = pPoller_->spareTime() - startSpare;
+	const uint64 elapsed = timestamp() - start;
+	const uint64 processingTime = (elapsed > idle) ? (elapsed - idle) : 0;
+
+	if (processingTime > maxNetworkTime_)
+	{
+		maxNetworkTime_ = processingTime;
+	}
+
+	if (processingTime > networkTimeBudget_)
+	{
+		++numOverBudgetTicks_;
+	}
+
+	return numEvents;
 }
 
 
@@ -385,7 +434,7 @@ double EventDispatcher::calculateWait() const
 	if (!pTimeQueue_->empty())
 	{
 		maxWait = std::min( maxWait,
-			pTimeQueue_->nextExp( timestamp() ) / stampsPerSecondD() );
+			pTimeQueue_->nextExp( clock_() ) / stampsPerSecondD() );
 	}
 
 	ChildDispatchers::const_iterator iter = childDispatchers_.begin();
@@ -482,6 +531,83 @@ uint64 EventDispatcher::timerDeliveryTime( TimerHandle handle ) const
 
 
 /**
+ *	This method returns the worst timer lateness this dispatcher's queue has
+ *	seen, in stamps. Not inline: it reaches through pTimeQueue_, which is
+ *	only forward declared in this header.
+ */
+TimeStamp EventDispatcher::maxTimerLateness() const
+{
+	return pTimeQueue_->maxLateness();
+}
+
+
+/**
+ *	This method returns how many timers this dispatcher has run late.
+ */
+uint32 EventDispatcher::numLateTimers() const
+{
+	return pTimeQueue_->numLateTimers();
+}
+
+
+/**
+ *	This method discards the accumulated timer lateness.
+ */
+void EventDispatcher::resetTimerLateness()
+{
+	pTimeQueue_->resetLateness();
+}
+
+
+/**
+ *	This method returns the worst wall-clock cost of a single network tick,
+ *	in stamps. See processNetwork() for how the idle wait is excluded.
+ */
+uint64 EventDispatcher::maxNetworkTime() const
+{
+	return maxNetworkTime_;
+}
+
+
+/**
+ *	This method returns how many network ticks have run past the network time
+ *	budget.
+ */
+uint32 EventDispatcher::numOverBudgetTicks() const
+{
+	return numOverBudgetTicks_;
+}
+
+
+/**
+ *	This method discards the accumulated network time record.
+ */
+void EventDispatcher::resetNetworkTimeStats()
+{
+	maxNetworkTime_ = 0;
+	numOverBudgetTicks_ = 0;
+}
+
+
+/**
+ *	This method returns the per-tick network processing budget, in seconds.
+ */
+double EventDispatcher::networkTimeBudget() const
+{
+	return static_cast<double>( networkTimeBudget_ ) / stampsPerSecondD();
+}
+
+
+/**
+ *	This method sets the per-tick network processing budget, in seconds.
+ */
+void EventDispatcher::networkTimeBudget( double seconds )
+{
+	networkTimeBudget_ = uint64( seconds * stampsPerSecond() );
+}
+
+
+/**
  *	This method returns the time between deliveries of the given timer handle.
  */
 uint64 EventDispatcher::timerIntervalTime( TimerHandle handle ) const
@@ -540,9 +666,60 @@ WatcherPtr EventDispatcher::pTimingWatcher()
 			makeWatcher( &EventDispatcher::totSpareTime_ ) );
 		watchMe->addChild( "numTimerCalls",
 			makeWatcher( &EventDispatcher::numTimerCalls_ ) );
+
+		// Event loop stall signal, in seconds since the last reset.
+		watchMe->addChild( "maxTimerLateness",
+			makeWatcher( &EventDispatcher::maxTimerLatenessSeconds ) );
+		watchMe->addChild( "numLateTimers",
+			makeWatcher( &EventDispatcher::lateTimerCount ) );
+
+		// Per-tick network processing cost, in seconds since the last reset.
+		watchMe->addChild( "maxNetworkTime",
+			makeWatcher( &EventDispatcher::maxNetworkTimeSeconds ) );
+		watchMe->addChild( "numOverBudgetTicks",
+			makeWatcher( &EventDispatcher::overBudgetTickCount ) );
 	}
 
 	return watchMe;
+}
+
+
+/**
+ *	This method returns maxTimerLateness() expressed in seconds, so this
+ *	watcher reads in the same units as the other timing entries above.
+ */
+double EventDispatcher::maxTimerLatenessSeconds() const
+{
+	return static_cast<double>( pTimeQueue_->maxLateness() ) /
+		stampsPerSecondD();
+}
+
+
+/**
+ *	This method returns numLateTimers() for the watcher.
+ */
+uint32 EventDispatcher::lateTimerCount() const
+{
+	return pTimeQueue_->numLateTimers();
+}
+
+
+/**
+ *	This method returns maxNetworkTime() expressed in seconds, so this
+ *	watcher reads in the same units as the other timing entries above.
+ */
+double EventDispatcher::maxNetworkTimeSeconds() const
+{
+	return static_cast<double>( maxNetworkTime_ ) / stampsPerSecondD();
+}
+
+
+/**
+ *	This method returns numOverBudgetTicks() for the watcher.
+ */
+uint32 EventDispatcher::overBudgetTickCount() const
+{
+	return numOverBudgetTicks_;
 }
 
 /**

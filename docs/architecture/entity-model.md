@@ -1,5 +1,7 @@
 # 实体模型：Base / Cell / Client
 
+> [English](entity-model.en.md) | **中文**
+
 <div class="arch-hero">
 
 BigWorld 的实体不是单对象模型，而是拆成 Base、Cell、Client 三个权威域。Base 承载会话、数据库和跨 Cell 协调；Cell 承载空间、位置、AOI、物理和 real/ghost；Client 只接收经过 Witness 和带宽调度过滤后的视图。

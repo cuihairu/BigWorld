@@ -272,6 +272,25 @@ ENDMACRO( BW_ADD_LIBRARY )
 MACRO( BW_ADD_EXECUTABLE _PROJNAME )
 	ADD_EXECUTABLE( ${_PROJNAME} ${ARGN} )
 
+	# Every exe that links the server libs pulls Python.h in transitively,
+	# and CPython's generated pyconfig.h embeds
+	# #pragma comment( lib, "python313.lib" ) into each of those objects -
+	# a bare-name link input. The root superproject sets
+	# BW_PYTHON_AS_SOURCE ON (CMakeLists.txt) before the subdirectories, so
+	# BWStandardProject's LINK_DIRECTORIES( .../PCbuild/amd64 ) is compiled
+	# out there and nothing resolves that bare name: LNK1104 on every exe
+	# whose link line lacks the full-path libpython that script and pyscript
+	# carry (run 39021844438: cellappmgr, baseappmgr, dbappmgr, reviver;
+	# cellapp got libpython through pyscript and linked). Give every
+	# executable the imported archive - MSVC dedupes by file name, so it
+	# satisfies the pragma even where the /LIBPATH does exist - and its
+	# bwpython313 ordering edge serialises the ExternalProject build first.
+	# The guard keeps standalone module configures without libpython
+	# working.
+	IF( TARGET libpython )
+		TARGET_LINK_LIBRARIES( ${_PROJNAME} libpython )
+	ENDIF()
+
 	IF (BW_IS_REMOTE_BUILD)
 		BW_CHECK_REMOTE_BUILD( ${_PROJNAME} ${ARGN} )
 	ENDIF()

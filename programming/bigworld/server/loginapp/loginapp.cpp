@@ -36,10 +36,22 @@
 #include "server/util.hpp"
 #include "server/writedb.hpp"
 
+#if !defined( _WIN32 )
 #include <pwd.h>
+#endif
 #include <signal.h>
 
 #include <sys/types.h>
+
+#if defined( _WIN32 )
+// MSVC's SDK leaves `#define interface struct` (rpcndr.h via d3d9.h / shlobj /
+// shlwapi / d3d10) live for the rest of the TU, which rewrites the
+// `interface`-named declarations in this file into syntax errors (C2332/C2027
+// in the root superproject build). Off for this file only; the pop below
+// restores it for whatever SDK COM header comes later in the TU.
+#pragma push_macro( "interface" )
+#undef interface
+#endif
 
 
 DECLARE_DEBUG_COMPONENT( 0 )
@@ -1160,7 +1172,10 @@ void LoginApp::probe( const Mercury::Address & source,
 
 #else
 	DWORD bsz = sizeof( buf );
-	if (!GetUserName( buf, &bsz ))
+	// GetUserNameA: the root build defines UNICODE, so the bare name
+	// resolves to GetUserNameW and the char buffer will not convert
+	// (C2664 in the root superproject build, run 39021844438).
+	if (!GetUserNameA( buf, &bsz ))
 	{
 		buf[ 0 ]=0;
 	}
@@ -1584,3 +1599,7 @@ LoginApp::LoginStats::LoginStats():
 BW_END_NAMESPACE
 
 // loginapp.cpp
+
+#if defined( _WIN32 )
+#pragma pop_macro( "interface" )
+#endif

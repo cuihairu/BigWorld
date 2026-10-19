@@ -66,6 +66,22 @@ public:
 	}
 
 	/**
+	 * Whether watcher writes that arrive over the wire are permitted. When
+	 * false, set operations are rejected (and audited as blocked) before
+	 * reaching any watcher. Defaults to true.
+	 */
+	CSTDMF_DLL static bool writesEnabled();
+	CSTDMF_DLL static void writesEnabled( bool enabled );
+
+	/**
+	 * Mounts the watcher write permission controls ("watcherWrites") on the
+	 * root watcher. Called lazily on the first watcher write, so apps do
+	 * not need to wire it up themselves. Writes to the toggle path stay
+	 * allowed while writes are blocked, so the switch can be flipped back.
+	 */
+	CSTDMF_DLL static void addWatchers();
+
+	/**
 	 * Check if we have been told about a creator, and notify them of our
 	 * completion.
 	 */
@@ -103,6 +119,9 @@ protected:
 	WatcherPathRequestNotification *pParent_; //!< The creator of the path request.
 
 	BW::string requestPath_; //!< The path of the requested watcher
+
+private:
+	static bool s_writesEnabled_; //!< Process-wide watcher write permission.
 };
 
 
@@ -149,6 +168,8 @@ public:
 	BinaryIStream * getValueStream() { return setStream_; }
 
 private:
+	void completeFailedSet();
+
 	MemoryOStream result_; //!< Output stream for the watcher path requests data.
 	BW::string originalRequestPath_; //!< Original path requested via watcher nub, used when visiting directories and requestPath_ may be altered.
 

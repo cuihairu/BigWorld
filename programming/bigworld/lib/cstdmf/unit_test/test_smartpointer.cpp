@@ -192,11 +192,16 @@ TEST( SafeReferenceCount_atomicHammer_threads )
 	// the hammer threads run.
 	obj.incRef();
 
-	BW::SimpleThread t1( &safeHammer, &obj, "sp-hammer-1" );
-	BW::SimpleThread t2( &safeHammer, &obj, "sp-hammer-2" );
-	BW::SimpleThread t3( &safeHammer, &obj, "sp-hammer-3" );
-	BW::SimpleThread t4( &safeHammer, &obj, "sp-hammer-4" );
-	// SimpleThread's destructor joins.
+	{
+		BW::SimpleThread t1( &safeHammer, &obj, "sp-hammer-1" );
+		BW::SimpleThread t2( &safeHammer, &obj, "sp-hammer-2" );
+		BW::SimpleThread t3( &safeHammer, &obj, "sp-hammer-3" );
+		BW::SimpleThread t4( &safeHammer, &obj, "sp-hammer-4" );
+	}
+	// The braces are the join: SimpleThread's destructor pthread_joins at the
+	// end of this block, not at the end of the test body. Checking before it
+	// races the threads this test exists to exercise, and the baseline
+	// decRef below could drive the count to zero while they still run.
 
 	CHECK_EQUAL( 1, obj.refCount() );
 	CHECK_EQUAL( 0, obj.decRef() );

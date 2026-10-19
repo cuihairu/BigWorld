@@ -6,6 +6,10 @@
 #include "query_result.hpp"
 #include "mldb/log_storage.hpp"
 
+#if defined( _WIN32 )
+	// opendir/readdir for the user log directory scan below.
+	#include "posix_compat.hpp"
+#endif
 
 BW_BEGIN_NAMESPACE
 

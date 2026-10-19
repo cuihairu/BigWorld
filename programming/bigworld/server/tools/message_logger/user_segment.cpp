@@ -4,7 +4,6 @@
 #include "log_entry.hpp"
 
 #include <stdio.h>
-#include <dirent.h>
 #include <string.h>
 
 

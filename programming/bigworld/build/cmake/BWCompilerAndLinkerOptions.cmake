@@ -9,6 +9,13 @@ IF( MSVC )
 		/DWIN32
 		/D_WINDOWS
 
+		# Language level: without this MSVC compiles at its c++14 default,
+		# while the make track builds with -std=c++23 (platform_el7.mak:6);
+		# pyscript's designated initializers then fail with C7555 in the
+		# root superproject build. c++20 is the closest stable MSVC tier
+		# (full c++23 needs /std:c++latest on 19.5x, preview surface).
+		/std:c++20
+
 		# General
 		/W3		# Warning level 3
 		/Zi		# Always generate debug information
@@ -66,7 +73,14 @@ IF( MSVC )
 		)
 
 	# Flags used by C and C++ compilers for Hybrid builds
-	SET( BW_COMPILER_FLAGS_HYBRID ${BW_COMPILER_FLAGS_OPTIMIZED} )
+	# _HYBRID rides on the config flags: the COMPILE_DEFINITIONS_HYBRID
+	# directory property below never reached a single target (a Ninja
+	# Multi-Config sandbox shows no -D_HYBRID on any command line, root
+	# directory property or not), so every TU that includes
+	# cstdmf/build_config.hpp hit its #error (C1189 on dbapp.cpp and
+	# reviver.cpp in the root superproject build, run 39016799505). _DEBUG
+	# needs no counterpart - /MDd defines it natively.
+	SET( BW_COMPILER_FLAGS_HYBRID ${BW_COMPILER_FLAGS_OPTIMIZED} -D_HYBRID )
 
 	# Flags used by C and C++ compilers for Consumer_Release builds
 	SET( BW_COMPILER_FLAGS_CONSUMER_RELEASE ${BW_COMPILER_FLAGS_OPTIMIZED} )
