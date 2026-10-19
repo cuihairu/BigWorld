@@ -39,3 +39,6 @@ programming/bigworld/lib/resmgr/unit_test/res/test_packed_section
 programming/bigworld/lib/resmgr/unit_test/res/test_conversion*.zip
 programming/bigworld/lib/resmgr/unit_test/res/test_deleted.zip
 programming/bigworld/build/vcpkg/
+programming/bigworld/build/cmake-*/
+programming/xmldataresource.xml
+docs/.vitepress/theme/*.bak
