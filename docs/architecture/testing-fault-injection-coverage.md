@@ -1,5 +1,7 @@
 # 测试体系、故障注入与覆盖边界
 
+> [English](testing-fault-injection-coverage.en.md) | **中文**
+
 <div class="arch-hero">
 
 BigWorld 并不是“几乎没测试”的老引擎。它已经有一套可运行的 `unit_test` 体系，网络层还内建人工丢包/延迟能力，并覆盖了可靠 UDP、overflow、channel 切换、ghost 消息缓冲和 replay 文件读写等关键路径。但这些能力并不等于现代意义上的统一集成测试或 chaos framework。

@@ -1,5 +1,7 @@
 # 安全、限流与加密
 
+> [English](security-rate-limit.en.md) | **中文**
+
 <div class="arch-hero">
 
 BigWorld 的安全相关逻辑分布在网络入口、登录流程、Proxy 消息预算、Mercury Channel 加密、EntityDef 暴露方法和管理工具链里。源码分析这部分时，必须按组件边界拆开看，不能只看玩家 UDP 包入口。

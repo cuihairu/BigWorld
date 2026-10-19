@@ -1,5 +1,7 @@
 # 网络 I/O 模型选择
 
+> [English](network-io-model.en.md) | **中文**
+
 <div class="arch-hero">
 
 这章是 BigWorld 网络架构研究的第一块硬骨头。不能只说"用了 epoll"，也不能用现代 benchmark 直接否定旧方案。必须结合 Mercury 的 UDP Channel 模型、主线程 Reactor、Tick 预算、平台基线和当时技术可用性一起判断。
