@@ -1134,5 +1134,30 @@ baseappmgr 20s 存活（kill，PASS-with-note：DLL 图解析完整，设计即�
 10-15 起就是红的；daily 车道是唯一能抓它的防线，首跑即抓到。两车道
 互补：单测门管语义、daily 全量 make 管编译可移植性。
 
-**再验**：修复后 dispatch daily 复跑，双车道待绿后补 artifact 同构
-比对（vs 探针 #33）与 L39 整条勾账。
+**再验（run 39369088298，head `98fd9b19`，workflow_dispatch）——双
+车道全绿，L39 收口**：
+- **Linux `build-test-package`**：绿，39m56s——apt 依赖 + vcpkg pinned
+  baseline + 全量 make + 21 模块门 + tar.gz/deb/rpm 打包，artifact
+  `bigworld-daily-14.4.1+daily20261020.98fd9b19-linux-x86_64`
+  （2.68 GB）。批次 36 埋、daily 首跑抓出的 `message_handlers.cpp:163`
+  缺陷在 CI gcc-14 下复测通过。
+- **Windows `Windows server products`**：绿，19m0s——freshness 门
+  （`shell: bash` 修复生效）、D3DX NuGet + jsoncpp vcpkg + 共享 ps1
+  脚本 + exe 车道 + zip/manifest 打包，artifact
+  `bigworld-daily-14.4.1+daily20261020.98fd9b19-windows-x64`
+  （30.7 MB）。产物命名与探针 #33（`…daily20261018.31ce396c`）同构：
+  同一生成脚本 `package-daily-windows.ps1`、同一 `bigworld-daily-<ver>-windows-x64`
+  模式，版本串随 head 更新。
+- **产物内容实证（artifact 解包，与探针 #33 同法）**：artifact 内恰
+  两件套——`bigworld-windows-server-14.4.1+daily20261020.98fd9b19.zip`
+  （31.2 MB）+ `products-manifest.txt`；内层 zip **11 个 exe**
+  （baseapp / baseappmgr / bots / cellapp / cellappmgr / dbapp /
+  dbappmgr / loginapp / message_logger / reviver / transfer_db）与 exe
+  车道 11/11 同集，**pyd 34 个**（#33 修正后的数，非早期误记 39）；
+  manifest 2397 行、头部版本串 `14.4.1+daily20261020.98fd9b19` /
+  commit `98fd9b19` / MSVC 19.51 VS 18 / Hybrid / UCRT 说明齐；
+  `python313.dll` 解包实算 SHA256 `b0829916…0636` 与 manifest 行同值
+  （交叉验证通过）。
+- 产物仅 workflow artifact（14 天保留），无 tag、无 release（红线）。
+  todo.md L39（exe 打包）勾账关闭，链 `14ebd63a`→`31ce396c`→
+  `68c2c1f1`→`98fd9b19`。
