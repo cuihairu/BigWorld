@@ -20,12 +20,16 @@ FIND_PACKAGE( PNG QUIET )
 IF( ZLIB_FOUND )
 	INCLUDE_DIRECTORIES( ${ZLIB_INCLUDE_DIRS} )
 	# GLOBAL: the target is created from whichever library project includes
-	# this file first, and every sibling project links the same name.
+	# this file first, and every sibling project links the same name. INTERFACE
+	# rather than UNKNOWN: ZLIB_LIBRARIES is the multi-config
+	# optimized/debug pair, and IMPORTED_LOCATION puts that whole list into one
+	# link input - LNK1181 on "optimized;<zs.lib>;debug;<zsd.lib>", and .obj on
+	# the MODULE targets that CMake folded the imported library into the source
+	# list (run 39418479793). INTERFACE lets CMake expand the pair per config.
 	IF( NOT TARGET zip )
-		ADD_LIBRARY( zip UNKNOWN IMPORTED GLOBAL )
+		ADD_LIBRARY( zip INTERFACE IMPORTED GLOBAL )
 		SET_TARGET_PROPERTIES( zip PROPERTIES
-			IMPORTED_LOCATION "${ZLIB_LIBRARIES}"
-			INTERFACE_INCLUDE_DIRECTORIES "${ZLIB_INCLUDE_DIRS}" )
+			INTERFACE_LINK_LIBRARIES "${ZLIB_LIBRARIES}" )
 	ENDIF()
 ELSE()
 	INCLUDE_DIRECTORIES( ${BW_SOURCE_DIR}/third_party/zip )
@@ -34,10 +38,9 @@ ENDIF()
 IF( PNG_FOUND )
 	INCLUDE_DIRECTORIES( ${PNG_INCLUDE_DIRS} )
 	IF( NOT TARGET libpng )
-		ADD_LIBRARY( libpng UNKNOWN IMPORTED GLOBAL )
+		ADD_LIBRARY( libpng INTERFACE IMPORTED GLOBAL )
 		SET_TARGET_PROPERTIES( libpng PROPERTIES
-			IMPORTED_LOCATION "${PNG_LIBRARIES}"
-			INTERFACE_INCLUDE_DIRECTORIES "${PNG_INCLUDE_DIRS}" )
+			INTERFACE_LINK_LIBRARIES "${PNG_LIBRARIES}" )
 	ENDIF()
 ELSE()
 	INCLUDE_DIRECTORIES( ${BW_SOURCE_DIR}/third_party/png )
