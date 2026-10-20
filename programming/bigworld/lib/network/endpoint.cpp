@@ -688,6 +688,30 @@ Mercury::Address Endpoint::getRemoteAddress() const
 MEMTRACKER_DECLARE( ThirdParty_OpenSSL, "ThirdParty - OpenSSL", 0 );
 namespace OpenSSLMemHooks
 {
+// BIGWORLD_BEGIN(3.13 migration)
+// The hook signatures are not the same on both sides of 1.1.0: CRYPTO_malloc_fn
+// and friends carry the caller's file and line since then (openssl/crypto.h),
+// while the vendored 1.0.2 trees call the hooks with the size only. Both sets
+// funnel into the same trackers, so this stays two thin adapters instead of one.
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+	void* malloc( size_t size, const char *, int )
+	{
+		MEMTRACKER_SCOPED( ThirdParty_OpenSSL );
+		return bw_malloc( size );
+	}
+
+	void free( void* mem, const char *, int )
+	{
+		MEMTRACKER_SCOPED( ThirdParty_OpenSSL );
+		bw_free( mem );
+	}
+
+	void* realloc( void* mem, size_t size, const char *, int )
+	{
+		MEMTRACKER_SCOPED( ThirdParty_OpenSSL );
+		return bw_realloc( mem, size );
+	}
+#else
 	void* malloc( size_t size )
 	{
 		MEMTRACKER_SCOPED( ThirdParty_OpenSSL );
@@ -705,6 +729,8 @@ namespace OpenSSLMemHooks
 		MEMTRACKER_SCOPED( ThirdParty_OpenSSL );
 		return bw_realloc( mem, size );
 	}
+#endif // OPENSSL_VERSION_NUMBER >= 1.1.0
+// BIGWORLD_END
 }
 #endif // USE_OPENSSL
 #endif // _WIN32
@@ -734,13 +760,19 @@ void initNetwork()
 
 #if !defined( _RELEASE )
 	{
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+		void *(*currentMalloc)(size_t, const char *, int);
+		void *(*currentRealloc)(void *, size_t, const char *, int);
+		void (*currentFree)(void *, const char *, int);
+#else
 		void *(*currentMalloc)(size_t);
 		void *(*currentRealloc)(void *, size_t);
 		void (*currentFree)(void *);
+#endif // OPENSSL_VERSION_NUMBER >= 1.1.0
 
-		BWOpenSSL::CRYPTO_get_mem_functions( 
-			&currentMalloc, 
-			&currentRealloc, 
+		BWOpenSSL::CRYPTO_get_mem_functions(
+			&currentMalloc,
+			&currentRealloc,
 			&currentFree );
 
 		MF_ASSERT( currentMalloc == OpenSSLMemHooks::malloc &&
