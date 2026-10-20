@@ -1,5 +1,7 @@
 # 持久化与 DB 线程模型
 
+> [English](persistence-db-model.en.md) | **中文**
+
 <div class="arch-hero">
 
 BigWorld 的持久化不是业务代码直接写 SQL。BaseApp 负责协调 Base/Cell 数据、备份和归档；DBApp 通过 IDatabase 抽象屏蔽 MySQL/XML 等后端；MySQL 后端把阻塞数据库操作下沉到后台任务。

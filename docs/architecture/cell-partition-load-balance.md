@@ -1,5 +1,7 @@
 # Cell 分区与负载均衡
 
+> [English](cell-partition-load-balance.en.md) | **中文**
+
 <div class="arch-hero">
 
 BigWorld 的负载均衡不是把请求分给后端服务器，而是调整空间中 Cell 的几何边界，让实体权威 real 所属 CellApp 发生变化。它本质是空间分区控制面，而不是 L4/L7 流量负载均衡。
