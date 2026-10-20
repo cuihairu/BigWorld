@@ -1100,4 +1100,8 @@ Linux 车道（build + 21 模块门 + tar.gz/deb/rpm）与 Windows 车道
 `net.core.rmem_max=4MB`（重启丢失此前手工 sysctl）。按测试自己文档的
 前置条件恢复并写入 `/etc/sysctl.conf`（带标注，幂等）后单模块复跑
 network_test：256 tests, 0 failures。判定：环境前置条件缺失，与本次
-改动无关；等效 21/21。探针 #34 负责冒烟步本身的 runner 侧实证。
+改动无关；等效 21/21。探针 #34 负责冒烟步本身的 runner 侧实证。**探针 #34 判定（run 39357396757）——冒烟步绿**：LoadLibraryW 过；
+baseappmgr 20s 存活（kill，PASS-with-note：DLL 图解析完整，设计即报告
+不判死）；版本串 `14.4.1+daily20261020.68c2c1f1`。同跑回归：exe 车道
+11/11（逐节 0 真错、目标集与 #33 全同、3× LNK4098 装饰性）；stage-1
+53 错全落 `cellapp_extension.vcxproj`（已知设计件）。
