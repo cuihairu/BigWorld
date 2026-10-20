@@ -23,6 +23,16 @@ SET( CMAKE_CONFIGURATION_TYPES Debug;Hybrid
 	CACHE STRING "Semicolon separated list of supported configuration types"
 	FORCE )
 
+# Hybrid is a release-flavored build (/MD, no _DEBUG), so imported
+# per-config targets must resolve their Release import for it. The
+# vcpkg-generated port exports list DEBUG first in IMPORTED_CONFIGURATIONS
+# (the export globs targets-debug.cmake before targets-release.cmake), and
+# CMake hands an unknown configuration the FIRST listed one: message_logger
+# got the MDd jsoncpp into the Hybrid exe (LNK2038 _ITERATOR_DEBUG_LEVEL,
+# probe run 39470260881) and sqlite3 landed there too - silently, since it
+# is pure C. Debug keeps its exact match, so debug builds are unchanged.
+SET( CMAKE_MAP_IMPORTED_CONFIG_HYBRID Release )
+
 # Enable C and C++ to force compiler detection so we can determine 32 or 64 bit
 ENABLE_LANGUAGE( C )
 ENABLE_LANGUAGE( CXX )
