@@ -12,6 +12,9 @@
 
 #if defined(__unix__)
 #include <unistd.h>
+#elif defined( _WIN32 )
+#include <io.h>
+#define unlink _unlink
 #endif
 
 #include <cstdio>

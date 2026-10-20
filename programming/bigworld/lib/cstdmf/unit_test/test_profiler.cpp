@@ -7,7 +7,13 @@
 #include <sstream>
 #include <sys/stat.h>
 #include <sys/types.h>
+#if defined( _WIN32 )
+#include <windows.h>
+#define BW_TEST_SLEEP_MS(ms) Sleep(ms)
+#else
 #include <unistd.h>
+#define BW_TEST_SLEEP_MS(ms) usleep((ms) * 1000)
+#endif // defined( _WIN32 )
 
 BW_BEGIN_NAMESPACE
 
@@ -122,7 +128,7 @@ void batch23WorkerFunc( void* arg )
 	{
 		g_profiler.addEntry( "Batch23WorkerEntry", Profiler::EVENT_START, 0 );
 		g_profiler.addEntry( "Batch23WorkerEntry", Profiler::EVENT_END, 0 );
-		usleep( 10 * 1000 );
+		BW_TEST_SLEEP_MS( 10 );
 	}
 
 	args->tid_ = OurThreadID();
@@ -808,7 +814,7 @@ TEST( Profiler_json_dump_success )
 	// false, a still-open file is closed by the next processed frame (which
 	// now runs as a background task - hence the wait before asserting).
 	setForceJsonDumpOffWithOpenFile();
-	usleep( 200 * 1000 );
+	BW_TEST_SLEEP_MS( 200 );
 	CHECK_EQUAL( Profiler::JSON_DUMPING_COMPLETED,
 		g_profiler.getJsonDumpState() );
 
@@ -970,7 +976,7 @@ TEST( Profiler_threads_visibility )
 	// Process a frame while the worker is still alive: its entries and its
 	// thread section must show up in the statistics under the registration
 	// name (visible_ defaults to true on addThisThread).
-	usleep( 200 * 1000 );
+	BW_TEST_SLEEP_MS( 200 );
 	g_profiler.tick();
 	CHECK( contains( statsToText(), ": Batch23WorkerThread" ) );
 

@@ -48,6 +48,21 @@ IF( BW_UNIT_TESTS_ENABLED )
 		loginapp_unit_test		server/loginapp/unit_test
 		reviver_unit_test		server/reviver/unit_test
 		)
+
+	IF( NOT MSVC )
+		LIST( REMOVE_ITEM BW_SERVER_UNIT_TEST_BINARIES
+			cstdmf_unit_test
+			math_unit_test
+		)
+	ELSE()
+		LIST( APPEND BW_SERVER_UNIT_TEST_BINARIES
+			cstdmf_unit_test		lib/cstdmf/unit_test
+			math_unit_test			lib/math/unit_test
+		)
+		LIST( APPEND BW_SERVER_UNIT_TEST_LIBRARIES
+			resmgr					lib/resmgr
+		)
+	ENDIF()
 ENDIF()
 
 SET( BW_LIBRARY_PROJECTS

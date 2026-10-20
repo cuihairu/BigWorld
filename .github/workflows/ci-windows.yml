@@ -99,7 +99,7 @@ permissions:
 
 jobs:
   msvc-compile:
-    name: ${{ matrix.library }} (MSVC x64)
+    name: ${{ matrix.module }} (MSVC x64)
     runs-on: windows-latest
     timeout-minutes: 60
     # Gate legs run on push/pull_request only: a manual dispatch is a
@@ -118,7 +118,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        library: [math, cstdmf]
+        module: [math, cstdmf]
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -139,7 +139,7 @@ jobs:
           }
 
       - name: Fetch legacy D3DX SDK (math only)
-        if: ${{ matrix.library == 'math' }}
+        if: ${{ matrix.module == 'math' }}
         shell: pwsh
         run: |
           # lib/math's Windows vector types are D3DX typedefs (xp_math.hpp)
@@ -166,7 +166,7 @@ jobs:
           "DXSDK_DIR=$dir" | Out-File -FilePath $env:GITHUB_ENV -Append
           Get-ChildItem "$root/Include/d3dx9*.h" | Select-Object -ExpandProperty Name
 
-      - name: Configure (${{ matrix.library }})
+      - name: Configure (${{ matrix.module }})
         shell: pwsh
         env:
           CMAKE_POLICY_VERSION_MINIMUM: "3.5"
@@ -176,8 +176,8 @@ jobs:
           # ("Invalid character escape '\a'"); forward slashes are accepted
           # everywhere on Windows.
           $repo = ((Resolve-Path programming/bigworld).Path -replace '\\','/')
-          cmake -S "$repo/lib/${{ matrix.library }}" `
-                -B "build/win_${{ matrix.library }}" `
+          cmake -S "$repo/lib/${{ matrix.module }}" `
+                -B "build/win_${{ matrix.module }}" `
                 -Wno-dev `
                 -G "Visual Studio 18 2026" -A x64 `
                 -DCMAKE_PROJECT_INCLUDE="$repo/build/cmake/BWMacros.cmake" `
@@ -188,21 +188,59 @@ jobs:
                 -DCMAKE_CONFIGURATION_TYPES="Debug;Release" `
                 '-DCMAKE_CXX_FLAGS=/DWIN32 /D_WINDOWS /DPCH_SUPPORT=1 /W3 /Zi /MP /Gy /w34302 /d2Zi+ /WX-' 2>&1 | Tee-Object -FilePath cmake-configure.log
 
-      - name: Build (${{ matrix.library }})
+      - name: Build (${{ matrix.module }})
         shell: pwsh
         run: |
-          cmake --build "build/win_${{ matrix.library }}" --config Release `
-                --target ${{ matrix.library }} --parallel 2>&1 | `
+          cmake --build "build/win_${{ matrix.module }}" --config Release `
+                --target ${{ matrix.module }} --parallel 2>&1 | `
                 Tee-Object -FilePath cmake-build.log
+
+      - name: Build cstdmf unit test (MSVC x64)
+        if: ${{ matrix.module == 'cstdmf' }}
+        shell: pwsh
+        run: |
+          cmake --build "build/win_cstdmf" --config Release `
+                --target cstdmf nedalloc CppUnitLite2 unit_test_lib `
+                cstdmf_unit_test --parallel 2>&1 | `
+                Tee-Object -FilePath cmake-build-test.log
+
+      - name: Test cstdmf unit test (MSVC x64)
+        if: ${{ matrix.module == 'cstdmf' }}
+        shell: pwsh
+        run: |
+          ctest --test-dir "build/win_cstdmf" `
+                -C Release -R "cstdmf_unit_test" `
+                --output-on-failure 2>&1 | `
+                Tee-Object -FilePath ctest-unit-test.log
+
+      - name: Build math unit test (MSVC x64)
+        if: ${{ matrix.module == 'math' }}
+        shell: pwsh
+        run: |
+          cmake --build "build/win_math" --config Release `
+                --target cstdmf nedalloc CppUnitLite2 unit_test_lib `
+                math_unit_test --parallel 2>&1 | `
+                Tee-Object -FilePath cmake-build-test.log
+
+      - name: Test math unit test (MSVC x64)
+        if: ${{ matrix.module == 'math' }}
+        shell: pwsh
+        run: |
+          ctest --test-dir "build/win_math" `
+                -C Release -R "math_unit_test" `
+                --output-on-failure 2>&1 | `
+                Tee-Object -FilePath ctest-unit-test.log
 
       - name: Upload logs on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: ci-windows-logs-${{ github.run_id }}-${{ matrix.library }}
+          name: ci-windows-logs-${{ github.run_id }}-${{ matrix.module }}
           path: |
             cmake-configure.log
             cmake-build.log
+            cmake-build-test.log
+            ctest-unit-test.log
           if-no-files-found: ignore
           retention-days: 7
 
