@@ -4,19 +4,44 @@ INCLUDE_DIRECTORIES( ${BW_SOURCE_DIR}/third_party )
 INCLUDE_DIRECTORIES( $ENV{DXSDK_DIR}/Include )
 INCLUDE_DIRECTORIES( ${BW_SOURCE_DIR}/third_party/python/Include )
 INCLUDE_DIRECTORIES( ${BW_SOURCE_DIR}/third_party/python/PC )
-# The vendored zlib. resmgr (zip_file_system.cpp, binary_block.cpp) and
-# lib/network (compression_stream.cpp, zip_stream.cpp) include <zlib.h>, but
-# zip is a plain static library with no interface includes, so its header
-# directory has to be supplied here like every other third party one (MSVC
-# C1083 on the first root superproject build).
-INCLUDE_DIRECTORIES( ${BW_SOURCE_DIR}/third_party/zip )
+# zlib and libpng come from vcpkg (vcpkg.json) when the vcpkg toolchain file
+# is in play; the vendored trees remain the fallback while they exist (the
+# make chain takes the same major/minor from vcpkg). resmgr
+# (zip_file_system.cpp, binary_block.cpp), lib/network (compression_stream.cpp,
+# zip_stream.cpp) and lib/moo (png.cpp) include the bare <zlib.h>/<png.h>, and
+# these are plain static libraries with no interface includes, so their header
+# directories have to be supplied here either way (MSVC C1083 on the first
+# root superproject build). Under vcpkg, imported targets under the names the
+# components already link (zip, libpng) redirect those links to the vcpkg
+# libraries; the matching third_party library projects are then skipped in
+# BWConfiguration_server.cmake.
+FIND_PACKAGE( ZLIB QUIET )
+FIND_PACKAGE( PNG QUIET )
+IF( ZLIB_FOUND )
+	INCLUDE_DIRECTORIES( ${ZLIB_INCLUDE_DIRS} )
+	# GLOBAL: the target is created from whichever library project includes
+	# this file first, and every sibling project links the same name.
+	IF( NOT TARGET zip )
+		ADD_LIBRARY( zip UNKNOWN IMPORTED GLOBAL )
+		SET_TARGET_PROPERTIES( zip PROPERTIES
+			IMPORTED_LOCATION "${ZLIB_LIBRARIES}"
+			INTERFACE_INCLUDE_DIRECTORIES "${ZLIB_INCLUDE_DIRS}" )
+	ENDIF()
+ELSE()
+	INCLUDE_DIRECTORIES( ${BW_SOURCE_DIR}/third_party/zip )
+ENDIF()
 
-# The vendored libpng (1.6.2, the same major/minor the make chain gets from
-# vcpkg). lib/moo/png.cpp includes <png.h>, but libpng is a plain static
-# library built from projects/visualc71 with no interface includes, so its
-# header directory has to be supplied here like zip's (MSVC C1083 on the
-# root superproject build).
-INCLUDE_DIRECTORIES( ${BW_SOURCE_DIR}/third_party/png )
+IF( PNG_FOUND )
+	INCLUDE_DIRECTORIES( ${PNG_INCLUDE_DIRS} )
+	IF( NOT TARGET libpng )
+		ADD_LIBRARY( libpng UNKNOWN IMPORTED GLOBAL )
+		SET_TARGET_PROPERTIES( libpng PROPERTIES
+			IMPORTED_LOCATION "${PNG_LIBRARIES}"
+			INTERFACE_INCLUDE_DIRECTORIES "${PNG_INCLUDE_DIRS}" )
+	ENDIF()
+ELSE()
+	INCLUDE_DIRECTORIES( ${BW_SOURCE_DIR}/third_party/png )
+ENDIF()
 
 # Python.h includes pyconfig.h, which PCbuild generates into pythoncore's own
 # IntDir (PCbuild/pyproject.props:14) - the vendored tree ships no pyconfig.h,

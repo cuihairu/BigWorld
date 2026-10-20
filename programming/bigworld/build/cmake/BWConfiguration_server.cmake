@@ -109,8 +109,6 @@ SET( BW_LIBRARY_PROJECTS
 
 	# Third party
 	libpython			third_party/python
-	zip 				third_party/zip
-	libpng				third_party/png/projects/visualc71
 	# lib/resmgr links re2 (lib/resmgr/CMakeLists.txt:149) and every other
 	# configuration lists it here, so the vendored tree - which ships its own
 	# repo-tailored CMakeLists and builds on MSVC as-is - was simply missing
@@ -129,6 +127,24 @@ SET( BW_LIBRARY_PROJECTS
 IF( BW_SPEEDTREE_SUPPORT )
 	SET( BW_LIBRARY_PROJECTS ${BW_LIBRARY_PROJECTS}
 		speedtree			lib/speedtree
+	)
+ENDIF()
+
+# zlib/libpng come from vcpkg when a vcpkg toolchain file is in play (the
+# find runs again - and the imported targets zip/libpng get built - in
+# BWStandardProject.cmake, which every library project includes). The vendored
+# trees are only added here as the fallback while they exist, so their library
+# projects never clash with the vcpkg imported targets of the same name.
+FIND_PACKAGE( ZLIB QUIET )
+IF( NOT ZLIB_FOUND )
+	SET( BW_LIBRARY_PROJECTS ${BW_LIBRARY_PROJECTS}
+		zip					third_party/zip
+	)
+ENDIF()
+FIND_PACKAGE( PNG QUIET )
+IF( NOT PNG_FOUND )
+	SET( BW_LIBRARY_PROJECTS ${BW_LIBRARY_PROJECTS}
+		libpng				third_party/png/projects/visualc71
 	)
 ENDIF()
 

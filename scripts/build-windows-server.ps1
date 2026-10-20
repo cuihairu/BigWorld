@@ -69,12 +69,36 @@ $RepoPath = (Resolve-Path $Repo).Path -replace '\\', '/'
 $BuildPath = (Resolve-Path $BuildDir -ErrorAction SilentlyContinue).Path -replace '\\', '/'
 if (-not $BuildPath) { $BuildPath = $BuildDir -replace '\\', '/' }
 
+# The vcpkg toolchain, resolved the way the workflows provision it: an
+# explicit VCPKG_ROOT (the daily lane clones the pinned manifest baseline)
+# wins, then the runner's preinstalled vcpkg. With a toolchain the manifest
+# (vcpkg.json) supplies openssl/curl/zlib/libpng/sqlite3 at configure time;
+# without one the legacy vendored branches in the FindBW* modules still
+# resolve, so a local run keeps working. The triplet is static-md: static
+# libraries against the dynamic CRT the root's BWCompilerAndLinkerOptions
+# mandates (/MD), so no vcpkg DLLs have to ship next to the exes.
+$VcpkgToolchain = $null
+if ($env:VCPKG_ROOT) {
+	$VcpkgToolchain = ($env:VCPKG_ROOT -replace '\\', '/') + '/scripts/buildsystems/vcpkg.cmake'
+} elseif ($env:VCPKG_INSTALLATION_ROOT) {
+	$VcpkgToolchain = ($env:VCPKG_INSTALLATION_ROOT -replace '\\', '/') + '/scripts/buildsystems/vcpkg.cmake'
+}
+$ToolchainArgs = @()
+if ($VcpkgToolchain -and (Test-Path $VcpkgToolchain)) {
+	$ToolchainArgs += @(
+		"-DCMAKE_TOOLCHAIN_FILE=$VcpkgToolchain",
+		"-DVCPKG_TARGET_TRIPLET=x64-windows-static-md"
+	)
+	Write-Host "=== vcpkg toolchain: $VcpkgToolchain ==="
+}
+
 if (-not $SkipConfigure) {
 	Write-Host "=== configure root superproject (server target) ==="
 	cmake -S $RepoPath -B $BuildPath `
 	      -G "Visual Studio 18 2026" -A x64 `
 	      -DBW_CMAKE_TARGET=server `
-	      -DBW_JSONCPP_INCLUDE_DIR="$env:VCPKG_JSONCPP_INCLUDE" 2>&1 |
+	      -DBW_JSONCPP_INCLUDE_DIR="$env:VCPKG_JSONCPP_INCLUDE" `
+	      @ToolchainArgs 2>&1 |
 	    Tee-Object -FilePath cmake-configure-root.log
 	if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }

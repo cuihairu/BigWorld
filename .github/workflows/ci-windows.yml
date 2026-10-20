@@ -218,7 +218,10 @@ jobs:
   root-configure-probe:
     name: root configure (R3 probe)
     runs-on: windows-latest
-    timeout-minutes: 30
+    # 90, up from 30: configuring with the vcpkg toolchain installs the
+    # manifest (vcpkg.json) on a cold binary cache, and the static-md
+    # openssl/curl builds alone can exceed half an hour on a 2-core runner.
+    timeout-minutes: 90
     # Push/pull_request only, same reasoning as the gate legs above.
     if: github.event_name != 'workflow_dispatch'
     continue-on-error: true
@@ -238,10 +241,22 @@ jobs:
           # The root sets BW_SOURCE_DIR / CMAKE_MODULE_PATH itself and pulls
           # BWCompilerAndLinkerOptions (so no flag mirroring here, unlike the
           # module-standalone legs). Configure only - nothing is built and no
-          # artifacts leave this job.
+          # artifacts leave this job. When the runner's preinstalled vcpkg is
+          # present, configure with its toolchain so the manifest (vcpkg.json)
+          # supplies openssl/curl/zlib/libpng/sqlite3 - the static-md triplet
+          # matches the /MD CRT the root mandates; without it the legacy
+          # vendored branches in the FindBW* modules still resolve.
+          $tcArgs = @()
+          $tc = "$($env:VCPKG_INSTALLATION_ROOT -replace '\\','/')/scripts/buildsystems/vcpkg.cmake"
+          if (Test-Path $tc) {
+            $tcArgs += @(
+              "-DCMAKE_TOOLCHAIN_FILE=$tc",
+              "-DVCPKG_TARGET_TRIPLET=x64-windows-static-md"
+            )
+          }
           cmake -S "$repo" -B "build/win_root_probe" `
                 -G "Visual Studio 18 2026" -A x64 `
-                -DBW_CMAKE_TARGET=server 2>&1 | `
+                -DBW_CMAKE_TARGET=server @tcArgs 2>&1 | `
                 Tee-Object -FilePath cmake-configure-root.log
 
       - name: Upload probe log
@@ -328,11 +343,23 @@ jobs:
           # Same configure as root-configure-probe, its own build dir: the
           # jobs do not share a workspace. BW_JSONCPP_INCLUDE_DIR
           # pre-seeds message_logger's FIND_PATH cache entry (headers only;
-          # the lib is found via its HINTS on the include dir).
+          # the lib is found via its HINTS on the include dir). The toolchain
+          # args mirror build-windows-server.ps1: with the runner's
+          # preinstalled vcpkg, the manifest supplies
+          # openssl/curl/zlib/libpng/sqlite3 (static-md, /MD CRT); without it
+          # the legacy vendored branches still resolve.
+          $tcArgs = @()
+          $tc = "$($env:VCPKG_INSTALLATION_ROOT -replace '\\','/')/scripts/buildsystems/vcpkg.cmake"
+          if (Test-Path $tc) {
+            $tcArgs += @(
+              "-DCMAKE_TOOLCHAIN_FILE=$tc",
+              "-DVCPKG_TARGET_TRIPLET=x64-windows-static-md"
+            )
+          }
           cmake -S "$repo" -B "build/win_root_build" `
                 -G "Visual Studio 18 2026" -A x64 `
                 -DBW_CMAKE_TARGET=server `
-                -DBW_JSONCPP_INCLUDE_DIR="$env:VCPKG_JSONCPP_INCLUDE" 2>&1 | `
+                -DBW_JSONCPP_INCLUDE_DIR="$env:VCPKG_JSONCPP_INCLUDE" @tcArgs 2>&1 | `
                 Tee-Object -FilePath cmake-configure-root.log
 
       - name: Build root superproject (Hybrid, all targets)

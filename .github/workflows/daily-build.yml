@@ -163,7 +163,10 @@ jobs:
   windows-products:
     name: Windows server products
     runs-on: windows-latest
-    timeout-minutes: 90
+    # 120, up from 90: the configure installs the vcpkg manifest, and a cold
+    # binary cache pays the static-md openssl/curl builds before the 11 exe
+    # lanes even start (warm-cache runs stay around the old 20 minutes).
+    timeout-minutes: 120
 
     steps:
       - name: Checkout
@@ -212,6 +215,48 @@ jobs:
           Copy-Item "$root/pkg/build/native/release/lib/x64/*" "$root/Lib/x64/" -Recurse -Force
           $dir = ($PWD.ProviderPath -replace '\\','/') + "/$root"
           "DXSDK_DIR=$dir" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Read manifest baseline pin
+        if: steps.freshness.outputs.stale != 'true'
+        id: baseline
+        shell: bash
+        run: |
+          BASE="$(sed -n 's/.*"builtin-baseline"[[:space:]]*:[[:space:]]*"\([0-9a-f]\{40\}\)".*/\1/p' \
+            programming/bigworld/vcpkg.json | head -1)"
+          [ -n "$BASE" ] || { echo "ERROR: no builtin-baseline in vcpkg.json" >&2; exit 1; }
+          echo "baseline=$BASE" >> "$GITHUB_OUTPUT"
+
+      - name: Restore vcpkg binary cache
+        if: steps.freshness.outputs.stale != 'true'
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/vcpkg-bcache
+          key: vcpkg-bcache-win-msvc-${{ steps.baseline.outputs.baseline }}-${{ hashFiles('programming/bigworld/vcpkg.json') }}
+          restore-keys: |
+            vcpkg-bcache-win-msvc-${{ steps.baseline.outputs.baseline }}-
+            vcpkg-bcache-win-msvc-
+
+      - name: Set up vcpkg at pinned baseline
+        if: steps.freshness.outputs.stale != 'true'
+        shell: pwsh
+        run: |
+          # The products lane resolves openssl/curl/zlib/libpng/sqlite3 from
+          # the manifest (vcpkg.json) at configure time - build-windows-server.ps1
+          # passes this vcpkg's toolchain with the static-md triplet, which
+          # keeps the /MD CRT the root mandates and ships no extra DLLs next
+          # to the exes. Same pinned-baseline clone as the Linux lane; the
+          # binary cache is shared across runs via the restore step above and
+          # pays for itself after the first openssl/curl build.
+          git clone https://github.com/microsoft/vcpkg.git "$env:RUNNER_TEMP/vcpkg"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          git -C "$env:RUNNER_TEMP/vcpkg" checkout "${{ steps.baseline.outputs.baseline }}"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & "$env:RUNNER_TEMP/vcpkg/bootstrap-vcpkg.bat" -disableMetrics
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "VCPKG_ROOT=$env:RUNNER_TEMP/vcpkg" | Out-File -FilePath $env:GITHUB_ENV -Append
+          New-Item -ItemType Directory -Force "$PWD/vcpkg-bcache" | Out-Null
+          "VCPKG_DEFAULT_BINARY_CACHE=$(($PWD.ProviderPath -replace '\\','/'))/vcpkg-bcache" | `
+            Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Install jsoncpp (vcpkg)
         if: steps.freshness.outputs.stale != 'true'

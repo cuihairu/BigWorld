@@ -13,23 +13,22 @@
 # curl is provided by vcpkg (see vcpkg.json next to the root CMakeLists.txt)
 # with the openssl feature. When configuring with the vcpkg toolchain file,
 # CMake's own FindCURL resolves it; map the results onto the BW-prefixed
-# variables and stop. The legacy branches below remain for the prebuilt
-# Windows third_party/curl trees.
-IF( NOT MSVC )
-	FIND_PACKAGE( CURL QUIET )
-	IF( CURL_FOUND )
-		SET( BWCURL_ROOT_DIR "${CURL_INCLUDE_DIRS}" )
-		SET( BWCURL_INCLUDE_DIR_RELEASE "${CURL_INCLUDE_DIRS}"
-			CACHE FILEPATH "curl include dir (vcpkg)" FORCE )
-		SET( BWCURL_LIBRARY_RELEASE "${CURL_LIBRARIES}"
-			CACHE FILEPATH "curl library (vcpkg)" FORCE )
-		SET( BWCURL_LIBRARY_DEBUG "${CURL_LIBRARIES}" )
-		SET( BWCURL_INCLUDE_DIRS "${CURL_INCLUDE_DIRS}" )
-		SET( BWCURL_LIBRARIES "${CURL_LIBRARIES}" )
-		SET( BWCURL_FOUND 1 )
-		SET( BWcurl_FOUND 1 )
-		RETURN()
-	ENDIF()
+# variables and stop. The legacy branch below remains as the fallback for
+# Windows builds without a vcpkg toolchain, using the prebuilt
+# third_party/curl trees.
+FIND_PACKAGE( CURL QUIET )
+IF( CURL_FOUND )
+	SET( BWCURL_ROOT_DIR "${CURL_INCLUDE_DIRS}" )
+	SET( BWCURL_INCLUDE_DIR_RELEASE "${CURL_INCLUDE_DIRS}"
+		CACHE FILEPATH "curl include dir (vcpkg)" FORCE )
+	SET( BWCURL_LIBRARY_RELEASE "${CURL_LIBRARIES}"
+		CACHE FILEPATH "curl library (vcpkg)" FORCE )
+	SET( BWCURL_LIBRARY_DEBUG "${CURL_LIBRARIES}" )
+	SET( BWCURL_INCLUDE_DIRS "${CURL_INCLUDE_DIRS}" )
+	SET( BWCURL_LIBRARIES "${CURL_LIBRARIES}" )
+	SET( BWCURL_FOUND 1 )
+	SET( BWcurl_FOUND 1 )
+	RETURN()
 ENDIF()
 # BIGWORLD_END
 
