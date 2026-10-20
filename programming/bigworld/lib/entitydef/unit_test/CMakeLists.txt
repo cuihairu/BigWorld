@@ -20,6 +20,7 @@ SET( ALL_SRCS
 	test_streamsizes.cpp
 	test_datatype_const_iterator.cpp
 	test_datatype_persistent_only_const_iterator.cpp
+	test_data_type_reload_reset.cpp
 	${BW_SOURCE_DIR}/lib/pyscript/unit_test/integer_range_checker.cpp
 	${BW_SOURCE_DIR}/lib/pyscript/unit_test/integer_range_checker.hpp
 )
