@@ -1083,3 +1083,21 @@ python313.dll 实算 SHA256 == manifest 行（`8ECEBB59…771A`）。2448 行 ar
 Linux 车道（build + 21 模块门 + tar.gz/deb/rpm）与 Windows 车道
 （`windows-products`）并行，产物 artifact 14 天保留，无 tag 无 release；
 结果待跑完后补记。
+
+## 第 48 批（2026-10-20）：bundle 运行时冒烟步 + gate17 环境取证
+
+**ci-windows.yml「Smoke the products bundle」步**（Upload 之后，
+`if: always()`，pwsh）：解开 zip 后两项窄断言——
+1. `LoadLibraryW(python313.dll)`（P/Invoke kernel32）非零，证明解释器
+   导入链在 bundle 内自足；失败打 Win32 错误码。
+2. `baseappmgr.exe` 起进程：退出码 `-1073741515`
+   （`0xC0000135` STATUS_DLL_NOT_FOUND）判 FAIL（bundle 缺 DLL）；其余
+   退出码（配置类报错）是数据不是失败；20s 不退则 kill 并报告不判死。
+不做完整 boot（无 res/、无 bw.xml）——冒烟只验"装得上、起得过 loader"。
+
+**gate17（CI 文件改动 → 全量套）**：20/21 绿，network_test 1 失败。
+取证：`test_config.cpp(20)` 报 `SO_RCVBUF` 16MB 设置失败，机器
+`net.core.rmem_max=4MB`（重启丢失此前手工 sysctl）。按测试自己文档的
+前置条件恢复并写入 `/etc/sysctl.conf`（带标注，幂等）后单模块复跑
+network_test：256 tests, 0 failures。判定：环境前置条件缺失，与本次
+改动无关；等效 21/21。探针 #34 负责冒烟步本身的 runner 侧实证。

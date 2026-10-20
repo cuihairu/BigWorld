@@ -423,6 +423,65 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+      - name: Smoke the products bundle
+        if: always()
+        shell: pwsh
+        run: |
+          # L39 runtime smoke, first probe iteration. Two narrow checks on the
+          # extracted bundle - deliberately NOT a full boot (no res/, no
+          # bw.xml; those drive their own ledger item):
+          #   (1) python313.dll LoadLibrary's from inside the bundle, which
+          #       proves the interpreter DLL and its import chain travel with
+          #       it - the exact thing a missing-DLL bundle would fail on;
+          #   (2) a real server binary gets PAST the loader: exit code
+          #       0xC0000135 (STATUS_DLL_NOT_FOUND) fails the smoke, any
+          #       other outcome - a clean config error, even a hang that has
+          #       to be killed - means the DLL graph resolved. Config-driven
+          #       exits are data here, not failures.
+          $zip = Get-ChildItem "build/products" -Filter *.zip |
+            Select-Object -First 1
+          if (-not $zip) {
+            Write-Host "no bundle to smoke - packaging failed earlier"
+            exit 0
+          }
+          $dir = "build/smoke"
+          if (Test-Path $dir) { Remove-Item $dir -Recurse -Force }
+          Expand-Archive -Path $zip.FullName -DestinationPath $dir -Force
+          $bundle = (Get-ChildItem $dir -Directory | Select-Object -First 1).FullName
+          Write-Host "smoking: $bundle"
+
+          Add-Type -Namespace Win32 -Name Loader -MemberDefinition @'
+          [DllImport("kernel32.dll", SetLastError=true, CharSet=CharSet.Unicode)]
+          public static extern IntPtr LoadLibraryW(string path);
+          '@
+          $h = [Win32.Loader]::LoadLibraryW((Join-Path $bundle "python313.dll"))
+          if ($h -eq [IntPtr]::Zero) {
+            $err = [System.Runtime.InteropServices.Marshal]::GetLastWin32Error()
+            Write-Host "FAIL: LoadLibrary python313.dll -> Win32 error $err"
+            exit 1
+          }
+          Write-Host "python313.dll loads from the bundle"
+
+          $exe = Join-Path $bundle "baseappmgr.exe"
+          $p = Start-Process -FilePath $exe -PassThru `
+                -WorkingDirectory $bundle `
+                -RedirectStandardOutput "$dir/stdout.txt" `
+                -RedirectStandardError "$dir/stderr.txt"
+          if ($p.WaitForExit(20000)) {
+            $code = $p.ExitCode
+            Write-Host "baseappmgr exit: 0x$('{0:X}' -f $code)"
+            if ($code -eq -1073741515) {
+              Write-Host "FAIL: STATUS_DLL_NOT_FOUND - bundle is missing a DLL"
+              exit 1
+            }
+            Get-Content "$dir/stdout.txt", "$dir/stderr.txt" -ErrorAction SilentlyContinue
+          } else {
+            Write-Host ("baseappmgr still running after 20s - killed; the " +
+              "process came up (DLL graph resolved), reported not asserted")
+            $p.Kill()
+          }
+          Write-Host "smoke: OK"
+
       - name: Dump cellapp_extension include tree on failure
         if: failure()
         shell: pwsh
