@@ -3,6 +3,9 @@ layout: home
 
 hero:
   name: "BigWorld 引擎架构研究"
+  image:
+    src: /logo.png
+    alt: BigWorld
   text: "从源码证据链学习 MMO 服务器设计"
   tagline: "重点分析线程、网络、Tick、通信、序列化、热更新、扩缩容与故障恢复，并给出源码证据、取舍和验证边界。"
   actions:

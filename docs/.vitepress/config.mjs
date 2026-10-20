@@ -37,7 +37,7 @@ export default {
   // VitePress does not apply `base` to head entries; the project-site base is
   // pinned below so the favicon resolves on GitHub Pages (/BigWorld/).
   head: [
-    ["link", { rel: "icon", type: "image/svg+xml", href: "/BigWorld/logo.svg" }]
+    ["link", { rel: "icon", type: "image/png", href: "/BigWorld/logo.png" }]
   ],
   ignoreDeadLinks: [
     /^\/home\/cui\/workspaces\/BigWorld\//,
@@ -54,7 +54,7 @@ export default {
     }
   },
   themeConfig: {
-    logo: "/logo.svg",
+    logo: "/logo.png",
     siteTitle: "BigWorld 架构研究",
     search: {
       provider: "local"
