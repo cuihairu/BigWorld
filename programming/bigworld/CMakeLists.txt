@@ -30,8 +30,13 @@ SET( CMAKE_CONFIGURATION_TYPES Debug;Hybrid
 # CMake hands an unknown configuration the FIRST listed one: message_logger
 # got the MDd jsoncpp into the Hybrid exe (LNK2038 _ITERATOR_DEBUG_LEVEL,
 # probe run 39470260881) and sqlite3 landed there too - silently, since it
-# is pure C. Debug keeps its exact match, so debug builds are unchanged.
-SET( CMAKE_MAP_IMPORTED_CONFIG_HYBRID Release )
+# is pure C. The list maps Hybrid to the Release import when the target
+# declares one, with an empty tail entry falling back to the base
+# IMPORTED_LOCATION for base-only imports - a bare "Release" instead sent
+# every such target to "<name>-NOTFOUND" (the libpython wrapper,
+# LNK1181 libpython-NOTFOUND.obj, probe run 39476482506). Debug keeps its
+# exact match, so debug builds are unchanged.
+SET( CMAKE_MAP_IMPORTED_CONFIG_HYBRID "Release;" )
 
 # Enable C and C++ to force compiler detection so we can determine 32 or 64 bit
 ENABLE_LANGUAGE( C )
