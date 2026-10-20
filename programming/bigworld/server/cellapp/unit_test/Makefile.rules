@@ -18,6 +18,14 @@ cxxSource =									\
 
 dependsOn += server resmgr network math cstdmf zip
 
+# Same include roots as the cellapp binary target
+# (../Makefile.rules incFlags): production server TUs include across
+# component dirs ("baseapp/baseapp_int_interface.hpp" et al) and only
+# resolve with these. Without them any production TU pulled into the
+# test target fails at compile, not link (2026-10-20 probe).
+incFlags_$(binName) += -I$(BW_ABS_SRC)
+incFlags_$(binName) += -I$(BW_ABS_SRC_SERVER)
+
 usePython := 1
 
 include $(BW_COMPONENT_FOOTER)
