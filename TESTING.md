@@ -1161,3 +1161,39 @@ baseappmgr 20s 存活（kill，PASS-with-note：DLL 图解析完整，设计即�
 - 产物仅 workflow artifact（14 天保留），无 tag、无 release（红线）。
   todo.md L39（exe 打包）勾账关闭，链 `14ebd63a`→`31ce396c`→
   `68c2c1f1`→`98fd9b19`。
+
+### 批次 50（2026-10-20，PATROL1020-1434）：F8 收窄并测试化——DataType 边界的 reload 重置语义
+
+（批次 48/49 为 exe/daily 车道收尾，记录并入上节批次 47 续，无新增单测；
+单测编号跳至 50 与测试文件头注一致。）
+
+**新增 4 用例（`42ec3b48`，entitydef_test 380→384）**：
+`lib/entitydef/unit_test/test_data_type_reload_reset.cpp`，make/CMake 双轨
+注册（Makefile.rules、CMakeLists.txt 同步补 TU）。
+
+**F8 真值收窄**：原记录「失败回滚无半迁移状态」在 DataType 层钉死——
+`SingletonMap = set< SingletonPtr >`，`SingletonPtr` 只包裸指针、
+`operator<` 按 `(*pInst_) < (*me.pInst_)` **值比较**、**非所有权**
+（`lib/entitydef/data_type.hpp:497-507`）；`findOrAddType` 在 map 为 NULL
+时懒重分配全新 map（`lib/entitydef/data_type.cpp:316`）。结论：全量 reload
+失败路径清掉的是**索引**而非**实例**，DataType 层自愈、无悬垂、无半迁移
+状态；真正未重建的是 entitydef 描述/类型注册表（`EntityType::s_newTypes_`
+残缺、`s_curTypes_` 未换），cellapp 本地，仍卡 C 档 L48 承载。
+
+**4 用例钉的三条不变量**：
+1. 值等类型段经单例索引坍缩到同一实例、不同参数各归各（去重契约）；
+2. reset 后索引懒重建、去重重新生效（两次等段坍缩到新实例）；
+3. reset 释放索引不释放实例——调用方持有的 DataType 在 reset 后仍可寻址、
+   `streamSize()` 不变（非所有权，失败 reload 留下的是可存活对象）。
+
+**承载约束**：`findOrAddType`/`initAliases`/`s_aliases_`/`s_singletonMap_`
+全 private（data_type.hpp 访问块），用例只走公开面——`buildDataType`
+（尾部即 `findOrAddType`，`data_type.cpp:247-295`）驱动索引，reset 用
+公开静态 `clearStaticsForReload()`。基类 `operator<` 只比
+`pMetaDataType_` 指针、派生类比参数（sequence 比size_/dbLen、string 比
+defaultValue_），去重按值敏感——用例参数取 ARRAY size 差一档，保证
+「等段坍缩 / 异段分立」两侧都断言得到。
+
+**门禁**：entitydef_test 384/0；全量 `bw-run-all-unit-tests` 21 模块全
+`result 0`，**1506→1510**（合计 1510 用例逐模块累加实测），无 tag、无
+release（红线）。
