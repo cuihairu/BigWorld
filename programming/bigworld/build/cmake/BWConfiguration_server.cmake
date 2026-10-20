@@ -49,18 +49,16 @@ IF( BW_UNIT_TESTS_ENABLED )
 		reviver_unit_test		server/reviver/unit_test
 		)
 
+	# cstdmf_unit_test and math_unit_test are already in the list above,
+	# and resmgr is already a BW_LIBRARY_PROJECTS entry - appending any of
+	# them again double-add_subdirectory's the same source dir and aborts
+	# the root configure (probe run 39485824624). MSVC keeps both tests
+	# through the plain list; non-MSVC drops them from this CMake-only
+	# list (the make chain runs the unit tests there).
 	IF( NOT MSVC )
 		LIST( REMOVE_ITEM BW_SERVER_UNIT_TEST_BINARIES
 			cstdmf_unit_test
 			math_unit_test
-		)
-	ELSE()
-		LIST( APPEND BW_SERVER_UNIT_TEST_BINARIES
-			cstdmf_unit_test		lib/cstdmf/unit_test
-			math_unit_test			lib/math/unit_test
-		)
-		LIST( APPEND BW_SERVER_UNIT_TEST_LIBRARIES
-			resmgr					lib/resmgr
 		)
 	ENDIF()
 ENDIF()
