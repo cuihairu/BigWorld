@@ -17,19 +17,40 @@ INCLUDE_DIRECTORIES( ${BW_SOURCE_DIR}/third_party/python/PC )
 # BWConfiguration_server.cmake.
 FIND_PACKAGE( ZLIB QUIET )
 FIND_PACKAGE( PNG QUIET )
+# The components link the bare names zip and libpng, so the alias targets are
+# created under those names. ZLIB_LIBARIES / PNG_LIBARIES are the GNU
+# multi-config list "optimized;<release>;debug;<debug>", and the alias has to
+# carry it as generator expressions: the INTERFACE_LINK_LIBARIES property
+# refuses the optimized/debug keywords outright (run 39424876897), and the
+# UNKNOWN variant handed that whole list to the linker as one file name -
+# LNK1181 on "optimized;<zs.lib>;debug;<zsd.lib>", and .obj on the MODULE
+# targets CMake folded the imported library into the source list
+# (run 39418479793).
+FUNCTION( BW_ADD_LIB_ALIAS ALIAS_NAME LIB_VAR )
+	SET( BW_ALIAS_CFG "" )
+	SET( BW_ALIAS_LINK "" )
+	FOREACH( BW_ALIAS_ITEM IN LISTS ${LIB_VAR} )
+		IF( BW_ALIAS_ITEM MATCHES "^(optimized|debug|general)$" )
+			SET( BW_ALIAS_CFG "${BW_ALIAS_ITEM}" )
+		ELSE()
+			IF( BW_ALIAS_CFG STREQUAL "debug" )
+				LIST( APPEND BW_ALIAS_LINK "$<CONFIG:Debug>${BW_ALIAS_ITEM}" )
+			ELSE()
+				LIST( APPEND BW_ALIAS_LINK "$<NOT:$<CONFIG:Debug>>${BW_ALIAS_ITEM}" )
+			ENDIF()
+		ENDIF()
+	ENDFOREACH( )
+	ADD_LIBRARY( ${ALIAS_NAME} INTERFACE IMPORTED GLOBAL )
+	SET_TARGET_PROPERTIES( ${ALIAS_NAME} PROPERTIES
+		INTERFACE_LINK_LIBARIES "${BW_ALIAS_LINK}" )
+ENDFUNCTION( )
+
 IF( ZLIB_FOUND )
 	INCLUDE_DIRECTORIES( ${ZLIB_INCLUDE_DIRS} )
-	# GLOBAL: the target is created from whichever library project includes
-	# this file first, and every sibling project links the same name. INTERFACE
-	# rather than UNKNOWN: ZLIB_LIBRARIES is the multi-config
-	# optimized/debug pair, and IMPORTED_LOCATION puts that whole list into one
-	# link input - LNK1181 on "optimized;<zs.lib>;debug;<zsd.lib>", and .obj on
-	# the MODULE targets that CMake folded the imported library into the source
-	# list (run 39418479793). INTERFACE lets CMake expand the pair per config.
+	# GLOBAL: the alias is created from whichever library project includes this
+	# file first, and every sibling project links the same name.
 	IF( NOT TARGET zip )
-		ADD_LIBRARY( zip INTERFACE IMPORTED GLOBAL )
-		SET_TARGET_PROPERTIES( zip PROPERTIES
-			INTERFACE_LINK_LIBRARIES "${ZLIB_LIBRARIES}" )
+		BW_ADD_LIB_ALIAS( zip "ZLIB_LIBARIES" )
 	ENDIF()
 ELSE()
 	INCLUDE_DIRECTORIES( ${BW_SOURCE_DIR}/third_party/zip )
@@ -38,9 +59,7 @@ ENDIF()
 IF( PNG_FOUND )
 	INCLUDE_DIRECTORIES( ${PNG_INCLUDE_DIRS} )
 	IF( NOT TARGET libpng )
-		ADD_LIBRARY( libpng INTERFACE IMPORTED GLOBAL )
-		SET_TARGET_PROPERTIES( libpng PROPERTIES
-			INTERFACE_LINK_LIBRARIES "${PNG_LIBRARIES}" )
+		BW_ADD_LIB_ALIAS( libpng "PNG_LIBARIES" )
 	ENDIF()
 ELSE()
 	INCLUDE_DIRECTORIES( ${BW_SOURCE_DIR}/third_party/png )
