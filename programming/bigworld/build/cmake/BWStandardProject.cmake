@@ -18,31 +18,34 @@ INCLUDE_DIRECTORIES( ${BW_SOURCE_DIR}/third_party/python/PC )
 FIND_PACKAGE( ZLIB QUIET )
 FIND_PACKAGE( PNG QUIET )
 # The components link the bare names zip and libpng, so the alias targets are
-# created under those names. ZLIB_LIBARIES / PNG_LIBARIES are the GNU
+# created under those names. ZLIB_LIBRARIES / PNG_LIBRARIES are the GNU
 # multi-config list "optimized;<release>;debug;<debug>", and the alias has to
-# carry it as generator expressions: the INTERFACE_LINK_LIBARIES property
+# carry it as generator expressions: the INTERFACE_LINK_LIBRARIES property
 # refuses the optimized/debug keywords outright (run 39424876897), and the
 # UNKNOWN variant handed that whole list to the linker as one file name -
 # LNK1181 on "optimized;<zs.lib>;debug;<zsd.lib>", and .obj on the MODULE
 # targets CMake folded the imported library into the source list
-# (run 39418479793).
+# (run 39418479793). The conditional form is the nested "$<cond:value>"; a
+# bare "$<CONFIG:Debug>" query is a 1/0 flag, and concatenating it onto the
+# path mangles every entry. Imported target names (PNG may yield "PNG::PNG")
+# pick their own config, so they pass through unwrapped.
 FUNCTION( BW_ADD_LIB_ALIAS ALIAS_NAME LIB_VAR )
 	SET( BW_ALIAS_CFG "" )
 	SET( BW_ALIAS_LINK "" )
 	FOREACH( BW_ALIAS_ITEM IN LISTS ${LIB_VAR} )
 		IF( BW_ALIAS_ITEM MATCHES "^(optimized|debug|general)$" )
 			SET( BW_ALIAS_CFG "${BW_ALIAS_ITEM}" )
+		ELSEIF( BW_ALIAS_ITEM MATCHES "::" )
+			LIST( APPEND BW_ALIAS_LINK "${BW_ALIAS_ITEM}" )
+		ELSEIF( BW_ALIAS_CFG STREQUAL "debug" )
+			LIST( APPEND BW_ALIAS_LINK "$<$<CONFIG:Debug>:${BW_ALIAS_ITEM}>" )
 		ELSE()
-			IF( BW_ALIAS_CFG STREQUAL "debug" )
-				LIST( APPEND BW_ALIAS_LINK "$<CONFIG:Debug>${BW_ALIAS_ITEM}" )
-			ELSE()
-				LIST( APPEND BW_ALIAS_LINK "$<NOT:$<CONFIG:Debug>>${BW_ALIAS_ITEM}" )
-			ENDIF()
+			LIST( APPEND BW_ALIAS_LINK "$<$<NOT:$<CONFIG:Debug>>:${BW_ALIAS_ITEM}>" )
 		ENDIF()
 	ENDFOREACH( )
 	ADD_LIBRARY( ${ALIAS_NAME} INTERFACE IMPORTED GLOBAL )
 	SET_TARGET_PROPERTIES( ${ALIAS_NAME} PROPERTIES
-		INTERFACE_LINK_LIBARIES "${BW_ALIAS_LINK}" )
+		INTERFACE_LINK_LIBRARIES "${BW_ALIAS_LINK}" )
 ENDFUNCTION( )
 
 IF( ZLIB_FOUND )
@@ -50,7 +53,7 @@ IF( ZLIB_FOUND )
 	# GLOBAL: the alias is created from whichever library project includes this
 	# file first, and every sibling project links the same name.
 	IF( NOT TARGET zip )
-		BW_ADD_LIB_ALIAS( zip "ZLIB_LIBARIES" )
+		BW_ADD_LIB_ALIAS( zip "ZLIB_LIBRARIES" )
 	ENDIF()
 ELSE()
 	INCLUDE_DIRECTORIES( ${BW_SOURCE_DIR}/third_party/zip )
@@ -59,7 +62,7 @@ ENDIF()
 IF( PNG_FOUND )
 	INCLUDE_DIRECTORIES( ${PNG_INCLUDE_DIRS} )
 	IF( NOT TARGET libpng )
-		BW_ADD_LIB_ALIAS( libpng "PNG_LIBARIES" )
+		BW_ADD_LIB_ALIAS( libpng "PNG_LIBRARIES" )
 	ENDIF()
 ELSE()
 	INCLUDE_DIRECTORIES( ${BW_SOURCE_DIR}/third_party/png )

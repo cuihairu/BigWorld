@@ -30,7 +30,19 @@ IF( OPENSSL_FOUND )
 	SET( BWOPENSSL_LIBRARY_SSL_DEBUG "${OPENSSL_SSL_LIBRARY}" )
 	SET( BWOPENSSL_VERSION_STRING "${OPENSSL_VERSION}" )
 	SET( BWOPENSSL_INCLUDE_DIRS "${OPENSSL_INCLUDE_DIR}" )
-	SET( BWOPENSSL_LIBRARIES "${OPENSSL_CRYPTO_LIBRARY}" "${OPENSSL_SSL_LIBRARY}" )
+	# OpenSSL 3's static libcrypto pulls in provider backends whose symbols
+	# live in system libraries (the cert-store loaders need CertOpenStore /
+	# CertOpenSystemStoreW from crypt32). A bare path list carries no such
+	# closure, and whatever crypt32 another target happens to propagate can
+	# land before libcrypto - where MSVC drops it (LNK2019
+	# __imp_CertOpenSystemStoreW in winstore_open, run 39429925113). The
+	# imported targets from FindOpenSSL carry the per-config system-lib
+	# closure and CMake orders it after libcrypto, so link those instead.
+	IF( TARGET OpenSSL::Crypto AND TARGET OpenSSL::SSL )
+		SET( BWOPENSSL_LIBRARIES OpenSSL::Crypto OpenSSL::SSL )
+	ELSE()
+		SET( BWOPENSSL_LIBRARIES "${OPENSSL_CRYPTO_LIBRARY}" "${OPENSSL_SSL_LIBRARY}" )
+	ENDIF()
 	SET( BWOPENSSL_FOUND 1 )
 	SET( BWOpenSSL_FOUND 1 )
 	RETURN()
