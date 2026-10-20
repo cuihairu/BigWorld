@@ -200,8 +200,7 @@ jobs:
         shell: pwsh
         run: |
           cmake --build "build/win_cstdmf" --config Release `
-                --target cstdmf nedalloc CppUnitLite2 unit_test_lib `
-                cstdmf_unit_test --parallel 2>&1 | `
+                --target cstdmf_unit_test --parallel 2>&1 | `
                 Tee-Object -FilePath cmake-build-test.log
 
       - name: Test cstdmf unit test (MSVC x64)
@@ -218,8 +217,7 @@ jobs:
         shell: pwsh
         run: |
           cmake --build "build/win_math" --config Release `
-                --target cstdmf nedalloc CppUnitLite2 unit_test_lib `
-                math_unit_test --parallel 2>&1 | `
+                --target math_unit_test --parallel 2>&1 | `
                 Tee-Object -FilePath cmake-build-test.log
 
       - name: Test math unit test (MSVC x64)
