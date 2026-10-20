@@ -1067,3 +1067,19 @@ manifest 哈希循环的管道输出没有收进 `$manifest` 数组（manifest �
 
 **余留**：探针 #33 验证脚本改造后的同路径（含 manifest 哈希行回归）；
 daily 车道首跑实证；bundle 运行时冒烟（exe 启动级，需 Windows 侧）未做。
+
+**探针 #33 判定（2026-10-20，run 39087537135，`31ce396c`）——三处修复全部实证**：
+exe 车道 11/11 复绿（0 实错、11 个 .exe）；manifest 2387 条 SHA256 行
+（哈希收进数组 ✓）、相对路径无乱切（`Lib\__future__.py` 形态，Substring
+转绝对 ✓）、头部完整（version `14.4.1+daily20261018.31ce396c` / toolset /
+UCRT / stdlib 2338 / cellapp_extension 缺席说明）、`Lib\` 2338 条 +
+python313.dll + 11 .exe + _bwlog/bwengine_xml/_bw_profile.dll + 34 pyd 全数
+在列、zip 名带版本串、zip 内 MANIFEST.txt 在位；**哈希交叉验证**：zip 内
+python313.dll 实算 SHA256 == manifest 行（`8ECEBB59…771A`）。2448 行 artifact
+总账 = 2338(stdlib) + 49(bundle 顶面文件) + 头部。
+（注：cron 记录曾写「39 pyd」，实测 34——以 artifact 为准。）
+
+**daily 车道首跑已触发（run 39350418532，`31ce396c`，workflow_dispatch）**：
+Linux 车道（build + 21 模块门 + tar.gz/deb/rpm）与 Windows 车道
+（`windows-products`）并行，产物 artifact 14 天保留，无 tag 无 release；
+结果待跑完后补记。
