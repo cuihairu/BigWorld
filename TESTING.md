@@ -1082,7 +1082,7 @@ python313.dll 实算 SHA256 == manifest 行（`8ECEBB59…771A`）。2448 行 ar
 **daily 车道首跑已触发（run 39350418532，`31ce396c`，workflow_dispatch）**：
 Linux 车道（build + 21 模块门 + tar.gz/deb/rpm）与 Windows 车道
 （`windows-products`）并行，产物 artifact 14 天保留，无 tag 无 release；
-结果待跑完后补记。
+首跑双红双修，见第 49 批。
 
 ## 第 48 批（2026-10-20）：bundle 运行时冒烟步 + gate17 环境取证
 
@@ -1105,3 +1105,34 @@ baseappmgr 20s 存活（kill，PASS-with-note：DLL 图解析完整，设计即�
 不判死）；版本串 `14.4.1+daily20261020.68c2c1f1`。同跑回归：exe 车道
 11/11（逐节 0 真错、目标集与 #33 全同、3× LNK4098 装饰性）；stage-1
 53 错全落 `cellapp_extension.vcxproj`（已知设计件）。
+
+## 第 49 批（2026-10-20）：daily 首跑判决（双红双修）+ 验证车道盲区入账
+
+**首跑判决（run 39350418532，head `31ce396c`，workflow_dispatch，
+2026-10-20 08:54）**：双 job 双红，各一处根因——
+- **Windows `Windows server products`**：红在 freshness 门 step——脚本
+  原样抄 Linux 车道的 POSIX shell，windows-latest 默认 pwsh，
+  **ParserError 在解析期即死**（连 workflow_dispatch 短路分支都没跑到）。
+  修复：该步补 `shell: bash`。
+- **Linux `build-test-package`**：红在 Build step——
+  `message_handlers.cpp:163` `enumeration value 'DISPOSITION_COUNT'
+  not handled in switch [-Werror=switch]`（CI gcc-14）。批次 36 引入的
+  **潜伏可移植性缺陷**：`DISPOSITION_COUNT` 全仓零消费方（测试矩阵另有
+  数法），是枚举里的死哨兵；生产 switch 无 default 臂，老 gcc 不查枚举
+  穷尽性，故从未暴露。修复：删哨兵枚举值（switch 穷尽性保护反而更纯——
+  将来新增 disposition 漏 case 仍会被 -Wswitch 抓）。
+
+**本地复现与验证（gcc 15.2.0，比 CI 的 gcc-14 更严）**：复现
+`make cellapp`（生产二进制目标）→ `message_handlers.cpp:163:16` 逐字节
+同错误；修后同目标链接绿（`[BIN] [hybrid] cellapp`）；全量单测门 18：
+21 模块全 `result 0`（cellapp_test 路由测试同编该头，删前已核全仓零
+引用）。
+
+**验证车道盲区入账**：本地门禁链只有 `bw-run-all-unit-tests`（21 个
+测试目标），**从不编译生产二进制 TU**——`message_handlers.cpp` 不在
+任何测试目标源清单里，批次 36 后所有本地 gate 全绿而完整 make 自
+10-15 起就是红的；daily 车道是唯一能抓它的防线，首跑即抓到。两车道
+互补：单测门管语义、daily 全量 make 管编译可移植性。
+
+**再验**：修复后 dispatch daily 复跑，双车道待绿后补 artifact 同构
+比对（vs 探针 #33）与 L39 整条勾账。

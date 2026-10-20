@@ -47,9 +47,7 @@ enum EntityMessageDisposition
 	/// No tick budget left this tick - defer to the next one.
 	DISPOSITION_BUFFER_IF_TICK_PENDING,
 	/// None of the above: call through to the message's handler.
-	DISPOSITION_DISPATCH,
-
-	DISPOSITION_COUNT
+	DISPOSITION_DISPATCH
 };
 
 /// Everything the disposition ladder branches on.
