@@ -258,20 +258,6 @@ jobs:
           "VCPKG_DEFAULT_BINARY_CACHE=$(($PWD.ProviderPath -replace '\\','/'))/vcpkg-bcache" | `
             Out-File -FilePath $env:GITHUB_ENV -Append
 
-      - name: Install jsoncpp (vcpkg)
-        if: steps.freshness.outputs.stale != 'true'
-        shell: pwsh
-        run: |
-          # message_logger's metadata backend is jsoncpp; the make chain takes
-          # it from vcpkg too and nothing vendors it in-tree.
-          & "$env:VCPKG_INSTALLATION_ROOT/vcpkg.exe" `
-                install jsoncpp --triplet x64-windows
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $jsoncppInc = `
-            "$env:VCPKG_INSTALLATION_ROOT/installed/x64-windows/include"
-          "VCPKG_JSONCPP_INCLUDE=$jsoncppInc" | `
-            Out-File -FilePath $env:GITHUB_ENV -Append
-
       - name: Build server executables (Hybrid)
         if: steps.freshness.outputs.stale != 'true'
         shell: pwsh

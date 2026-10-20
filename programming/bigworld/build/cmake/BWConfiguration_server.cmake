@@ -168,9 +168,21 @@ SET( BW_BINARY_PROJECTS
 	snapshot_helper		server/tools/snapshot_helper
 	sync_db				server/tools/sync_db
 	transfer_db			server/tools/transfer_db
-	
-	cellapp_extension	examples/cellapp_extension
-	
+
+	# examples/cellapp_extension imports the host's classes (Entity,
+	# Controller, EntityType) out of the running cellapp executable. A Linux
+	# shared module binds those to the exe's exports at load time; an MSVC
+	# exe exports nothing unless told to, so the module has nothing to bind
+	# to - 53 LNK2019/2001 in the superproject stage-1 build (run
+	# 39439040925). Exporting the host interface is a design item of its own
+	# (todo.md R3); until it lands the example stays out of the Windows
+	# build, where nothing consumes it.
+	IF( NOT MSVC )
+		SET( BW_BINARY_PROJECTS ${BW_BINARY_PROJECTS}
+			cellapp_extension	examples/cellapp_extension
+		)
+	ENDIF()
+
 	${BW_SERVER_UNIT_TEST_BINARIES}
 )
 

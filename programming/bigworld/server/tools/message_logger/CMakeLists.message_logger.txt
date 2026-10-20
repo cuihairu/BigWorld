@@ -140,29 +140,40 @@ ENDIF()
 
 BW_ADD_EXECUTABLE( message_logger ${ALL_SRCS} )
 
-# jsoncpp comes from vcpkg on the make chain (third_party_vcpkg.mak, the
-# jsoncpp port) and nothing vendors it in-tree; metadata.hpp includes
+# jsoncpp comes from vcpkg (the jsoncpp port in vcpkg.json, taken by both
+# tracks) and nothing vendors it in-tree; metadata.hpp includes
 # <json/json.h> (C1083 in the root superproject build, run 39016799505).
-# Probe like the mongodb backend above; the workflow hands the include dir
-# over as a cache entry.
-FIND_PATH( BW_JSONCPP_INCLUDE_DIR json/json.h )
-MARK_AS_ADVANCED( BW_JSONCPP_INCLUDE_DIR )
-IF( BW_JSONCPP_INCLUDE_DIR )
-	INCLUDE_DIRECTORIES( ${BW_JSONCPP_INCLUDE_DIR} )
-
-	# metadata.cpp drives Json::Reader / Json::FastWriter, so the headers
-	# alone leave LNK2019s behind. The vcpkg layout keeps the linkable
-	# (import) library one level below the include dir: lib/ on every
-	# triplet, next to the make chain's libjsoncpp.a.
-	FIND_LIBRARY( BW_JSONCPP_LIBRARY jsoncpp
-		HINTS ${BW_JSONCPP_INCLUDE_DIR}/../lib )
-	MARK_AS_ADVANCED( BW_JSONCPP_LIBRARY )
-	IF( BW_JSONCPP_LIBRARY )
-		BW_TARGET_LINK_LIBRARIES( message_logger ${BW_JSONCPP_LIBRARY} )
-	ENDIF()
+# metadata.cpp drives Json::Reader / Json::FastWriter, so the headers alone
+# leave LNK2019s behind.
+#
+# The link goes through the port's CMake config package: the imported target
+# picks the right CRT variant per configuration by construction, and carries
+# its include dirs with it. A hand-rolled find_library resolves the one shared
+# library name in <prefix>/debug/lib before <prefix>/lib under the vcpkg
+# toolchain and handed the MDd jsoncpp.lib to the Hybrid message_logger link -
+# LNK2038 on _ITERATOR_DEBUG_LEVEL in run 39439040925.
+FIND_PACKAGE( jsoncpp CONFIG QUIET )
+IF( TARGET JsonCpp::JsonCpp )
+	BW_TARGET_LINK_LIBRARIES( message_logger JsonCpp::JsonCpp )
 ELSE()
-	MESSAGE( STATUS "jsoncpp headers not found. "
-		"message_logger needs BW_JSONCPP_INCLUDE_DIR (vcpkg jsoncpp)." )
+	# Host without the vcpkg port: probe headers like the mongodb backend
+	# above and take the linkable library one level below them (make-chain
+	# layout: libjsoncpp.a in the triplet lib dir, next to the headers).
+	FIND_PATH( BW_JSONCPP_INCLUDE_DIR json/json.h )
+	MARK_AS_ADVANCED( BW_JSONCPP_INCLUDE_DIR )
+	IF( BW_JSONCPP_INCLUDE_DIR )
+		INCLUDE_DIRECTORIES( ${BW_JSONCPP_INCLUDE_DIR} )
+
+		FIND_LIBRARY( BW_JSONCPP_LIBRARY jsoncpp
+			HINTS ${BW_JSONCPP_INCLUDE_DIR}/../lib )
+		MARK_AS_ADVANCED( BW_JSONCPP_LIBRARY )
+		IF( BW_JSONCPP_LIBRARY )
+			BW_TARGET_LINK_LIBRARIES( message_logger ${BW_JSONCPP_LIBRARY} )
+		ENDIF()
+	ELSE()
+		MESSAGE( STATUS "jsoncpp headers not found. "
+			"message_logger needs BW_JSONCPP_INCLUDE_DIR (vcpkg jsoncpp)." )
+	ENDIF()
 ENDIF()
 
 

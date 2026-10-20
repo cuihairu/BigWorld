@@ -12,9 +12,6 @@
 #   $env:DXSDK_DIR            - D3DX 9.29.952.8 headers + libs; lib/math's
 #                               Windows vector types are D3DX typedefs and
 #                               server modules pull them through math headers.
-#   $env:VCPKG_JSONCPP_INCLUDE - jsoncpp include dir (message_logger's
-#                               metadata backend; the make chain takes the same
-#                               port from vcpkg and nothing vendors it).
 #
 # Usage:
 #   pwsh -File scripts/build-windows-server.ps1 `
@@ -97,7 +94,6 @@ if (-not $SkipConfigure) {
 	cmake -S $RepoPath -B $BuildPath `
 	      -G "Visual Studio 18 2026" -A x64 `
 	      -DBW_CMAKE_TARGET=server `
-	      -DBW_JSONCPP_INCLUDE_DIR="$env:VCPKG_JSONCPP_INCLUDE" `
 	      @ToolchainArgs 2>&1 |
 	    Tee-Object -FilePath cmake-configure-root.log
 	if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
