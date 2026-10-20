@@ -4282,8 +4282,8 @@ bool Entity::migrate()
 
 	// see if we can't smoothly set in the script type
 	PyObject * pNewEntity = this;
-	if (PyObject_SetAttrString( this, "__class__",
-			(PyObject *)pEntityType_->pPyType() ) == -1)
+	if (!Entity::swapScriptClass( this,
+			(PyObject *)pEntityType_->pPyType() ))
 	{
 		// set the class by some other means ... hmmm,
 		// I think I need to ask Murf about this one

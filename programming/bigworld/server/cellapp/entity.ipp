@@ -355,4 +355,17 @@ INLINE void Entity::pRealChannel( CellAppChannel * channel )
 }
 
 
+/**
+ *	This method sets __class__ on pEntity to pNewClass. PyObject_SetAttrString
+ *	is all-or-nothing: when Python rejects the swap, __class__ is untouched,
+ *	so migrate()'s rollback only has to restore the C++ type pointer.
+ */
+INLINE
+bool Entity::swapScriptClass( PyObject * pEntity, PyObject * pNewClass )
+{
+	return PyObject_SetAttrString( pEntity, "__class__",
+		       pNewClass ) != -1;
+}
+
+
 // entity.ipp

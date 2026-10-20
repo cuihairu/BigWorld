@@ -283,6 +283,21 @@ public:
 	bool migrate();
 	void migratedAll();
 
+	/**
+	 *	This static method sets __class__ on a script entity to the new
+	 *	script class and reports whether Python accepted the swap. The
+	 *	underlying PyObject_SetAttrString is all-or-nothing: on failure
+	 *	__class__ is left untouched, which is what lets migrate() roll its
+	 *	C++ type pointer back without any Python-level rollback. Extracted
+	 *	from migrate() so that the swap and its failure semantics can be
+	 *	asserted without a running CellApp.
+	 *
+	 *	@param pEntity		The script object whose class is swapped.
+	 *	@param pNewClass	The PyTypeObject of the new script class.
+	 *	@return True when the object now is an instance of pNewClass.
+	 */
+	static bool swapScriptClass( PyObject * pEntity, PyObject * pNewClass );
+
 	/// @name Message handlers
 	//@{
 	void avatarUpdateImplicit(
