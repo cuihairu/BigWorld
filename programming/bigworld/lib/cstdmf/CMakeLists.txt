@@ -389,6 +389,6 @@ BW_PROJECT_CATEGORY( cstdmf "BigWorld Libs" )
 # Module-standalone builds have no root binary-project manifest, but must
 # carry the MSVC unit-test gate. The root server manifest already includes
 # this directory on MSVC, so only standalone generation adds it here.
-IF( BW_UNIT_TESTS_ENABLED AND NOT BW_IS_SERVER )
+IF( BW_UNIT_TESTS_ENABLED AND NOT BW_IS_SERVER AND NOT DEFINED BW_BINARY_PROJECTS )
 	ADD_SUBDIRECTORY( unit_test )
 ENDIF()
