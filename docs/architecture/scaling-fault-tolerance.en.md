@@ -362,7 +362,7 @@ Call chain:
 Surviving CellApps receive the death notification and collect the state of the
 ghost entities they hold:
 
-Source entry: [cellapp.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/cellapp.cpp)
+Source entry: cellapp.cpp
 
 Call chain:
 

@@ -518,7 +518,7 @@ Source entry: [method_args.cpp:213](/home/cui/workspaces/BigWorld/programming/bi
 
 The full call chain for persisting an Entity to the database:
 
-Source entry: [base.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/baseapp/base.cpp)
+Source entry: base.cpp
 
 <div class="flow-strip">
   <span class="flow-node">Base::writeToDB()</span>

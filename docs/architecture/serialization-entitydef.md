@@ -433,7 +433,7 @@ RPC 方法参数序列化的完整调用链：
 
 Entity 持久化到数据库的完整调用链：
 
-源码入口：[base.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/baseapp/base.cpp)
+源码入口：base.cpp
 
 <div class="flow-strip">
   <span class="flow-node">Base::writeToDB()</span>

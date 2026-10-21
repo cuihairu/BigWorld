@@ -51,7 +51,7 @@ Base/Cell/Client 不是简单分层对象，而是权威域：
 - Base 保存长期身份、Proxy、DBID、Cell mailbox 和持久化协调权。源码见 [base.hpp:58](/home/cui/workspaces/BigWorld/programming/bigworld/server/baseapp/base.hpp:58)。
 - Cell 保存空间权威、real/ghost、AOI、物理、位置和 offload 状态。源码见 [entity.hpp:89](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity.hpp:89)。
 - Client 只接收 Witness 筛选后的实体投影。源码见 [entity.cpp:2475](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity.cpp:2475)。
-- DB 只保存 EntityDef persistent 视图和引擎运行时元数据。源码见 [idatabase.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/db/idatabase.hpp)。
+- DB 只保存 EntityDef persistent 视图和引擎运行时元数据。源码见 idatabase.hpp。
 
 这解释了为什么调试一个实体问题经常要串 BaseApp、CellApp、DBApp、Proxy、Witness、Mailbox、Channel 和客户端日志。
 
@@ -71,9 +71,9 @@ machined、Manager、Reviver 解决的是 BigWorld 组件发现、进程接纳�
 EntityDef + BinaryStream 不是普通 wire schema：
 
 - `entities.xml` 顺序影响 EntityTypeID。源码见 [entitydef-contract-generation](/architecture/entitydef-contract-generation)。
-- `.def` 属性 flags 决定 Base、Cell、Client、Persistent、Ghost 数据域。源码见 [data_description.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/entitydef/data_description.hpp)。
-- exposed method range 决定客户端可调用方法。源码见 [exposed_message_range.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/exposed_message_range.hpp)。
-- digest 决定客户端、服务端和 DB persistent 视图兼容性。源码见 [entity_description.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/entitydef/entity_description.hpp)。
+- `.def` 属性 flags 决定 Base、Cell、Client、Persistent、Ghost 数据域。源码见 data_description.hpp。
+- exposed method range 决定客户端可调用方法。源码见 exposed_message_range.hpp。
+- digest 决定客户端、服务端和 DB persistent 视图兼容性。源码见 entity_description.hpp。
 - DB 映射层消费的是 EntityDef persistent stream，不是 Python 对象本身。源码见 [persistence-db-model](/architecture/persistence-db-model)。
 
 因此 `.def` 改动必须同时看协议编号、客户端可见性、DB schema、热更新、迁移流和持久化 digest。
@@ -82,11 +82,11 @@ EntityDef + BinaryStream 不是普通 wire schema：
 
 BigWorld 的可观测性不是单纯日志：
 
-- Watcher 是运行时对象树，支持 GET/SET/TELL。源码见 [watcher.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/cstdmf/watcher.hpp)。
-- ForwardingWatcher 会把 watcher command 转发到进程集合。源码见 [watcher_nub.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/watcher_nub.cpp)。
-- Profiler 和 DogWatch 记录进程内耗时。源码见 [profiler.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/cstdmf/profiler.hpp)。
-- EntityProfiler 参与实体负载分析。源码见 [entity_profiler.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/server/entity_profiler.hpp)。
-- Message Logger 是独立集中日志链路，有 MLDB/MongoDB 后端和重连边界。源码见 [message_logger.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/server/message_logger.hpp)。
+- Watcher 是运行时对象树，支持 GET/SET/TELL。源码见 watcher.hpp。
+- ForwardingWatcher 会把 watcher command 转发到进程集合。源码见 watcher_nub.cpp。
+- Profiler 和 DogWatch 记录进程内耗时。源码见 profiler.hpp。
+- EntityProfiler 参与实体负载分析。源码见 entity_profiler.hpp。
+- Message Logger 是独立集中日志链路，有 MLDB/MongoDB 后端和重连边界。源码见 message_logger.hpp。
 
 这里最重要的边界是：Watcher 既能观测也能控制，必须按管理面攻击面分析；Message Logger 能集中查询，但不能被当成强可靠审计日志。
 

@@ -65,7 +65,7 @@ Base/Cell/Client is not simple object layering; it is a split of authority:
 - Base stores long-term identity, Proxy, DBID, the Cell mailbox, and persistence-coordination authority. See [base.hpp:58](/home/cui/workspaces/BigWorld/programming/bigworld/server/baseapp/base.hpp:58).
 - Cell stores spatial authority, real/ghost state, AOI, physics, position, and offload state. See [entity.hpp:89](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity.hpp:89).
 - Client receives only the entity projection filtered by Witness. See [entity.cpp:2475](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity.cpp:2475).
-- Database stores only the EntityDef persistent view and engine runtime metadata. See [idatabase.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/db/idatabase.hpp).
+- Database stores only the EntityDef persistent view and engine runtime metadata. See idatabase.hpp.
 
 This explains why debugging one entity problem often requires joining logs
 from BaseApp, CellApp, DBApp, Proxy, Witness, Mailbox, Channel, and the
@@ -90,9 +90,9 @@ not merely whether a process remains alive.
 EntityDef plus BinaryStream is not an ordinary wire schema:
 
 - `entities.xml` order affects EntityTypeID. See [EntityDef contract and protocol generation](/architecture/entitydef-contract-generation).
-- `.def` property flags determine Base, Cell, Client, Persistent, and Ghost data domains. See [data_description.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/entitydef/data_description.hpp).
-- The exposed-method range determines which methods the client can call. See [exposed_message_range.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/exposed_message_range.hpp).
-- Digests determine compatibility among client, server, and database persistent views. See [entity_description.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/entitydef/entity_description.hpp).
+- `.def` property flags determine Base, Cell, Client, Persistent, and Ghost data domains. See data_description.hpp.
+- The exposed-method range determines which methods the client can call. See exposed_message_range.hpp.
+- Digests determine compatibility among client, server, and database persistent views. See entity_description.hpp.
 - The database mapping layer consumes the EntityDef persistent stream, not Python objects themselves. See [persistence and the database model](/architecture/persistence-db-model).
 
 Therefore, a `.def` change must be evaluated together with protocol numbers,
@@ -103,11 +103,11 @@ persistence digest.
 
 BigWorld observability is more than logging:
 
-- Watcher is a runtime object tree supporting GET/SET/TELL. See [watcher.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/cstdmf/watcher.hpp).
-- ForwardingWatcher forwards watcher commands to a set of processes. See [watcher_nub.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/watcher_nub.cpp).
-- Profiler and DogWatch record in-process time consumption. See [profiler.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/cstdmf/profiler.hpp).
-- EntityProfiler participates in entity-load analysis. See [entity_profiler.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/server/entity_profiler.hpp).
-- Message Logger is a separate centralized logging path with MLDB/MongoDB backends and reconnection boundaries. See [message_logger.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/server/message_logger.hpp).
+- Watcher is a runtime object tree supporting GET/SET/TELL. See watcher.hpp.
+- ForwardingWatcher forwards watcher commands to a set of processes. See watcher_nub.cpp.
+- Profiler and DogWatch record in-process time consumption. See profiler.hpp.
+- EntityProfiler participates in entity-load analysis. See entity_profiler.hpp.
+- Message Logger is a separate centralized logging path with MLDB/MongoDB backends and reconnection boundaries. See message_logger.hpp.
 
 The most important boundary is that Watcher can both observe and control, so
 it must be analyzed as a management-plane attack surface. Message Logger

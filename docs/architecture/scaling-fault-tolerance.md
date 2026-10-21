@@ -309,7 +309,7 @@ CellAppMgr 通过 Channel 断开检测到 CellApp 死亡，调用 handleCellAppD
 
 存活的 CellApp 收到 death 通知后，收集自己持有的 ghost 实体状态：
 
-源码入口：[cellapp.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/cellapp.cpp)
+源码入口：cellapp.cpp
 
 调用链：
 
