@@ -56,8 +56,8 @@ CMake projects; deleted after R3 lands).
   hook → **zlib allocations are absent from BW memory statistics** (a
   registered change in observability semantics); the jsoncpp consumer
   surface uses deprecated APIs (warning noise, tolerated for now).
-- **Follow-ups**: delete the residual `third_party/png` and
-  `third_party/zip` trees after R3 lands; vcpkg upgrades follow the
+- **Follow-ups**: the residual `third_party/png`, `third_party/zip`, and
+  `third_party/sqlite` trees are deleted; vcpkg upgrades follow the
   baseline-bump process.
 
 Evidence: [third-party dependency switch to vcpkg](/vcpkg-migration).

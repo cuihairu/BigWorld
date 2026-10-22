@@ -68,12 +68,11 @@ if (-not $BuildPath) { $BuildPath = $BuildDir -replace '\\', '/' }
 
 # The vcpkg toolchain, resolved the way the workflows provision it: an
 # explicit VCPKG_ROOT (the daily lane clones the pinned manifest baseline)
-# wins, then the runner's preinstalled vcpkg. With a toolchain the manifest
-# (vcpkg.json) supplies openssl/curl/zlib/libpng/sqlite3 at configure time;
-# without one the legacy vendored branches in the FindBW* modules still
-# resolve, so a local run keeps working. The triplet is static-md: static
-# libraries against the dynamic CRT the root's BWCompilerAndLinkerOptions
-# mandates (/MD), so no vcpkg DLLs have to ship next to the exes.
+# wins, then the runner's preinstalled vcpkg. The manifest (vcpkg.json) is
+# required and supplies openssl/curl/zlib/libpng/sqlite3 at configure time.
+# The triplet is static-md: static libraries against the dynamic CRT the
+# root's BWCompilerAndLinkerOptions mandates (/MD), so no vcpkg DLLs have to
+# ship next to the exes.
 $VcpkgToolchain = $null
 if ($env:VCPKG_ROOT) {
 	$VcpkgToolchain = ($env:VCPKG_ROOT -replace '\\', '/') + '/scripts/buildsystems/vcpkg.cmake'

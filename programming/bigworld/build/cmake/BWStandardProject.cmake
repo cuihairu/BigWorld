@@ -4,17 +4,13 @@ INCLUDE_DIRECTORIES( ${BW_SOURCE_DIR}/third_party )
 INCLUDE_DIRECTORIES( $ENV{DXSDK_DIR}/Include )
 INCLUDE_DIRECTORIES( ${BW_SOURCE_DIR}/third_party/python/Include )
 INCLUDE_DIRECTORIES( ${BW_SOURCE_DIR}/third_party/python/PC )
-# zlib and libpng come from vcpkg (vcpkg.json) when the vcpkg toolchain file
-# is in play; the vendored trees remain the fallback while they exist (the
-# make chain takes the same major/minor from vcpkg). resmgr
+# zlib and libpng come from the pinned vcpkg manifest. resmgr
 # (zip_file_system.cpp, binary_block.cpp), lib/network (compression_stream.cpp,
 # zip_stream.cpp) and lib/moo (png.cpp) include the bare <zlib.h>/<png.h>, and
-# these are plain static libraries with no interface includes, so their header
-# directories have to be supplied here either way (MSVC C1083 on the first
-# root superproject build). Under vcpkg, imported targets under the names the
+# are plain static libraries with no interface includes, so their header
+# directories are supplied here. Imported targets under the names the
 # components already link (zip, libpng) redirect those links to the vcpkg
-# libraries; the matching third_party library projects are then skipped in
-# BWConfiguration_server.cmake.
+# libraries.
 FIND_PACKAGE( ZLIB QUIET )
 FIND_PACKAGE( PNG QUIET )
 # The components link the bare names zip and libpng, so the alias targets are
@@ -56,7 +52,7 @@ IF( ZLIB_FOUND )
 		BW_ADD_LIB_ALIAS( zip "ZLIB_LIBRARIES" )
 	ENDIF()
 ELSE()
-	INCLUDE_DIRECTORIES( ${BW_SOURCE_DIR}/third_party/zip )
+	MESSAGE( FATAL_ERROR "zlib requires the vcpkg manifest" )
 ENDIF()
 
 IF( PNG_FOUND )
@@ -65,7 +61,7 @@ IF( PNG_FOUND )
 		BW_ADD_LIB_ALIAS( libpng "PNG_LIBRARIES" )
 	ENDIF()
 ELSE()
-	INCLUDE_DIRECTORIES( ${BW_SOURCE_DIR}/third_party/png )
+	MESSAGE( FATAL_ERROR "libpng requires the vcpkg manifest" )
 ENDIF()
 
 # Python.h includes pyconfig.h, which PCbuild generates into pythoncore's own

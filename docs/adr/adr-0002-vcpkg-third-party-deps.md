@@ -47,7 +47,7 @@ png/zip 源码树（Windows CMake 工程仍引用，R3 落地后删除）。
 - **代价/风险**：zlib 分配不再走 `MY_ZCALLOC` 钩子 → **zlib 分配不进 BW
   内存统计**（已登记的观测口径变化）；jsoncpp 消费面走 deprecated API
   （有告警面，暂容忍）。
-- **后续**：R3 落地后删除 `third_party/png`、`third_party/zip` 残树；
-  vcpkg 升级走 baseline 前移流程。
+- **后续**：`third_party/png`、`third_party/zip`、`third_party/sqlite`
+  残树已删除；vcpkg 升级走 baseline 前移流程。
 
 证据：[第三方依赖切换到 vcpkg](/vcpkg-migration)。

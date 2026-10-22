@@ -143,24 +143,6 @@ IF( BW_SPEEDTREE_SUPPORT )
 	)
 ENDIF()
 
-# zlib/libpng come from vcpkg when a vcpkg toolchain file is in play (the
-# find runs again - and the imported targets zip/libpng get built - in
-# BWStandardProject.cmake, which every library project includes). The vendored
-# trees are only added here as the fallback while they exist, so their library
-# projects never clash with the vcpkg imported targets of the same name.
-FIND_PACKAGE( ZLIB QUIET )
-IF( NOT ZLIB_FOUND )
-	SET( BW_LIBRARY_PROJECTS ${BW_LIBRARY_PROJECTS}
-		zip					third_party/zip
-	)
-ENDIF()
-FIND_PACKAGE( PNG QUIET )
-IF( NOT PNG_FOUND )
-	SET( BW_LIBRARY_PROJECTS ${BW_LIBRARY_PROJECTS}
-		libpng				third_party/png/projects/visualc71
-	)
-ENDIF()
-
 SET( BW_BINARY_PROJECTS
 	baseapp				server/baseapp
 	baseappmgr			server/baseappmgr

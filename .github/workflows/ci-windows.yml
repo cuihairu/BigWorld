@@ -291,11 +291,10 @@ jobs:
           # The root sets BW_SOURCE_DIR / CMAKE_MODULE_PATH itself and pulls
           # BWCompilerAndLinkerOptions (so no flag mirroring here, unlike the
           # module-standalone legs). Configure only - nothing is built and no
-          # artifacts leave this job. When the runner's preinstalled vcpkg is
-          # present, configure with its toolchain so the manifest (vcpkg.json)
-          # supplies openssl/curl/zlib/libpng/sqlite3 - the static-md triplet
-          # matches the /MD CRT the root mandates; without it the legacy
-          # vendored branches in the FindBW* modules still resolve.
+          # artifacts leave this job. Configure with the runner's preinstalled
+          # vcpkg toolchain: the manifest (vcpkg.json) is now required and
+          # supplies openssl/curl/zlib/libpng/sqlite3. The static-md triplet
+          # matches the /MD CRT the root mandates.
           $tcArgs = @()
           $tc = "$($env:VCPKG_INSTALLATION_ROOT -replace '\\','/')/scripts/buildsystems/vcpkg.cmake"
           if (Test-Path $tc) {
@@ -377,10 +376,8 @@ jobs:
           $repo = ((Resolve-Path programming/bigworld).Path -replace '\\','/')
           # Same configure as root-configure-probe, its own build dir: the
           # jobs do not share a workspace. The toolchain args mirror
-          # build-windows-server.ps1: with the runner's preinstalled vcpkg,
-          # the manifest supplies openssl/curl/zlib/libpng/sqlite3/jsoncpp
-          # (static-md, /MD CRT); without it the legacy vendored branches
-          # still resolve.
+          # build-windows-server.ps1: the required manifest supplies
+          # openssl/curl/zlib/libpng/sqlite3/jsoncpp (static-md, /MD CRT).
           $tcArgs = @()
           $tc = "$($env:VCPKG_INSTALLATION_ROOT -replace '\\','/')/scripts/buildsystems/vcpkg.cmake"
           if (Test-Path $tc) {
