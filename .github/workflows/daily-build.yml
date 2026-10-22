@@ -36,7 +36,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@v7.0.1
         with:
           # full history: the 48-hour freshness check counts commits by date
           fetch-depth: 0
@@ -112,7 +112,7 @@ jobs:
 
       - name: Restore vcpkg binary cache
         if: steps.freshness.outputs.stale != 'true'
-        uses: actions/cache@v4
+        uses: actions/cache@v6.1.0
         with:
           path: ${{ github.workspace }}/vcpkg-bcache
           key: vcpkg-bcache-${{ runner.os }}-${{ steps.baseline.outputs.baseline }}-${{ hashFiles('programming/bigworld/vcpkg.json') }}
@@ -141,7 +141,7 @@ jobs:
 
       - name: Upload daily packages
         if: steps.freshness.outputs.stale != 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: bigworld-daily-${{ steps.pkg.outputs.ver }}-linux-x86_64
           path: out/*
@@ -167,7 +167,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@v7.0.1
         with:
           # full history: the 48-hour freshness check counts commits by date
           fetch-depth: 0
@@ -246,7 +246,7 @@ jobs:
 
       - name: Upload Windows packages
         if: steps.freshness.outputs.stale != 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: bigworld-daily-${{ steps.pkg.outputs.ver }}-windows-x64
           path: |
