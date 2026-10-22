@@ -55,19 +55,25 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_INTERPROCEDURAL_OPTIMIZATION OFF) # make profile does not use LTO
 
-add_compile_options(
-	-m64 -msse3 -pipe
-	-Wall -Wextra -Werror
-	-Wfloat-equal
-	-Wno-deprecated -Wno-uninitialized -Wno-char-subscripts
-	-Wno-non-virtual-dtor -Wno-write-strings
-	-Wno-unused-parameter
-	-Wno-error=expansion-to-defined
-	-Wno-error=deprecated-declarations
-	-Wno-error=deprecated-copy
-	-fno-strict-aliasing
-	-g -O3
-)
+if(MSVC)
+	add_compile_options(
+		/MP /W3 /Zi /WX-
+	)
+else()
+	add_compile_options(
+		-m64 -msse3 -pipe
+		-Wall -Wextra -Werror
+		-Wfloat-equal
+		-Wno-deprecated -Wno-uninitialized -Wno-char-subscripts
+		-Wno-non-virtual-dtor -Wno-write-strings
+		-Wno-unused-parameter
+		-Wno-error=expansion-to-defined
+		-Wno-error=deprecated-declarations
+		-Wno-error=deprecated-copy
+		-fno-strict-aliasing
+		-g -O3
+	)
+endif()
 
 add_compile_definitions(
 	MF_SERVER
@@ -138,9 +144,11 @@ add_library(cstdmf STATIC
 	${BW_LIB_DIR}/cstdmf/bw_platform_info.cpp
 	${BW_LIB_DIR}/cstdmf/bw_string_ref.cpp
 	${BW_LIB_DIR}/cstdmf/bw_util.cpp
-	${BW_LIB_DIR}/cstdmf/bw_util_linux.cpp
+	$<$<PLATFORM_ID:Linux>:${BW_LIB_DIR}/cstdmf/bw_util_linux.cpp>
+	$<$<PLATFORM_ID:Windows>:${BW_LIB_DIR}/cstdmf/bw_util_windows.cpp>
 	${BW_LIB_DIR}/cstdmf/callstack.cpp
-	${BW_LIB_DIR}/cstdmf/callstack_linux.cpp
+	$<$<PLATFORM_ID:Linux>:${BW_LIB_DIR}/cstdmf/callstack_linux.cpp>
+	$<$<PLATFORM_ID:Windows>:${BW_LIB_DIR}/cstdmf/callstack_windows.cpp>
 	${BW_LIB_DIR}/cstdmf/checksum_stream.cpp
 	${BW_LIB_DIR}/cstdmf/concurrency.cpp
 	${BW_LIB_DIR}/cstdmf/cpuinfo.cpp
@@ -238,18 +246,19 @@ add_executable(cstdmf_test
 	${BW_LIB_DIR}/cstdmf/unit_test/test_watcher.cpp
 )
 target_compile_definitions(cstdmf_test PRIVATE CSTDMF_IMPORT)
-target_compile_options(cstdmf_test PRIVATE -Wno-float-equal) # unit_test profile
+if(NOT MSVC)
+	target_compile_options(cstdmf_test PRIVATE -Wno-float-equal) # unit_test profile
+endif()
 
 target_link_libraries(cstdmf_test PRIVATE
 	unit_test_lib
 	CppUnitLite2
 	cstdmf
-	m
-	pthread
 )
-# make links the unit-test binaries with -rdynamic -Wl,-export-dynamic
-# (backtrace() symbol names in callstack.cpp depend on it)
-target_link_options(cstdmf_test PRIVATE -rdynamic -Wl,--export-dynamic)
+if(NOT WIN32)
+	target_link_libraries(cstdmf_test PRIVATE m pthread)
+	target_link_options(cstdmf_test PRIVATE -rdynamic -Wl,--export-dynamic)
+endif()
 
 get_filename_component(BW_REPO_ROOT "${CMAKE_CURRENT_LIST_DIR}/../../../../.." ABSOLUTE)
 enable_testing()
