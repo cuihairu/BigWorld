@@ -1,33 +1,38 @@
-# Python C API 迁移指南
+# Python C API Migration Guide
 
-> [English](python-c-api-guide.en.md) | **中文**
+> **English** | [中文](python-c-api-guide.md)
 
 <div class="arch-hero">
 
-> **状态（2026-10-13 审计）**：迁移已完成（嵌入式解释器现为 Python 3.13.16）。
-> 最终**未创建**任何兼容包装层——本页迁移步骤中提到的 `bw_python_compat.hpp`
-> 等兼容文件在仓库中不存在，实际采用逐点直接替换（Py2 符号仅存于注释）。
-> 本页保留为 API 映射参考。
+> **Status (2026-10-13 audit)**: the migration is complete (the embedded
+> interpreter is now Python 3.13.16). In the end **no** compatibility
+> wrapper layer was created — the compatibility files such as
+> `bw_python_compat.hpp` mentioned in this page's migration steps do not
+> exist in the repository; the actual approach was point-by-point direct
+> replacement (Py2 symbols survive only in comments). This page is kept as
+> an API-mapping reference.
 
-BigWorld 大量使用 Python 2 C API，迁移到 Python 3 需要系统性替换。本文档提供完整的 API 映射和迁移策略。
+BigWorld makes heavy use of the Python 2 C API, and migrating to Python 3
+requires systematic replacement. This document provides the complete API
+mapping and migration strategy.
 
 </div>
 
-## 核心 API 变更
+## Core API changes
 
-### 字符串 API
+### String API
 
-Python 3 统一使用 Unicode 字符串，bytes 类型独立。
+Python 3 uses Unicode strings uniformly, with a separate bytes type.
 
-| Python 2 API | Python 3 API | 说明 |
+| Python 2 API | Python 3 API | Notes |
 |--------------|--------------|------|
-| `PyString_FromString()` | `PyUnicode_FromString()` | 创建字符串 |
-| `PyString_AsString()` | `PyUnicode_AsUTF8()` | 获取 C 字符串 |
-| `PyString_Size()` | `PyUnicode_GetLength()` | 获取长度 |
-| `PyString_Concat()` | `PyUnicode_Concat()` | 拼接字符串 |
-| `PyString_Format()` | `PyUnicode_Format()` | 格式化 |
+| `PyString_FromString()` | `PyUnicode_FromString()` | Create a string |
+| `PyString_AsString()` | `PyUnicode_AsUTF8()` | Get a C string |
+| `PyString_Size()` | `PyUnicode_GetLength()` | Get the length |
+| `PyString_Concat()` | `PyUnicode_Concat()` | Concatenate strings |
+| `PyString_Format()` | `PyUnicode_Format()` | Format |
 
-**迁移策略**:
+**Migration strategy**:
 
 ```cpp
 // Python 2
@@ -37,17 +42,17 @@ PyObject* name = PyString_FromString("player");
 PyObject* name = PyUnicode_FromString("player");
 ```
 
-### 整数 API
+### Integer API
 
-Python 3 统一使用 `PyLong` 类型。
+Python 3 uses the `PyLong` type uniformly.
 
-| Python 2 API | Python 3 API | 说明 |
+| Python 2 API | Python 3 API | Notes |
 |--------------|--------------|------|
-| `PyInt_FromLong()` | `PyLong_FromLong()` | 创建整数 |
-| `PyInt_AsLong()` | `PyLong_AsLong()` | 转换为 C long |
-| `PyInt_Check()` | `PyLong_Check()` | 类型检查 |
+| `PyInt_FromLong()` | `PyLong_FromLong()` | Create an integer |
+| `PyInt_AsLong()` | `PyLong_AsLong()` | Convert to C long |
+| `PyInt_Check()` | `PyLong_Check()` | Type check |
 
-**迁移策略**:
+**Migration strategy**:
 
 ```cpp
 // Python 2
@@ -57,16 +62,16 @@ PyObject* id = PyInt_FromLong(12345);
 PyObject* id = PyLong_FromLong(12345);
 ```
 
-### 模块初始化
+### Module initialization
 
-Python 3 使用新的模块初始化机制。
+Python 3 uses a new module-initialization mechanism.
 
-| Python 2 API | Python 3 API | 说明 |
+| Python 2 API | Python 3 API | Notes |
 |--------------|--------------|------|
-| `Py_InitModule()` | `PyModule_Create()` | 创建模块 |
-| `Py_InitModule3()` | `PyModule_Create2()` | 创建模块 (带状态) |
+| `Py_InitModule()` | `PyModule_Create()` | Create a module |
+| `Py_InitModule3()` | `PyModule_Create2()` | Create a module (with state) |
 
-**迁移策略**:
+**Migration strategy**:
 
 ```cpp
 // Python 2
@@ -91,22 +96,22 @@ static struct PyModuleDef module = {
 PyModule_Create(&module);
 ```
 
-### 异常处理
+### Exception handling
 
-| Python 2 API | Python 3 API | 说明 |
+| Python 2 API | Python 3 API | Notes |
 |--------------|--------------|------|
-| `PyErr_Format()` | `PyErr_Format()` | 无变化 |
-| `PyErr_SetString()` | `PyErr_SetString()` | 无变化 |
-| `PyErr_Occurred()` | `PyErr_Occurred()` | 无变化 |
+| `PyErr_Format()` | `PyErr_Format()` | No change |
+| `PyErr_SetString()` | `PyErr_SetString()` | No change |
+| `PyErr_Occurred()` | `PyErr_Occurred()` | No change |
 
-### Pickle 序列化
+### Pickle serialization
 
-| Python 2 API | Python 3 API | 说明 |
+| Python 2 API | Python 3 API | Notes |
 |--------------|--------------|------|
-| `cPickle.dumps()` | `pickle.dumps()` | 序列化 |
-| `cPickle.loads()` | `pickle.loads()` | 反序列化 |
+| `cPickle.dumps()` | `pickle.dumps()` | Serialize |
+| `cPickle.loads()` | `pickle.loads()` | Deserialize |
 
-**迁移策略**:
+**Migration strategy**:
 
 ```cpp
 // Python 2
@@ -116,9 +121,9 @@ PyObject* pickle = PyImport_ImportModule("cPickle");
 PyObject* pickle = PyImport_ImportModule("pickle");
 ```
 
-## 兼容层设计
+## Compatibility-layer design
 
-### 方案一：宏定义
+### Option 1: macros
 
 ```cpp
 // bw_python_compat.h
@@ -135,7 +140,7 @@ PyObject* pickle = PyImport_ImportModule("pickle");
 #endif
 ```
 
-### 方案二：内联函数
+### Option 2: inline functions
 
 ```cpp
 // bw_python_compat.hpp
@@ -160,81 +165,81 @@ inline const char* pyStringAsString(PyObject* o) {
 } // namespace BW
 ```
 
-**推荐方案二**，原因：
-- 类型安全
-- 调试友好
-- 可以添加空指针检查
+**Option 2 is recommended**, because:
+- it is type safe;
+- it is debug friendly;
+- null-pointer checks can be added.
 
-## 迁移步骤
+## Migration steps
 
-### 第一步：建立兼容层
+### Step 1: build the compatibility layer
 
-1. 在 `lib/pyscript/` 创建 `bw_python_compat.hpp`
-2. 在 `lib/script/` 创建 `bw_python_compat.hpp`
-3. 统一收口所有 Python API 调用
+1. Create `bw_python_compat.hpp` under `lib/pyscript/`
+2. Create `bw_python_compat.hpp` under `lib/script/`
+3. Funnel all Python API calls through it
 
-### 第二步：逐模块替换
+### Step 2: replace module by module
 
-按依赖顺序替换：
+Replace in dependency order:
 
-1. `lib/cstdmf` - 基础工具
-2. `lib/network` - 网络栈
-3. `lib/entitydef` - 实体定义
-4. `lib/pyscript` - Python 桥接
-5. `server/*` - 服务端进程
-6. `client/*` - 客户端
-7. `tools/*` - 工具
+1. `lib/cstdmf` — foundation utilities
+2. `lib/network` — network stack
+3. `lib/entitydef` — entity definitions
+4. `lib/pyscript` — Python bridge
+5. `server/*` — server processes
+6. `client/*` — client
+7. `tools/*` — tools
 
-### 第三步：测试验证
+### Step 3: test and validate
 
-每个模块替换后：
-1. 编译通过
-2. 单元测试通过
-3. 集成测试通过
+After each module replacement:
+1. It compiles
+2. Unit tests pass
+3. Integration tests pass
 
-## 常见陷阱
+## Common pitfalls
 
-### 1. 字符串编码
+### 1. String encoding
 
-Python 2 字符串是 bytes，Python 3 字符串是 Unicode。
+Python 2 strings are bytes; Python 3 strings are Unicode.
 
 ```cpp
-// 错误：假设字符串是 bytes
+// Wrong: assuming the string is bytes
 char* data = PyString_AsString(obj);
 
-// 正确：明确编码
+// Right: make the encoding explicit
 const char* utf8 = PyUnicode_AsUTF8(obj);
 ```
 
-### 2. 整数溢出
+### 2. Integer overflow
 
-Python 3 整数无上限，C long 有上限。
+Python 3 integers are unbounded; C long has a limit.
 
 ```cpp
-// 错误：不检查溢出
+// Wrong: no overflow check
 long id = PyLong_AsLong(obj);
 
-// 正确：检查溢出
+// Right: check for overflow
 if (PyErr_Occurred()) {
     return NULL;
 }
 long id = PyLong_AsLong(obj);
 ```
 
-### 3. 模块状态
+### 3. Module state
 
-Python 3 支持模块状态，Python 2 不支持。
+Python 3 supports module state; Python 2 does not.
 
 ```cpp
-// Python 3 模块状态
+// Python 3 module state
 typedef struct {
     int initialized;
     PyObject* config;
 } BigWorldModuleState;
 ```
 
-## 参考资料
+## References
 
-- [Python 3 迁移指南](https://docs.python.org/3/howto/cporting.html)
-- [Python C API 参考](https://docs.python.org/3/c-api/)
-- [BigWorld Python 绑定源码](/analysis/source-code-guide)
+- [Python 3 migration guide](https://docs.python.org/3/howto/cporting.html)
+- [Python C API reference](https://docs.python.org/3/c-api/)
+- [BigWorld Python binding source](/analysis/source-code-guide)

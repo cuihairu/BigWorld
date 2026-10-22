@@ -1,91 +1,153 @@
-# 热重载生产化设计
+# Hot-Reload Productionization Design
 
-> [English](hot-reload-productionization.en.md) | **中文**
+> **English** | [中文](hot-reload-productionization.md)
 
 <div class="arch-hero">
 
-`BigWorld.reloadScript` 当前定位为开发期工具（源码注释原话 "never in a production environment"）。本文档基于对 reload 链路的逐行审计，给出将其生产化所需的五件套设计：版本化 schema、双版本兼容窗口、dry-run、失败回滚、跨进程一致性屏障，以及分期落地路径与测试承载。
+`BigWorld.reloadScript` is currently a development-time tool (the source
+comment says verbatim "never in a production environment"). Based on a
+line-by-line audit of the reload chain, this document gives the five-piece
+design needed to productionize it: versioned schema, a dual-version
+compatibility window, dry-run, failure rollback, and a cross-process
+consistency barrier, together with a phased landing path and test carriers.
 
 </div>
 
-## 现状链路审计
+## Audit of the current chain
 
-以下事实均以 2026-10-15 的 dev 分支源码为证。
+The facts below are evidenced against the dev-branch source of 2026-10-15.
 
-### 调用链
+### Call chain
 
-| 步骤 | 代码位置 | 行为 |
+| Step | Code location | Behavior |
 |------|----------|------|
-| 入口 | `server/cellapp/cellapp.cpp:2974` | `BigWorld.reloadScript(fullReload=True)`，仅在本 cellapp 生效；跨组件由调用方自行保证 |
-| 1. 新解释器 | `cellapp.cpp:2329-2330` | `Script::createInterpreter` + `swapInterpreter`——重载在新解释器里进行，旧解释器仍在调用栈上存活 |
-| 2. 加载 | `cellapp.cpp:2332-2340` | fullReload → `EntityType::init(true)` 重新解析 entity defs 进 `s_newTypes_` 并打印 MD5 digest；否则 `EntityType::reloadScript()` 只重导入类；随后 `UserDataObjectType::load` |
-| 3. 换回 | `cellapp.cpp:2350-2351` | 换回旧解释器并销毁新解释器（新模块表已先拷贝进 `s_pNewModules_`） |
-| 4. 迁移 | `cellapp.cpp:2353-2362` | `EntityType::migrate`（模块换窗）→ `UserDataObjectType::migrate` → `ServerEntityMailBox::migrateMailBoxes` → 逐实体 `Entity::migrate()`（`MF_VERIFY` 包裹） |
-| 5. 收尾 | `cellapp.cpp:2364` | `EntityType::cleanupAfterReload(isFullReload)` 与迁移同一 tick 执行 |
-| 失败路径 | `cellapp.cpp:2368-2385` | 换回旧解释器；非 full reload 时 `EntityType::reloadScript(true)` 重试旧脚本（依赖 sys.modules 未被动过）；cleanup；销毁新解释器；返回 false |
+| Entry | `server/cellapp/cellapp.cpp:2974` | `BigWorld.reloadScript(fullReload=True)`; takes effect only in this cellapp; cross-component behavior is the caller's responsibility |
+| 1. New interpreter | `cellapp.cpp:2329-2330` | `Script::createInterpreter` + `swapInterpreter` — reload proceeds in the new interpreter while the old one stays alive on the call stack |
+| 2. Load | `cellapp.cpp:2332-2340` | fullReload → `EntityType::init(true)` re-parses entity defs into `s_newTypes_` and prints the MD5 digest; otherwise `EntityType::reloadScript()` only re-imports classes; then `UserDataObjectType::load` |
+| 3. Swap back | `cellapp.cpp:2350-2351` | Swap back to the old interpreter and destroy the new one (the new module table has already been copied into `s_pNewModules_`) |
+| 4. Migrate | `cellapp.cpp:2353-2362` | `EntityType::migrate` (module window) → `UserDataObjectType::migrate` → `ServerEntityMailBox::migrateMailBoxes` → per-entity `Entity::migrate()` (wrapped in `MF_VERIFY`) |
+| 5. Finalize | `cellapp.cpp:2364` | `EntityType::cleanupAfterReload(isFullReload)` executes in the same tick as migration |
+| Failure path | `cellapp.cpp:2368-2385` | Swap back to the old interpreter; for non-full reload, `EntityType::reloadScript(true)` retries the old scripts (relies on sys.modules being untouched); cleanup; destroy the new interpreter; return false |
 
-### 关键语义体
+### Key semantic bodies
 
-- **模块换窗**：`EntityType::migrate` 的 `isFullReload=false` 分支已提取为 `EntityType::swapInModules`（`entity_type.ipp`），2026-10-15 起在 cellapp 单测可断言。
-- **实体换类**：`Entity::migrate`（`server/cellapp/entity.cpp:4245`）——type-id 守卫（类型缺失或 id 不匹配 → 判 obsolete 返回 false）→ 换 `pEntityType_` 并经 `EntityType::old()` 挂旧类型 → `PyObject_SetAttrString(__class__)`（失败 → 恢复 `pEntityType_` 返回 false）→ 调脚本侧 `onMigrate`。
-- **双版本钩子**：`EntityType::old()` + `MethodDescription::supersede(CELL)` 使旧方法签名在窗口内继续可解析。
+- **Module window**: the `isFullReload=false` branch of `EntityType::migrate`
+  has been extracted to `EntityType::swapInModules` (`entity_type.ipp`),
+  assertable in cellapp unit tests since 2026-10-15.
+- **Entity class swap**: `Entity::migrate`
+  (`server/cellapp/entity.cpp:4245`) — type-id guard (missing type or id
+  mismatch → judged obsolete, return false) → swap `pEntityType_` and hang
+  the old type via `EntityType::old()` → `PyObject_SetAttrString(__class__)`
+  (failure → restore `pEntityType_`, return false) → call the script-side
+  `onMigrate`.
+- **Dual-version hook**: `EntityType::old()` +
+  `MethodDescription::supersede(CELL)` keep old method signatures resolvable
+  inside the window.
 
-## 失败模式清单
+## Failure-mode list
 
-| # | 模式 | 证据 | 后果 |
+| # | Mode | Evidence | Consequence |
 |---|------|------|------|
-| F1 | release 下实体迁移失败被静默吞掉 | `MF_VERIFY` 在 `_RELEASE` 展开为 `(exp)`（`cstdmf/debug.hpp:428`），`cellapp.cpp:2361` 的返回值无人消费 | 该实体留在旧类，而 `sys.modules`/`s_curTypes_` 已是新版本——半迁移态；dev 构建则直接 abort 在 reload 中途 |
-| F2 | `onMigrate` 脚本异常不算失败 | `entity.cpp:4297` `Script::call(..., okIfFnNull=true)` 仅打印异常，`migrate()` 仍返回 true | 脚本级半迁移，且无失败计数 |
-| F3 | 双版本窗口长度为零 | `cleanupAfterReload(isFullReload)` 在迁移同一 tick 调用（`cellapp.cpp:2364`），立刻 `old(NULL)` 断链 | `supersede` 机制实际只在迁移循环内有效，边界上的在途旧签名调用没有缓冲期 |
-| F4 | 无跨进程一致性 | `cellapp.cpp:2944-2946` 文档明示"用户负责在所有 server 组件上调用"；digest 已计算（`entity_type.cpp:280-287`）但只打印、不比对、不传播 | cellapp 已迁移而 baseapp/dbmgr 仍旧 defs 时，跨进程 type-id 漂移 |
-| F5 | 自定义数据类型实例不迁移 | `cellapp.cpp:2951-2960` 文档要求用户手工逐实例重指 `__class__` | 依赖调用方脚本正确性，无引擎侧保障 |
-| F6 | 批量迁移完成钩子是死代码 | `Entity::migratedAll`（`entity.hpp:284` 声明、`entity.cpp:4308` 定义）全仓无调用方 | `onMigratedAll` 永不触发 |
-| F7 | 回滚后旧描述仍处于 superseded 态 | `entity.cpp:4267` `pNewType->old(pOldType)` 先于 `__class__` 尝试（`entity.cpp:4275`）执行；`entity_type.cpp:168-185` 首次调用即无条件对旧描述 `supersede(CELL)`（全部 cell 方法改名 `old_` 前缀、清名重建 map）；`entity.cpp:4287` `__class__` 失败回滚 `pEntityType_ = pOldType`，而全仓无 un-supersede（批次 33 实测：`find("cellTick")`→NULL、`find("old_cellTick")` 可达、`internalMethod`/`exposedMethod` 下标派发不受影响、digest 随改名漂移） | 回滚"成功"的实体按名字的 mailbox 方法查找全断（`mailbox.cpp:122/240` `findMethod` 返回 NULL→脚本侧报错），按 msgID 的暴露派发仍活——半残实体；第 4 节回滚设计必须连 un-supersede（或以窗口期重解析补偿），且 schema digest 必须在 supersede 前采集 |
+| F1 | In release, entity-migration failure is silently swallowed | `MF_VERIFY` expands to `(exp)` under `_RELEASE` (`cstdmf/debug.hpp:428`); the return value at `cellapp.cpp:2361` is consumed by nobody | The entity stays on its old class while `sys.modules`/`s_curTypes_` are already the new version — a half-migrated state; a dev build instead aborts mid-reload |
+| F2 | An `onMigrate` script exception does not count as failure | At `entity.cpp:4297` `Script::call(..., okIfFnNull=true)` only prints the exception; `migrate()` still returns true | Script-level half-migration with no failure count |
+| F3 | The dual-version window has zero length | `cleanupAfterReload(isFullReload)` is called in the same tick as migration (`cellapp.cpp:2364`) and immediately breaks the link with `old(NULL)` | The `supersede` mechanism is effectively valid only inside the migration loop; in-flight old-signature calls at the boundary have no grace period |
+| F4 | No cross-process consistency | `cellapp.cpp:2944-2946` documents explicitly that "the user is responsible for calling on all server components"; the digest is computed (`entity_type.cpp:280-287`) but only printed, never compared or propagated | When cellapp has migrated but baseapp/dbmgr still use old defs, cross-process type-id drift |
+| F5 | Custom data-type instances are not migrated | `cellapp.cpp:2951-2960` requires the user to manually repoint `__class__` per instance | Depends on the caller's scripts being correct; no engine-side guarantee |
+| F6 | The batch-migration-complete hook is dead code | `Entity::migratedAll` (declared `entity.hpp:284`, defined `entity.cpp:4308`) has no caller anywhere in the tree | `onMigratedAll` never fires |
+| F7 | After rollback the old description is still superseded | At `entity.cpp:4267` `pNewType->old(pOldType)` runs before the `__class__` attempt (`entity.cpp:4275`); at `entity_type.cpp:168-185` the first call unconditionally `supersede(CELL)`s the old description (all cell methods are renamed with an `old_` prefix and the name map is rebuilt); on `__class__` failure `entity.cpp:4287` rolls back `pEntityType_ = pOldType`, but nothing in the tree un-supersedes (batch 33 measured: `find("cellTick")`→NULL, `find("old_cellTick")` reachable, `internalMethod`/`exposedMethod` index dispatch unaffected, digest drifts with the renames) | A "successfully" rolled-back entity loses all by-name mailbox method lookups (`mailbox.cpp:122/240` `findMethod` returns NULL → script-side error), while exposed dispatch by msgID still works — a half-broken entity; the rollback design in §4 must also un-supersede (or compensate with window-period re-resolution), and the schema digest must be captured before supersede |
 
-## 设计
+## Design
 
-### 1. 版本化 schema
+### 1. Versioned schema
 
-以既有 `entityDescriptionMap` MD5 digest 作为 schema 版本号（不新造版本体系）：
+Use the existing `entityDescriptionMap` MD5 digest as the schema version
+number (do not invent a new versioning scheme):
 
-- digest 从"只打印"改为"可查询"：挂 cellapp watcher（只读），供屏障与人工核验。
-- `BigWorld.reloadScript` 增加可选 `expectedDigest` 参数：传入时与本次加载结果比对，不匹配直接判失败（走既有失败路径，零迁移）。
+- change the digest from "printed only" to "queryable": mount a (read-only)
+  cellapp watcher for the barrier and manual verification;
+- `BigWorld.reloadScript` gains an optional `expectedDigest` parameter: when
+  supplied it is compared against this load's result; a mismatch is judged a
+  failure directly (existing failure path, zero migration).
 
-### 2. 双版本兼容窗口
+### 2. Dual-version compatibility window
 
-- `cleanupAfterReload` 拆两段：迁移 tick 只清 `s_pNewModules_`；`pOldSelf_` 断链改为延迟——由 tick 钩子在配置的窗口（秒或 tick 数，默认 0 保持现行为）后执行。
-- 窗口内 `EntityType::old()` 链有效；注意 F7 实测边界：supersede 之后按名字的查找已断（只剩 `old_` 前缀名），窗口只保得住**下标/msgID 派发**——按名补解析需另设计。窗口到期统一断链并告警残留计数。
+- split `cleanupAfterReload` into two phases: the migration tick only clears
+  `s_pNewModules_`; the `pOldSelf_` link break becomes deferred — a tick hook
+  executes it after a configured window (seconds or tick count; default 0
+  preserves current behavior).
+- Inside the window the `EntityType::old()` chain is valid; note the measured
+  F7 boundary: after supersede, by-name lookups are already broken (only the
+  `old_`-prefixed names remain), so the window preserves only
+  **index/msgID dispatch** — by-name re-resolution needs a separate design.
+  On window expiry the link is broken uniformly and the residual count is
+  alarmed.
 
 ### 3. dry-run
 
-- reload 增加模式位：只执行步骤 1–2（新解释器内 init/reloadScript + UDO load + 全类型 import），然后直接销毁新解释器、不做任何 migrate。
-- 本质是复用既有失败路径的"零接触"性质：旧解释器从未被换出，风险为零；产出口径为"将加载成功的类型集 + digest + 预计失效类型清单"。
-- 这是 F1/F4 前置的廉价探测：先 dry-run 全组件，digest 一致且无失效类型才真跑。
+- reload gains a mode bit: execute only steps 1–2 (init/reloadScript in the
+  new interpreter + UDO load + full-type import), then destroy the new
+  interpreter directly without any migrate.
+- It is essentially reuse of the existing failure path's "zero-touch"
+  property: the old interpreter is never swapped out, so risk is zero; output
+  is "the set of types that loaded successfully + digest + the list of types
+  expected to become invalid".
+- This is the cheap probe preceding F1/F4: dry-run all components first; only
+  reload for real once digests agree and no types become invalid.
 
-### 4. 失败回滚
+### 4. Failure rollback
 
-- 逐实体 `Entity::migrate` 循环改为**收集-决策**：失败（F1 的两类失败 + F2 的脚本异常计入）先记录并继续或即停，由 reload 请求的策略位决定；返回值不再经 `MF_VERIFY`。
-- 已迁移实体的回滚 = `Entity::migrate` 的逆操作（`pEntityType_` 与 `__class__` 对调回旧类型，旧类型经 `old()` 链仍可达）。注意 F7：逆操作必须同时回退 `supersede` 的改名（否则按名查找仍断）；版本化 schema 的 digest 采集点也必须定在 supersede 之前。
-- 决策默认"即停+回滚"，保 L34 验收"失败无半迁移状态"。
+- The per-entity `Entity::migrate` loop becomes **collect-decide**: failures
+  (both F1 failure classes plus the F2 script exceptions) are recorded and
+  the loop continues or stops immediately according to a policy bit in the
+  reload request; the return value no longer goes through `MF_VERIFY`.
+- Rollback of already-migrated entities = the inverse of `Entity::migrate`
+  (swap `pEntityType_` and `__class__` back to the old type, still reachable
+  through the `old()` chain). Note F7: the inverse must also revert the
+  `supersede` renames (otherwise by-name lookups stay broken); the
+  versioned-schema digest capture point must likewise be before supersede.
+- The default decision is "stop immediately + roll back", preserving the
+  L34 acceptance criterion "no half-migrated state on failure".
 
-### 5. 跨进程一致性屏障
+### 5. Cross-process consistency barrier
 
-分两期：
+In two phases:
 
-- **P1（无新 RPC）**：dry-run + `expectedDigest` 参数把屏障放在调用方——跨组件编排脚本先全组件 dry-run 收 digest，一致才逐组件真 reload。引擎只提供原语。
-- **P2（引擎侧）**：cellappmgr 广播 reload 请求、收集各组件 ack（digest+就绪位）后统一下发；需要 cellappmgr/管理面改动，独立立项。
+- **P1 (no new RPC)**: dry-run + the `expectedDigest` parameter place the
+  barrier on the caller — a cross-component orchestration script dry-runs all
+  components first, collects digests, and only reloads each component for
+  real once they agree. The engine provides only primitives.
+- **P2 (engine side)**: cellappmgr broadcasts the reload request, collects
+  each component's ack (digest + readiness bit), then issues a unified
+  go-ahead; this needs cellappmgr/control-plane changes and is a separate
+  project.
 
-## 分期落地路径
+## Phased landing path
 
-| 期 | 内容 | 测试承载 | 状态 |
+| Phase | Content | Test carrier | Status |
 |----|------|----------|------|
-| P0 | 模块换窗语义可测（`swapInModules` 提取） | cellapp/unit_test（已落地，2 用例） | 2026-10-15 完成 |
-| P1 | dry-run 模式 + digest 可查询 + `expectedDigest` | prepare 阶段要跑 `EntityType::init`（BWResource + entity defs + 脚本导入），现 cellapp/unit_test harness 不可达——与 P2 同源承载缺口，需 C 档先行或集群物料 | 待做（承载缺口） |
-| P2 | 失败收集-决策 + 实体级回滚 | 需 Entity 运行时承载（C 档缺口，见下） | 待做 |
-| P3 | 双版本兼容窗口 | 需 cellapp tick 级承载 | 待做 |
-| P4 | 引擎侧屏障（P2 期） | 需集群黑盒链（C 档） | 待做 |
+| P0 | Module-window semantics testable (`swapInModules` extraction) | cellapp/unit_test (landed, 2 cases) | Done 2026-10-15 |
+| P1 | dry-run mode + queryable digest + `expectedDigest` | The prepare phase must run `EntityType::init` (BWResource + entity defs + script import), unreachable in the current cellapp/unit_test harness — the same carrier gap as P2; needs the C-tier item first or cluster materials | Todo (carrier gap) |
+| P2 | Failure collect-decide + entity-level rollback | Needs an Entity-runtime carrier (C-tier gap; see below) | Todo |
+| P3 | Dual-version compatibility window | Needs a cellapp tick-level carrier | Todo |
+| P4 | Engine-side barrier (the P2 period) | Needs the cluster black-box chain (C tier) | Todo |
 
-## 验收映射（对应 todo L34）
+## Acceptance mapping (corresponds to todo L34)
 
-- 「迁移路径测试覆盖 `Entity::migrate` 语义保持」→ P2，承载缺口：`Entity::migrate` 需要 Entity 实例 + 脚本类型，现 cellapp/unit_test 只编入低耦合 TU（C 档"server 侧 reload 迁移语义测试承载"同源）。
-- 「失败无半迁移状态」→ 加载期失败今天已天然无半迁移（失败路径不触发 migrate）；迁移期半迁移由 P2 的收集-决策+回滚关闭。**批次 36（2026-10-15）起该性质有测试承载**：`ReloadScript::planReload`（`reload_script_plan.hpp`）把 `CellApp::reloadScript` 的动作序列做成数据，失败尾断言不含任何 `MIGRATE_*`，成功尾断言 scratch 解释器先销毁再 migrate、cleanup 最后（7 用例，cellapp_test）。同一提取如实上报 **F8**——全量重载失败时 `EntityType::init(true)`（`entity_type.cpp:262`）已调 `DataType::clearStaticsForReload()` 清空 `s_singletonMap_` 而失败路径不重建，`planReload` 以 `dataTypesWiped` 字段标出；迁移期半迁移与 F8 同属 P2 承载缺口。
+- "Migration path tests cover `Entity::migrate` semantic preservation" → P2;
+  carrier gap: `Entity::migrate` needs an Entity instance plus script types,
+  and the current cellapp/unit_test only compiles in low-coupling TUs (same
+  source as the C-tier "server-side reload migration semantic test carrier").
+- "No half-migrated state on failure" → a load-time failure today is naturally
+  free of half-migration (the failure path never triggers migrate);
+  migration-time half-migration is closed by P2's collect-decide + rollback.
+  **Since batch 36 (2026-10-15) this property has a test carrier**:
+  `ReloadScript::planReload` (`reload_script_plan.hpp`) turns
+  `CellApp::reloadScript`'s action sequence into data; the failure tail
+  asserts no `MIGRATE_*` appears, and the success tail asserts the scratch
+  interpreter is destroyed before migrate with cleanup last (7 cases,
+  cellapp_test). The same extraction truthfully reports **F8** — on full
+  reload failure `EntityType::init(true)` (`entity_type.cpp:262`) has already
+  called `DataType::clearStaticsForReload()` to clear `s_singletonMap_`, and
+  the failure path does not rebuild it; `planReload` flags this with the
+  `dataTypesWiped` field. Migration-time half-migration and F8 share the P2
+  carrier gap.

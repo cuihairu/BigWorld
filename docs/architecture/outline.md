@@ -1,100 +1,104 @@
-# 完整专题大纲
+# Complete Topic Outline
 
-> [English](outline.en.md) | **中文**
+> **English** | [中文](outline.md)
 
 <div class="arch-hero">
 
-这是后续重写 `docs/` 的完整地图。所有专题都按“源码事实 -> 调用链 -> 源码取舍 -> 验证重点 -> 本章边界”的结构展开。
+This is the complete map for the subsequent `docs/` rewrite. Every topic
+follows the same structure: source facts, call chain, source trade-offs,
+verification focus, and chapter boundary.
 
 </div>
 
-## 第一组：基础架构
+## Group 1: Foundation architecture
 
-1. [研究方法与证据分级](/architecture/research-method)
-2. [进程拓扑与职责切分](/architecture/process-topology)
-3. [主循环、Tick 与事件分发](/architecture/event-loop)
-4. [网络 I/O 模型选择](/architecture/network-io-model)
-5. [Mercury 协议与可靠 UDP](/architecture/mercury-reliable-udp)
-6. [通信抽象、接口定义与组件间 RPC](/architecture/communication-rpc)
-7. [收发路径、背压与故障注入](/architecture/network-backpressure-fault-injection)
+1. [Research method and evidence grading](/architecture/research-method)
+2. [Process topology and responsibility split](/architecture/process-topology)
+3. [Main loop, ticks, and event dispatch](/architecture/event-loop)
+4. [Network I/O model selection](/architecture/network-io-model)
+5. [Mercury protocol and reliable UDP](/architecture/mercury-reliable-udp)
+6. [Communication abstraction, interface definitions, and inter-component RPC](/architecture/communication-rpc)
+7. [Send/receive paths, backpressure, and fault injection](/architecture/network-backpressure-fault-injection)
 
-## 第二组：游戏状态模型
+## Group 2: Game-state model
 
-8. [实体模型：Base / Cell / Client 三层语义](/architecture/entity-model)
-9. [EntityDef、属性、方法与协议生成](/architecture/entitydef-contract-generation)
-10. [序列化与反序列化：BinaryStream、DataType、DataDescription](/architecture/serialization-entitydef)
-11. [AOI、Witness、Ghost 与带宽调度](/architecture/aoi-witness-ghost)
-12. [空间划分、Cell 分区与负载均衡](/architecture/cell-partition-load-balance)
-13. [实体迁移、Cell 退休与跨进程状态移动](/architecture/entity-migration-offload)
-14. [实体生命周期状态机](/architecture/entity-lifecycle-state-machine)
+8. [Entity model: Base / Cell / Client semantics](/architecture/entity-model)
+9. [EntityDef, properties, methods, and protocol generation](/architecture/entitydef-contract-generation)
+10. [Serialization and deserialization: BinaryStream, DataType, DataDescription](/architecture/serialization-entitydef)
+11. [AOI, Witness, Ghost, and bandwidth scheduling](/architecture/aoi-witness-ghost)
+12. [Space partitioning, Cell partitioning, and load balancing](/architecture/cell-partition-load-balance)
+13. [Entity migration, Cell retirement, and cross-process state movement](/architecture/entity-migration-offload)
+14. [Entity lifecycle state machine](/architecture/entity-lifecycle-state-machine)
 
-## 第三组：运行时工程
+## Group 3: Runtime engineering
 
-15. [登录、会话与 Proxy 接管](/architecture/login-session-proxy-flow)
-16. [线程架构、后台任务与 Python GIL](/architecture/threading-background-tasks)
-17. [时间系统、Timer、GameTime 与测试可控时间](/architecture/testing-time-control)
-18. [脚本热更新、解释器切换与实体迁移](/architecture/hot-reload-script-migration)
-19. [持久化、一致性与数据库线程模型](/architecture/persistence-db-model)
-20. [动态扩展、控制面与容量治理](/architecture/scaling-fault-tolerance)
-21. [Reviver、machined 与故障恢复边界](/architecture/machined-control-plane)
+15. [Login, sessions, and Proxy takeover](/architecture/login-session-proxy-flow)
+16. [Threading, background tasks, and the Python GIL](/architecture/threading-background-tasks)
+17. [Time system, timers, GameTime, and controllable test time](/architecture/testing-time-control)
+18. [Script hot reload, interpreter switching, and entity migration](/architecture/hot-reload-script-migration)
+19. [Persistence, consistency, and database threading model](/architecture/persistence-db-model)
+20. [Dynamic scaling, control plane, and capacity governance](/architecture/scaling-fault-tolerance)
+21. [Reviver, machined, and failure-recovery boundaries](/architecture/machined-control-plane)
 
-## 第四组：工程质量与源码边界
+## Group 4: Engineering quality and source boundaries
 
-22. [测试体系、故障注入与覆盖边界](/architecture/testing-fault-injection-coverage)
-23. [安全、限流、加密与攻击面](/architecture/security-rate-limit)
-24. [Watcher、Profiler、日志与可观测性](/architecture/observability-watcher-profiler-logs)
-25. [内存、对象生命周期与资源管理](/architecture/memory-lifecycle)
-26. [构建、平台与依赖治理](/architecture/build-platform-dependencies)
-27. [MMO 架构边界对比](/architecture/modern-mmo-comparison)
+22. [Testing, fault injection, and coverage boundaries](/architecture/testing-fault-injection-coverage)
+23. [Security, rate limiting, encryption, and attack surface](/architecture/security-rate-limit)
+24. [Watcher, Profiler, logging, and observability](/architecture/observability-watcher-profiler-logs)
+25. [Memory, object lifetime, and resource management](/architecture/memory-lifecycle)
+26. [Build, platforms, and dependency governance](/architecture/build-platform-dependencies)
+27. [MMO architecture boundary comparison](/architecture/modern-mmo-comparison)
 
-## 已明确要覆盖的问题
+## Questions explicitly covered
 
 <div class="decision-grid">
   <div class="decision-card">
-    <h3>网络模型</h3>
-    <p>select、poll、LT epoll、ET epoll、io_uring、recvmmsg/sendmmsg、SO_REUSEPORT、AF_XDP/DPDK。</p>
+    <h3>Network model</h3>
+    <p>select, poll, LT epoll, ET epoll, io_uring, recvmmsg/sendmmsg, SO_REUSEPORT, and AF_XDP/DPDK.</p>
   </div>
   <div class="decision-card">
-    <h3>线程模型</h3>
-    <p>单 Reactor 主线程、后台任务、BaseApp WorkerThread、Python GIL、actor-like mailbox 与实体调度边界。</p>
+    <h3>Threading model</h3>
+    <p>Single-reactor main thread, background tasks, BaseApp WorkerThread, Python GIL, actor-like mailboxes, and entity scheduling boundaries.</p>
   </div>
   <div class="decision-card">
-    <h3>热更新</h3>
-    <p>新解释器加载、旧解释器迁移、EntityType/UDO/Mailbox/实体迁移、生产环境边界。</p>
+    <h3>Hot updates</h3>
+    <p>New-interpreter loading, old-interpreter migration, EntityType/UDO/Mailbox/entity migration, and production boundaries.</p>
   </div>
   <div class="decision-card">
-    <h3>测试与时间</h3>
-    <p>unit_test、网络故障注入、Timer 驱动、GameTime、虚拟时钟缺口和可重复测试边界。</p>
+    <h3>Testing and time</h3>
+    <p>unit_test, network fault injection, timer driving, GameTime, virtual-clock gaps, and repeatable-test boundaries.</p>
   </div>
   <div class="decision-card">
-    <h3>登录与会话</h3>
-    <p>LoginApp、DBApp、BaseAppMgr、BaseApp、Proxy、SessionKey、PendingLogins 和 NAT/firewall 处理。</p>
+    <h3>Login and sessions</h3>
+    <p>LoginApp, DBApp, BaseAppMgr, BaseApp, Proxy, SessionKey, PendingLogins, and NAT/firewall handling.</p>
   </div>
   <div class="decision-card">
-    <h3>实体生命周期</h3>
-    <p>Base-only、pending cell、real、ghost、offload、onload、destroy、restore 和 zombie ghost 状态。</p>
+    <h3>Entity lifecycle</h3>
+    <p>Base-only, pending cell, real, ghost, offload, onload, destroy, restore, and zombie-ghost states.</p>
   </div>
   <div class="decision-card">
-    <h3>通信与序列化</h3>
-    <p>Mercury Interface、Bundle、BinaryStream、DataType、EntityDescription、协议兼容与 EntityDef 契约。</p>
+    <h3>Communication and serialization</h3>
+    <p>Mercury Interface, Bundle, BinaryStream, DataType, EntityDescription, protocol compatibility, and the EntityDef contract.</p>
   </div>
   <div class="decision-card">
-    <h3>动态扩展</h3>
-    <p>Manager 接纳新 App、Cell 负载均衡、实体迁移、Reviver 恢复和状态迁移边界。</p>
+    <h3>Dynamic scaling</h3>
+    <p>Manager admission of new apps, Cell load balancing, entity migration, Reviver recovery, and state-migration boundaries.</p>
   </div>
 </div>
 
-## 每章固定输出
+## Fixed output for every chapter
 
-每章必须包含：
+Every chapter must contain:
 
-- 源码入口
-- 关键调用链
-- 线程/进程归属
-- 数据结构或状态机
-- 源码取舍
-- 源码边界
-- 验证重点
-- 本章边界
+- Source entry points
+- Key call chains
+- Thread/process ownership
+- Data structures or state machines
+- Source trade-offs
+- Source boundaries
+- Verification focus
+- Chapter boundary
 
-如果某项在源码中不存在，文档必须明确写“不存在或未确认”，并解释可能原因，而不是等读者指出后再补。
+When an item does not exist in the source, the document must explicitly say
+that it “does not exist or is unconfirmed” and explain plausible reasons,
+rather than waiting for readers to identify the omission.

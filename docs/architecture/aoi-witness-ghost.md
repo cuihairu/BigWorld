@@ -1,70 +1,97 @@
-# AOI、Witness 与 Ghost
+# AOI, Witness and Ghost
 
-> [English](aoi-witness-ghost.en.md) | **中文**
+> **English** | [中文](aoi-witness-ghost.md)
 
 <div class="arch-hero">
 
-BigWorld 的 AOI 不是简单的“半径内广播”。Witness 维护客户端视野、带宽预算、实体别名、可靠位置更新和 SpaceData 同步；Ghost 维护跨 Cell 边界副本，为 AOI 和实体迁移提供连续性。
+BigWorld's AOI is not a simple "broadcast to everything within a radius". The
+Witness maintains the client's view, bandwidth budgets, entity aliases, reliable
+position updates and SpaceData sync; the Ghost maintains a copy across Cell
+boundaries, providing continuity for AOI and entity migration.
 
 </div>
 
-## 先给结论
+## Conclusion First
 
-AOI、Witness、Ghost 的关系：
+How AOI, Witness and Ghost relate:
 
-- `Witness` 附着在有客户端的 real entity 上，负责管理该客户端的 Area of Interest。
-- `AoITrigger` 把 RangeList 的进入/离开事件转换成 `Witness::addToAoI()` / `removeFromAoI()`。
-- `EntityCache` 记录某个实体在该 Witness 视野内的客户端发送状态，不是普通集合元素。
-- 客户端看到新实体不是一次性 create，而是 `enterAoI -> requestEntityUpdate -> createEntity` 的两阶段握手。
-- Witness 更新队列按 priority heap、AoIUpdateScheme、packet budget 和 bandwidth deficit 调度。
-- `Ghost` 是相邻 CellApp 上的实体副本，用于跨 Cell AOI、offload 和恢复。
-- `EntityGhostMaintainer` 周期性维护 ghost，并判断 real entity 是否应该 offload 到其他 Cell。
+- A `Witness` attaches to a real entity that has a client, and manages that
+  client's Area of Interest.
+- `AoITrigger` converts RangeList enter/leave events into
+  `Witness::addToAoI()` / `removeFromAoI()`.
+- `EntityCache` records the per-client send state of one entity inside that
+  Witness's view; it is not a plain set element.
+- A client does not see a new entity in one create - it is a two-stage
+  handshake: `enterAoI -> requestEntityUpdate -> createEntity`.
+- The Witness update queue is scheduled by priority heap, AoIUpdateScheme,
+  packet budget and bandwidth deficit.
+- A `Ghost` is a copy of an entity on a neighbouring CellApp, used for
+  cross-Cell AOI, offload and recovery.
+- `EntityGhostMaintainer` periodically maintains ghosts and decides whether a
+  real entity should be offloaded to another Cell.
 
-关键源码：
+Key sources:
 
-- `Witness` 注释说明它在客户端附着到实体时创建，主要活动是管理 AoI list，见 [witness.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/witness.hpp:21)。
-- `Entity` 注释说明 AoI 使用 x/z 等长范围和 hysteresis，进入 AoI 和离开 AoI 使用不同半径，见 [entity.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity.hpp:106)。
-- `Witness` 维护 `aoiMap_`、`entityQueue_`、`aoiRadius_`、`aoiHyst_`、`pAoIRoot_`、`freeAliases_` 和可靠位置历史，见 [witness.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/witness.hpp:263)。
-- `EntityCache` 的 flags 包含 `ENTER_PENDING`、`REQUEST_PENDING`、`CREATE_PENDING`、`GONE`、`WITHHELD`、`REFRESH`，见 [entity_cache.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity_cache.hpp:104)。
-- `AoITrigger::triggerEnter()` / `triggerLeave()` 在 [witness.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/witness.cpp:3586)。
-- `Witness::update()` 的发送队列主循环在 [witness.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/witness.cpp:1088)。
-- `EntityGhostMaintainer::check()` 先检查 offload，再标记/创建/删除 haunts，见 [entity_ghost_maintainer.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity_ghost_maintainer.cpp:42)。
+- The `Witness` comment says it is created when a client attaches to an entity,
+  and that its main activity is managing the AoI list, see
+  witness.hpp.
+- The `Entity` comment says the AoI uses an equal-length range on x and z plus
+  hysteresis, with different radii for entering and leaving the AoI, see
+  entity.hpp.
+- `Witness` maintains `aoiMap_`, `entityQueue_`, `aoiRadius_`, `aoiHyst_`,
+  `pAoIRoot_`, `freeAliases_` and the reliable position history, see
+  witness.hpp.
+- The `EntityCache` flags include `ENTER_PENDING`, `REQUEST_PENDING`,
+  `CREATE_PENDING`, `GONE`, `WITHHELD`, `REFRESH`, see
+  entity_cache.hpp.
+- `AoITrigger::triggerEnter()` / `triggerLeave()` are at
+  witness.cpp.
+- The send-queue main loop of `Witness::update()` is at
+  witness.cpp.
+- `EntityGhostMaintainer::check()` checks offload first, then marks, creates and
+  deletes haunts, see
+  entity_ghost_maintainer.cpp.
 
-## Witness 是什么
+## What a Witness Is
 
-Witness 不是客户端连接本身。客户端连接主要在 Proxy/BaseApp；Witness 在 CellApp 上，代表“这个玩家实体看到什么”。
+A Witness is not the client connection itself. The client connection mostly
+lives in Proxy/BaseApp; the Witness lives on CellApp and represents "what this
+player entity can see".
 
-`Witness` 的职责包括：
+The responsibilities of `Witness` include:
 
-- 维护 AoI 内实体集合。
-- 决定实体 enter/create/leave 消息。
-- 管理实体 ID alias，减少客户端包体。
-- 发送 SpaceData 变化。
-- 发送自身详细位置和其他实体 volatile 更新。
-- 根据带宽预算调度更新。
-- 处理手动 AoI、withhold、position detailed 等脚本控制。
+- Maintaining the set of entities inside the AoI.
+- Deciding the entity enter/create/leave messages.
+- Managing entity ID aliases to shrink client packets.
+- Sending SpaceData changes.
+- Sending its own detailed position and other entities' volatile updates.
+- Scheduling updates against the bandwidth budget.
+- Handling script-driven control: manual AoI, withhold, position detailed.
 
-源码见 [witness.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/witness.hpp:91)。
+Source: witness.hpp.
 
-`Witness` 构造时还会做几件关键初始化：
+The `Witness` constructor also performs a few key initialisations:
 
-- 使用 `defaultAoIRadius` 作为初始 AoI 半径。
-- 把 `pAoIRoot_` 默认设为本实体的 `RangeListNode`。
-- 初始化 `freeAliases_`，并保留 `NO_ID_ALIAS`。
-- 向 `CellApp` 注册 witness。
-- 先向 Proxy 发送首个 `tickSync`。
-- 如果是初始创建 real，则发送 `createCellPlayer` 给客户端。
+- Uses `defaultAoIRadius` as the initial AoI radius.
+- Sets `pAoIRoot_` by default to this entity's own `RangeListNode`.
+- Initialises `freeAliases_`, keeping `NO_ID_ALIAS` in reserve.
+- Registers the witness with `CellApp`.
+- Sends the first `tickSync` to Proxy.
+- If this is the initial real creation, sends `createCellPlayer` to the client.
 
-源码见 [witness.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/witness.cpp:124)。
+Source: witness.cpp.
 
-## AoI 的 hysteresis
+## AoI Hysteresis
 
-**概述：** AoI 使用 hysteresis（滞后）机制避免边界抖动。实体进入 AoI 使用内层半径，离开 AoI 使用外层半径。这防止实体在边界来回移动时反复触发 enter/leave 消息。
+**Overview:** the AoI uses hysteresis to avoid flapping at the boundary.
+Entities enter the AoI on the inner radius and leave it on the outer radius.
+This stops entities that hover on the boundary from repeatedly triggering
+enter/leave messages.
 
-**源码入口：** [entity.hpp:106](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity.hpp:106)
+**Source entry:** entity.hpp:106
 
 ```cpp
-// entity.hpp:106 - AoI 注释
+// entity.hpp:106 - AoI comment
 /*
  *  Area of Interest, or "AoI" is an important concept for all BigWorld
  *  entities which belong to clients. The AoI of an entity is the area around
@@ -77,136 +104,170 @@ Witness 不是客户端连接本身。客户端连接主要在 Proxy/BaseApp；W
  */
 ```
 
-**流程图：**
+**Flowchart:**
 
-<MermaidDiagram title="AoI Hysteresis 机制">
+<MermaidDiagram title="AoI hysteresis mechanism">
 flowchart TD
-    A[实体移动] --> B{进入内层 AoI?}
-    B -- 是 --> C[触发 enterAoI]
-    C --> D[发送 enter/create 消息]
-    D --> E[加入 Witness AoI 列表]
-    E --> F{移动到外层 AoI 外?}
-    F -- 否 --> E
-    F -- 是 --> G[触发 leaveAoI]
-    G --> H[发送 leave/delete 消息]
-    H --> I[从 Witness AoI 列表移除]
+    A[Entity moves] --> B{Inside inner AoI?}
+    B -- yes --> C[Trigger enterAoI]
+    C --> D[Send enter/create message]
+    D --> E[Add to Witness AoI list]
+    E --> F{Moved outside outer AoI?}
+    F -- no --> E
+    F -- yes --> G[Trigger leaveAoI]
+    G --> H[Send leave/delete message]
+    H --> I[Remove from Witness AoI list]
 </MermaidDiagram>
 
-**详细讲解：**
+**Detailed walkthrough:**
 
-1. **内层半径**：`aoiRadius_` 定义 AoI 内层范围。实体进入这个范围时，触发 `enterAoI`。
+1. **Inner radius**: `aoiRadius_` defines the inner AoI range. When an entity
+   enters it, `enterAoI` is triggered.
 
-2. **外层半径**：`aoiRadius_ + aoiHyst_` 定义 AoI 外层范围。实体离开外层范围时，才触发 `leaveAoI`。
+2. **Outer radius**: `aoiRadius_ + aoiHyst_` defines the outer AoI range. Only
+   when an entity leaves the outer range is `leaveAoI` triggered.
 
-3. **滞后效果**：进入和离开使用不同半径，避免边界抖动。例如：
-   - 内层半径 50m，外层半径 60m
-   - 实体 A 在 49m 处进入 AoI
-   - 实体 A 移动到 55m 处（仍在 AoI 内）
-   - 实体 A 移动到 61m 处（离开 AoI）
-   - 实体 A 移动到 59m 处（仍在 AoI 外，因为在外层范围内）
-   - 实体 A 移动到 51m 处（重新进入 AoI）
+3. **Hysteresis effect**: entering and leaving use different radii, which
+   prevents boundary flapping. For example:
+   - inner radius 50m, outer radius 60m
+   - entity A enters the AoI at 49m
+   - entity A moves to 55m (still inside the AoI)
+   - entity A moves to 61m (leaves the AoI)
+   - entity A moves to 59m (still outside the AoI, because it is inside the
+     outer range)
+   - entity A moves to 51m (re-enters the AoI)
 
-4. **网络优化**：减少 enter/leave 消息数量，降低网络开销和客户端对象 churn。
+4. **Network optimisation**: fewer enter/leave messages, which lowers network
+   overhead and client-side object churn.
 
-### AoI 触发机制
+### AoI Triggering
 
-**源码入口：** [witness.cpp:3586](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/witness.cpp:3586)
+**Source entry:** witness.cpp:3586
 
 ```cpp
-// witness.cpp:3586 - AoI 触发
+// witness.cpp:3586 - AoI trigger
 void AoITrigger::triggerEnter( RangeListNode * pOther )
 {
-    // 1. 获取目标实体
+    // 1. Get the target entity
     Entity * pEntity = static_cast<Entity *>(pOther);
     
-    // 2. 检查是否已经在 AoI 中
+    // 2. Check whether it is already in the AoI
     if (pWitness_->isInAoI( pEntity ))
     {
         return;
     }
     
-    // 3. 添加到 AoI
+    // 3. Add to the AoI
     pWitness_->addToAoI( pEntity );
 }
 
 void AoITrigger::triggerLeave( RangeListNode * pOther )
 {
-    // 1. 获取目标实体
+    // 1. Get the target entity
     Entity * pEntity = static_cast<Entity *>(pOther);
     
-    // 2. 检查是否在 AoI 中
+    // 2. Check whether it is in the AoI
     if (!pWitness_->isInAoI( pEntity ))
     {
         return;
     }
     
-    // 3. 从 AoI 移除
+    // 3. Remove from the AoI
     pWitness_->removeFromAoI( pEntity );
 }
 ```
 
-**关键细节：**
+**Key details:**
 
-- `RangeListNode` 是范围树节点，用于高效的空间查询
-- `triggerEnter()` 和 `triggerLeave()` 由范围树在实体进入/离开范围时调用
-- `addToAoI()` 和 `removeFromAoI()` 更新 Witness 的 AoI 列表和 EntityCache
+- `RangeListNode` is a range tree node used for efficient spatial queries.
+- `triggerEnter()` and `triggerLeave()` are called by the range tree when an
+  entity enters or leaves the range.
+- `addToAoI()` and `removeFromAoI()` update the Witness's AoI list and the
+  EntityCache.
 
-真正触发进入/离开的不是每 tick 全量扫描，而是 `AoITrigger` 接在 `RangeList` 上：
+What actually triggers enter/leave is not a full scan every tick - it is
+`AoITrigger` attached to a `RangeList`:
 
-- `AoITrigger` 继承 `RangeTrigger`，构造时会先访问当前覆盖到的大实体，再插入 RangeList，见 [witness.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/witness.cpp:73)。
-- `triggerEnter()` 忽略自己和 manual AoI 实体，然后调用 `Witness::addToAoI()`，见 [witness.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/witness.cpp:3586)。
-- `triggerLeave()` 同样忽略自己和 manual AoI 实体，然后调用 `Witness::removeFromAoI()`，见 [witness.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/witness.cpp:3602)。
+- `AoITrigger` derives from `RangeTrigger`; its constructor first visits the
+  large entities already covered, then inserts itself into the RangeList, see
+  witness.cpp.
+- `triggerEnter()` ignores itself and manual AoI entities, then calls
+  `Witness::addToAoI()`, see
+  witness.cpp.
+- `triggerLeave()` likewise ignores itself and manual AoI entities, then calls
+  `Witness::removeFromAoI()`, see
+  witness.cpp.
 
-`setAoIRadius()` 会先把 radius clamp 到 `maxAoIRadius`，再调用 `pAoITrigger_->setRange()`，并根据 AoI root 类型更新实体或移动节点上的 trigger，见 [witness.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/witness.cpp:2109)。相关配置在 [cellapp_config.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/cellapp_config.cpp:28)。
+`setAoIRadius()` first clamps the radius to `maxAoIRadius`, then calls
+`pAoITrigger_->setRange()`, and updates the trigger on the entity or on the
+moving node depending on the AoI root type, see
+witness.cpp.
+The related configuration is at
+cellapp_config.cpp.
 
-这说明 AoI 半径、最大半径、ghostDistance 不是文档概念，而是 CellApp 配置约束的一部分。`CellAppConfig::sanityCheckSettings()` 还会检查 `maxAoIRadius` 与 `ghostDistance`、`defaultAoIRadius` 与 `maxAoIRadius` 的关系，见 [cellapp_config.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/cellapp_config.cpp:163)。
+This means the AoI radius, max radius and ghostDistance are not documentation
+notions but part of the CellApp configuration constraints.
+`CellAppConfig::sanityCheckSettings()` also checks the relations between
+`maxAoIRadius` and `ghostDistance`, and between `defaultAoIRadius` and
+`maxAoIRadius`, see
+cellapp_config.cpp.
 
-## EntityCache 与发送队列
+## EntityCache and the Send Queue
 
-Witness 内部维护：
+Inside a Witness:
 
-- `entityQueue_`：已知实体发送队列。
-- `aoiMap_`：AoI 内实体缓存映射。
-- `bandwidthDeficit_`：带宽欠账。
-- `maxPacketSize_`：每次更新包大小约束。
-- `freeAliases_[256]`：客户端实体 alias 池。
+- `entityQueue_`: send queue of known entities.
+- `aoiMap_`: map of entity caches inside the AoI.
+- `bandwidthDeficit_`: bandwidth deficit.
+- `maxPacketSize_`: per-update packet size constraint.
+- `freeAliases_[256]`: pool of client entity aliases.
 
-源码见 [witness.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/witness.hpp:274)。
+Source: witness.hpp.
 
-这说明 BigWorld 的 AoI 更新不是“一次性遍历全量实体发给客户端”，而是缓存实体状态并按预算调度。
+This shows that BigWorld's AoI update is not "walk every entity once and send
+it to the client", but caches entity state and schedules against a budget.
 
-`EntityCache` 是这个队列的状态机。flags 定义包括：
+`EntityCache` is the state machine of that queue. Its flag definitions include:
 
-- `ENTER_PENDING`：等待向客户端发送 `enterAoI`。
-- `REQUEST_PENDING`：已发送 enter，等待客户端 `requestEntityUpdate`。
-- `CREATE_PENDING`：已收到 request，等待发送 `createEntity`。
-- `GONE`：等待从优先级队列中移除。
-- `WITHHELD`：实体在 AoI 中，但暂不发给客户端。
-- `REFRESH`：需要把客户端视图删掉再重新进入。
-- `PRIORITISED`：下一次 `Witness::update()` 要优先发送。
-- `MANUALLY_ADDED` / `ADDED_BY_TRIGGER`：区分脚本手动 AoI 与 RangeList 自动触发。
+- `ENTER_PENDING`: waiting to send `enterAoI` to the client.
+- `REQUEST_PENDING`: enter sent, waiting for the client's `requestEntityUpdate`.
+- `CREATE_PENDING`: request received, waiting to send `createEntity`.
+- `GONE`: waiting to be removed from the priority queue.
+- `WITHHELD`: the entity is in the AoI but is not sent to the client for now.
+- `REFRESH`: the client view has to be deleted and re-entered.
+- `PRIORITISED`: the next `Witness::update()` should send this first.
+- `MANUALLY_ADDED` / `ADDED_BY_TRIGGER`: distinguishes a script-driven manual
+  AoI from a RangeList automatic trigger.
 
-源码见 [entity_cache.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity_cache.hpp:138)。
+Source: entity_cache.hpp.
 
-进入 AoI 时，`Witness::addToAoI()` 会：
+On entering the AoI, `Witness::addToAoI()` will:
 
-1. 忽略 destroyed entity 和不能出现在客户端的 entity。
-2. 如果 cache 已存在且是 `GONE`，调用 `EntityCache::reuse()`。
-3. 如果 cache 不存在，加入 `aoiMap_`，设置 `ENTER_PENDING`，再加入 `entityQueue_`。
-4. 标记来源是手动添加还是 trigger 添加。
-5. 非 offload 场景下调用实体脚本 `onEnteredAoI`。
+1. Ignore destroyed entities and entities that cannot appear on a client.
+2. If the cache already exists and is `GONE`, call `EntityCache::reuse()`.
+3. If there is no cache, add it to `aoiMap_`, set `ENTER_PENDING`, then add it
+   to `entityQueue_`.
+4. Record whether the source is a manual add or a trigger add.
+5. Outside the offload case, call the entity script's `onEnteredAoI`.
 
-源码见 [witness.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/witness.cpp:2202)。
+Source: witness.cpp.
 
-离开 AoI 时，`Witness::removeFromAoI()` 不会立即删除 cache。它会清理 manual/trigger 来源标记；如果另一个来源仍然存在，就直接返回。真正要离开时只设置 `GONE`，并调用脚本 `onLeftAoI`，见 [witness.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/witness.cpp:2305)。
+On leaving the AoI, `Witness::removeFromAoI()` does not delete the cache
+immediately. It clears the manual/trigger source markers; if another source is
+still present, it returns right away. When the entity really leaves, it only
+sets `GONE` and calls the script's `onLeftAoI`, see
+witness.cpp.
 
-这个延迟删除很重要：leave 消息要和后续 bundle、event number、alias 回收保持顺序，不能在 RangeList 触发时直接从所有结构里消失。
+This deferred deletion matters: the leave message has to stay ordered against
+the following bundle, event numbers and alias recycling, so it cannot simply
+vanish from every structure at the moment the RangeList fires.
 
-## enter/request/create/leave 握手
+## The enter/request/create/leave Handshake
 
-客户端第一次看到 AoI 实体不是直接收到完整实体数据。源码里是一个小状态机：
+The first time a client sees an AoI entity it does not receive the full entity
+data outright. In the source it is a small state machine:
 
-<MermaidDiagram title="AoI 实体进入客户端的状态机">
+<MermaidDiagram title="State machine for an AoI entity reaching the client">
 stateDiagram-v2
   [*] --> ENTER_PENDING: addToAoI
   ENTER_PENDING --> REQUEST_PENDING: sendEnter
@@ -218,34 +279,55 @@ stateDiagram-v2
   REFRESH --> ENTER_PENDING: delete + re-enter
 </MermaidDiagram>
 
-`Witness::sendEnter()` 会分配 ID alias，把 cache 从 `ENTER_PENDING` 改成 `REQUEST_PENDING`，然后根据目标是否在 vehicle 上发送 `enterAoIOnVehicle` 或 `enterAoI`，见 [witness.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/witness.cpp:1601)。
+`Witness::sendEnter()` allocates an ID alias, changes the cache from
+`ENTER_PENDING` to `REQUEST_PENDING`, and then sends `enterAoIOnVehicle` or
+`enterAoI` depending on whether the target is on a vehicle, see
+witness.cpp.
 
-客户端随后通过 `requestEntityUpdate` 回来。`Witness::requestEntityUpdate()` 会：
+The client then comes back through `requestEntityUpdate`.
+`Witness::requestEntityUpdate()` will:
 
-- 确认 entity 还在 AoI。
-- 拒绝请求自己或请求非 pending entity 的异常情况。
-- 把 `REQUEST_PENDING` 改成 `CREATE_PENDING`。
-- 校验客户端传来的 LoD event stamps 数量不能超过 cache 的 LoD 数。
-- 记录 LoD event numbers，然后重新加入发送队列。
+- Confirm the entity is still in the AoI.
+- Reject the abnormal cases of a request for itself or for a non-pending
+  entity.
+- Change `REQUEST_PENDING` to `CREATE_PENDING`.
+- Validate that the number of LoD event stamps from the client does not exceed
+  the cache's LoD count.
+- Record the LoD event numbers, then rejoin the send queue.
 
-源码见 [witness.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/witness.cpp:2025)。
+Source: witness.cpp.
 
-`Witness::sendCreate()` 清除 `CREATE_PENDING`，写 vehicle 变化，按实体是否 volatile 选择 `createEntity` 或 `createEntityDetailed`，再写 entity id、client type id、位置、方向和外层 detail level 属性，见 [witness.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/witness.cpp:1643)。
+`Witness::sendCreate()` clears `CREATE_PENDING`, writes vehicle changes, picks
+`createEntity` or `createEntityDetailed` depending on whether the entity is
+volatile, then writes the entity id, client type id, position, direction and
+outer detail level properties, see
+witness.cpp.
 
-离开时，`EntityCache::addLeaveAoIMessage()` 发送 `leaveAoI`，并把 LoD event numbers 写回 bundle，见 [entity_cache.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity_cache.cpp:342)。随后 `Witness::onLeaveAoI()` 回收 ID alias，见 [witness.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/witness.cpp:2096)。
+On the way out, `EntityCache::addLeaveAoIMessage()` sends `leaveAoI` and writes
+the LoD event numbers back into the bundle, see
+entity_cache.cpp.
+Then `Witness::onLeaveAoI()` recycles the ID alias, see
+witness.cpp.
 
-这个握手设计的价值是：
+What this handshake design buys:
 
-- enter 很轻，先告诉客户端“有这个实体”。
-- create 可以根据客户端已有 event stamps 和 LoD 状态补差量。
-- leave 携带 event stamps，为实体快速离开又重新进入时复用或 refresh 提供依据。
-- alias 只给 volatile entity 分配，减少高频位置更新包体。
+- enter is cheap: it first tells the client "there is such an entity".
+- create can send only the delta, based on the event stamps and LoD state the
+  client already has.
+- leave carries event stamps, which gives the basis for reuse or refresh when
+  an entity leaves and re-enters quickly.
+- aliases are only allocated for volatile entities, shrinking the frequent
+  position update packets.
 
-`Witness::allocateIDAlias()` 明确只给有 volatile 数据的实体分配 alias；没有可用 alias 或非 volatile 实体返回 `NO_ID_ALIAS`，见 [witness.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/witness.cpp:1881)。
+`Witness::allocateIDAlias()` explicitly allocates an alias only for entities
+that have volatile data; with no free alias or a non-volatile entity it returns
+`NO_ID_ALIAS`, see
+witness.cpp.
 
-## Witness 发送预算与优先级
+## Witness Send Budget and Priority
 
-`Witness::update()` 是 AOI 发送的核心热路径。它先计算本 tick 期望包大小：
+`Witness::update()` is the core hot path of AOI sending. It first computes the
+desired packet size for this tick:
 
 ```cpp
 const float throttle = CellApp::instance().emergencyThrottle();
@@ -253,234 +335,303 @@ const int desiredPacketSize = int(maxPacketSize_ * throttle) -
         bandwidthDeficit_ + bundle.size();
 ```
 
-源码见 [witness.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/witness.cpp:1102)。
+Source: witness.cpp.
 
-然后它按固定顺序发送：
+Then it sends in a fixed order:
 
-1. SpaceData changes。
-2. reference position 或 player detailed position。
-3. vehicle stack 内的实体，强制优先。
-4. `entityQueue_` heap 中 priority 最靠前的实体。
-5. 根据 bundle size、`desiredPacketSize` 和 `witnessUpdateMaxPriorityDelta` 停止本 tick 发送。
-6. 更新 `bandwidthDeficit_`，必要时封顶。
-7. 重新维护 heap。
-8. flush 到 Proxy，并写下一 tick 的 `tickSync`。
+1. SpaceData changes.
+2. Reference position, or the player's detailed position.
+3. Entities in the vehicle stack, forced to the front.
+4. The highest-priority entity in the `entityQueue_` heap.
+5. Stop sending for this tick based on bundle size, `desiredPacketSize` and
+   `witnessUpdateMaxPriorityDelta`.
+6. Update `bandwidthDeficit_`, capping it when necessary.
+7. Re-maintain the heap.
+8. Flush to Proxy and write the next tick's `tickSync`.
 
-源码见 [witness.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/witness.cpp:1088)。
+Source: witness.cpp.
 
-`handleStateChange()` 负责把 pending flags 推进为客户端消息：
+`handleStateChange()` is responsible for turning pending flags into client
+messages:
 
-- `GONE`：发送 leave 并从 AoI 删除。
-- `WITHHELD`：如果客户端已经知道该实体，先 delete，再重新设为 `ENTER_PENDING`。
-- `ENTER_PENDING`：发送 enter。
-- `CREATE_PENDING`：发送 create 并更新 priority。
-- `REFRESH`：delete 后重新 enter。
+- `GONE`: send leave and remove from the AoI.
+- `WITHHELD`: if the client already knows the entity, delete it first, then set
+  `ENTER_PENDING` again.
+- `ENTER_PENDING`: send enter.
+- `CREATE_PENDING`: send create and update priority.
+- `REFRESH`: delete, then enter again.
 
-源码见 [witness.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/witness.cpp:986)。
+Source: witness.cpp.
 
-普通 updatable entity 走 `sendQueueElement()`。它先计算 LoD priority，再调用实体的 `writeClientUpdateDataToBundle()` 写属性/位置更新，见 [witness.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/witness.cpp:1043)。
+An ordinary updatable entity goes through `sendQueueElement()`. It computes the
+LoD priority first, then calls the entity's `writeClientUpdateDataToBundle()` to
+write property/position updates, see
+witness.cpp.
 
-priority 不是单纯距离排序。`EntityCache::updatePriority()` 用 `AoIUpdateSchemes::apply(updateSchemeID_, distSQ)` 计算 delta，并用 `witnessUpdateDeltaGrowthThrottle` 限制 delta 增长，最后累加到 cache priority，见 [entity_cache.ipp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity_cache.ipp:106)。
+Priority is not plain distance ordering. `EntityCache::updatePriority()` uses
+`AoIUpdateSchemes::apply(updateSchemeID_, distSQ)` to compute a delta, limits the
+delta growth with `witnessUpdateDeltaGrowthThrottle`, and finally accumulates
+it into the cache priority, see
+entity_cache.ipp.
 
-`AoIUpdateScheme` 的默认公式是 `(distance * distanceWeighting + 1) * weighting`。如果 min/max delta 都为 0，则该 scheme 被视为 coincident，LoD priority 按 0 处理，见 [aoi_update_schemes.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/aoi_update_schemes.hpp:18) 和 [aoi_update_schemes.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/aoi_update_schemes.cpp:90)。
+The default formula of an `AoIUpdateScheme` is
+`(distance * distanceWeighting + 1) * weighting`. If both min and max delta are
+0, the scheme is treated as coincident and the LoD priority is handled as 0, see
+aoi_update_schemes.hpp
+and
+aoi_update_schemes.cpp.
 
-这套机制的实际效果：
+The real effect of this mechanism:
 
-- 近处实体天然更频繁更新。
-- 远处实体不会因为每 tick 都在队列里而吃光预算。
-- vehicle stack 优先，避免玩家所在载具位置关系抖动。
-- emergency throttle 和 bandwidth deficit 会把网络压力反馈到本 tick 发送量。
+- Nearby entities are naturally updated more often.
+- Distant entities do not eat the whole budget just by being in the queue every
+  tick.
+- The vehicle stack goes first, which avoids jitter in the player's position
+  relative to their vehicle.
+- Emergency throttle and bandwidth deficit feed network pressure back into this
+  tick's send volume.
 
-## 位置更新可靠性
+## Reliable Position Updates
 
-`Witness::addDetailedPlayerPosition()` 会决定是否发送玩家自身详细位置，并判断是否可以跳过未变化的位置，见 [witness.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/witness.cpp:882)。
+`Witness::addDetailedPlayerPosition()` decides whether to send the player's own
+detailed position, and whether unchanged positions can be skipped, see
+witness.cpp.
 
-关键逻辑：
+Key logic:
 
-- 非 volatile 或 witness-controlled entity 不发送。
-- 记录 `lastSentReliableGameTime_`、`lastSentReliablePosition_`、`lastSentReliableDirection_`。
-- 如果位置方向未变化，并且在配置允许时间内，可以跳过。
-- 某些情况下会把下一条消息标为 reliable。
+- Non-volatile or witness-controlled entities are not sent.
+- Records `lastSentReliableGameTime_`, `lastSentReliablePosition_`,
+  `lastSentReliableDirection_`.
+- If position and direction are unchanged, and the configured time window
+  allows it, the send can be skipped.
+- In some cases the next message is marked reliable.
 
-发送可靠位置后调用 `onSendReliablePosition()` 记录最后可靠位置，见 [witness.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/witness.cpp:1416)。
+After sending a reliable position, `onSendReliablePosition()` records the last
+reliable position, see
+witness.cpp.
 
-这和 Mercury 的可靠 UDP 设计直接相关：位置通常是 volatile，但某些参考位置或详细位置必须可靠，否则后续相对位置会失去基准。
+This relates directly to Mercury's reliable UDP design: positions are normally
+volatile, but certain reference positions or detailed positions must be
+reliable, otherwise later relative positions lose their basis.
 
 ## tickSync
 
-Witness 更新末尾会向 Proxy 发送 `tickSync`，告诉 Proxy 后续消息属于下一 tick：
+At the end of the Witness update it sends `tickSync` to Proxy, telling Proxy
+that the following messages belong to the next tick:
 
-源码见 [witness.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/witness.cpp:1406)。
+Source: witness.cpp.
 
-这说明客户端同步不是纯实时流，而是围绕 GameTime/Tick 做批次边界。
+This shows that client sync is not a pure real-time stream, but batched around
+GameTime/Tick boundaries.
 
-## Ghost 的作用
+## What a Ghost Is For
 
-Ghost 是 real entity 的跨 Cell 副本。它服务三个目标：
+A Ghost is a cross-Cell copy of a real entity. It serves three goals:
 
-- 让邻近 CellApp 能给本地 Witness 提供远端实体的视图。
-- 让 real entity offload 到相邻 Cell 时，目标 Cell 已有基础状态。
-- 在 CellApp death 或消息乱序时提供恢复和缓冲依据。
+- Let a neighbouring CellApp provide the view of a remote entity to local
+  Witnesses.
+- Let a real entity offload to a neighbouring Cell with the target Cell already
+  holding a base state.
+- Provide a basis for recovery and buffering when a CellApp dies or messages
+  arrive out of order.
 
-`EntityGhostMaintainer` 的 `check()` 会：
+`check()` of `EntityGhostMaintainer` will:
 
-1. 如果当前 Cell 允许 offload，检查实体是否应该迁移到 home cell。
-2. 标记所有 haunts。
-3. 创建或取消标记仍需要的 haunts。
-4. 删除无效 haunts。
+1. If the current Cell allows offload, check whether the entity should migrate
+   to its home cell.
+2. Mark all haunts.
+3. Create or unmark the haunts that are still needed.
+4. Delete invalid haunts.
 
-源码见 [entity_ghost_maintainer.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity_ghost_maintainer.cpp:46)。
+Source: entity_ghost_maintainer.cpp.
 
-## AOI 完整调用链
+## The Full AOI Call Chains
 
-### 实体进入 AOI
+### Entity Enters the AOI
 
-实体进入玩家视野的完整调用链：
+The full call chain for an entity entering the player's view:
 
-源码入口：[witness.cpp:3586](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/witness.cpp:3586)
+Source entry: witness.cpp:3586
 
 <div class="flow-strip">
   <span class="flow-node">AoITrigger::triggerEnter()</span>
   <span class="flow-arrow">-></span>
-  <span class="flow-node">忽略自己和 manual AoI</span>
+  <span class="flow-node">ignore itself and manual AoI</span>
   <span class="flow-arrow">-></span>
   <span class="flow-node">Witness::addToAoI()</span>
   <span class="flow-arrow">-></span>
-  <span class="flow-node">创建 EntityCache</span>
+  <span class="flow-node">create EntityCache</span>
   <span class="flow-arrow">-></span>
-  <span class="flow-node">设置 ENTER_PENDING</span>
+  <span class="flow-node">set ENTER_PENDING</span>
   <span class="flow-arrow">-></span>
-  <span class="flow-node">加入 entityQueue_</span>
+  <span class="flow-node">join entityQueue_</span>
 </div>
 
-### 实体离开 AOI
+### Entity Leaves the AOI
 
-实体离开玩家视野的完整调用链：
+The full call chain for an entity leaving the player's view:
 
-源码入口：[witness.cpp:2096](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/witness.cpp:2096)
+Source entry: witness.cpp:2096
 
 <div class="flow-strip">
   <span class="flow-node">AoITrigger::triggerLeave()</span>
   <span class="flow-arrow">-></span>
   <span class="flow-node">EntityCache::addLeaveAoIMessage()</span>
   <span class="flow-arrow">-></span>
-  <span class="flow-node">发送 leaveAoI</span>
+  <span class="flow-node">send leaveAoI</span>
   <span class="flow-arrow">-></span>
-  <span class="flow-node">写入 LoD event numbers</span>
+  <span class="flow-node">write LoD event numbers</span>
   <span class="flow-arrow">-></span>
   <span class="flow-node">Witness::onLeaveAoI()</span>
   <span class="flow-arrow">-></span>
-  <span class="flow-node">回收 ID alias</span>
+  <span class="flow-node">recycle ID alias</span>
 </div>
 
-### Witness 更新发送
+### Witness Update Send
 
-Witness 每 Tick 更新并发送实体数据的完整调用链：
+The full call chain for the per-tick Witness update that sends entity data:
 
-源码入口：[witness.cpp:1088](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/witness.cpp:1088)
+Source entry: witness.cpp:1088
 
 <div class="flow-strip">
   <span class="flow-node">Witness::update()</span>
   <span class="flow-arrow">-></span>
-  <span class="flow-node">计算 desiredPacketSize</span>
+  <span class="flow-node">compute desiredPacketSize</span>
   <span class="flow-arrow">-></span>
-  <span class="flow-node">发送 SpaceData changes</span>
+  <span class="flow-node">send SpaceData changes</span>
   <span class="flow-arrow">-></span>
-  <span class="flow-node">发送 reference position</span>
+  <span class="flow-node">send reference position</span>
   <span class="flow-arrow">-></span>
-  <span class="flow-node">发送 vehicle stack 实体</span>
+  <span class="flow-node">send vehicle stack entities</span>
   <span class="flow-arrow">-></span>
-  <span class="flow-node">按 priority 发送 entityQueue_</span>
+  <span class="flow-node">send entityQueue_ by priority</span>
   <span class="flow-arrow">-></span>
-  <span class="flow-node">更新 bandwidthDeficit_</span>
+  <span class="flow-node">update bandwidthDeficit_</span>
   <span class="flow-arrow">-></span>
-  <span class="flow-node">flush 到 Proxy</span>
+  <span class="flow-node">flush to Proxy</span>
   <span class="flow-arrow">-></span>
-  <span class="flow-node">写 tickSync</span>
+  <span class="flow-node">write tickSync</span>
 </div>
 
-### Ghost 创建与维护
+### Ghost Creation and Maintenance
 
-Ghost 实体的创建和维护调用链：
+The call chain for ghost entity creation and maintenance:
 
-源码入口：[entity_ghost_maintainer.cpp:46](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity_ghost_maintainer.cpp:46)
+Source entry: entity_ghost_maintainer.cpp:46
 
 <div class="flow-strip">
   <span class="flow-node">EntityGhostMaintainer::check()</span>
   <span class="flow-arrow">-></span>
-  <span class="flow-node">检查 offload 状态</span>
+  <span class="flow-node">check offload state</span>
   <span class="flow-arrow">-></span>
-  <span class="flow-node">标记所有 haunts</span>
+  <span class="flow-node">mark all haunts</span>
   <span class="flow-arrow">-></span>
-  <span class="flow-node">创建/取消标记 haunts</span>
+  <span class="flow-node">create/unmark haunts</span>
   <span class="flow-arrow">-></span>
-  <span class="flow-node">删除无效 haunts</span>
+  <span class="flow-node">delete invalid haunts</span>
 </div>
 
-## Offload 前的 Ghost 准备
+## Ghost Preparation Before Offload
 
-`EntityGhostMaintainer::checkEntityForOffload()` 会根据实体位置查 `Space::pCellAt(x,z)`：
+`EntityGhostMaintainer::checkEntityForOffload()` looks up
+`Space::pCellAt(x,z)` from the entity's position:
 
-- 如果 home cell 是当前 cell，不 offload。
-- 如果目标 cell 正在删除，不 offload。
-- 如果目标 CellApp channel 不存在或不健康，不 offload。
-- 否则把目标加入 offload list。
+- If the home cell is the current cell, do not offload.
+- If the target cell is being deleted, do not offload.
+- If the target CellApp channel does not exist or is unhealthy, do not offload.
+- Otherwise add the target to the offload list.
 
-源码见 [entity_ghost_maintainer.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity_ghost_maintainer.cpp:81)。
+Source: entity_ghost_maintainer.cpp.
 
-这体现了 BigWorld 的安全边界：不能因为坐标跨边界就盲目迁移，必须确认目标 Cell 和 Channel 可用。
+This reflects BigWorld's safety boundary: coordinates crossing a boundary are
+not a reason to migrate blindly - the target Cell and Channel have to be
+confirmed available.
 
-## Ghost 消息顺序
+## Ghost Message Ordering
 
-实体 offload 时，旧 real 会通知 ghosts 下一个 real 地址：
+When an entity offloads, the old real tells the ghosts the next real address:
 
-- `RealEntity::destroy()` 遍历 haunts。
-- 对非目标 haunt 发送 `ghostSetNextReal`。
-- 然后 reset/destroy 当前 real channel。
+- `RealEntity::destroy()` walks the haunts.
+- Sends `ghostSetNextReal` to every non-target haunt.
+- Then resets/destroys the current real channel.
 
-源码见 [real_entity.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/real_entity.cpp:246)。
+Source: real_entity.cpp.
 
-`Entity::ghostSetNextReal()` 收到后设置 `nextRealAddr_`，并播放 buffered ghost messages，见 [entity.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity.cpp:4863)。
+`Entity::ghostSetNextReal()` sets `nextRealAddr_` on receipt and plays back the
+buffered ghost messages, see
+entity.cpp.
 
-这就是 Channel version 和 buffered ghost messages 的业务意义：offload 会造成消息重排，Ghost 必须知道何时开始接受新 real 的消息。
+That is the practical meaning of channel versioning and buffered ghost
+messages: offload reorders messages, so the Ghost must know when to start
+accepting messages from the new real.
 
-## 源码取舍
+## Trade-offs in the Source
 
-源码里的 AoI/Ghost 不是单一“空间查询结果”，而是几套状态共同维护客户端可见性：
+The AoI/Ghost code is not a single "spatial query result" but several pieces of
+state that together maintain client visibility:
 
-- `AoITrigger` 只负责把 RangeList 进入/离开事件转成 Witness 操作。
-- `EntityCache` 保存客户端侧是否 pending、created、gone、withheld、refresh，以及 LoD event numbers。
-- `Witness::update()` 按 packet budget、bandwidth deficit、priority heap 和 vehicle stack 分批写 bundle。
-- `EntityGhostMaintainer` 维护 haunts，并在 offload 前确认目标 Cell 与 Channel 可用。
-- `RealEntity` / `Entity` 的 `ghostSetNextReal`、buffered ghost messages 用于处理迁移期间的 real 切换和消息乱序。
+- `AoITrigger` only converts RangeList enter/leave events into Witness
+  operations.
+- `EntityCache` holds the client-side pending/created/gone/withheld/refresh
+  state plus the LoD event numbers.
+- `Witness::update()` writes bundles in batches according to packet budget,
+  bandwidth deficit, priority heap and vehicle stack.
+- `EntityGhostMaintainer` maintains haunts and confirms the target Cell and
+  Channel are available before offload.
+- `ghostSetNextReal` and buffered ghost messages on `RealEntity` / `Entity`
+  handle the real switch and message reordering during migration.
 
-这套设计把可见性、带宽、可靠位置、跨 Cell 副本和迁移顺序绑在一起。好处是客户端不会因为 Cell 边界或短暂离开 AoI 就丢失上下文；代价是调试必须同时看 Witness、EntityCache、RealEntity、Haunt、Channel 和 event history。
+This design binds visibility, bandwidth, reliable positions, cross-Cell copies
+and migration ordering together. The benefit is that clients do not lose
+context because of a Cell boundary or a brief AoI exit; the cost is that
+debugging has to look at Witness, EntityCache, RealEntity, Haunt, Channel and
+event history at the same time.
 
-## 源码边界
+## Source Boundaries
 
-几个容易误读的边界需要按源码处理：
+A few boundaries that are easy to misread must be handled the way the source
+does:
 
-- `requestEntityUpdate()` 请求非 pending cache 时记录错误并返回；LoD stamps 超过数量时记录 `CHEAT` 日志并截断，不是直接断开连接。
-- `EntityCache::reuse()` 只有在 cache 仍是 `GONE` 且事件历史没有被裁剪时才能安全复用；如果 `lastEventNumber` 早于 `lastTrimmedEventNumber`，会设置 `REFRESH`。
-- `handleStateChange()` 处理 `REFRESH` 时会先 `deleteFromClient()`，再 `setEnterPending()`，让客户端重新走 enter/request/create。
-- `removeFromAoI()` 会区分 manual 和 trigger 来源；只要任一来源仍存在，就不能发 leave。
-- `allocateIDAlias()` 只给有 volatile 数据且 alias 池有空位的实体分配别名。
+- `requestEntityUpdate()` logs an error and returns when asked for a
+  non-pending cache; when the LoD stamps exceed the count it logs `CHEAT` and
+  truncates, rather than disconnecting the client.
+- `EntityCache::reuse()` can only be reused safely while the cache is still
+  `GONE` and its event history has not been trimmed; if `lastEventNumber` is
+  older than `lastTrimmedEventNumber`, `REFRESH` is set.
+- `handleStateChange()` on `REFRESH` calls `deleteFromClient()` first and then
+  `setEnterPending()`, so the client walks enter/request/create again.
+- `removeFromAoI()` distinguishes manual and trigger sources; as long as either
+  source remains, leave must not be sent.
+- `allocateIDAlias()` only allocates an alias for entities that have volatile
+  data and only when the alias pool has a free slot.
 
-## 源码验证重点
+## What Source-Verified Tests Should Cover
 
-AOI/Witness/Ghost 的测试要覆盖状态顺序，而不是只看客户端最终有没有实体：
+Tests for AOI/Witness/Ghost should cover the state ordering, not just whether
+the client eventually has the entity:
 
-- 实体进入 AoI 后必须先进入 `ENTER_PENDING`，发送 enter 后才变成 `REQUEST_PENDING`。
-- 客户端 `requestEntityUpdate` 只能作用于 pending cache，请求非 pending entity 应拒绝。
-- LoD event stamps 数量超过 cache LoD 数时应被截断并记录 `CHEAT` 日志，不应越界写入 LoD event number。
-- `removeFromAoI()` 只清理对应来源；manual 和 trigger 其中一个仍存在时不能发送 leave。
-- `GONE` cache 应在 `Witness::update()` 中发 leave，并回收 alias。
-- `EntityCache::reuse()` 遇到 event history 已被 trim 时必须触发 refresh，而不是复用旧 cache。
-- `setAoIRadius()` 超过 `maxAoIRadius` 时必须 clamp。
-- `witnessUpdateMaxPriorityDelta` 和 packet budget 应限制单 tick 发送数量。
-- vehicle stack 内实体应优先于普通 heap 队列发送。
-- offload 期间替换 AoI root 不应重复触发 `onEnteredAoI`。
+- After an entity enters the AoI it must first be `ENTER_PENDING`, and only
+  after enter is sent become `REQUEST_PENDING`.
+- A client `requestEntityUpdate` may only act on a pending cache; a request for
+  a non-pending entity should be rejected.
+- When the LoD event stamp count exceeds the cache's LoD count, it should be
+  truncated and a `CHEAT` log written - never an out-of-range LoD event number
+  write.
+- `removeFromAoI()` only clears its own source; while either manual or trigger
+  remains, leave must not be sent.
+- A `GONE` cache should have leave sent in `Witness::update()`, with the alias
+  recycled.
+- `EntityCache::reuse()` must trigger a refresh when the event history has been
+  trimmed, instead of reusing the stale cache.
+- `setAoIRadius()` must clamp to `maxAoIRadius`.
+- `witnessUpdateMaxPriorityDelta` and the packet budget should limit the number
+  of entities sent in one tick.
+- Entities in the vehicle stack should be sent ahead of the ordinary heap
+  queue.
+- Replacing the AoI root during offload must not trigger `onEnteredAoI` twice.
 
-## 本章边界
+## Scope of This Chapter
 
-本章解释 Client 可见性和跨 Cell 副本。下一章分析 Cell 分区与负载均衡，即这些 Ghost 和 offload 为什么会发生。
+This chapter explains client visibility and cross-Cell copies. The next
+chapter analyses Cell partitioning and load balancing, which is why these
+ghosts and offloads happen at all.

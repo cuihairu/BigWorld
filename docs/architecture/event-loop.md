@@ -1,16 +1,19 @@
-# 主循环、Tick 与事件分发
+# Main Loop, Ticks and Event Dispatch
 
-> [English](event-loop.en.md) | **中文**
+> **English** | [中文](event-loop.md)
 
 <div class="arch-hero">
 
-BigWorld 每个主要服务进程不是“每个玩家一个线程”，而是以主 Reactor 线程驱动网络、定时器、统计和频繁任务。理解主循环顺序，是研究线程模型、网络公平性、Tick 抖动和热路径瓶颈的前提。
+BigWorld's main server processes are not "one thread per player": they are driven
+by a main Reactor thread that handles networking, timers, statistics and
+frequent tasks. Understanding the main loop order is a prerequisite for studying
+the threading model, network fairness, tick jitter and hot-path bottlenecks.
 
 </div>
 
-## 核心结论
+## Core Conclusion
 
-`EventDispatcher::processOnce()` 的顺序是：
+The order of `EventDispatcher::processOnce()` is:
 
 <div class="flow-strip">
   <span class="flow-node">FrequentTasks</span>
@@ -22,64 +25,69 @@ BigWorld 每个主要服务进程不是“每个玩家一个线程”，而是�
   <span class="flow-node">Network</span>
 </div>
 
-源码入口是 [event_dispatcher.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/event_dispatcher.cpp:428)。
+The source entry is at
+event_dispatcher.cpp.
 
-### EventDispatcher 核心数据结构
+### The Core EventDispatcher Data Structure
 
 ```cpp
-// event_dispatcher.hpp - EventDispatcher 类定义
+// event_dispatcher.hpp - EventDispatcher class definition
 class EventDispatcher
 {
 public:
     EventDispatcher();
     ~EventDispatcher();
 
-    // 主循环入口
+    // Main loop entry points
     int processOnce( bool shouldIdle = true );
     int processContinuously();
     int processUntilBreak();
 
-    // Timer 管理
+    // Timer management
     int addTimer( int microseconds, TimerHandler * pHandler, 
                   void * pUser, const char * name );
     int addOnceOffTimer( int microseconds, TimerHandler * pHandler,
                          void * pUser, const char * name );
 
-    // FrequentTask 管理
+    // FrequentTask management
     void addFrequentTask( FrequentTask * pTask );
     void delFrequentTask( FrequentTask * pTask );
 
 private:
-    // 核心组件
+    // Core components
     FrequentTasks * pFrequentTasks_;
     TimeQueue64 * pTimeQueue_;
     EventPoller * pPoller_;
     
-    // 等待策略
-    double maxWait_;  // 默认 0.1 秒 (100ms)
+    // Wait policy
+    double maxWait_;  // default 0.1 seconds (100ms)
     bool breakProcessing_;
     
-    // 统计
+    // Statistics
     uint64 lastProcessTime_;
     int numTimerCalls_;
     int numFrequentTaskCalls_;
 };
 ```
 
-**设计要点：**
-- `pFrequentTasks_` 是同步回调集合，每轮主循环都执行
-- `pTimeQueue_` 是基于 timestamp 的定时器队列，支持一次性和循环 timer
-- `pPoller_` 是 epoll/kqueue 封装，只负责 FD readiness 事件
-- `maxWait_` 默认 100ms，控制网络 poll 的最大等待时间
-- `breakProcessing_` 标志用于提前退出循环（如收到 SIGINT）
+**Design points:**
+- `pFrequentTasks_` is a set of synchronous callbacks executed every round of
+  the main loop
+- `pTimeQueue_` is a timestamp-based timer queue supporting one-off and
+  repeating timers
+- `pPoller_` is the epoll/kqueue wrapper, responsible only for FD readiness
+  events
+- `maxWait_` defaults to 100ms and caps how long the network poll waits
+- `breakProcessing_` is the flag used to leave the loop early (for example on
+  SIGINT)
 
-### processOnce() 实现细节
+### processOnce() Implementation Details
 
 ```cpp
 // event_dispatcher.cpp:428
 int EventDispatcher::processOnce( bool shouldIdle )
 {
-    // 1. 执行 FrequentTasks
+    // 1. Run the FrequentTasks
     if (pFrequentTasks_)
     {
         pFrequentTasks_->process();
@@ -87,7 +95,7 @@ int EventDispatcher::processOnce( bool shouldIdle )
     
     if (breakProcessing_) return 0;
     
-    // 2. 处理 Timer
+    // 2. Process the Timers
     if (pTimeQueue_)
     {
         pTimeQueue_->process( timestamp() );
@@ -95,12 +103,12 @@ int EventDispatcher::processOnce( bool shouldIdle )
     
     if (breakProcessing_) return 0;
     
-    // 3. 更新统计
+    // 3. Update statistics
     this->processStats();
     
     if (breakProcessing_) return 0;
     
-    // 4. 处理网络事件
+    // 4. Process network events
     if (pPoller_)
     {
         double maxWait = shouldIdle ? this->calculateWait() : 0;
@@ -111,19 +119,27 @@ int EventDispatcher::processOnce( bool shouldIdle )
 }
 ```
 
-**关键细节：**
-- FrequentTasks 在 Timer 之前执行，所以频繁任务优先级更高
-- Timer 使用 `timestamp()` 驱动，不是 wall-clock
-- 网络处理在最后，受前面任务耗时影响
-- `calculateWait()` 取 `maxWait_` 和最近 timer 到期时间的较小值
+**Key details:**
+- FrequentTasks run before Timers, so frequent tasks have higher priority
+- Timers are driven by `timestamp()`, not wall-clock
+- Network processing comes last and is affected by how long the earlier stages
+  took
+- `calculateWait()` takes the smaller of `maxWait_` and the nearest timer expiry
 
-这说明网络事件不是孤立调度的，它被放在一轮主循环的后半段。任何 Timer、FrequentTask 或主线程消息处理耗时，都会影响网络处理的及时性。
+This shows network events are not scheduled in isolation: they sit in the second
+half of a main loop round. Time spent in any Timer, FrequentTask or main-thread
+message handling directly affects how promptly networking runs.
 
-从服务进程视角看，默认入口更简单：`ServerApp::run()` 调用 `mainDispatcher_.processUntilBreak()`，运行结束后才执行 `onRunComplete()`，见 [server_app.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/server/server_app.cpp:240)。所以 BaseApp、CellApp、LoginApp、Manager 的“主线程”本质上就是围绕同一个 `EventDispatcher` 轮转。
+From the server process's perspective the default entry is simpler:
+`ServerApp::run()` calls `mainDispatcher_.processUntilBreak()` and only runs
+`onRunComplete()` after it returns, see
+server_app.cpp.
+So the "main thread" of BaseApp, CellApp, LoginApp and Manager is essentially one
+`EventDispatcher` cycling around the same loop.
 
-## 调用链
+## The Call Chain
 
-<MermaidDiagram title="EventDispatcher 主循环">
+<MermaidDiagram title="EventDispatcher main loop">
 flowchart TD
   A[processContinuously] --> B[processOnce shouldIdle=true]
   B --> C[processFrequentTasks]
@@ -139,61 +155,77 @@ flowchart TD
   K --> L[Input/Write Handler]
 </MermaidDiagram>
 
-源码锚点：
+Source anchors:
 
-- `processContinuously()` 循环调用 `processOnce(true)`，见 [event_dispatcher.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/event_dispatcher.cpp:409)。
-- `processOnce()` 的执行顺序见 [event_dispatcher.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/event_dispatcher.cpp:428)。
-- `processNetwork()` 通过 `calculateWait()` 计算最大等待时间，见 [event_dispatcher.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/event_dispatcher.cpp:367)。
-- `calculateWait()` 会取默认 `maxWait_` 与最近 timer 到期时间的较小值，见 [event_dispatcher.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/event_dispatcher.cpp:381)。
-- `processUntilBreak()` 在循环结束后统一报告 pending exceptions，见 [event_dispatcher.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/event_dispatcher.cpp:453)。
+- `processContinuously()` loops calling `processOnce(true)`, see
+  event_dispatcher.cpp.
+- The execution order of `processOnce()` is at
+  event_dispatcher.cpp.
+- `processNetwork()` computes the maximum wait through `calculateWait()`, see
+  event_dispatcher.cpp.
+- `calculateWait()` takes the smaller of the default `maxWait_` and the nearest
+  timer expiry, see
+  event_dispatcher.cpp.
+- `processUntilBreak()` reports pending exceptions together after the loop ends,
+  see
+  event_dispatcher.cpp.
 
-## 等待策略
+## The Wait Policy
 
-`processNetwork()` 的 `maxWait` 由 `shouldIdle` 决定：
+The `maxWait` of `processNetwork()` is decided by `shouldIdle`:
 
-- 如果 `shouldIdle=false`，网络 poll 不阻塞。
-- 如果 `shouldIdle=true`，最多等到最近 timer 到期或默认最大等待值。
+- If `shouldIdle=false`, the network poll does not block.
+- If `shouldIdle=true`, it waits at most until the nearest timer expiry or the
+  default maximum wait.
 
-这是一种典型 Reactor 设计：主线程在没有网络事件时可以休眠，但不会错过定时器。
+This is a typical Reactor design: the main thread may sleep when there are no
+network events, but it never misses a timer.
 
-代价是：
+The costs:
 
-- Timer 太密集会减少网络等待，增加循环频率。
-- 某个 handler 执行过久会阻塞后续所有事件。
-- 如果网络接收一次处理太多包，Timer 和其他任务可能被拖延。
+- Too many dense timers reduce the network wait and raise the loop frequency.
+- A handler that runs too long blocks every subsequent event.
+- If one network receive drains too many packets, Timers and other tasks can be
+  delayed.
 
-`EventDispatcher` 构造时默认 `maxWait_ = 0.1`，也就是没有更早 timer 时一次网络等待最多 100ms，见 [event_dispatcher.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/event_dispatcher.cpp:53)。这不是固定 tick sleep，而是“网络 poll 等待上限 + 最近 timer 到期时间”的组合。
+The `EventDispatcher` constructor defaults `maxWait_ = 0.1`, i.e. one network
+wait is at most 100ms when there is no earlier timer, see
+event_dispatcher.cpp.
+This is not a fixed tick sleep but a combination of "network poll wait cap +
+nearest timer expiry".
 
-## TimerQueue 与 GameTick
+## TimerQueue and GameTick
 
-**概述：** BigWorld 的游戏循环不是固定 sleep，而是通过 Timer 驱动。每个 App 有自己的 GameTick timer，到期后执行游戏逻辑。Timer 使用 `timestamp()` 驱动，不是 wall-clock。
+**Overview:** BigWorld's game loop is not a fixed sleep but is driven by timers.
+Each App has its own GameTick timer, and executes game logic when it expires.
+Timers are driven by `timestamp()`, not wall-clock.
 
-**源码入口：** [event_dispatcher.cpp:264](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/event_dispatcher.cpp:264)
+**Source entry:** event_dispatcher.cpp:264
 
 ```cpp
-// event_dispatcher.cpp:264 - 添加 Timer
+// event_dispatcher.cpp:264 - adding a timer
 int EventDispatcher::addTimerCommon( int microseconds, 
     TimerHandler * pHandler, void * pUser, const char * name,
     bool isRepeating )
 {
-    // 1. 微秒转换为 timestamp interval
+    // 1. Convert microseconds into a timestamp interval
     uint64 interval = uint64(microseconds) * 1000;
     
-    // 2. 计算到期时间
+    // 2. Compute the expiry time
     uint64 startTime = timestamp() + interval;
     
-    // 3. 插入 TimeQueue64
+    // 3. Insert into the TimeQueue64
     TimeQueue64::iterator iter = pTimeQueue_->add( startTime, 
         pHandler, pUser, interval );
     
-    // 4. 返回 timer ID
+    // 4. Return the timer id
     return iter->id();
 }
 ```
 
-**流程图：**
+**Flowchart:**
 
-<MermaidDiagram title="Timer 添加与触发流程">
+<MermaidDiagram title="Timer addition and firing flow">
 sequenceDiagram
     participant App as BaseApp/CellApp
     participant Dispatcher as EventDispatcher
@@ -203,51 +235,56 @@ sequenceDiagram
 
     App->>Dispatcher: addTimer(100ms)
     Dispatcher->>TimeQueue: add(timestamp + 100ms)
-    TimeQueue->>Timer: 创建 Timer 节点
-    Timer->>Timer: 设置 interval = 100ms
+    TimeQueue->>Timer: create the timer node
+    Timer->>Timer: set interval = 100ms
     
-    Note over Timer: 等待 100ms...
+    Note over Timer: waiting 100ms...
     
     Timer->>TimeQueue: process(timestamp())
-    TimeQueue->>Timer: 检查是否到期
+    TimeQueue->>Timer: check whether it has expired
     Timer->>Handler: handleTimeout()
     Handler->>App: tickGameTime()
-    Timer->>TimeQueue: 重新入队 (循环 timer)
+    Timer->>TimeQueue: re-enqueue (repeating timer)
 </MermaidDiagram>
 
-**详细讲解：**
+**Detailed walkthrough:**
 
-1. **时间单位**：`microseconds` 是输入，`timestamp()` 返回纳秒。所以 `interval = microseconds * 1000`。
+1. **Time units**: `microseconds` is the input and `timestamp()` returns
+   nanoseconds. Hence `interval = microseconds * 1000`.
 
-2. **TimeQueue64 结构**：基于时间戳的优先队列，最早到期的 timer 在队首。`process()` 方法检查队首是否到期。
+2. **TimeQueue64 structure**: a timestamp-based priority queue with the
+   earliest-expiring timer at the head. `process()` checks whether the head has
+   expired.
 
-3. **循环 Timer**：如果 `interval > 0`，timer 到期后会重新入队，实现周期性触发。GameTick 就是循环 timer。
+3. **Repeating timers**: if `interval > 0`, the timer is re-enqueued after
+   expiring, which yields periodic firing. The GameTick is a repeating timer.
 
-4. **Timer 触发**：`triggerTimer()` 直接调用 `TimerHandler::handleTimeout()`，在主线程同步执行。
+4. **Timer firing**: `triggerTimer()` calls `TimerHandler::handleTimeout()`
+   directly, executing synchronously on the main thread.
 
-### GameTick 启动
+### GameTick Startup
 
-**源码入口：** [baseapp.cpp:2016](/home/cui/workspaces/BigWorld/programming/bigworld/server/baseapp/baseapp.cpp:2016)
+**Source entry:** baseapp.cpp:2016
 
 ```cpp
-// baseapp.cpp:2016 - BaseApp 启动 GameTick
+// baseapp.cpp:2016 - BaseApp starts the GameTick
 void BaseApp::onManagerRebirth( ... )
 {
-    // ... 其他初始化 ...
+    // ... other initialisation ...
     
-    // 启动 GameTick timer，10Hz (100ms)
+    // Start the GameTick timer, 10Hz (100ms)
     gameTimerHandle_ = mainDispatcher_.addTimer(
         1000000 / Config::updateHertz(),  // 1000000 / 10 = 100000us = 100ms
         this,                              // TimerHandler
         NULL,                              // pUser
-        "GameTick"                         // 名称
+        "GameTick"                         // name
     );
 }
 ```
 
-**GameTick 执行流程：**
+**GameTick execution flow:**
 
-<MermaidDiagram title="GameTick 执行流程">
+<MermaidDiagram title="GameTick execution flow">
 sequenceDiagram
     participant Timer as GameTick Timer
     participant BaseApp as BaseApp
@@ -265,154 +302,243 @@ sequenceDiagram
     ServerApp->>ServerApp: onStartOfTick()
     ServerApp->>ServerApp: callUpdatables()
     ServerApp->>EntityApp: onTickProcessingComplete()
-    EntityApp->>Script: 执行脚本 timer
+    EntityApp->>Script: run the script timers
 </MermaidDiagram>
 
-**详细讲解：**
+**Detailed walkthrough:**
 
-1. **Tick 频率**：`Config::updateHertz()` 默认 10，表示 10Hz，每 100ms 一个 tick。这是 MMO 服务器的典型配置。
+1. **Tick rate**: `Config::updateHertz()` defaults to 10, i.e. 10Hz and one tick
+   every 100ms. This is a typical MMO server configuration.
 
-2. **Tick Hook 顺序**：`advanceTime()` 定义了所有 App 共享的 hook 顺序，确保每个 tick 的执行顺序一致。
+2. **Tick hook order**: `advanceTime()` defines the hook order shared by all
+   Apps, guaranteeing a consistent execution order in every tick.
 
-3. **脚本 Timer**：`EntityApp::onTickProcessingComplete()` 会执行 Python 脚本的 timer，这些 timer 绑定到 GameTime，不是 wall-clock。
+3. **Script timers**: `EntityApp::onTickProcessingComplete()` runs the Python
+   script timers; those timers bind to GameTime, not wall-clock.
 
-4. **负载上报**：每个 tick 结束时，App 会向 Mgr 上报负载信息，用于负载均衡决策。
+4. **Load reporting**: at the end of each tick the App reports load information
+   to the Mgr, for load balancing decisions.
 
-## Tick Hook 顺序
+## Tick Hook Order
 
-`ServerApp::advanceTime()` 定义了所有 EntityApp 派生进程共享的 tick hook 顺序：
+`ServerApp::advanceTime()` defines the tick hook order shared by all EntityApp
+derived processes:
 
-1. 计算上一个 tick 周期并调用 `onTickPeriod()`。
-2. 调用 `onEndOfTick()`。
-3. 递增 `time_`。
-4. profiler tick。
-5. 调用 `onStartOfTick()`。
-6. 调用 `callUpdatables()`。
-7. 调用 `onTickProcessingComplete()`。
+1. Compute the elapsed tick period and call `onTickPeriod()`.
+2. Call `onEndOfTick()`.
+3. Increment `time_`.
+4. profiler tick.
+5. Call `onStartOfTick()`.
+6. Call `callUpdatables()`.
+7. Call `onTickProcessingComplete()`.
 
-源码见 [server_app.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/server/server_app.cpp:311)。这些 hook 的语义在 [server_app.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/server/server_app.hpp:158) 有明确注释。
+Source: server_app.cpp.
+The semantics of these hooks are documented at
+server_app.hpp.
 
-`EntityApp::onTickProcessingComplete()` 会在 ServerApp hook 后调用脚本 timer 队列，见 [entity_app.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/server/entity_app.cpp:136)。这说明脚本 timer 不是 `EventDispatcher` 的 wall-clock timer，而是跟 `EntityAppTimeQueue` 和 `GameTime` 绑定，`EntityAppTimeQueue::time()` 返回当前实体 app 的 `time_`，见 [entity_app.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/server/entity_app.cpp:25)。
+`EntityApp::onTickProcessingComplete()` runs the script timer queue after the
+ServerApp hooks, see
+entity_app.cpp.
+This shows script timers are not `EventDispatcher` wall-clock timers but are
+bound to `EntityAppTimeQueue` and `GameTime`; `EntityAppTimeQueue::time()`
+returns the entity app's current `time_`, see
+entity_app.cpp.
 
-`BaseApp::tickGameTime()` 在 `advanceTime()` 前后还会执行一批 BaseApp 专属工作：
+`BaseApp::tickGameTime()` runs a batch of BaseApp-specific work around
+`advanceTime()`:
 
-- 计算 tick 是否迟到和 spare time。
-- 更新 profiler 和负载。
-- tick pending login。
-- backup/archive。
-- 同步 TimeKeeper。
-- 向 BaseAppMgr 上报 load、base 数和 proxy 数。
-- tick worker jobs、rate limit filters、send window overflow、idle proxy channels、stats 和 dead CellApp 处理。
+- Compute whether the tick is late and the spare time.
+- Update the profiler and load.
+- Tick pending logins.
+- Backup/archive.
+- Sync the TimeKeeper.
+- Report load, base count and proxy count to BaseAppMgr.
+- Tick worker jobs, rate limit filters, send window overflow, idle proxy
+  channels, stats and dead CellApp handling.
 
-源码见 [baseapp.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/baseapp/baseapp.cpp:1504)。
+Source: baseapp.cpp.
 
-`CellApp::handleGameTickTimeSlice()` 的 tick 工作更偏空间模拟：
+The tick work of `CellApp::handleGameTickTimeSlice()` leans more towards spatial
+simulation:
 
-- shutdown pause 时进入 `tickShutdown()`。
-- 更新 load 并通知 CellAppMgr。
-- 更新边界。
-- `advanceTime()`。
-- tick backup。
-- 检查 send window overflow。
-- 执行 offload 检查、删除旧 Space、同步时间、tick stats。
-- 播放 buffered entity/input messages。
-- tick recordings。
+- Enter `tickShutdown()` while shutdown is paused.
+- Update load and notify CellAppMgr.
+- Update the boundaries.
+- `advanceTime()`.
+- Tick backup.
+- Check send window overflow.
+- Run offload checks, delete old Spaces, sync time and tick stats.
+- Play buffered entity/input messages.
+- Tick recordings.
 
-源码见 [cellapp.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/cellapp.cpp:1302)。
+Source: cellapp.cpp.
 
-关键结论：`EventDispatcher` 的 Timer 只是触发点，真实游戏 tick 是 `ServerApp::advanceTime()` 和各 App 自己的 tick body 共同组成的。
+Key conclusion: the `EventDispatcher` Timer is only the trigger point; the real
+game tick is composed of `ServerApp::advanceTime()` plus each App's own tick
+body.
 
-## TimeKeeper 校准
+## TimeKeeper Calibration
 
-BigWorld 的 GameTick timer 不是完全固定的本地节拍。`TimeKeeper` 保存 game time、目标 tick 频率、被跟踪的 timer handle 和 master address，见 [time_keeper.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/server/time_keeper.hpp:13)。
+BigWorld's GameTick timer is not a perfectly fixed local beat. `TimeKeeper` keeps
+the game time, the target tick rate, the tracked timer handle and the master
+address, see
+time_keeper.hpp.
 
-当从 master 收到时间读数后，`TimeKeeper::inputMasterReading()` 会估算 round trip，计算本地 reading 与 master reading 的 offset。如果本地慢了，会把 tracking timer 的 interval 缩短；如果本地快了，会把 interval 拉长；调整量是 nominal interval 的 1/20，见 [time_keeper.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/server/time_keeper.cpp:110)。
+When a time reading arrives from the master, `TimeKeeper::inputMasterReading()`
+estimates the round trip and computes the offset between the local reading and
+the master reading. If the local side is slow it shortens the tracking timer's
+interval; if the local side is fast it lengthens it; the adjustment is 1/20 of
+the nominal interval, see
+time_keeper.cpp.
 
-同步请求通过 `synchroniseWithMaster()` 发 Mercury request，携带当前 `readingNow()`，见 [time_keeper.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/server/time_keeper.cpp:283)。`scheduleSyncCheck()` 会在下一次 tracking timer delivery 附近注册一次性 timer，用来检查或恢复 interval，见 [time_keeper.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/server/time_keeper.cpp:212)。
+The sync request goes out through `synchroniseWithMaster()` as a Mercury request
+carrying the current `readingNow()`, see
+time_keeper.cpp.
+`scheduleSyncCheck()` registers a one-off timer near the next tracking timer
+delivery, used to check or restore the interval, see
+time_keeper.cpp.
 
-工程含义：
+Engineering implications:
 
-- Tick 同步是通过调节 timer interval 实现的，不是简单地把 `time_` 改成 master 值。
-- 多进程 MMO 需要跨 BaseApp/CellApp/Manager 维持相近 GameTime，否则 AOI、迁移、备份和客户端同步都会出现时间语义偏差。
-- `TimeKeeper` 本身也跑在主 dispatcher 上，所以同步回调仍然受主线程阻塞影响。
+- Tick sync is achieved by adjusting the timer interval, not by simply assigning
+  `time_` the master's value.
+- A multi-process MMO needs comparable GameTime across BaseApp/CellApp/Manager,
+  otherwise AOI, migration, backup and client sync all get temporal skew.
+- `TimeKeeper` itself runs on the main dispatcher, so the sync callbacks are
+  still subject to main-thread blocking.
 
-## 网络处理不是异步完成模型
+## Network Handling Is Not an Async Completion Model
 
-`EventPoller` 只负责把 FD readiness 分派给 handler。handler 仍在主线程同步执行。Linux 下 `EPoller::processPendingEvents()` 调用 `epoll_wait()`，然后逐个处理事件。源码见 [event_poller.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/event_poller.cpp:1115)。
+`EventPoller` is only responsible for dispatching FD readiness to handlers. The
+handlers still execute synchronously on the main thread. On Linux,
+`EPoller::processPendingEvents()` calls `epoll_wait()` and then processes events
+one by one. Source:
+event_poller.cpp.
 
-源码边界很清楚：
+The source boundary is very clear:
 
-- `EventPoller` 只把可读/可写事件分派给 handler。
-- handler 执行、Mercury packet 解析、Channel 状态更新仍占用主 dispatcher。
-- 当前代码没有提交队列、完成队列或异步完成回调语义。
+- `EventPoller` only dispatches readable/writable events to handlers.
+- Handler execution, Mercury packet decoding and Channel state updates still
+  occupy the main dispatcher.
+- The current code has no submission queue, completion queue or async completion
+  callback semantics.
 
-因此不能把 `EventPoller` 理解成后台 I/O 完成层；它只是 Reactor 的 FD 分派层。
+So `EventPoller` cannot be understood as a background I/O completion layer; it is
+only the Reactor's FD dispatch layer.
 
-## Tick 公平性
+## Tick Fairness
 
-接收路径中 `PacketReceiver::handleInputNotification()` 会在一次可读事件中持续调用 `processSocket()`，直到不能继续或超过 `maxSocketProcessingTime`。源码见 [packet_receiver.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/packet_receiver.cpp:83)。
+On the receive path, `PacketReceiver::handleInputNotification()` keeps calling
+`processSocket()` during a single readability event until it cannot continue or
+`maxSocketProcessingTime` is exceeded. Source:
+packet_receiver.cpp.
 
-这个设计说明开发者已经意识到“单个 socket 排空”可能压垮一帧：
+This design shows the developers were already aware that "draining a single
+socket" can crush a frame:
 
-- 继续排空 socket 可以提高吞吐，减少 UDP receive queue 堆积。
-- 设置处理时间上限可以保护主循环公平性。
-- 超时后停止处理会留下内核队列压力，可能增加延迟或丢包。
+- Continuing to drain the socket raises throughput and reduces UDP receive queue
+  buildup.
+- The processing time cap protects main loop fairness.
+- Stopping after the cap leaves kernel queue pressure, which may increase latency
+  or packet loss.
 
-这是一种非常游戏服务器式的折中：吞吐不是唯一指标，Tick 预算和尾延迟同样重要。
+This is a very game-server-style compromise: throughput is not the only metric;
+tick budget and tail latency matter just as much.
 
-## 子 Dispatcher
+## Child Dispatchers
 
-`NetworkInterface` 不是只拿一个外部 dispatcher 使用。`EventDispatcher::attach()` 会把 child dispatcher 附到 parent dispatcher，并把 child poller fd 注册到 parent，见 [event_dispatcher.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/event_dispatcher.cpp:126)。
+`NetworkInterface` does not just use one external dispatcher. `EventDispatcher::attach()`
+attaches a child dispatcher to the parent dispatcher and registers the child
+poller's fd with the parent, see
+event_dispatcher.cpp.
 
-`DispatcherCoupling` 本身是一个 `FrequentTask`。构造时注册到 main dispatcher，`doTask()` 每轮调用 `childDispatcher_.processOnce()`，见 [dispatcher_coupling.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/dispatcher_coupling.hpp:18)。
+`DispatcherCoupling` is itself a `FrequentTask`. It registers with the main
+dispatcher at construction, and `doTask()` calls `childDispatcher_.processOnce()`
+every round, see
+dispatcher_coupling.hpp.
 
-`NetworkInterface::processUntilChannelsEmpty()` 会在 flush 阶段交替处理 main dispatcher 和 interface 自己的 dispatcher。源码见 [network_interface.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/network_interface.cpp:255)。
+`NetworkInterface::processUntilChannelsEmpty()` alternates between the main
+dispatcher and the interface's own dispatcher during the flush phase. Source:
+network_interface.cpp.
 
-这说明 Mercury 不是只有一个全局 dispatcher，而是存在主 dispatcher 与网络接口 dispatcher 的组合。文档后续分析 Channel 关闭、可靠包 flush、进程退出时会继续引用这条链路。
+This shows Mercury does not have a single global dispatcher; there is a
+combination of a main dispatcher and a network interface dispatcher. Later
+sections keep referring to this chain when analysing Channel closure, reliable
+packet flushing and process exit.
 
-## FrequentTask 边界
+## FrequentTask Boundaries
 
-`FrequentTasks::process()` 每轮遍历注册的 `FrequentTask` 并调用 `doTask()`，但它不是一个任务队列调度器：
+`FrequentTasks::process()` walks the registered `FrequentTask`s every round and
+calls `doTask()`, but it is not a task queue scheduler:
 
-- 如果正在递归处理且集合变脏，会直接返回。
-- task 执行期间如果 `FrequentTasks` 自身被销毁，会通过 `pGotDestroyed_` 立即退出。
-- 如果 task 增删导致容器变脏，当前轮会 break，避免迭代器失效。
+- If it is already processing recursively and the set becomes dirty, it returns
+  immediately.
+- If `FrequentTasks` itself is destroyed during a task, it exits at once via
+  `pGotDestroyed_`.
+- If a task's add/remove makes the container dirty, the current round breaks to
+  avoid iterator invalidation.
 
-源码见 [frequent_tasks.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/frequent_tasks.cpp:77)。
+Source: frequent_tasks.cpp.
 
-脚本层也可以注册 frequent task。`ScriptFrequentTasks::addFrequentTask()` 会把 Python callable 包装成 `ScriptFrequentTask` 并注册到 `Updatables`，其 `update()` 调用 Python callback，返回 true 时移除自身，见 [script_frequent_tasks.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/server/script_frequent_tasks.cpp:35)。
+The script layer can register frequent tasks too. `ScriptFrequentTasks::addFrequentTask()`
+wraps a Python callable as a `ScriptFrequentTask` and registers it with
+`Updatables`; its `update()` calls the Python callback and removes itself when
+that returns true, see
+script_frequent_tasks.cpp.
 
-这再次说明：主循环里的 frequent task 是同步回调集合，不是后台线程池。耗时 callback 会直接占用主线程预算。
+This again shows: frequent tasks in the main loop are a set of synchronous
+callbacks, not a background thread pool. An expensive callback directly consumes
+the main thread budget.
 
-## 源码取舍
+## Trade-offs in the Source
 
-源码选择的不是通用任务调度器，而是主 dispatcher 串起网络、timer、统计和频繁任务：
+What the source chose is not a general task scheduler but a main dispatcher that
+strings together networking, timers, statistics and frequent tasks:
 
-- 逻辑执行顺序由 `processOnce()` 固定，便于定位实体、脚本和网络消息的先后关系。
-- 实体状态默认在主线程推进，避免 Base/Cell 热路径被锁竞争打碎。
-- 后台线程主要承接数据库、文件和长耗时任务，完成后再回主线程交付结果。
-- CellApp/BaseApp 的扩展点更多依赖多进程分片、Cell 切分和实体迁移，而不是在单进程内并行执行实体逻辑。
+- The logical execution order is fixed by `processOnce()`, which makes it easy
+  to reason about the relative order of entity, script and network messages.
+- Entity state advances on the main thread by default, which keeps the Base/Cell
+  hot paths from being fragmented by lock contention.
+- Background threads mainly take over database, file and long-running tasks, then
+  hand the results back on the main thread.
+- CellApp/BaseApp extension relies more on multi-process sharding, Cell splitting
+  and entity migration than on executing entity logic in parallel within one
+  process.
 
-源码也暴露出明确约束：
+The source also exposes clear constraints:
 
-- 任意 handler、timer callback、frequent task 都不能长时间阻塞。
-- 单个热点进程会被主 dispatcher 上限卡住。
-- `PacketReceiver::maxSocketProcessingTime` 只能限制单次 socket 处理时间，不能消除所有主线程抖动。
-- 脚本 frequent task 虽然从 Python callable 包装而来，但执行位置仍是主线程回调。
+- No handler, timer callback or frequent task may block for long.
+- A single hot process is throttled by the main dispatcher's caps.
+- `PacketReceiver::maxSocketProcessingTime` only limits the per-socket
+  processing time; it cannot remove all main-thread jitter.
+- A script frequent task is wrapped from a Python callable, but it still executes
+  as a main-thread callback.
 
-## 源码验证重点
+## What Source-Verified Tests Should Cover
 
-主循环相关验证应覆盖调度顺序和阻塞边界：
+Verification around the main loop should cover the scheduling order and blocking
+boundaries:
 
-- `processOnce()` 中 FrequentTasks、Timers、Stats、Network 的顺序不能被改乱。
-- `breakProcessing()` 在 FrequentTask 中触发时应跳过 Timers 和 Network，但 Stats 仍会执行。
-- `breakProcessing()` 在 Timer 中触发时应跳过 Network，但 Stats 仍会执行。
-- 循环 timer 在 callback 后应按 interval 重新入队，一次性 timer 应自动取消。
-- GameTick timer 的 interval 应等于 `1000000 / updateHertz`，并能被 `TimeKeeper` 调整后恢复。
-- `PacketReceiver::maxSocketProcessingTime` 非零时，一次 socket 可读事件不能无限排空。
-- `DispatcherCoupling` 下 child dispatcher 的 `processOnce()` 不应阻塞 main dispatcher。
-- 脚本 frequent task 或 updatable 抛错时不能破坏主循环异常报告路径。
+- The order of FrequentTasks, Timers, Stats and Network in `processOnce()` must
+  not be disturbed.
+- When `breakProcessing()` fires inside a FrequentTask, Timers and Network are
+  skipped but Stats still runs.
+- When `breakProcessing()` fires inside a Timer, Network is skipped but Stats
+  still runs.
+- A repeating timer should re-enqueue by interval after its callback, and a
+  one-off timer should cancel itself.
+- The GameTick timer's interval should equal `1000000 / updateHertz` and be able
+  to recover after `TimeKeeper` adjusts it.
+- With a non-zero `PacketReceiver::maxSocketProcessingTime`, one socket
+  readability event must not drain indefinitely.
+- Under `DispatcherCoupling` the child dispatcher's `processOnce()` must not
+  block the main dispatcher.
+- When a script frequent task or updatable throws, it must not break the main
+  loop's exception reporting path.
 
-## 后续问题
+## Follow-up Questions
 
-本章只解释“事件如何被调度”。下一章会进入网络 I/O 模型本身：`EventPoller`、`PacketReceiver`、Bundle 收发和 Channel 可靠层如何共同构成 Mercury 的网络路径。
+This chapter only explains "how events are scheduled". The next chapter moves
+into the network I/O model itself: how `EventPoller`, `PacketReceiver`, Bundle
+send/receive and the Channel reliability layer together form Mercury's network
+path.

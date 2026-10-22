@@ -1,6 +1,6 @@
 # Documentation–Code Consistency Audit
 
-> **English** | [中文](审计-文档一致性.md)
+> [中文](/zh/)
 
 Audit date: 2026-10-13. Audit scope: README.md, all pages under docs/**, the VitePress site config, and the public GitHub facade (description/homepageUrl/topics).
 

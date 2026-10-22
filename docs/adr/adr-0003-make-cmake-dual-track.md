@@ -1,53 +1,65 @@
-# ADR-0003：make 主链 + 按组件 CMake 样板双轨并存
+# ADR-0003: Dual Track — make Main Chain plus Per-Component CMake Samples
 
-> [English](adr-0003-make-cmake-dual-track.en.md) | **中文**
+> **English** | [中文](adr-0003-make-cmake-dual-track.md)
 
-- **状态**：已接受（2026-10-12 cstdmf 样板落地，2026-10-14 resmgr + network + CI matrix）
-- **范围**：`programming/bigworld/build/make/`、`cmake/samples/`、
-  `scripts/build-*-cmake.sh`、`.github/workflows/ci.yml`、
-  `lib/*/CMakeLists.txt`（Windows 超级工程）
+- **Status**: Accepted (cstdmf sample landed 2026-10-12; resmgr + network + CI matrix on 2026-10-14)
+- **Scope**: `programming/bigworld/build/make/`, `cmake/samples/`,
+  `scripts/build-*-cmake.sh`, `.github/workflows/ci.yml`,
+  `lib/*/CMakeLists.txt` (the Windows superproject)
 
-## 背景
+## Context
 
-仓库原生构建是 `build/make/` 一套递归 make（Linux 服务端唯一验证口径：
-21 模块单测门禁在此跑），另有一套 2008 年代的 Windows CMake 超级工程
-（`BWConfiguration_*.cmake` + `lib/*/CMakeLists.txt`，MSVC/编辑器面，未迁移）。
-现代构建诉求（vcpkg toolchain、可复现、增量、IDE 支持）与两万人年 make 规则
-的迁移风险之间存在矛盾。
+The repository's native build is the recursive make set under
+`build/make/` (the sole validated Linux server path: the 21-module
+unit-test gate runs there), alongside a Windows CMake superproject from the
+2008 era (`BWConfiguration_*.cmake` + `lib/*/CMakeLists.txt`, the
+MSVC/editor surface, not migrated). Modern build requirements (vcpkg
+toolchain, reproducibility, incrementality, IDE support) conflict with the
+migration risk carried by decades of accumulated make rules.
 
-## 决策
+## Decision
 
-**不整体迁移**。Linux 侧维持 make 为唯一权威链（编译选项、TU 清单、门禁
-全以它为准），另立 `cmake/samples/<组件>/CMakeLists.txt` 按组件样板
-**自下而上**双轨并存：
+**No big-bang migration.** Linux keeps make as the single authoritative
+chain (compile flags, TU lists, and the test gate are all defined by it);
+a separate bottom-up dual track of per-component samples lives at
+`cmake/samples/<component>/CMakeLists.txt`:
 
-- 样板编译选项/宏逐字取自 `make -n` 实测命令行；源清单逐条对照
-  `Makefile.rules`（Windows/macOS TU 与清单外文件显式排除并注释）；
-  依赖走共享 vcpkg manifest（见 [ADR-0002](adr-0002-vcpkg-third-party-deps)）；
-- 每组件一条命令（`scripts/build-<组件>-cmake.sh`：configure → build →
-  ctest），用例数与 make 链一致才收（cstdmf 427、resmgr 88、network 210）；
-- CI（`ci.yml`）以 matrix 跑全部样板，防 manifest 与样板漂移；
-- Windows 超级工程保持原样，归 R3 统一处理。
+- sample compile flags/macros are taken verbatim from measured `make -n`
+  command lines; source lists are checked entry by entry against
+  `Makefile.rules` (Windows/macOS TUs and off-list files are explicitly
+  excluded with comments); dependencies go through the shared vcpkg
+  manifest (see [ADR-0002](adr-0002-vcpkg-third-party-deps.md));
+- one command per component (`scripts/build-<component>-cmake.sh`:
+  configure → build → ctest), accepted only when case counts match the
+  make chain (cstdmf 427, resmgr 88, network 210);
+- CI (`ci.yml`) runs all samples in a matrix to prevent manifest/sample drift;
+- the Windows superproject stays untouched and is handled wholesale under R3.
 
-## 取舍
+## Trade-offs
 
-| 备选 | 否掉的原因 |
+| Alternative | Reason for rejection |
 |---|---|
-| 一次性把 make 链翻译成 CMake 超级工程 | 30+ 组件 × 平台宏矩阵，任何一处语义漂移都直接威胁 21 模块门禁；不可增量验收 |
-| Bazel/Meson 等新系统重写 | 更大的人员/工具成本；且与既有 Windows CMake 工程生态无法复用 |
-| 只留 make，不做 CMake | 无 IDE/增量现代化路径；vcpkg toolchain 集成与 CI 矩阵验证面单薄 |
-| 直接修 Windows 超级工程上 Linux | 该工程深绑 MSVC/MFC/编辑器面，混入 Linux server profile 会把 R3 风险拉进主线 |
+| Translate the make chain into a CMake superproject in one pass | 30+ components × platform-macro matrix; any semantic drift directly threatens the 21-module gate; it cannot be accepted incrementally |
+| Rewrite with a new system such as Bazel/Meson | Even greater people/tooling cost, and nothing from the existing Windows CMake ecosystem would be reusable |
+| Keep make only, no CMake track | No path to IDE/incremental modernization; a thin validation surface for vcpkg toolchain integration and the CI matrix |
+| Fix the Windows superproject to run on Linux directly | It is deeply bound to MSVC/MFC/the editor surface; mixing in a Linux server profile would pull R3 risk into the main line |
 
-## 后果
+## Consequences
 
-- **正面**：双轨互相校验（样板用例数对 make 链是持续断言）；组件可按需
-  现代化；新组件接入模板可复制（cstdmf → resmgr → network 已验证）。
-- **代价/风险**：`Makefile.rules` 改源清单必须同步样板清单（样板头部已
-  注明"keep in sync"）；两套构建语义长期并存，需 CI matrix 兜漂移；
-  每样板 ~300 行显式清单是刻意为之的"翻译透明性"，不是债。
-- **后续**：connection/entitydef 样板按同一模式叠加
-  （connection 无 unit_test 需先建测试面、entitydef 依赖 8 库，单独评估）；
-  R3 时 Windows 超级工程与 Linux 样板合流或分工再立 ADR。
+- **Positive**: the two tracks cross-check each other (sample case counts
+  are a continuous assertion against the make chain); components can
+  modernize on demand; the onboarding template is replicable for new
+  components (cstdmf → resmgr → network already validated).
+- **Costs/risks**: source-list changes in `Makefile.rules` must be mirrored
+  in the sample lists (sample headers already carry a "keep in sync" note);
+  two build semantics coexist long-term and need the CI matrix to catch
+  drift; each sample's ~300-line explicit list is deliberate "translation
+  transparency", not debt.
+- **Follow-ups**: connection/entitydef samples stack on in the same pattern
+  (connection has no unit_test and needs a test surface first; entitydef
+  depends on 8 libraries and is assessed separately); at R3 time a new ADR
+  decides whether the Windows superproject and Linux samples merge or
+  divide responsibilities.
 
-证据：[vcpkg-migration §3](/vcpkg-migration)、
-[构建系统现代化](/upgrade-plan/build-system-modernization)。
+Evidence: [vcpkg-migration §3](/vcpkg-migration),
+[build system modernization](/upgrade-plan/build-system-modernization).

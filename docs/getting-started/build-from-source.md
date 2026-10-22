@@ -1,31 +1,35 @@
-# 从源码构建
+# Building from Source
 
-> [English](build-from-source.en.md) | **中文**
+> **English** | [中文](build-from-source.md)
 
 <div class="arch-hero">
 
-本文按当前仓库中的 Makefile、CMakeLists 和 Dockerfile 说明 BigWorld 的构建入口。重点是明确真实源码边界，而不是把旧工程改写成现代通用构建流程。
+This document explains the BigWorld build entries based on the Makefiles,
+CMakeLists files, and Dockerfiles currently in the repository. The focus is
+on making the real source boundaries explicit, not on rewriting the old
+project into a modern generic build flow.
 
 </div>
 
-## 构建系统概览
+## Build system overview
 
-BigWorld 保留了多条构建链：
+BigWorld keeps several build chains:
 
-| 构建链 | 入口文件 | 主要目标 |
+| Build chain | Entry file | Main targets |
 |---|---|---|
-| Linux Make | `programming/Makefile` -> `programming/bigworld/build/make/Makefile` | 服务端组件、服务端工具、单元测试和部分第三方库 |
-| Docker | `programming/bigworld/build/docker/Dockerfile` | 固定 CentOS 7 构建环境 |
-| CMake | `programming/bigworld/CMakeLists.txt` | Windows 工程和 remote server 生成路径 |
-| Windows 脚本 | `programming/bigworld/build/*.bat` | Windows 工程生成辅助 |
+| Linux Make | `programming/Makefile` -> `programming/bigworld/build/make/Makefile` | Server components, server tools, unit tests, and some third-party libraries |
+| Docker | `programming/bigworld/build/docker/Dockerfile` | A pinned CentOS 7 build environment |
+| CMake | `programming/bigworld/CMakeLists.txt` | Windows projects and the remote server generation path |
+| Windows scripts | `programming/bigworld/build/*.bat` | Windows project generation helpers |
 
-Linux 服务端源码分析应优先看 Make 链；客户端、工具和 Windows 工程再看 CMake 链。
+For Linux server source analysis, look at the Make chain first; for the
+client, tools, and Windows projects, then look at the CMake chain.
 
-## Linux 服务端构建
+## Linux server build
 
-### 依赖基线
+### Dependency baseline
 
-Dockerfile 使用 `centos:7`，并安装以下关键依赖：
+The Dockerfile uses `centos:7` and installs these key dependencies:
 
 ```text
 make
@@ -42,60 +46,68 @@ ncurses-devel
 binutils-devel
 ```
 
-这说明当前服务端构建依赖的是旧式系统包和内置第三方库组合。不要直接假设现代发行版包名、编译器或 Python 版本可以无差异替换。
+This shows the current server build relies on a combination of old-style
+system packages and in-tree third-party libraries. Do not assume modern
+distributions' package names, compilers, or Python versions are drop-in
+replacements.
 
-### 构建命令
+### Build commands
 
-从仓库根目录执行：
+Run from the repository root:
 
 ```sh
 make -C programming
 ```
 
-Dockerfile 注释里的示例命令：
+The example command from the Dockerfile comments:
 
 ```sh
 make -s -j64 -rR -C programming
 ```
 
-`-j64` 只是示例，应按实际机器 CPU、内存和第三方库构建稳定性调整。
+`-j64` is only an example; tune it to the machine's CPU, memory, and the
+stability of third-party library builds.
 
-### 常用目标
+### Common targets
 
-顶层 Makefile 注释中定义了几个主目标：
+The top-level Makefile comments define a few main targets:
 
-| 目标 | 说明 |
+| Target | Notes |
 |---|---|
-| `all` | 构建源码组件 |
-| `everything` | 仅顶层 Makefile 注释提及（`build/make/Makefile:5`："build absolutely everything, even non-source stuff (eg: rpms)"）；当前 `build/make/*.mak` 中**无对应规则**，`make everything` 不会执行任何操作 |
-| `clean` | 清理中间文件 |
-| `bw-run-all-unit-tests` | 运行全部单元测试 |
-| `bw-run-unit-tests` | 运行单元测试，失败时尽早停止 |
+| `all` | Build the source components |
+| `everything` | Mentioned only in the top-level Makefile comment (`build/make/Makefile:5`: "build absolutely everything, even non-source stuff (eg: rpms)"); there is currently **no matching rule** in `build/make/*.mak`, so `make everything` does nothing |
+| `clean` | Remove intermediate files |
+| `bw-run-all-unit-tests` | Run all unit tests |
+| `bw-run-unit-tests` | Run unit tests, stopping early on failure |
 
-如果要定位某个服务端组件，可继续查对应目录下的 `Makefile.rules`。
+To locate a particular server component, continue into that directory's
+`Makefile.rules`.
 
-## 输出目录
+## Output directories
 
-Makefile 中的输出路径由 `BW_BUILD_PLATFORM`、`BW_CONFIG` 和相关变量拼出。
+The output paths in the Makefile are assembled from `BW_BUILD_PLATFORM`,
+`BW_CONFIG`, and related variables.
 
-| 类型 | 变量 | 路径形式 |
+| Type | Variable | Path form |
 |---|---|---|
-| 服务端二进制 | `BW_SERVER_BIN_DIR` | `bin/server/<platform_config>/server` |
-| 服务端工具 | `BW_SERVER_TOOLS_BIN_DIR` | `bin/server/<platform_config>/tools` |
-| 单元测试 | `BW_UNIT_TEST_DIR` | `bin/server/<platform_config>/unit_tests` |
-| 第三方产物 | `BW_THIRD_PARTY_INSTALL_DIR` | `bin/server/<host_platform_config>/third_party` |
+| Server binaries | `BW_SERVER_BIN_DIR` | `bin/server/<platform_config>/server` |
+| Server tools | `BW_SERVER_TOOLS_BIN_DIR` | `bin/server/<platform_config>/tools` |
+| Unit tests | `BW_UNIT_TEST_DIR` | `bin/server/<platform_config>/unit_tests` |
+| Third-party artifacts | `BW_THIRD_PARTY_INSTALL_DIR` | `bin/server/<host_platform_config>/third_party` |
 
-在默认安装目录下，产物位于 `game/` 树中。Dockerfile 注释中也指出 Make 输出通常进入 `game/bin/server/el7/`。
+Under the default install directory, artifacts land in the `game/` tree.
+The Dockerfile comments also note Make output usually goes to
+`game/bin/server/el7/`.
 
-## Docker 构建
+## Docker build
 
-Dockerfile 位于：
+The Dockerfile is at:
 
 ```text
 programming/bigworld/build/docker/Dockerfile
 ```
 
-构建镜像示例：
+Example image build:
 
 ```sh
 docker buildx build . \
@@ -103,7 +115,7 @@ docker buildx build . \
   -t bigworld-build
 ```
 
-进入容器执行构建的示例：
+Example of entering a container to build:
 
 ```sh
 docker run --rm -it \
@@ -115,69 +127,79 @@ docker run --rm -it \
   bigworld-build
 ```
 
-容器内再执行：
+Inside the container:
 
 ```sh
 make -s -j"$(nproc)" -rR -C programming
 ```
 
-顶层 Makefile 的 Known issues 注释明确提示：初次 third_party 构建可能不适合并行构建（`build/make/Makefile:13`："initial third party library builds may not like parallel jobs"）。Dockerfile 另有注释指出构建可能因 Python 构建系统输出混淆而提前停止、需要重跑（`build/docker/Dockerfile:48`）。这是构建链现实，不应在文档中隐藏。
+The top-level Makefile's Known issues comment explicitly warns that the
+initial third_party build may not tolerate parallel jobs
+(`build/make/Makefile:13`: "initial third party library builds may not like
+parallel jobs"). Another Dockerfile comment notes the build can stop early,
+confused by Python build-system output, and need a rerun
+(`build/docker/Dockerfile:48`). This is a reality of the build chain and
+should not be hidden in the documentation.
 
-## CMake 工程边界
+## CMake project boundaries
 
-`programming/bigworld/CMakeLists.txt` 的源码事实：
+Source facts about `programming/bigworld/CMakeLists.txt`:
 
-- `CMAKE_MINIMUM_REQUIRED(VERSION 2.8.12)`。
-- 必须指定 `BW_CMAKE_TARGET`，否则直接报错。
-- 普通路径只支持 Windows；非 Windows 会报 “Only Windows builds are currently supported.”
-- remote server 是单独路径，由 `BW_IS_REMOTE_ONLY` 和 `BW_REMOTE_PLATFORM` 控制。
-- 支持的 MSVC token 是 `vc9` 到 `vc14`。
+- `CMAKE_MINIMUM_REQUIRED(VERSION 2.8.12)`.
+- `BW_CMAKE_TARGET` must be specified, otherwise it errors out immediately.
+- The ordinary path supports only Windows; on non-Windows it reports "Only Windows builds are currently supported."
+- Remote server is a separate path, controlled by `BW_IS_REMOTE_ONLY` and `BW_REMOTE_PLATFORM`.
+- The supported MSVC tokens are `vc9` through `vc14`.
 
-因此，不应写成：
+Therefore this should not be written as:
 
 ```sh
 cmake -B build
 cmake --build build
 ```
 
-这种通用现代 CMake 流程不符合当前根 CMakeLists 的行为。使用 CMake 时必须先明确目标和平台，例如 Windows 工程、client、tools 或 remote server。
+That generic modern CMake flow does not match the current root CMakeLists
+behavior. When using CMake you must first fix the target and platform — for
+example a Windows project, client, tools, or remote server.
 
-## 单元测试
+## Unit tests
 
-测试目标分布在各模块 `unit_test/CMakeLists.txt` 或 Make 构建规则中。
+Test targets are spread across each module's `unit_test/CMakeLists.txt` or
+Make build rules.
 
-源码入口示例：
+Example source entries:
 
-| 测试区域 | 路径 |
+| Test area | Path |
 |---|---|
-| 网络 | `programming/bigworld/lib/network/unit_test/` |
+| Networking | `programming/bigworld/lib/network/unit_test/` |
 | EntityDef | `programming/bigworld/lib/entitydef/unit_test/` |
 | BgTaskManager | `programming/bigworld/lib/cstdmf/unit_test/test_bgtasks.cpp` |
 | BaseApp | `programming/bigworld/server/baseapp/unit_test/` |
 | CellApp | `programming/bigworld/server/cellapp/unit_test/` |
 | DBApp | `programming/bigworld/server/dbapp/unit_test/` |
 
-运行测试前先确认对应目标已被当前平台构建链纳入。找测试目标可用：
+Before running tests, confirm the corresponding target is included in the
+current platform's build chain. To find test targets:
 
 ```sh
 rg "BW_ADD_TEST" programming/bigworld
 rg "TEST\\(" programming/bigworld/lib programming/bigworld/server
 ```
 
-## 构建排查顺序
+## Build troubleshooting order
 
-排查构建问题时建议按顺序确认：
+When investigating build problems, confirm in this order:
 
-1. 当前目标是 Linux server、Windows client/tool，还是文档站。
-2. 使用的是 Make 链还是 CMake 链。
-3. `BW_BUILD_PLATFORM`、`BW_CONFIG`、`BW_INSTALL_DIR` 是否符合预期。
-4. 第三方库是否已构建并复制到 `bin/server/<platform>/third_party`。
-5. 目标目录的 `Makefile.rules` 是否被顶层 Makefile 收集。
-6. 如果是 CMake，`BW_CMAKE_TARGET` 和平台判断是否通过。
-7. 如果是运行失败，再查资源路径、`BWResource::init`、`BWConfig::init` 和 App `init()`。
+1. Whether the current target is a Linux server, Windows client/tool, or the docs site.
+2. Whether the Make chain or CMake chain is being used.
+3. Whether `BW_BUILD_PLATFORM`, `BW_CONFIG`, and `BW_INSTALL_DIR` are as expected.
+4. Whether third-party libraries have been built and copied to `bin/server/<platform>/third_party`.
+5. Whether the target directory's `Makefile.rules` is collected by the top-level Makefile.
+6. For CMake, whether `BW_CMAKE_TARGET` and the platform checks pass.
+7. For a runtime failure, then check resource paths, `BWResource::init`, `BWConfig::init`, and the App `init()`.
 
-## 相关文档
+## Related documents
 
-- [构建与运行体系](/analysis/build-and-runtime)
-- [构建、平台与依赖治理](/architecture/build-platform-dependencies)
-- [源码导读](/analysis/source-code-guide)
+- [Build and runtime system](/analysis/build-and-runtime)
+- [Build, platform, and dependency governance](/architecture/build-platform-dependencies)
+- [Source code guide](/analysis/source-code-guide)

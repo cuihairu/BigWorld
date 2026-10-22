@@ -1,53 +1,73 @@
-# Watcher、Profiler 与日志
+# Watcher, Profiler and Logs
+
+> [中文](/zh/)
 
 <div class="arch-hero">
 
-BigWorld 的可观测性围绕 Watcher 树、Profiler、DogWatch、EntityProfiler、Message Logger 和管理工具构建。它不是单纯日志聚合，而是把运行时对象、进程控制面、性能采样和集中日志放进同一套引擎工具链里。
+BigWorld's observability is built around the Watcher tree, the Profiler, DogWatch,
+EntityProfiler, the Message Logger and the management tooling. It is not plain log
+aggregation: runtime objects, the process control plane, performance sampling and
+centralised logging all live in one engine toolchain.
 
 </div>
 
-## 先给结论
+## Conclusion First
 
-BigWorld 的可观测性非常有研究价值，因为它不是事后外挂的日志，而是深度嵌入引擎对象模型：
+BigWorld's observability is genuinely worth studying, because it is not log
+instrumentation bolted on afterwards. It is embedded deeply in the engine object
+model:
 
-- Watcher 提供树状路径，可读写运行时变量。
-- Manager 进程通过 Watcher 暴露 App、Space、Cell、load、DB 等状态。
-- `ForwardingWatcher` 支持把 watcher 请求转发到 BaseApp/CellApp 集合。
-- `PacketReceiver` 暴露网络 stats 和 socket 处理时间预算。
-- Profiler 支持 C++/GPU/Python 分类、层级统计、hitch detection、JSON/CSV 输出。
-- EntityProfiler 直接把实体执行时间转成 load，进入负载均衡决策。
-- Message Logger 是独立工具链，不只是进程 stdout。
+- Watcher provides a tree of paths that can read and write runtime variables.
+- The Manager process exposes App, Space, Cell, load and DB state through Watcher.
+- `ForwardingWatcher` forwards watcher requests to a set of BaseApp/CellApp targets.
+- `PacketReceiver` exposes network stats and the socket processing time budget.
+- The Profiler supports C++/GPU/Python categorisation, hierarchical statistics, hitch
+  detection and JSON/CSV output.
+- EntityProfiler turns entity execution time directly into load, which feeds
+  load-balancing decisions.
+- The Message Logger is a separate toolchain, not just each process writing stdout.
 
-关键源码：
+Key source code:
 
-- Watcher 类型系统在 [watcher.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/cstdmf/watcher.hpp:35)。
-- `PacketReceiver::pWatcher()` 在 [packet_receiver.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/packet_receiver.cpp:1367)。
-- `BaseAppMgr::addWatchers()` 在 [baseappmgr.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/baseappmgr/baseappmgr.cpp:705)。
-- `Space::pWatcher()` 在 [space.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellappmgr/space.cpp:932)。
-- `ForwardingWatcher` 在 [watcher_forwarding.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/server/watcher_forwarding.cpp:64)。
-- Profiler 宏与事件模型在 [profiler.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/cstdmf/profiler.hpp:43)。
-- EntityProfiler 在 [entity_profiler.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/server/entity_profiler.hpp:38)。
-- Guard/Profiler/MemTracker 组合宏在 [guard.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/cstdmf/guard.hpp:13)。
+- The Watcher type system is at
+  watcher.hpp.
+- `PacketReceiver::pWatcher()` is at
+  packet_receiver.cpp.
+- `BaseAppMgr::addWatchers()` is at
+  baseappmgr.cpp.
+- `Space::pWatcher()` is at
+  space.cpp.
+- `ForwardingWatcher` is at
+  watcher_forwarding.cpp.
+- The Profiler macros and event model are at
+  profiler.hpp.
+- EntityProfiler is at
+  entity_profiler.hpp.
+- The combined Guard/Profiler/MemTracker macros are at
+  guard.hpp.
 
-## Watcher 是什么
+## What a Watcher Is
 
-Watcher 可以理解为 BigWorld 内建的“运行时对象树”。
+A Watcher can be understood as BigWorld's built-in runtime object tree.
 
-它不是单纯指标系统，而是同时具备：
+It is not a plain metrics system. It also provides:
 
-- 读：查询变量、统计和对象状态。
-- 写：修改可写配置或触发命令。
-- 路径：用类似目录的路径组织对象。
-- 类型：支持 int、uint、float、bool、string、tuple、type。
-- 远程访问：通过 watcher network 协议读取其他组件。
+- Read: query variables, statistics and object state.
+- Write: change writable configuration or trigger commands.
+- Paths: organise objects with directory-like paths.
+- Types: int, uint, float, bool, string, tuple and type are supported.
+- Remote access: read other components through the watcher network protocol.
 
-Watcher 类型定义见 [watcher.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/cstdmf/watcher.hpp:40)。
+The Watcher type definitions are at
+watcher.hpp.
 
-`WATCHER_SEPARATOR` 是 `/`，说明 Watcher 的组织方式天然是路径树。见 [watcher.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/cstdmf/watcher.hpp:70)。
+`WATCHER_SEPARATOR` is `/`, which means the Watcher is organised as a path tree by
+nature. See
+watcher.hpp.
 
-## Watcher 树形模型
+## The Watcher Tree Model
 
-<MermaidDiagram title="Watcher 观测模型">
+<MermaidDiagram title="Watcher observation model">
 flowchart TD
   Root[Watcher root] --> ServerApp[ServerApp common watchers]
   Root --> Mgr[BaseAppMgr / CellAppMgr]
@@ -62,47 +82,67 @@ flowchart TD
   Space --> Cells[cells / bsp / geometry / load]
 </MermaidDiagram>
 
-设计含义：
+Design implications:
 
-- 可观测性按运行时对象组织，而不是按文件或日志关键字组织。
-- Manager 能看到集群控制面的关键数据。
-- 负载均衡、空间划分、网络处理预算都可以被运行时观察。
-- Watcher 既是调试工具，也是运维控制面的一部分。
+- Observability is organised by runtime object, not by file or log keyword.
+- The Manager can see the key data of the cluster control plane.
+- Load balancing, space partitioning and the network processing budget can all be
+  observed at runtime.
+- Watcher is both a debugging tool and part of the operations control plane.
 
-## Watcher 网络协议
+## The Watcher Network Protocol
 
-Watcher 不只是本地 `Watcher::rootWatcher()`。服务进程可以通过 `WatcherNub` 把 watcher 树暴露给外部工具。
+A Watcher is not just the local `Watcher::rootWatcher()`. A service process can
+expose its watcher tree to external tools through `WatcherNub`.
 
-关键源码事实：
+Key facts from the source:
 
-- `WatcherNub::init()` 同时创建 UDP socket 和 TCP socket，并尝试把两者绑定到同一个端口，见 [watcher_nub.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/watcher_nub.cpp:47) 和 [watcher_nub.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/watcher_nub.cpp:121)。
-- `WatcherNub::attachTo()` 把 UDP/TCP fd 注册到 `EventDispatcher`，名字分别是 `WatcherUDP` 和 `WatcherTCP`，见 [watcher_nub.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/watcher_nub.cpp:256)。
-- `WatcherNub::notifyMachineGuard()` 会向本机 machined 注册 watcher nub 的端口、进程 ID、简称和版本号，见 [watcher_nub.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/watcher_nub.cpp:222)。
+- `WatcherNub::init()` creates both a UDP socket and a TCP socket and tries to bind
+  them to the same port, see
+  watcher_nub.cpp
+  and
+  watcher_nub.cpp.
+- `WatcherNub::attachTo()` registers the UDP and TCP file descriptors with
+  `EventDispatcher`, named `WatcherUDP` and `WatcherTCP` respectively, see
+  watcher_nub.cpp.
+- `WatcherNub::notifyMachineGuard()` registers the watcher nub's port, process ID,
+  short name and version with the local machined, see
+  watcher_nub.cpp.
 
-Watcher 协议本身支持 GET/SET/TELL 两代消息：
+The Watcher protocol itself supports two generations of GET/SET/TELL messages:
 
-- v1：`WATCHER_MSG_GET`、`WATCHER_MSG_SET`、`WATCHER_MSG_TELL`。
-- v2：`WATCHER_MSG_GET2`、`WATCHER_MSG_SET2`、`WATCHER_MSG_TELL2`、`WATCHER_MSG_SET2_TELL2`。
+- v1: `WATCHER_MSG_GET`, `WATCHER_MSG_SET`, `WATCHER_MSG_TELL`.
+- v2: `WATCHER_MSG_GET2`, `WATCHER_MSG_SET2`, `WATCHER_MSG_TELL2`,
+  `WATCHER_MSG_SET2_TELL2`.
 
-定义见 [watcher_nub.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/watcher_nub.hpp:43)。
+The definitions are at
+watcher_nub.hpp.
 
-`WatcherPacketHandler` 负责把多个 path request 聚合成一个回复包，并处理 UDP 包大小限制：
+`WatcherPacketHandler` batches several path requests into one reply packet and handles
+the UDP packet-size limit:
 
-- v1 UDP 回复包会在超过限制时写入 `<Err>` 和 `Exceeded maximum packet size`。
-- v2 对 TCP 使用更大的 `WN_PACKET_SIZE_TCP`，对 UDP 仍受 `WN_PACKET_SIZE` 限制。
+- A v1 UDP reply writes `<Err>` and `Exceeded maximum packet size` when the limit is
+  exceeded.
+- v2 uses the larger `WN_PACKET_SIZE_TCP` for TCP, while UDP remains limited by
+  `WN_PACKET_SIZE`.
 
-源码见 [watcher_packet_handler.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/watcher_packet_handler.cpp:25) 和 [watcher_packet_handler.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/watcher_packet_handler.cpp:114)。
+Source:
+watcher_packet_handler.cpp
+and
+watcher_packet_handler.cpp.
 
-这解释了 Watcher 的几个工程特征：
+This explains several engineering properties of the Watcher:
 
-- 它是运行时远程 introspection 协议，不是单纯指标拉取协议。
-- 它允许 SET，所以天然带控制面风险。
-- 它依赖 machined 发现，不是所有工具都需要静态配置每个端口。
-- 大 watcher 子树查询可能撞到 UDP 包大小，需要 TCP 或路径收敛。
+- It is a runtime remote-introspection protocol, not a plain metrics-pulling protocol.
+- It allows SET, so it carries control-plane risk by nature.
+- It relies on machined discovery, so not every tool needs each port configured
+  statically.
+- Querying a large watcher subtree can hit the UDP packet size and needs TCP or narrower
+  paths.
 
-## Manager Watcher
+## Manager Watchers
 
-`BaseAppMgr::addWatchers()` 暴露：
+`BaseAppMgr::addWatchers()` exposes:
 
 - `numBaseApps`
 - `numServiceApps`
@@ -116,16 +156,17 @@ Watcher 协议本身支持 GET/SET/TELL 两代消息：
 - `serviceAppLoad/average`
 - `serviceAppLoad/max`
 
-源码见 [baseappmgr.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/baseappmgr/baseappmgr.cpp:705)。
+Source:
+baseappmgr.cpp.
 
-这些 watcher 直接对应运营关心的问题：
+These watchers map directly onto operational questions:
 
-- 当前有多少 BaseApp。
-- 当前有多少在线代理。
-- BaseApp 是否负载不均。
-- 是否需要迁移 Base 或扩容进程。
+- How many BaseApps are there right now.
+- How many proxies are online right now.
+- Whether the BaseApp load is uneven.
+- Whether a Base needs to be migrated or processes need to be scaled out.
 
-CellAppMgr 的 Space watcher 暴露：
+The CellAppMgr Space watcher exposes:
 
 - `id`
 - `cells`
@@ -139,13 +180,16 @@ CellAppMgr 的 Space watcher 暴露：
 - `geometry`
 - `bsp`
 
-源码见 [space.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellappmgr/space.cpp:932)。
+Source:
+space.cpp.
 
-这说明 BigWorld 对 Cell 空间划分不是黑箱。空间、BSP、负载和退休 Cell 都能被观察。
+BigWorld's Cell space partitioning is therefore not a black box. The space, the BSP, the
+load and retiring Cells can all be observed.
 
 ## ForwardingWatcher
 
-`ForwardingWatcher` 支持将 watcher 请求转发到目标组件集合。它定义了几个目标：
+`ForwardingWatcher` forwards watcher requests to a set of target components. It defines
+several targets:
 
 - `cellApps`
 - `baseApps`
@@ -153,30 +197,36 @@ CellAppMgr 的 Space watcher 暴露：
 - `baseServiceApps`
 - `leastLoaded`
 
-源码见 [watcher_forwarding.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/server/watcher_forwarding.cpp:10)。
+Source:
+watcher_forwarding.cpp.
 
-`setFromStream()` 解析路径时支持：
+When `setFromStream()` parses a path, it supports:
 
 - `all/command/addBot`
 - `leastLoaded/command/addBot`
 - `1,2,45,87/command/addBot`
 
-源码注释见 [watcher_forwarding.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/server/watcher_forwarding.cpp:64)。
+Source comment:
+watcher_forwarding.cpp.
 
-这个设计很强，但也有风险：
+This design is powerful, and it also carries risk:
 
-- 强：可以从 Manager 对多组件执行统一 watcher 操作。
-- 风险：如果写权限暴露到不可信网络，会变成远程管理入口。
+- Powerful: the Manager can run one watcher operation across many components.
+- Risk: if write access is exposed on an untrusted network, it becomes a remote
+  administration entry point.
 
-安全分析时应把 Watcher 明确拆成“只读观测”和“可写控制”两类权限。
+A security review must split Watcher access explicitly into read-only observation and
+writable control.
 
-## Watcher 编码边界
+## Watcher Encoding Boundaries
 
-v2 Watcher 数据不是 JSON，而是二进制类型流。
+v2 Watcher data is not JSON; it is a binary type stream.
 
-`WatcherProtocolDecoder::decodeNext()` 每次读取 `type` 和 `mode`，再按 watcher 类型分发到对应 handler，见 [watcher_protocol.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/server/watcher_protocol.cpp:22)。
+`WatcherProtocolDecoder::decodeNext()` reads `type` and `mode` on each iteration, then
+dispatches to the matching handler by watcher type, see
+watcher_protocol.cpp.
 
-当前支持的类型包括：
+The types supported today are:
 
 - `WATCHER_TYPE_INT`
 - `WATCHER_TYPE_UINT`
@@ -185,39 +235,49 @@ v2 Watcher 数据不是 JSON，而是二进制类型流。
 - `WATCHER_TYPE_STRING`
 - `WATCHER_TYPE_TUPLE`
 
-源码见 [watcher_protocol.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/server/watcher_protocol.cpp:44)。
+Source:
+watcher_protocol.cpp.
 
-`defaultHandler()` 会读取长度并校验剩余 stream，不允许越界读取，见 [watcher_protocol.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/server/watcher_protocol.cpp:78)。
+`defaultHandler()` reads the length and validates the remaining stream, so out-of-range
+reads are not allowed, see
+watcher_protocol.cpp.
 
-这说明 Watcher 的安全边界不只是“有没有认证”。还包括：
+The Watcher security boundary is therefore not just "is there authentication". It also
+covers:
 
-- path 是否允许写。
-- 类型和 mode 是否匹配。
-- 长度字段是否可信。
-- 单次请求是否可能放大成大量 forwarded watcher 请求。
-- 返回包是否可能过大导致丢失或截断。
+- Whether a path may be written.
+- Whether the type and the mode match.
+- Whether the length field can be trusted.
+- Whether one request can be amplified into a large number of forwarded watcher
+  requests.
+- Whether the reply packet can be so large that it is dropped or truncated.
 
-## 网络观测
+## Network Observation
 
-`PacketReceiver::pWatcher()` 暴露：
+`PacketReceiver::pWatcher()` exposes:
 
 - `stats`
 - `maxSocketProcessingTimeStamps`
 
-源码见 [packet_receiver.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/packet_receiver.cpp:1372)。
+Source:
+packet_receiver.cpp.
 
-`maxSocketProcessingTime()` 注释明确说明：
+The comment on `maxSocketProcessingTime()` states explicitly:
 
-- 非零时限制一次 socket 输入通知允许处理的时间。
-- 为零时不限制，会处理到 receive queue 为空。
+- When it is non-zero, it limits the time a single socket input notification is allowed
+  to spend processing.
+- When it is zero, there is no limit and it processes until the receive queue is empty.
 
-源码见 [packet_receiver.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/packet_receiver.cpp:1400)。
+Source:
+packet_receiver.cpp.
 
-这对学习网络模型很关键。BigWorld 不只是用 epoll 等待事件，它还通过可观测/可调参数限制一次网络处理占用主线程的时间。
+This matters for reading the network model. BigWorld does not merely wait for events with
+epoll; it also bounds how long one round of network processing occupies the main thread,
+through a parameter that is both observable and tunable.
 
 ## Profiler
 
-Profiler 不是简单计时器。`profiler.hpp` 暴露了多种模式：
+The Profiler is not a simple timer. `profiler.hpp` exposes several modes:
 
 - `HIERARCHICAL`
 - `SORT_BY_TIME`
@@ -227,17 +287,19 @@ Profiler 不是简单计时器。`profiler.hpp` 暴露了多种模式：
 - `GRAPHS`
 - `CORES`
 
-源码见 [profiler.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/cstdmf/profiler.hpp:130)。
+Source:
+profiler.hpp.
 
-事件类别包括：
+The event categories are:
 
 - `CATEGORY_CPP`
 - `CATEGORY_GPU`
 - `CATEGORY_PYTHON`
 
-源码见 [profiler.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/cstdmf/profiler.hpp:162)。
+Source:
+profiler.hpp.
 
-宏层包括：
+The macro layer includes:
 
 - `PROFILER_SCOPED`
 - `PROFILER_COUNTER`
@@ -245,22 +307,24 @@ Profiler 不是简单计时器。`profiler.hpp` 暴露了多种模式：
 - `PROFILER_IDLE_SCOPED`
 - `PROFILER_LEVEL_COUNTER`
 
-源码见 [profiler.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/cstdmf/profiler.hpp:43)。
+Source:
+profiler.hpp.
 
-这说明 BigWorld 关注的不只是“哪里慢”，还包括：
+BigWorld is therefore not asking only "where is it slow". It also tracks:
 
-- 调用层级。
-- 调用次数。
-- idle 时间。
-- 文件 I/O。
-- Python 与 C++ 分类。
-- hitch detection。
+- Call hierarchy.
+- Call count.
+- Idle time.
+- File I/O.
+- Python and C++ categorisation.
+- Hitch detection.
 
-## EntityProfiler 与负载
+## EntityProfiler and Load
 
-`EntityProfiler` 是 BigWorld 很有代表性的设计：它把实体执行耗时变成 load，供 Cell 负载均衡使用。
+`EntityProfiler` is one of BigWorld's most characteristic designs: it turns entity
+execution time into load, which Cell load balancing then consumes.
 
-源码中 `EntityProfiler` 暴露：
+In the source, `EntityProfiler` exposes:
 
 - `load()`
 - `rawLoad()`
@@ -268,156 +332,216 @@ Profiler 不是简单计时器。`profiler.hpp` 暴露了多种模式：
 - `artificialMinLoad()`
 - `tick()`
 
-并使用指数平滑计算 load。见 [entity_profiler.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/server/entity_profiler.hpp:53)。
+and it computes load with exponential smoothing, see
+entity_profiler.hpp.
 
-`AUTO_SCOPED_ENTITY_PROFILE` 使用 RAII 在作用域进入/退出时 start/stop，见 [entity_profiler.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/server/entity_profiler.hpp:13)。
+`AUTO_SCOPED_ENTITY_PROFILE` uses RAII to start on scope entry and stop on scope exit,
+see
+entity_profiler.hpp.
 
-设计含义：
+Design implications:
 
-- 负载均衡不是只看实体数量。
-- 单个昂贵实体会反映到 load。
-- 人工最小负载可用于测试或调参。
-- 观测数据直接影响调度策略。
+- Load balancing does not look at entity count alone.
+- A single expensive entity shows up in the load.
+- The artificial minimum load exists for testing and tuning.
+- Observation data feeds the scheduling policy directly.
 
-## Guard、Stack Tracker 与 MemTracker
+## Guard, Stack Tracker and MemTracker
 
-`guard.hpp` 定义了组合宏：
+`guard.hpp` defines combined macros:
 
 - `BW_GUARD`
 - `BW_GUARD_PROFILER`
 - `BW_GUARD_MEMTRACKER`
 - `BW_GUARD_PROFILER_MEMTRACKER`
 
-源码见 [guard.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/cstdmf/guard.hpp:13)。
+Source:
+guard.hpp.
 
-这类宏在旧 C++ 游戏引擎里很常见，作用是：
+Macros like these are common in older C++ game engines, and they serve to:
 
-- 函数级栈跟踪。
-- Profiling 作用域。
-- 内存跟踪作用域。
-- 崩溃或断言时提供上下文。
+- Provide function-level stack tracking.
+- Open a profiling scope.
+- Open a memory-tracking scope.
+- Provide context at crash or assertion time.
 
-它的优势是侵入式但低门槛，代价是宏散布和编译开关复杂。
+The advantage is that this is intrusive but low-cost to add. The cost is macro spread and
+a complicated set of build switches.
 
-## 日志系统
+## The Logging System
 
-仓库中存在独立工具链 `server/tools/message_logger`。这说明 BigWorld 的日志不是仅靠每个进程写 stdout，而是有集中消息日志工具。
+The repository contains a standalone toolchain at `server/tools/message_logger`. BigWorld
+logging is therefore not just every process writing to stdout; there is a central message
+logger.
 
-从架构角度看，Message Logger 的价值在于：
+From an architecture standpoint, the value of the Message Logger is:
 
-- 多进程集群需要统一收集日志。
-- MMO 问题往往跨 BaseApp、CellApp、DBApp、Mgr。
-- 只看单进程日志无法还原实体迁移、Channel death、登录链路。
+- A multi-process cluster needs log collection in one place.
+- MMO incidents usually cross BaseApp, CellApp, DBApp and Manager.
+- Single-process logs alone cannot reconstruct entity migration, Channel death or the
+  login path.
 
-端到端链路如下：
+The end-to-end chain is:
 
-<MermaidDiagram title="日志转发链路">
+<MermaidDiagram title="Log forwarding chain">
 flowchart TD
-  A[TRACE/DEBUG/INFO/WARNING/ERROR 宏] --> B[DebugFilter]
+  A[TRACE/DEBUG/INFO/WARNING/ERROR macros] --> B[DebugFilter]
   B --> C[DebugMessageCallback]
   C --> D[LoggerMessageForwarder]
   D --> E[LoggerEndpoint TCP/UDP]
   E --> F[message_logger Logger]
   F --> G[LogStorage]
-  G --> H[MLDB 文件后端或 MongoDB 后端]
+  G --> H[MLDB file backend or MongoDB backend]
 </MermaidDiagram>
 
-源码证据：
+Source evidence:
 
-- `DebugFilter::handleMessage()` 会把消息交给注册的 `DebugMessageCallback`，见 [debug_filter.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/cstdmf/debug_filter.cpp:189)。
-- `LoggerMessageForwarder` 构造时调用 `DebugFilter::instance().addMessageCallback(this)`，把自己挂到日志回调链，见 [logger_message_forwarder.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/logger_message_forwarder.cpp:254)。
-- `FindLoggerHandler` 通过 machined 的 `ProcessStatsMessage` 找到 MessageLogger 地址并添加 logger endpoint，见 [logger_message_forwarder.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/logger_message_forwarder.cpp:163)。
-- `LoggerEndpoint` 负责连到远端 MessageLogger，并维护 TCP/UDP、重连、缓冲队列和 dropped message 计数，见 [logger_endpoint.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/logger_endpoint.hpp:18)。
-- `Logger` 是 `message_logger` 进程主体，负责接收组件日志、注册组件、处理断开和写入存储，见 [logger.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/tools/message_logger/logger.hpp:18)。
+- `DebugFilter::handleMessage()` hands the message to the registered
+  `DebugMessageCallback`, see
+  debug_filter.cpp.
+- The `LoggerMessageForwarder` constructor calls
+  `DebugFilter::instance().addMessageCallback(this)`, hooking itself into the log
+  callback chain, see
+  logger_message_forwarder.cpp.
+- `FindLoggerHandler` finds the MessageLogger address through machined's
+  `ProcessStatsMessage` and adds the logger endpoint, see
+  logger_message_forwarder.cpp.
+- `LoggerEndpoint` connects to the remote MessageLogger and maintains TCP/UDP, reconnect,
+  the buffer queue and the dropped-message count, see
+  logger_endpoint.hpp.
+- `Logger` is the body of the `message_logger` process, responsible for receiving
+  component logs, registering components, handling disconnects and writing to storage,
+  see
+  logger.hpp.
 
-这条链路体现了几个取舍：
+This chain reflects several trade-offs:
 
-- 业务进程不直接写集中日志文件，而是把日志作为网络消息转发。
-- MessageLogger 可以按 UID、组件名、LoggerID、优先级过滤，见 [logger.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/tools/message_logger/logger.cpp:164)。
-- Logger 进程自己也暴露 watcher，例如 `size`、`reattachAll`、`filter/TRACE` 到 `filter/CRITICAL`，见 [logger.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/tools/message_logger/logger.cpp:164)。
+- The game processes do not write to the central log file directly; logs are forwarded as
+  network messages.
+- The MessageLogger can filter by UID, component name, LoggerID and priority, see
+  logger.cpp.
+- The Logger process exposes watchers of its own, for example `size`, `reattachAll` and
+  `filter/TRACE` through `filter/CRITICAL`, see
+  logger.cpp.
 
-## MessageLogger 存储模型
+## MessageLogger Storage Model
 
-`message_logger` 不是一个单一文本文件 writer。它有抽象存储层：
+`message_logger` is not a single text-file writer. It has an abstract storage layer:
 
-- `LogStorage` 定义 `addLogMessage()`、`writeLogToDB()`、`roll()`、`validateNextHostname()`、`setAppInstanceID()` 等接口，见 [log_storage.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/tools/message_logger/log_storage.hpp:19)。
-- `LogStorage::addLogMessage()` 会读取网络 header、消息来源、优先级、格式串，再解析 host、category，最后交给后端写入，见 [log_storage.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/tools/message_logger/log_storage.cpp:71)。
-- `mldb` 是本地文件型存储后端，目录在 [mldb/log_storage.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/tools/message_logger/mldb/log_storage.hpp:1)。
-- MongoDB 后端由 `LogStorageMongoDB` 实现，支持缓冲、后台 TaskManager、重连、roll、过期清理和 BSON 构造，见 [mongodb/log_storage.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/tools/message_logger/mongodb/log_storage.hpp:32)。
+- `LogStorage` defines interfaces such as `addLogMessage()`, `writeLogToDB()`, `roll()`,
+  `validateNextHostname()` and `setAppInstanceID()`, see
+  log_storage.hpp.
+- `LogStorage::addLogMessage()` reads the network header, the message source, the priority
+  and the format string, then resolves the host and category, and finally hands the
+  message to the backend for writing, see
+  log_storage.cpp.
+- `mldb` is the local file-based storage backend, in
+  mldb/log_storage.hpp.
+- The MongoDB backend is implemented by `LogStorageMongoDB`, with buffering, a background
+  TaskManager, reconnect, roll, expiry cleanup and BSON construction, see
+  mongodb/log_storage.hpp.
 
-MongoDB 后端还有一个重要运行时边界：
+The MongoDB backend has one more important runtime boundary:
 
-- 如果连接断开，`LogStorageMongoDB::addLogMessage()` 会暂停写日志并排入 `ReconnectTask`，连接恢复后再恢复 logging，见 [mongodb/log_storage.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/tools/message_logger/mongodb/log_storage.cpp:268)。
+- If the connection drops, `LogStorageMongoDB::addLogMessage()` pauses logging and queues
+  a `ReconnectTask`, then resumes logging once the connection is back, see
+  mongodb/log_storage.cpp.
 
-这说明 MessageLogger 是一个独立的日志数据库服务，而不是“每个进程 printf 到文件”。它可以集中查询，但也引入了自己的可靠性问题：
+MessageLogger is therefore a standalone log-database service, not "each process printfing
+to a file". It can be queried centrally, but it brings its own reliability problems:
 
-- LoggerEndpoint 缓冲满会丢消息。
-- MessageLogger 进程故障会影响集中日志。
-- MongoDB 连接故障时会暂停写入。
-- 日志格式串和元数据协议需要前后端版本兼容。
+- LoggerEndpoint drops messages when its buffer is full.
+- A MessageLogger process failure affects central logging.
+- Writes pause when the MongoDB connection fails.
+- The log format string and the metadata protocol need front/back-end version
+  compatibility.
 
-## 日志字段与缺口
+## Log Fields and Gaps
 
-BigWorld 的日志已经有一些结构化雏形：
+BigWorld's logs already have some structured shape:
 
-- `LoggerMessageHeader` 包含 component priority、message priority、message source、category，见 [logger_message_forwarder.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/logger_message_forwarder.hpp:114)。
-- `LoggerComponentMessage` 包含 version、loggerID、uid、pid、componentName，见 [logger_message_forwarder.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/logger_message_forwarder.hpp:131)。
-- `LogStorage::resolveUID()` 会通过 machined 把 uid 解析成 username，见 [log_storage.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/tools/message_logger/log_storage.cpp:159)。
+- `LoggerMessageHeader` carries the component priority, the message priority, the message
+  source and the category, see
+  logger_message_forwarder.cpp.
+- `LoggerComponentMessage` carries the version, loggerID, uid, pid and componentName, see
+  logger_message_forwarder.cpp.
+- `LogStorage::resolveUID()` resolves a uid to a username through machined, see
+  log_storage.cpp.
 
-但它还不是现代意义上的完整结构化日志：
+But it is not yet fully structured logging in the modern sense:
 
-- 结构化日志字段。
-- trace/correlation id。
-- EntityID、SpaceID、CellAppID、Channel addr 等关键上下文统一规范。
-- 日志采样和动态级别控制。
-- 与指标和 profiler 事件关联。
+- Structured log fields.
+- A trace/correlation id.
+- A unified convention for key context such as EntityID, SpaceID, CellAppID and Channel
+  addr.
+- Log sampling and dynamic level control.
+- Correlation with metrics and profiler events.
 
-所以要区分两件事：
+So two things have to be kept separate:
 
-- BigWorld 已经有集中日志和部分结构化 metadata。
-- BigWorld 没有统一的跨进程 trace/span 模型，也没有强制每条关键日志都携带 EntityID/DBID/SpaceID/SessionKey。
+- BigWorld already has central logging and partly structured metadata.
+- BigWorld has no unified cross-process trace/span model, and no requirement that every
+  key log carries EntityID/DBID/SpaceID/SessionKey.
 
-## 源码职责划分
+## Source-Code Responsibility Split
 
-这章不能把 Watcher、Profiler 和 Message Logger 混成一个“监控系统”。源码里的职责边界更细：
+This chapter must not lump Watcher, Profiler and Message Logger into one "monitoring
+system". The responsibility boundaries in the source are finer:
 
-- Watcher 是运行时对象树和管理协议，路径可以读，也可能写或执行 TELL。
-- `ForwardingWatcher` 是跨进程转发器，能把 watcher command 发到 all、leastLoaded 或指定进程集合。
-- `Profiler` / `DogWatch` 是进程内耗时采样和分段统计，输出服务性能分析。
-- `EntityProfiler` 直接服务实体负载分析，和 CellApp 负载均衡输入有交集。
-- `LoggerEndpoint` 和 Message Logger 是集中日志链路，负责格式串、进程元数据、优先级、category 和存储后端。
+- Watcher is a runtime object tree and a management protocol; paths can be read, and may
+  also be written or executed via TELL.
+- `ForwardingWatcher` is a cross-process forwarder that can send watcher commands to
+  all, leastLoaded or an explicit set of processes.
+- `Profiler` / `DogWatch` is in-process timing sampling and section statistics, feeding
+  performance analysis.
+- `EntityProfiler` serves entity load analysis directly and overlaps with the CellApp
+  load-balancing input.
+- `LoggerEndpoint` and the Message Logger form the central logging chain, owning the
+  format string, process metadata, priority, category and the storage backend.
 
-因此源码分析时要先判断问题属于哪条链路：
+When analysing the source, decide first which chain a question belongs to:
 
-- 想看运行时变量，查 watcher path 和 setter/TELL 权限。
-- 想看 tick 内耗时，查 profiler scope 和 `DogWatch` 分段。
-- 想看实体造成的 CellApp 负载，查 EntityProfiler 与 load 上报。
-- 想看跨进程故障，查 Message Logger 是否收到完整日志，以及后端是否暂停写入。
+- To see a runtime variable, check the watcher path and the setter/TELL permissions.
+- To see time spent inside a tick, check profiler scopes and `DogWatch` sections.
+- To see the CellApp load caused by entities, check EntityProfiler and the load reports.
+- To see a cross-process fault, check whether the Message Logger received complete logs
+  and whether the backend paused writes.
 
-## 源码边界
+## Source Boundaries
 
-几个边界直接影响线上排障：
+A few boundaries directly affect production troubleshooting:
 
-- Watcher 不是只读指标协议；SET/TELL 路径必须按控制面入口处理。
-- Watcher UDP 回复受包大小限制，路径树过大或返回内容过长时不能假设一定完整。
-- ForwardingWatcher 会改变命令作用范围，排障时要区分本进程 watcher 和转发 watcher。
-- `LoggerEndpoint` 在 Message Logger 不可用或缓冲满时可能丢日志，不能把集中日志当成强可靠审计日志。
-- MongoDB 后端断连时会暂停写入并排重连任务，恢复前日志可见性会下降。
-- 日志已有 component、priority、source、category 等元数据，但源码没有统一 trace/span 模型。
+- Watcher is not a read-only metrics protocol; SET/TELL paths must be treated as
+  control-plane entry points.
+- Watcher UDP replies are limited by packet size, so a large path tree or a long response
+  cannot be assumed complete.
+- ForwardingWatcher changes a command's scope, so troubleshooting must distinguish local
+  watchers from forwarded watchers.
+- `LoggerEndpoint` can lose logs when the Message Logger is unavailable or its buffer is
+  full, so central logging must not be treated as a strongly reliable audit log.
+- The MongoDB backend pauses writes and queues a reconnect task on disconnect, so log
+  visibility drops until it recovers.
+- Logs already carry metadata such as component, priority, source and category, but the
+  source has no unified trace/span model.
 
-## 源码验证重点
+## Source-Code Verification Focus
 
-可观测性改造的测试不能只看“能看到指标”。至少要覆盖：
+Tests for an observability change must not stop at "metrics are visible". They must cover
+at least:
 
-- Watcher v1/v2 GET/SET/TELL 兼容性。
-- UDP watcher 回复包超过限制时的行为。
-- ForwardingWatcher 对 all、leastLoaded、指定 ID 列表的转发结果。
-- 可写 watcher 的权限、审计和失败回滚。
-- LoggerEndpoint 在 MessageLogger 不可用、重连和缓冲满时的丢消息行为。
-- MLDB/MongoDB 后端的 roll、过期清理和查询兼容性。
-- DebugFilter category suppression 是否能动态生效。
-- EntityProfiler load 是否和 Cell 负载均衡输入一致。
+- Watcher v1/v2 GET/SET/TELL compatibility.
+- Behaviour when a UDP watcher reply packet exceeds the limit.
+- ForwardingWatcher results for all, leastLoaded and an explicit ID list.
+- Permissions, auditing and failure rollback for writable watchers.
+- Message loss in LoggerEndpoint when the MessageLogger is unavailable, during reconnect
+  and when the buffer is full.
+- Roll, expiry cleanup and query compatibility for the MLDB/MongoDB backends.
+- Whether DebugFilter category suppression takes effect dynamically.
+- Whether EntityProfiler load matches the Cell load-balancing input.
 
-## 本章边界
+## Chapter Boundary
 
-本章解释可观测性设施。下一章分析内存和生命周期：BigWorld 大量使用自定义 SmartPointer、ReferenceCount、PyObjectPlus、Packet/Bundle 和实体状态转换，生命周期本身就是架构复杂度来源。
+This chapter explains the observability facilities. The next chapter analyses memory and
+lifetime: BigWorld makes heavy use of custom SmartPointer, ReferenceCount, PyObjectPlus,
+Packet/Bundle and entity state transitions, so lifetime itself is a source of
+architectural complexity.

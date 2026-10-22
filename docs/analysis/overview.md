@@ -1,100 +1,119 @@
-# 总体画像
+# Overall Picture
 
-> [English](overview.en.md) | **中文**
+> **English** | [中文](overview.md)
 
-## 一句话判断
+## One-sentence verdict
 
-BigWorld 开源版是一个以 C++ 服务端、Mercury 网络协议、EntityDef 契约和嵌入式脚本层共同组成的大型 MMO 引擎源码仓库。它的核心不是某一种语言或工具链，而是多进程状态分片、实体生命周期、客户端同步和数据库持久化之间的闭环。
+Open-source BigWorld is a large MMO engine source repository built from a
+C++ server, the Mercury network protocol, the EntityDef contract, and an
+embedded scripting layer. Its core is not any single language or toolchain,
+but the closed loop among multi-process state sharding, entity lifecycle,
+client synchronization, and database persistence.
 
-## 源码主线
+## Source main lines
 
-从源码关系看，BigWorld 至少有六条主线：
+From the source relationships, BigWorld has at least six main lines:
 
-| 主线 | 代表源码 | 要回答的问题 |
+| Main line | Representative source | Question it answers |
 |---|---|---|
-| 进程框架 | `programming/bigworld/lib/server/` | 每个服务进程如何启动、注册接口并进入事件循环 |
-| Mercury 网络 | `programming/bigworld/lib/network/` | 消息如何被打包、发送、接收、分发和重试 |
-| 实体契约 | `programming/bigworld/lib/entitydef/` | `.def` 如何决定属性域、方法、序列化顺序和 digest |
-| 服务端状态 | `programming/bigworld/server/` | BaseApp、CellApp、DBApp、LoginApp 等进程如何协作 |
-| 客户端连接 | `programming/bigworld/lib/connection/`, `programming/bigworld/client/` | 客户端如何登录、接管 Proxy、接收 AOI 和属性更新 |
-| 持久化映射 | `programming/bigworld/lib/db_storage*`, `programming/bigworld/server/dbapp/` | EntityDef 属性如何映射到数据库并被写入 |
+| Process framework | `programming/bigworld/lib/server/` | How each server process starts, registers its interface, and enters the event loop |
+| Mercury networking | `programming/bigworld/lib/network/` | How messages are packed, sent, received, dispatched, and retried |
+| Entity contract | `programming/bigworld/lib/entitydef/` | How a `.def` determines property domains, methods, serialization order, and digest |
+| Server state | `programming/bigworld/server/` | How BaseApp, CellApp, DBApp, LoginApp and the other processes cooperate |
+| Client connection | `programming/bigworld/lib/connection/`, `programming/bigworld/client/` | How the client logs in, takes over a Proxy, and receives AOI and property updates |
+| Persistence mapping | `programming/bigworld/lib/db_storage*`, `programming/bigworld/server/dbapp/` | How EntityDef properties map to the database and get written |
 
-读源码时应优先把这六条线串起来，而不是按目录顺序逐个文件阅读。
+When reading the source, connect these six lines first rather than reading
+files one by one in directory order.
 
-## 运行闭环
+## Runtime closed loop
 
-最小服务端闭环可以这样理解：
+The minimal server closed loop can be understood as:
 
 ```
 BIGWORLD_MAIN
   -> bwMainT / doBWMainT
   -> ServerApp::runApp
-  -> 具体 App::init
+  -> concrete App::init
   -> Interface::registerWithInterface
   -> EventDispatcher::processOnce
   -> Mercury handler
-  -> Entity / Manager / DB 状态变更
+  -> Entity / Manager / DB state change
 ```
 
-实体相关闭环更复杂：
+The entity loop is more complex:
 
 ```
 entities.xml / .def
   -> EntityDescriptionMap
-  -> Base / Cell / Client / Persistent 数据域
-  -> Bundle / MethodDescription / DataDescription 序列化
+  -> Base / Cell / Client / Persistent data domains
+  -> Bundle / MethodDescription / DataDescription serialization
   -> BaseApp / CellApp / Proxy / DBApp
-  -> AOI、Ghost、Offload、writeToDB
+  -> AOI, Ghost, Offload, writeToDB
 ```
 
-这解释了 BigWorld 源码的主要难点：一个 `.def` 属性可能同时影响客户端可见性、Cell ghost 同步、Base 备份、DB 持久化、热更新和迁移流。
+This explains the main difficulty of the BigWorld source: a single `.def`
+property can simultaneously affect client visibility, Cell ghost
+synchronization, Base backup, DB persistence, hot update, and migration
+streams.
 
-## 仓库层级
+## Repository tiers
 
-从根目录观察，主线源码集中在以下区域：
+Viewed from the root, the main-line source is concentrated in these areas:
 
-| 目录 | 作用 |
+| Directory | Role |
 |---|---|
-| `programming/bigworld` | BigWorld 主体源码，包含客户端、服务端、工具、库、第三方依赖和构建系统 |
-| `programming/fantasydemo` | 示例内容与演示资源，可辅助理解业务层如何使用引擎 |
-| `docs/pdf` | 原始文档资料，可作为背景材料，但源码结论应以当前仓库为准 |
+| `programming/bigworld` | BigWorld main source: client, server, tools, libraries, third-party dependencies, and the build system |
+| `programming/fantasydemo` | Sample content and demo assets; helps understand how the business layer uses the engine |
+| `docs/pdf` | Original documentation; usable as background, but source conclusions should be based on the current repository |
 
-`programming/bigworld/lib` 是共享机制层，`programming/bigworld/server` 是 MMO 服务进程层。前者定义“消息、类型、资源、脚本、DB 抽象”，后者把这些机制组装成具体运行时。
+`programming/bigworld/lib` is the shared-mechanism layer;
+`programming/bigworld/server` is the MMO server-process layer. The former
+defines "messages, types, resources, scripts, DB abstractions"; the latter
+assembles those mechanisms into a concrete runtime.
 
-## 项目规模特征
+## Project scale characteristics
 
-基于目录扫描可得到以下事实：
+Directory scans give these facts:
 
-| 区域 | 一级目录数量 | 含义 |
+| Area | Number of first-level directories | Meaning |
 |---|---:|---|
-| `programming/bigworld/lib` | 57 | 共享库数量多，跨模块依赖明显 |
-| `programming/bigworld/server` | 12 | 服务端进程与扩展目录并存 |
-| `programming/bigworld/server/tools` | 10 | 运维、日志、数据处理工具是服务端生态的一部分 |
-| `programming/bigworld/third_party` | 22 | 仓库采用内置第三方依赖策略（另有 7 个依赖走 vcpkg，见 `vcpkg.json`） |
+| `programming/bigworld/lib` | 57 | Many shared libraries with significant cross-module dependencies |
+| `programming/bigworld/server` | 12 | Server processes and extension directories coexist |
+| `programming/bigworld/server/tools` | 10 | Operations, logging, and data-processing tools are part of the server ecosystem |
+| `programming/bigworld/third_party` | 22 | The repository uses a bundled third-party dependency strategy (another 7 dependencies come through vcpkg; see `vcpkg.json`) |
 
-这些数字只能说明规模，不能直接说明架构。架构判断必须回到源码调用链：接口在哪里注册、消息在哪里发出、handler 修改了什么状态、状态最终是否进入客户端或数据库。
+These numbers indicate scale only, not architecture. Architectural judgments
+must return to source call chains: where an interface is registered, where a
+message is sent, what state a handler mutates, and whether that state
+ultimately reaches a client or the database.
 
-## 架构分层
+## Architectural layering
 
-按职责可把源码分成五层：
+By responsibility the source can be split into five layers:
 
-| 层 | 内容 | 关键边界 |
+| Layer | Contents | Key boundary |
 |---|---|---|
-| 基础设施层 | `cstdmf`, `network`, `resmgr`, `math` | 时间、内存、资源、网络基础能力 |
-| 契约与脚本层 | `entitydef`, `script`, `pyscript`, `entitydef_script` | `.def`、DataType、脚本对象和 C++ 边界 |
-| 服务端进程层 | `baseapp`, `cellapp`, `dbapp`, `loginapp`, managers | 进程职责、RPC、状态分片和故障恢复 |
-| 客户端与工具层 | `client`, `tools`, editor libraries | 客户端协议、编辑器、资源生产链 |
-| 持久化与运维层 | `db_storage*`, `server/tools`, Watcher | DB 映射、后台任务、观测与控制 |
+| Infrastructure | `cstdmf`, `network`, `resmgr`, `math` | Time, memory, resources, networking primitives |
+| Contract and scripting | `entitydef`, `script`, `pyscript`, `entitydef_script` | `.def`, DataType, script objects, and the C++ boundary |
+| Server processes | `baseapp`, `cellapp`, `dbapp`, `loginapp`, managers | Process responsibilities, RPC, state sharding, fault recovery |
+| Client and tools | `client`, `tools`, editor libraries | Client protocol, editors, the asset production chain |
+| Persistence and operations | `db_storage*`, `server/tools`, Watcher | DB mapping, background tasks, observability and control |
 
-这五层不是严格单向依赖。比如 EntityDef 同时被网络、脚本、DB 和客户端使用；Watcher 同时用于观测和部分控制；Base/Cell 实体状态跨进程流动。
+These five layers are not strictly one-way dependencies. For example
+EntityDef is used by networking, scripting, DB, and the client at once;
+Watcher is used for both observation and some control; Base/Cell entity
+state flows across processes.
 
-## 当前文档目标
+## Goals of the current documentation
 
-本站的源码分析目标是：
+The source analysis on this site aims to:
 
-- 把 BigWorld 的多进程职责和消息链讲清楚。
-- 把 EntityDef 如何影响网络、DB、客户端和迁移讲清楚。
-- 把 Base、Cell、Client、Proxy、Witness、Ghost 的状态边界讲清楚。
-- 把构建、运行、测试、Watcher 和日志作为源码验证入口，而不是只作为使用说明。
+- explain BigWorld's multi-process responsibilities and message chains;
+- explain how EntityDef affects networking, DB, the client, and migration;
+- explain the state boundaries among Base, Cell, Client, Proxy, Witness, and Ghost;
+- treat the build, runtime, tests, Watcher, and logs as source-verification entry points rather than mere usage instructions.
 
-后续阅读建议从 [源码导读](/analysis/source-code-guide) 开始，再进入 [架构研究方法](/architecture/research-method) 和各专题章节。
+For continued reading, start with the [source code guide](/analysis/source-code-guide),
+then move to the [architecture research method](/architecture/research-method)
+and the topic chapters.

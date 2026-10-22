@@ -1,40 +1,43 @@
-# 实体生命周期状态机
+# Entity Lifecycle State Machine
 
-> [English](entity-lifecycle-state-machine.en.md) | **中文**
+> **English** | [中文](entity-lifecycle-state-machine.md)
 
 <div class="arch-hero">
 
-BigWorld 的 Entity 不是普通业务对象。它可以是 Base、Cell real、Cell ghost、Proxy、带 Witness 的客户端代表，也可以在 offload 中从 real 转 ghost，再在目标 CellApp onload 成 real。生命周期状态机是理解整个 MMO 架构的核心。
+A BigWorld Entity is not an ordinary business object. It may be a Base, a Cell
+real, a Cell ghost, a Proxy, a client-owned entity with a Witness, or an entity
+migrating from real to ghost during offload before becoming real again on the
+target CellApp. Its lifecycle state machine is central to the MMO architecture.
 
 </div>
 
-## 先给结论
+## Key Takeaways
 
-BigWorld 实体生命周期至少有这些关键状态：
+The lifecycle has at least these key states:
 
-- Base-only：只有 BaseApp 上的长期实体。
-- Base + pending Cell：Base 正在请求创建 Cell 实体。
-- Base + Cell real：CellApp 上有权威 real 实体。
-- Ghost：非权威副本，用于 AOI/跨 Cell 可见性。
-- Offloading：real 正在迁移到另一个 CellApp。
-- Destroying：实体进入销毁过程，但不能立即 delete。
-- Zombie ghost：恢复场景中可能残留的 ghost。
-- Restored real：从备份/迁移流恢复出的 real。
+- Base-only: only the long-lived Base entity exists on BaseApp.
+- Base + pending Cell: Base is requesting creation of a Cell entity.
+- Base + Cell real: an authoritative real entity exists on CellApp.
+- Ghost: a non-authoritative copy used for AOI and cross-Cell visibility.
+- Offloading: the real entity is migrating to another CellApp.
+- Destroying: entity destruction has begun, but the object cannot be deleted immediately.
+- Zombie ghost: a leftover ghost possible in recovery scenarios.
+- Restored real: a real restored from backup or a migration stream.
 
-关键源码：
+Key source code:
 
-- `Base::createCellEntity()` 请求创建关联 Cell 实体，见 [base.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/baseapp/base.cpp:3321)。
-- `Base::sendCreateCellEntity()` 发送 `CellAppInterface::createEntityNearEntity`，见 [base.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/baseapp/base.cpp:3363)。
-- `Cell::createEntityInternal()` 创建 real 实体，见 [cell.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/cell.cpp:300)。
-- `Entity::offload()` 发 `CellAppInterface::onload` 并调用 `convertRealToGhost()`，见 [entity.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity.cpp:1968)。
-- `Entity::convertRealToGhost()` 写迁移数据并 flush Witness，见 [entity.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity.cpp:2005)。
-- `Entity::readRealDataFromStreamForOnload()` 在目标 CellApp 读回 real 数据，见 [entity.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity.cpp:4710)。
-- `Entity::destroy()` 进入 destroyed 状态并处理 real/ghost 差异，见 [entity.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity.cpp:2886)。
-- `Cell::~Cell()` / `Cell::shutDown()` 会销毁所有 real entities，见 [cell.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/cell.cpp:98)。
+- `Base::createCellEntity()` requests creation of the linked Cell entity: base.cpp.
+- `Base::sendCreateCellEntity()` sends `CellAppInterface::createEntityNearEntity`: base.cpp.
+- `Cell::createEntityInternal()` creates a real entity: cell.cpp.
+- `Entity::offload()` sends `CellAppInterface::onload` and calls `convertRealToGhost()`: entity.cpp.
+- `Entity::convertRealToGhost()` writes migration data and flushes the Witness: entity.cpp.
+- `Entity::readRealDataFromStreamForOnload()` reads real data on the target CellApp: entity.cpp.
+- `Entity::destroy()` enters the destroyed state and handles real/ghost differences: entity.cpp.
+- `Cell::~Cell()` / `Cell::shutDown()` destroy every real entity: cell.cpp.
 
-## 状态机总览
+## State-Machine Overview
 
-<MermaidDiagram title="Entity 生命周期状态机">
+<MermaidDiagram title="Entity lifecycle state machine">
 stateDiagram-v2
   [*] --> BaseOnly: createBase / login
   BaseOnly --> PendingCell: Base.createCellEntity
@@ -52,212 +55,235 @@ stateDiagram-v2
   Destroyed --> [*]
 </MermaidDiagram>
 
-这个状态机不是源码中的单个 enum，而是从多个类和调用链归纳出的架构状态。
+This state machine is not a single source-level enum. It is an architectural
+state model reconstructed from multiple classes and call chains.
 
-## Base 创建 Cell 实体
+## Base Creates a Cell Entity
 
-`Base::createCellEntity()` 是脚本 API 入口之一。
+`Base::createCellEntity()` is one script API entry point.
 
-它先检查是否已经有关联 Cell 实体，如果传入附近实体 mailbox，则调用 `sendCreateCellEntityToMailBox()`。源码见 [base.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/baseapp/base.cpp:3321)。
+It first checks whether a linked Cell entity already exists. If a nearby entity
+mailbox was supplied, it calls `sendCreateCellEntityToMailBox()`:
+base.cpp.
 
-`Base::sendCreateCellEntity()` 会：
+`Base::sendCreateCellEntity()`:
 
-- 创建独立 `UDPBundle`，而不是直接使用 channel 自带 bundle。
-- `startRequest( CellAppInterface::createEntityNearEntity, pHandler )`。
-- 写入 nearby entity id。
-- 写入当前 entity channel version。
-- 写入 `isRestore = false`。
-- 调用 `addCellCreationData()` 写入创建数据。
-- 发送到目标 CellApp。
+- creates a separate `UDPBundle` rather than using the channel's own bundle;
+- calls `startRequest( CellAppInterface::createEntityNearEntity, pHandler )`;
+- writes the nearby entity ID;
+- writes the current entity channel version;
+- writes `isRestore = false`;
+- calls `addCellCreationData()` to write creation data;
+- sends the request to the target CellApp.
 
-源码见 [base.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/baseapp/base.cpp:3363)。
+Source: base.cpp.
 
-这里有一个关键注释：不用 channel 自带 bundle，因为 streaming 可能失败，需要能中途 abort。这个细节说明 Entity 创建不是普通 RPC，它对数据流完整性要求很高。
+A key comment explains the separate bundle: streaming may fail and must be
+abortable partway through. Entity creation is therefore not an ordinary RPC; it
+places strict requirements on stream integrity.
 
-## Cell 创建 Real
+## Cell Creates a Real
 
-`Cell::createEntityInternal()` 是 CellApp 上创建 real 实体的核心路径。
+`Cell::createEntityInternal()` is the core real-creation path on CellApp.
 
-关键步骤：
+Key steps:
 
-1. 从流中读取 `EntityID` 和 `EntityTypeID`。
-2. 如果 ID 为 0，则通过 `idClient()` 分配新 ID。
-3. 检查 population 中是否已有未销毁实体。
-4. restore 场景下如果已有 ghost，可能视为 zombie ghost 并销毁。
-5. `space_.newEntity(id, entityTypeID)` 创建 Entity。
-6. 暂时禁止 callbacks。
-7. 调用 `initReal()` 初始化 real。
-8. 加入 real entity 列表。
-9. 通知 population observers。
-10. 恢复 callbacks。
-11. 如果有 replay data，写入初始状态。
-12. 立即 `pReal()->backup()` 发送备份到 BaseApp。
+1. Read `EntityID` and `EntityTypeID` from the stream.
+2. If the ID is zero, allocate a new one through `idClient()`.
+3. Check whether the population already contains a non-destroyed entity.
+4. In a restore scenario, an existing ghost may be treated as a zombie ghost and destroyed.
+5. `space_.newEntity(id, entityTypeID)` creates the Entity.
+6. Temporarily disallow callbacks.
+7. Call `initReal()` to initialize the real.
+8. Insert it into the real-entity list.
+9. Notify population observers.
+10. Restore callback permission.
+11. If replay data exists, write initial state.
+12. Immediately call `pReal()->backup()` to send a backup to BaseApp.
 
-源码见 [cell.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/cell.cpp:300)。
+Source: cell.cpp.
 
-重要设计点：
+Important design points:
 
-- 初始化期间禁止 callbacks，避免半初始化对象执行脚本。
-- currentCell 消息延迟到和 backup 同 bundle，避免 Base 失去 cellData 与收到首个 backup 之间出现窗口。
-- restore 场景显式处理 zombie ghost。
+- Callbacks are disabled during initialization so a half-initialized object cannot run script.
+- The currentCell message is delayed into the same bundle as the backup, eliminating a window where Base lacks cellData before the first backup.
+- Restore explicitly handles zombie ghosts.
 
-## Real 与 Ghost 的差异
+## Difference Between Real and Ghost
 
-在 BigWorld 中：
+In BigWorld:
 
-- Real 是权威实体，能执行位置、控制器、脚本逻辑和持久化相关状态。
-- Ghost 是副本，服务 AOI 和跨 Cell 可见性。
-- Entity 对象可以从 real 转 ghost，也可以在目标 CellApp 从 ghost/新对象 onload 成 real。
+- A real is authoritative and executes position, controller, script, and persistence-related state.
+- A ghost is a copy serving AOI and cross-Cell visibility.
+- An Entity object can change from real to ghost, and can become real again on the target CellApp from a ghost or new object through onload.
 
-这不是复制对象那么简单，因为：
+This is more than copying an object:
 
-- Real-only 属性和 ghost 属性不同。
-- Witness 只存在于某些 real Proxy 实体上。
-- 控制器、Channel、Haunts、Ghosts 都要重新绑定。
-- 迁移流必须保持 EntityDef 序列化顺序。
+- Real-only properties differ from ghost properties.
+- Witnesses exist only on certain real Proxy entities.
+- Controllers, channels, haunts, and ghosts must all be rebound.
+- Migration streams must preserve EntityDef serialization order.
 
-## Offload 迁移
+## Offload Migration
 
-`Entity::offload()` 只能在 real entity 上调用。它会：
+`Entity::offload()` may only be called on a real entity. It:
 
-- 断言 `isReal()`。
-- 取目标 `CellAppChannel` 的 bundle。
-- 非 teleport 时 start `CellAppInterface::onload` 消息。
-- 调用 `convertRealToGhost(&bundle, pChannel, isTeleport)`。
+- asserts `isReal()`;
+- obtains the target `CellAppChannel` bundle;
+- starts a `CellAppInterface::onload` message when not teleporting;
+- calls `convertRealToGhost(&bundle, pChannel, isTeleport)`.
 
-源码见 [entity.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity.cpp:1968)。
+Source: entity.cpp.
 
-`convertRealToGhost()` 做：
+`convertRealToGhost()`:
 
-- 断言当前是 real。
-- 禁止 callbacks。
-- 如果有 Witness，先 `flushToClient()`。
-- 如果有目标 pChannel，则 `writeRealDataToStream()` 写迁移数据。
-- 后续销毁 real-only 部分，把实体留作 ghost。
+- asserts that the entity is currently real;
+- disables callbacks;
+- flushes the Witness first when one exists;
+- writes migration data through `writeRealDataToStream()` when a target channel exists;
+- destroys real-only state and leaves the entity as a ghost.
 
-源码见 [entity.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity.cpp:2005)。
+Source: entity.cpp.
 
-迁移的本质：
+The essence of migration:
 
-- 源 CellApp：real -> ghost。
-- 目标 CellApp：读取迁移流 -> real。
-- Ghost 和 Haunt 需要知道 next real 地址。
-- 客户端 Witness 状态必须在切换前 flush。
+- source CellApp: real -> ghost;
+- target CellApp: read migration stream -> real;
+- ghosts and haunts must learn the next real address;
+- client Witness state must flush before the switch.
 
-## Onload 恢复 Real
+## Onload Restores a Real
 
-目标 CellApp 通过 `Entity::readRealDataFromStreamForOnload()` 读取迁移流。内部顺序必须和 offload 写入顺序一致：
+The target CellApp reads the migration stream in
+`Entity::readRealDataFromStreamForOnload()`. The internal order must match the
+offload write order:
 
-1. 读取 real properties。
-2. `TOKEN_CHECK( data, "RealProps" )`。
-3. `createReal()`。
-4. `pReal_->init( data, CREATE_REAL_FROM_OFFLOAD, ... )`。
-5. 读取 exposed base properties for replay。
-6. `startRealControllers()`。
+1. Read real properties.
+2. `TOKEN_CHECK( data, "RealProps" )`.
+3. `createReal()`.
+4. `pReal_->init( data, CREATE_REAL_FROM_OFFLOAD, ... )`.
+5. Read exposed base properties for replay.
+6. `startRealControllers()`.
 
-源码见 [entity.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity.cpp:4710)。
+Source: entity.cpp.
 
-这个顺序非常重要：如果 EntityDef、属性序列化、controller 数据或 replay 数据不兼容，实体迁移会失败。
+Order matters: incompatible EntityDef, property serialization, controller data,
+or replay data causes entity migration to fail.
 
-## Destroy 流程
+## Destroy Flow
 
-`Entity::destroy()` 注释说明：不能立刻 delete，因为其他对象可能还在引用它。源码见 [entity.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity.cpp:2882)。
+The comment on `Entity::destroy()` states that immediate deletion is impossible
+because other objects may still reference the entity:
+entity.cpp.
 
-如果是 real：
+For a real:
 
-- 设置 `inDestroy_` 防重入。
-- 用 `EntityPtr pThis = this` 保活。
-- 调用脚本 `onDestroy`。
-- 如果有 Base，通知 Base cell entity lost。
-- `setDestroyed()`。
-- 删除 ghosts。
-- 通知 Cell `entityDestroyed()`。
-- `convertRealToGhost()`。
-- 如果没有 Base，则标记返回 ID。
-- 从 population real channel 中清理。
+- set `inDestroy_` to prevent reentry;
+- keep the object alive with `EntityPtr pThis = this`;
+- invoke script `onDestroy`;
+- if a Base exists, notify it that the Cell entity was lost;
+- call `setDestroyed()`;
+- delete ghosts;
+- notify Cell through `entityDestroyed()`;
+- call `convertRealToGhost()`;
+- if no Base exists, mark the ID for return;
+- clean up from the population's real channel.
 
-源码见 [entity.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity.cpp:2886)。
+Source: entity.cpp.
 
-如果是 ghost：
+For a ghost:
 
-- 调用 `onGhostDestroyed`。
-- 保留 real address 信息，用于处理后续可能收到的消息。
+- invoke `onGhostDestroyed`;
+- retain the real address to process messages that may arrive later.
 
-源码见 [entity.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity.cpp:2944)。
+Source: entity.cpp.
 
-销毁不是析构，而是协议状态变化。
+Destruction is not destruction of the C++ object; it is a protocol-state change.
 
 ## Zombie Ghost
 
-`Cell::createEntityInternal()` 在 restore 场景下，如果 population 中已有 ghost，则可能把它视为 zombie ghost。注释说明 critical channels 应保证不会恢复一个仍然 alive 的实体，但恢复时仍可能看到残留 ghost。源码见 [cell.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/cell.cpp:322)。
+During restore, `Cell::createEntityInternal()` may treat an existing ghost in
+the population as a zombie ghost. The comment notes that critical channels
+should prevent restoring an entity that is still alive, but a stale ghost can
+still appear during recovery:
+cell.cpp.
 
-处理方式是循环调用 `destroyZombie()`，直到实体 destroyed。源码见 [cell.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/cell.cpp:334)。
+It repeatedly calls `destroyZombie()` until the entity is destroyed:
+cell.cpp.
 
-这说明容灾恢复不是简单重建对象，还要处理旧状态残留。
+Recovery is therefore not simple object reconstruction; it must also remove old
+state remnants.
 
-## Cell 关闭
+## Cell Shutdown
 
-`Cell::~Cell()` 和 `Cell::shutDown()` 都会循环销毁 `realEntities_`。源码见 [cell.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/cell.cpp:98)。
+Both `Cell::~Cell()` and `Cell::shutDown()` repeatedly destroy `realEntities_`:
+cell.cpp.
 
-这说明 Cell 是 real entity 的拥有/管理边界之一：
+Cell is thus one ownership/management boundary for real entities:
 
-- Cell 删除前必须处理 real 实体。
-- 实体 destroy 可能触发回调、Base 通知、Ghost 删除。
-- 删除 Cell 不是释放容器那么简单。
+- a Cell must handle real entities before deletion;
+- entity destruction may trigger callbacks, Base notifications, and ghost deletion;
+- deleting a Cell is not merely releasing a container.
 
-## 生命周期风险
+## Lifecycle Risks
 
-实体生命周期的高风险点：
+High-risk points:
 
-- 初始化期间脚本回调导致半初始化对象被访问。
-- Offload 流写入/读取顺序不一致。
-- EntityDef 变更导致迁移流不兼容。
-- Destroy 中脚本回调再次触发 destroy。
-- Base/Cell 通知失败导致状态不一致。
-- Ghost 残留导致 restore 冲突。
-- Witness 未 flush 导致客户端看到过期状态。
-- Channel version 不匹配导致旧消息污染新 real。
+- Script callbacks during initialization expose a half-initialized object.
+- Offload stream write/read order diverges.
+- EntityDef changes make migration streams incompatible.
+- Script callbacks during destroy trigger destroy again.
+- Base/Cell notification failure creates inconsistent state.
+- A stale ghost conflicts with restore.
+- An unflushed Witness leaves the client with stale state.
+- Channel-version mismatch lets old messages pollute the new real.
 
-这些风险解释了为什么 BigWorld 需要大量状态断言、callbacksPermitted、channel version、backup 和 ghost 机制。
+These risks explain BigWorld's extensive state assertions,
+`callbacksPermitted`, channel versions, backup logic, and ghost machinery.
 
-## 源码取舍
+## Source Trade-Offs
 
-BigWorld 采用 real/ghost/offload，是因为实体生命周期要同时满足空间权威、可见性和迁移：
+BigWorld chose real/ghost/offload because entity lifecycles must jointly satisfy
+spatial authority, visibility, and migration:
 
-- MMO 世界空间太大，不能单进程承载。
-- AOI 跨 Cell 边界必须看到附近实体。
-- 负载均衡需要把实体权威从一个 CellApp 移到另一个 CellApp。
-- 客户端连接和长期身份在 BaseApp，空间逻辑在 CellApp。
-- 实体迁移要保持脚本对象和 EntityID 连续性。
+- MMO worlds are too large for one process.
+- AOI crossing Cell boundaries must still see nearby entities.
+- Load balancing must move entity authority from one CellApp to another.
+- Client connection and long-term identity remain on BaseApp while spatial logic runs on CellApp.
+- Migration must preserve the script object and EntityID continuity.
 
-源码代价：
+Costs:
 
-- 生命周期状态复杂。
-- 序列化和热更新强耦合。
-- 测试难度高。
-- 跨进程 trace 必不可少。
-- 脚本对象生命周期和 C++ Entity 生命周期紧耦合，析构、回调许可和迁移流必须一起验证。
-- Channel version、buffered messages、zombie ghost 处理都增加了消息顺序复杂度。
+- lifecycle state is complex;
+- serialization is strongly coupled to hot reload;
+- testing is difficult;
+- cross-process tracing is essential;
+- script-object and C++ Entity lifetimes are tightly coupled, so destruction, callback permission, and migration streams must be verified together;
+- channel versions, buffered messages, and zombie ghosts add message-ordering complexity.
 
-## 源码验证重点
+## Source-Code Verification Focus
 
-实体生命周期测试应围绕状态转换和跨进程序列：
+Lifecycle tests should target state transitions and cross-process sequences:
 
-- Base 创建、Cell 创建、real entity 创建和客户端 player 创建顺序必须一致。
-- `callbacksPermitted` 为 false 时不应触发脚本生命周期回调。
-- destroy 期间再次触发 destroy 或脚本回调时不能破坏状态机。
-- offload/onload 流字段顺序必须和 EntityDef、backup、ghost 数据保持兼容。
-- real/ghost 切换期间的 `ghostSetReal`、`ghostSetNextReal` 和 buffered messages 应按 channel version 过滤旧消息。
-- zombie ghost 和 restore 场景应覆盖源 CellApp 死亡、目标 real 不存在、BaseApp 通知失败等路径。
-- Witness 未 flush、Cell destroy pending、Base mailbox 更新失败都应有回归用例。
+- Base creation, Cell creation, real creation, and client player creation must maintain consistent ordering.
+- No script lifecycle callback may run while `callbacksPermitted` is false.
+- Reentrant destroy or a script callback during destroy must not corrupt the state machine.
+- Offload/onload field order must remain compatible with EntityDef, backup, and ghost data.
+- During real/ghost switching, `ghostSetReal`, `ghostSetNextReal`, and buffered messages must filter stale messages by channel version.
+- Zombie-ghost and restore scenarios should cover source CellApp death, missing target real, and failed BaseApp notification.
+- Unflushed Witness, pending Cell destruction, and failed Base mailbox updates need regression cases.
 
-## 本章边界
+## Chapter Boundary
 
-本章把实体生命周期串成状态机。更细的 AOI、Cell 负载均衡、Offload 数据流已分别在 [AOI、Witness 与 Ghost](/architecture/aoi-witness-ghost)、[Cell 分区与负载均衡](/architecture/cell-partition-load-balance)、[实体迁移与 Offload](/architecture/entity-migration-offload) 中展开。
+This chapter organizes entity lifecycle as a state machine. AOI, Cell load
+balancing, and the offload data stream are expanded in
+[AOI, Witness, and Ghost](/architecture/aoi-witness-ghost),
+[Cell partitioning and load balancing](/architecture/cell-partition-load-balance),
+and [Entity migration and offload](/architecture/entity-migration-offload).
 
-## 相关文档
+## Related Documentation
 
-- 实体模型基础，详见 [实体模型 Base/Cell/Client](/architecture/entity-model)。
-- EntityDef 契约，详见 [EntityDef 契约与协议生成](/architecture/entitydef-contract-generation)。
-- 持久化机制，详见 [持久化与 DB 线程模型](/architecture/persistence-db-model)。
-- 进程故障恢复，详见 [动态扩展与容灾](/architecture/scaling-fault-tolerance)。
+- Entity-model foundation: [Entity model: Base/Cell/Client](/architecture/entity-model).
+- EntityDef contract: [EntityDef contract and protocol generation](/architecture/entitydef-contract-generation).
+- Persistence: [Persistence and DB thread model](/architecture/persistence-db-model).
+- Process failure recovery: [Scaling and fault tolerance](/architecture/scaling-fault-tolerance).

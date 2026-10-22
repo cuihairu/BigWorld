@@ -1,61 +1,74 @@
-# 源码导读
+# Source Code Guide
 
-> [English](source-code-guide.en.md) | **中文**
+> **English** | [中文](source-code-guide.md)
 
 <div class="arch-hero">
 
-本章给出 BigWorld 源码的阅读地图。重点不是罗列目录，而是把进程入口、消息注册、EntityDef、数据库、客户端通信和 Cell 迁移串成可验证的源码链。
+This chapter gives a reading map for the BigWorld source. Rather than just
+listing directories, it connects process entry points, message registration,
+EntityDef, the database, client communication, and Cell migration into
+verifiable source chains.
 
 </div>
 
-## 阅读边界
+## Reading boundaries
 
-源码主目录是 `programming/bigworld/`：
+The main source directory is `programming/bigworld/`:
 
 ```
 programming/bigworld/
-├── server/           # BaseApp、CellApp、DBApp、LoginApp 等服务端进程
-├── lib/              # Mercury、EntityDef、DB、Script、Watcher 等共享库
-├── client/           # 客户端运行时
-├── tools/            # 编辑器、运维与离线工具
-├── common/           # 共享定义
-├── build/            # 构建脚本
-└── third_party/      # 第三方依赖
+├── server/           # Server processes: BaseApp, CellApp, DBApp, LoginApp, etc.
+├── lib/              # Shared libraries: Mercury, EntityDef, DB, Script, Watcher, etc.
+├── client/           # Client runtime
+├── tools/            # Editors, operations and offline tools
+├── common/           # Shared definitions
+├── build/            # Build scripts
+└── third_party/      # Third-party dependencies
 ```
 
-不要从完整扫描 `lib/` 或 `third_party/` 开始。BigWorld 的关键关系不是目录树关系，而是“接口注册 -> 网络消息 -> handler -> 实体/数据库状态变更”的运行链。
+Do not start with a complete scan of `lib/` or `third_party/`. BigWorld's
+key relationships are not directory-tree relationships but the runtime chain
+"interface registration -> network message -> handler -> entity/database
+state change".
 
-建议先读这些稳定锚点：
+Start with these stable anchors:
 
-| 主题 | 先读文件 | 关键函数或类型 |
+| Topic | Read first | Key functions or types |
 |---|---|---|
-| 进程入口 | `lib/server/bwservice.hpp` | `BIGWORLD_MAIN`, `bwMainT`, `doBWMainT` |
-| 主循环 | `lib/server/server_app.cpp`, `lib/network/event_dispatcher.cpp` | `ServerApp::runApp`, `ServerApp::run`, `ServerApp::advanceTime`, `EventDispatcher::processOnce` |
-| 服务初始化 | `server/baseapp/baseapp.cpp`, `server/cellapp/cellapp.cpp`, `server/dbapp/dbapp.cpp`, `server/loginapp/loginapp.cpp` | `BaseApp::init`, `CellApp::init`, `DBApp::init`, `LoginApp::init` |
-| 网络接口 | `lib/network/interface_macros.hpp`, `lib/network/network_interface.hpp` | `BEGIN_MERCURY_INTERFACE`, `registerWithInterface`, `NetworkInterface` |
-| 实体定义 | `lib/entitydef/entity_description_map.cpp` | `EntityDescriptionMap::parse`, `parseInternal`, `parseServices` |
-| 持久化 | `server/baseapp/base.cpp`, `server/dbapp/dbapp.cpp`, `lib/db_storage_mysql/` | `Base::writeToDB`, `DBApp::writeEntity`, `IDatabase::putEntity`, `PropertyMapping::create` |
+| Process entry | `lib/server/bwservice.hpp` | `BIGWORLD_MAIN`, `bwMainT`, `doBWMainT` |
+| Main loop | `lib/server/server_app.cpp`, `lib/network/event_dispatcher.cpp` | `ServerApp::runApp`, `ServerApp::run`, `ServerApp::advanceTime`, `EventDispatcher::processOnce` |
+| Service initialization | `server/baseapp/baseapp.cpp`, `server/cellapp/cellapp.cpp`, `server/dbapp/dbapp.cpp`, `server/loginapp/loginapp.cpp` | `BaseApp::init`, `CellApp::init`, `DBApp::init`, `LoginApp::init` |
+| Network interfaces | `lib/network/interface_macros.hpp`, `lib/network/network_interface.hpp` | `BEGIN_MERCURY_INTERFACE`, `registerWithInterface`, `NetworkInterface` |
+| Entity definitions | `lib/entitydef/entity_description_map.cpp` | `EntityDescriptionMap::parse`, `parseInternal`, `parseServices` |
+| Persistence | `server/baseapp/base.cpp`, `server/dbapp/dbapp.cpp`, `lib/db_storage_mysql/` | `Base::writeToDB`, `DBApp::writeEntity`, `IDatabase::putEntity`, `PropertyMapping::create` |
 
-## 进程启动链
+## Process startup chain
 
-服务端目录下存在 `main.cpp`，但多数逻辑不是写在 `main()` 里，而是通过 `BIGWORLD_MAIN` 宏接入统一服务框架。
+`main.cpp` exists in the server directories, but most logic is not written in
+`main()`; it plugs into the unified service framework through the
+`BIGWORLD_MAIN` macro.
 
-真实启动链可以按下面顺序读：
+Read the real startup chain in this order:
 
-1. `server/<app>/main.cpp` 使用 `BIGWORLD_MAIN` 调用 `bwMainT<App>()`。
-2. `lib/server/bwservice.hpp` 中 `BIGWORLD_MAIN` 展开真实 `main()`，初始化 `BWResource`、`BWConfig` 和命令行参数。
-3. `bwMainT` 创建 `Mercury::EventDispatcher` 和 `Mercury::NetworkInterface`。
-4. `doBWMainT` 初始化 `ServerAppConfig`，构造具体 `SERVER_APP`，然后调用 `serverApp.runApp()`。
-5. `ServerApp::runApp()` 先调用派生类 `init()`，成功后进入 `ServerApp::run()`。
-6. `ServerApp::run()` 调用 `mainDispatcher_.processUntilBreak()`，事件循环再进入 `EventDispatcher::processOnce()`。
+1. `server/<app>/main.cpp` uses `BIGWORLD_MAIN` to call `bwMainT<App>()`.
+2. In `lib/server/bwservice.hpp`, `BIGWORLD_MAIN` expands to the real `main()`, initializing `BWResource`, `BWConfig`, and command-line arguments.
+3. `bwMainT` creates a `Mercury::EventDispatcher` and a `Mercury::NetworkInterface`.
+4. `doBWMainT` initializes `ServerAppConfig`, constructs the concrete `SERVER_APP`, and calls `serverApp.runApp()`.
+5. `ServerApp::runApp()` first calls the derived class's `init()`, and on success enters `ServerApp::run()`.
+6. `ServerApp::run()` calls `mainDispatcher_.processUntilBreak()`, and the event loop then enters `EventDispatcher::processOnce()`.
 
-这条链解释了为什么不能只看各进程目录下的 `main.cpp`：`main.cpp` 只是进程类型选择点，真正的初始化、定时器、网络事件分发在共享服务框架中完成。
+This chain explains why you cannot read only the `main.cpp` in each process
+directory: `main.cpp` is only the process-type selection point; real
+initialization, timers, and network-event dispatch happen in the shared
+service framework.
 
-## 服务注册链
+## Service registration chain
 
-Mercury 接口不是运行时反射式自动发现，而是由接口定义宏生成 message 描述，再在进程初始化时注册到 `NetworkInterface`。
+Mercury interfaces are not runtime-reflection auto-discovery; the
+interface-definition macros generate message descriptors, which are then
+registered on the `NetworkInterface` during process initialization.
 
-| 进程 | 注册位置 | 接口 |
+| Process | Registration point | Interface |
 |---|---|---|
 | BaseApp | `server/baseapp/baseapp.cpp` | `BaseAppIntInterface`, `BaseAppExtInterface` |
 | CellApp | `server/cellapp/cellapp.cpp` | `CellAppInterface` |
@@ -66,13 +79,16 @@ Mercury 接口不是运行时反射式自动发现，而是由接口定义宏生
 | DBAppMgr | `server/dbappmgr/dbappmgr.cpp` | `DBAppMgrInterface` |
 | Reviver | `server/reviver/reviver.cpp` | `ReviverInterface` |
 
-验证方式：先在接口头文件中查 `BEGIN_MERCURY_INTERFACE`，再查对应进程的 `registerWithInterface()`，最后顺着 `bundle.startMessage()` 或 `bundle.startRequest()` 找调用方。
+Verification: look up `BEGIN_MERCURY_INTERFACE` in the interface header, then
+the corresponding process's `registerWithInterface()`, and finally follow
+`bundle.startMessage()` or `bundle.startRequest()` to callers.
 
-## 主循环与 Tick
+## Main loop and tick
 
-主循环由 `EventDispatcher` 驱动，游戏时间推进由派生进程在 timer handler 中触发。
+The main loop is driven by `EventDispatcher`; game-time advancement is
+triggered by the derived process in a timer handler.
 
-核心链路：
+Core chain:
 
 ```
 ServerApp::run()
@@ -83,53 +99,62 @@ ServerApp::run()
   -> processNetwork()
 ```
 
-BaseApp 的游戏 tick 入口是 `BaseApp::tickGameTime()`；CellApp 的游戏 tick 入口是 `CellApp::handleGameTickTimeSlice()`。它们都会在各自逻辑中调用或依赖 `ServerApp::advanceTime()`，再触发 `onEndOfTick()`、`onStartOfTick()`、`callUpdatables()` 等统一阶段。
+BaseApp's game tick entry is `BaseApp::tickGameTime()`; CellApp's game tick
+entry is `CellApp::handleGameTickTimeSlice()`. Both call or depend on
+`ServerApp::advanceTime()` in their logic, which then triggers the unified
+phases `onEndOfTick()`, `onStartOfTick()`, `callUpdatables()`, and so on.
 
-阅读时要分清两层：
+Keep two layers distinct while reading:
 
-| 层次 | 代码 | 作用 |
+| Layer | Code | Role |
 |---|---|---|
-| 事件分发 | `EventDispatcher::processOnce()` | 网络、timer、统计、频繁任务 |
-| 游戏时间 | `ServerApp::advanceTime()` | 推进 `GameTime` 并运行 tick 生命周期 |
-| 进程逻辑 | `BaseApp::tickGameTime()`, `CellApp::handleGameTickTimeSlice()` | Base/Cell 各自的备份、负载、AOI、迁移等逻辑 |
+| Event dispatch | `EventDispatcher::processOnce()` | Network, timers, statistics, frequent tasks |
+| Game time | `ServerApp::advanceTime()` | Advances `GameTime` and runs the tick lifecycle |
+| Process logic | `BaseApp::tickGameTime()`, `CellApp::handleGameTickTimeSlice()` | Base/Cell-specific backup, load, AOI, migration, etc. |
 
-## 网络消息链
+## Network message chain
 
-Mercury 的阅读顺序建议从“消息如何发出”和“消息如何落到 handler”两端夹击：
+For Mercury, a good reading order attacks from both ends — "how a message is
+sent" and "how a message reaches a handler":
 
 ```
-发送侧:
+Send side:
 InterfaceElement
   -> Bundle::startMessage/startRequest
   -> Channel / UDPChannel
   -> PacketSender
 
-接收侧:
+Receive side:
 PacketReceiver
   -> NetworkInterface
   -> UDPBundleProcessor
   -> InterfaceElement handler
-  -> 具体 App / Entity 方法
+  -> concrete App / Entity method
 ```
 
-关键文件：
+Key files:
 
-| 文件 | 关注点 |
+| File | Focus |
 |---|---|
-| `lib/network/interface_macros.hpp` | 接口宏如何生成 `Args::start()`、`startRequest()`、`registerWithInterface()` |
-| `lib/network/bundle.hpp` | 消息如何写入 bundle |
-| `lib/network/udp_bundle.cpp` | UDP bundle 如何开始 message/request |
-| `lib/network/network_interface.hpp` | 网络接口持有 channel、sender、receiver、请求管理器 |
-| `lib/network/packet_receiver.hpp` | socket 输入如何进入 Mercury |
-| `lib/network/channel.hpp`, `lib/network/udp_channel.hpp` | 可靠、有序、重传和 indexed channel 的核心状态 |
+| `lib/network/interface_macros.hpp` | How the interface macros generate `Args::start()`, `startRequest()`, `registerWithInterface()` |
+| `lib/network/bundle.hpp` | How messages are written into a bundle |
+| `lib/network/udp_bundle.cpp` | How a UDP bundle starts a message/request |
+| `lib/network/network_interface.hpp` | The network interface holding channel, sender, receiver, request manager |
+| `lib/network/packet_receiver.hpp` | How socket input enters Mercury |
+| `lib/network/channel.hpp`, `lib/network/udp_channel.hpp` | Core state for reliable, ordered, retransmitted, and indexed channels |
 
-追一条 RPC 不要先猜协议格式，应先 `rg "startRequest( SomeInterface::someMessage"` 找发送方，再到接口定义中看 message 类型，最后到 handler 所属类看状态变更。
+To trace an RPC, do not guess the protocol format first: run
+`rg "startRequest( SomeInterface::someMessage"` to find the sender, inspect
+the message type in the interface definition, and finally look at the
+handler's owning class for state changes.
 
-## EntityDef 链
+## EntityDef chain
 
-`.def` 文件是 BigWorld 的实体契约入口，不只是脚本声明。它决定属性域、方法暴露、序列化顺序、协议 digest 和数据库映射基础。
+The `.def` file is BigWorld's entity-contract entry, not just a script
+declaration. It determines property domains, exposed methods, serialization
+order, protocol digest, and the database-mapping basis.
 
-阅读链：
+Reading chain:
 
 ```
 examples/client_integration/python/simple/res/scripts/entities.xml
@@ -141,44 +166,48 @@ examples/client_integration/python/simple/res/scripts/entities.xml
   -> DataType::addToStream/createFromStream
 ```
 
-重点字段含义：
+Key tag meanings:
 
-| `.def` 标记 | 源码承载 | 影响 |
+| `.def` tag | Source carrier | Effect |
 |---|---|---|
-| `Persistent` | `DataDescription::isPersistent()` | 是否进入持久化数据域 |
-| `Identifier` | `EntityDescription::pIdentifier()` | 是否可用业务标识查 DBID |
-| `Indexed` | `DataDescription::isIndexed()` | MySQL mapping 是否创建索引型列 |
-| `DatabaseLength` | `DataDescription::databaseLength()` | 字符串、blob、用户类型等数据库长度限制 |
-| Client/Base/Cell 域 | `EntityDescription` data domains | 决定属性在 base、cell、client 间如何序列化 |
+| `Persistent` | `DataDescription::isPersistent()` | Whether it enters the persistent data domain |
+| `Identifier` | `EntityDescription::pIdentifier()` | Whether a business identifier can be used to look up a DBID |
+| `Indexed` | `DataDescription::isIndexed()` | Whether MySQL mapping creates an indexed column |
+| `DatabaseLength` | `DataDescription::databaseLength()` | Database length limits for strings, blobs, user types, etc. |
+| Client/Base/Cell domains | `EntityDescription` data domains | How a property is serialized among base, cell, and client |
 
-验证 `.def` 影响时，不要只看 XML。需要同时查：
+When verifying a `.def` effect, do not look only at the XML. Check all of:
 
-| 验证点 | 源码 |
+| Verification point | Source |
 |---|---|
-| 属性是否持久化 | `DataDescription::parse()` 读取字段，`DataDescription::isPersistent()` 返回判断 |
-| 只写持久化属性 | `EntityDescription::ONLY_PERSISTENT_DATA`, `Base::addToStream()` |
-| 协议一致性 | `EntityDescriptionMap::addPersistentPropertiesToMD5()` |
-| 数据库字段映射 | `PropertyMappingsPerType`, `PropertyMapping::create()` |
-| 方法参数序列化 | `MethodDescription::addToStream()`, `MethodDescription::createArgsFromStream()` |
+| Whether a property persists | `DataDescription::parse()` reads the field; `DataDescription::isPersistent()` returns the verdict |
+| Writing only persistent properties | `EntityDescription::ONLY_PERSISTENT_DATA`, `Base::addToStream()` |
+| Protocol consistency | `EntityDescriptionMap::addPersistentPropertiesToMD5()` |
+| Database field mapping | `PropertyMappingsPerType`, `PropertyMapping::create()` |
+| Method-argument serialization | `MethodDescription::addToStream()`, `MethodDescription::createArgsFromStream()` |
 
-详见 [序列化与 EntityDef](/architecture/serialization-entitydef) 和 [EntityDef 契约与协议生成](/architecture/entitydef-contract-generation)。
+See [Serialization and EntityDef](/architecture/serialization-entitydef) and
+[EntityDef contract and protocol generation](/architecture/entitydef-contract-generation).
 
-## 属性变更与“脏数据”
+## Property changes and "dirty data"
 
-BigWorld 里“属性变更”有两条不同用途的链，不能混成一种 ORM 式脏字段追踪。
+In BigWorld "property change" has two chains with different purposes; do not
+merge them into one ORM-style dirty-field tracker.
 
-第一条是运行时同步链：
+The first is the runtime sync chain:
 
 ```
-属性被脚本或容器修改
+A property is modified by a script or container
   -> PropertyOwner / PropertyChange
   -> Entity::onOwnedPropertyChanged()
   -> HistoryEvent / ghostedDataUpdate / Witness::sendToClient()
 ```
 
-这条链用于把变化推给客户端、ghost 或 replay。它关心的是网络可见性、AOI、嵌套属性变更和消息大小，不等价于“这个字段稍后要写数据库”。
+This chain pushes changes to clients, ghosts, or replay. It cares about
+network visibility, AOI, nested property changes, and message size; it is not
+equivalent to "this field will be written to the database later".
 
-第二条是显式持久化链：
+The second is the explicit persistence chain:
 
 ```
 Base.writeToDB()
@@ -191,24 +220,28 @@ Base.writeToDB()
   -> IDatabase::putEntity()
 ```
 
-这条链由 `writeToDB` 触发，按照 `.def` 的 `Persistent` 域筛选 base/cell 数据并序列化。源码重点在 `Base::writeToDB()`、`Base::requestCellDBData()`、`Base::addToStream()` 和 `DBApp::writeEntity()`。
+This chain is triggered by `writeToDB`, selecting and serializing base/cell
+data according to the `.def`'s `Persistent` domain. The source focus is
+`Base::writeToDB()`, `Base::requestCellDBData()`, `Base::addToStream()`, and
+`DBApp::writeEntity()`.
 
-因此，读源码时应把“脏数据”理解为两类事实：
+So when reading source, understand "dirty data" as two classes of fact:
 
-| 场景 | 代表源码 | 语义 |
+| Scenario | Representative source | Semantics |
 |---|---|---|
-| 属性变了，需要同步 | `PropertyChange`, `Entity::onOwnedPropertyChanged()` | 增量网络事件 |
-| 需要落库 | `Base::writeToDB()`, `WRITE_BASE_CELL_DATA`, `ONLY_PERSISTENT_DATA` | 显式持久化快照 |
+| A property changed and needs sync | `PropertyChange`, `Entity::onOwnedPropertyChanged()` | Incremental network event |
+| Persistence is needed | `Base::writeToDB()`, `WRITE_BASE_CELL_DATA`, `ONLY_PERSISTENT_DATA` | Explicit persistence snapshot |
 
-## 数据库映射链
+## Database mapping chain
 
-BigWorld 的数据库层是“EntityDef 驱动的持久化映射”，不是典型 ORM。
+BigWorld's database layer is "EntityDef-driven persistence mapping", not a
+typical ORM.
 
-落库链路：
+The persistence chain:
 
 ```
 Base::writeToDB(flags)
-  -> 如果有 Cell 数据，先向 CellAppInterface::writeToDBRequest 要 cell 快照
+  -> If there is Cell data, first request a cell snapshot via CellAppInterface::writeToDBRequest
   -> Base::addToStream(flags, stream, pCellData)
   -> DBAppInterface::writeEntity
   -> DBApp::writeEntity()
@@ -218,7 +251,7 @@ Base::writeToDB(flags)
   -> MySqlDatabase::putEntity() / XMLDatabase::putEntity()
 ```
 
-映射链路：
+The mapping chain:
 
 ```
 EntityDescriptionMap
@@ -229,77 +262,92 @@ EntityDescriptionMap
   -> NumMapping<T> / StringMapping / SequenceMapping / ClassMapping / BlobMapping / StringLikeMapping / UserTypeMapping ...
 ```
 
-与 ORM 的区别：
+Differences from an ORM:
 
-| 维度 | BigWorld 源码 | 典型 ORM |
+| Dimension | BigWorld source | Typical ORM |
 |---|---|---|
-| 模型来源 | `.def` + `EntityDescription` | 语言对象 class / annotation / schema |
-| 保存触发 | 显式 `writeToDB` 和登录/登出/备份流程 | Unit of Work、事务提交或对象状态 flush |
-| 字段选择 | `Persistent` 数据域 + `ONLY_PERSISTENT_DATA` | mapped columns 或 tracked fields |
-| 关系表达 | mailbox、DBID、Identifier、Base/Cell 数据流 | object relation、foreign key、lazy loading |
-| 运行目标 | 分布式 MMO 实体状态落库 | 应用对象到关系表映射 |
+| Model source | `.def` + `EntityDescription` | Language object class / annotation / schema |
+| Save trigger | Explicit `writeToDB` and login/logout/backup flows | Unit of Work, transaction commit, or object-state flush |
+| Field selection | `Persistent` data domain + `ONLY_PERSISTENT_DATA` | Mapped columns or tracked fields |
+| Relation expression | mailbox, DBID, Identifier, Base/Cell data flow | Object relation, foreign key, lazy loading |
+| Runtime target | Persisting distributed MMO entity state | Mapping application objects to relational tables |
 
-读数据库相关源码时，先确认 `.def` 中属性是否 `Persistent`，再看 `PropertyMapping::create()` 如何根据 `DataType` 选择具体 mapping。不要从 SQL 表结构反推实体模型，否则会漏掉 Base/Cell 分区、Identifier 缓存、secondary DB 和 auto-load 标记。
+When reading database-related source, first confirm whether a property is
+`Persistent` in the `.def`, then see how `PropertyMapping::create()` chooses
+the concrete mapping based on `DataType`. Do not reverse-engineer the entity
+model from SQL table structure, or you will miss Base/Cell partitioning, the
+Identifier cache, the secondary DB, and auto-load flags.
 
-详见 [持久化与 DB 线程模型](/architecture/persistence-db-model)。
+See [Persistence and the DB thread model](/architecture/persistence-db-model).
 
-## 客户端通信链
+## Client communication chain
 
-BigWorld 里的“前端通信”主要指客户端运行时与 LoginApp/BaseApp/CellApp 的协议链。入口不在 HTTP API，而在 Mercury interface 和 `ServerConnection`。
+"Client communication" in BigWorld primarily means the protocol chain among
+the client runtime and LoginApp/BaseApp/CellApp. The entry is not an HTTP API
+but Mercury interfaces and `ServerConnection`.
 
-登录和接管链：
+Login and takeover chain:
 
 ```
-客户端 LoginInterface::login
+Client LoginInterface::login
   -> LoginApp::login()
   -> DBAppInterface::logOn
-  -> BaseAppMgr / BaseApp 创建或恢复 Base
+  -> BaseAppMgr / BaseApp creates or restores a Base
   -> BaseAppExtInterface::baseAppLogin
-  -> Proxy 接管客户端 channel
+  -> Proxy takes over the client channel
 ```
 
-运行时上下行链：
+Runtime upstream/downstream chains:
 
-| 方向 | 接口 | 代表源码 |
+| Direction | Interface | Representative source |
 |---|---|---|
-| 客户端到 LoginApp | `LoginInterface` | `lib/connection/login_interface.hpp`, `server/loginapp/loginapp.cpp` |
-| 客户端到 BaseApp | `BaseAppExtInterface` | `lib/connection/baseapp_ext_interface.hpp`, `server/baseapp/baseapp.cpp`, `server/baseapp/proxy.cpp` |
-| 服务端到客户端 | `ClientInterface` | `lib/connection/client_interface.hpp`, `server/baseapp/proxy.cpp`, `server/cellapp/entity.cpp` |
-| 客户端本地协议处理 | `ServerConnection` | `lib/connection/server_connection.cpp` |
+| Client to LoginApp | `LoginInterface` | `lib/connection/login_interface.hpp`, `server/loginapp/loginapp.cpp` |
+| Client to BaseApp | `BaseAppExtInterface` | `lib/connection/baseapp_ext_interface.hpp`, `server/baseapp/baseapp.cpp`, `server/baseapp/proxy.cpp` |
+| Server to client | `ClientInterface` | `lib/connection/client_interface.hpp`, `server/baseapp/proxy.cpp`, `server/cellapp/entity.cpp` |
+| Client-local protocol handling | `ServerConnection` | `lib/connection/server_connection.cpp` |
 
-`Proxy` 是客户端连接在服务端的代表：它负责认证后的 channel、切换 BaseApp、向客户端发送 `ClientInterface` 消息，并把客户端输入转给 Base/Cell 实体方法。`ServerConnection` 则是客户端侧对这些协议的封装。
+The `Proxy` is the server-side representative of a client connection: it owns
+the post-authentication channel, switches BaseApps, sends `ClientInterface`
+messages to the client, and forwards client input to Base/Cell entity
+methods. `ServerConnection` is the client-side encapsulation of these
+protocols.
 
-详见 [登录、会话与 Proxy 接管](/architecture/login-session-proxy-flow) 和 [通信抽象与 RPC](/architecture/communication-rpc)。
+See [Login, sessions, and proxy takeover](/architecture/login-session-proxy-flow)
+and [Communication abstraction and RPC](/architecture/communication-rpc).
 
-## Actor 相似点与边界
+## Actor similarities and boundaries
 
-BigWorld 的实体通信有 actor-like 特征，但不是通用 Actor runtime。
+BigWorld entity communication has actor-like traits, but it is not a generic
+Actor runtime.
 
-相似点：
+Similarities:
 
-| 相似点 | 源码表现 |
+| Similarity | Source expression |
 |---|---|
-| 地址化通信 | mailbox、EntityID、Mercury address |
-| 消息驱动 | `bundle.startMessage()` / `startRequest()` |
-| 单实体封装状态 | Base/Cell 实体方法围绕实体实例执行 |
-| 分布式位置透明的一部分 | Base mailbox、Cell mailbox、Proxy 转发 |
+| Addressed communication | mailbox, EntityID, Mercury address |
+| Message driven | `bundle.startMessage()` / `startRequest()` |
+| Single entity encapsulating state | Base/Cell entity methods execute around an entity instance |
+| Part of distributed location transparency | Base mailbox, Cell mailbox, Proxy forwarding |
 
-边界：
+Boundaries:
 
-| 差异 | BigWorld 源码表现 |
+| Difference | BigWorld source expression |
 |---|---|
-| 没有通用 mailbox runtime | mailbox 是 MMO 实体和 Mercury 协议封装，不是统一 actor 调度器 |
-| 调度核心不是 actor scheduler | 主循环是 `EventDispatcher` + timer +网络 handler |
-| 状态被 EntityDef 分域 | Base/Cell/Client/Persistent 域决定数据流向 |
-| 位置迁移是 Cell/App 机制 | Offload、Ghost、Witness 由空间分区和 AOI 驱动 |
+| No generic mailbox runtime | A mailbox is an MMO entity and Mercury protocol wrapper, not a unified actor scheduler |
+| The scheduling core is not an actor scheduler | The main loop is `EventDispatcher` + timers + network handlers |
+| State is domain-partitioned by EntityDef | Base/Cell/Client/Persistent domains determine data flow |
+| Location migration is a Cell/App mechanism | Offload, Ghost, Witness are driven by space partitioning and AOI |
 
-所以可以把 BigWorld 理解为“面向 MMO 实体的消息化分布式对象系统”，但源码分析时不能直接套 Actor 模型解释所有行为。
+So BigWorld can be understood as "a messaged distributed object system for
+MMO entities", but source analysis cannot apply the Actor model wholesale to
+explain every behavior.
 
-## AOI、Ghost 与 Offload
+## AOI, Ghost, and Offload
 
-Cell 侧源码要按空间管理读，不要只从实体类本身读。
+Read the Cell-side source through space management, not just from the entity
+classes themselves.
 
-核心链：
+Core chain:
 
 ```
 CellApp::handleGameTickTimeSlice()
@@ -313,7 +361,7 @@ CellApp::handleGameTickTimeSlice()
   -> RealEntity::readOffloadData()
 ```
 
-AOI 与客户端可见性链：
+AOI and client-visibility chain:
 
 ```
 Witness::update()
@@ -322,46 +370,58 @@ Witness::update()
   -> ServerConnection handler
 ```
 
-Offload 的关键不是“移动对象内存”，而是把 real entity 的必要状态序列化到目标 Cell，同时在原 Cell 和相邻 Cell 上维护 ghost、haunt、next real address 等顺序约束。相关源码集中在 `server/cellapp/entity.cpp`、`real_entity.cpp`、`entity_ghost_maintainer.cpp`、`offload_checker.cpp`、`witness.cpp`。
+The key to Offload is not "moving object memory" but serializing the real
+entity's necessary state to the target Cell while maintaining ordering
+constraints — ghost, haunt, next real address — on the original and adjacent
+Cells. The relevant source is concentrated in `server/cellapp/entity.cpp`,
+`real_entity.cpp`, `entity_ghost_maintainer.cpp`, `offload_checker.cpp`, and
+`witness.cpp`.
 
-详见 [AOI、Witness 与 Ghost](/architecture/aoi-witness-ghost)、[Cell 分区与负载均衡](/architecture/cell-partition-load-balance) 和 [实体迁移与 Offload](/architecture/entity-migration-offload)。
+See [AOI, Witness, and Ghost](/architecture/aoi-witness-ghost),
+[Cell partitioning and load balancing](/architecture/cell-partition-load-balance),
+and [Entity migration and offload](/architecture/entity-migration-offload).
 
-## 观测与测试入口
+## Observation and test entries
 
-源码验证不要只靠静态阅读。BigWorld 自带 Watcher、Profiler、单元测试和网络测试入口。
+Source verification should not rely on static reading alone. BigWorld ships
+with Watcher, Profiler, unit-test, and network-test entries.
 
-| 目标 | 源码入口 |
+| Goal | Source entry |
 |---|---|
-| 运行时观测 | `lib/network/watcher_nub.hpp`, `lib/server/watcher_forwarding_collector.cpp` |
-| 服务指标 | 各 App 的 `addWatchers()` |
-| Tick 性能 | `ServerApp::advanceTime()`, `AUTO_SCOPED_PROFILE` |
-| 网络行为测试 | `lib/network/unit_test/` |
-| EntityDef 序列化测试 | `lib/entitydef/unit_test/` |
-| Cell ghost/offload 测试 | `server/cellapp/unit_test/` |
+| Runtime observation | `lib/network/watcher_nub.hpp`, `lib/server/watcher_forwarding_collector.cpp` |
+| Service metrics | Each App's `addWatchers()` |
+| Tick performance | `ServerApp::advanceTime()`, `AUTO_SCOPED_PROFILE` |
+| Network behavior tests | `lib/network/unit_test/` |
+| EntityDef serialization tests | `lib/entitydef/unit_test/` |
+| Cell ghost/offload tests | `server/cellapp/unit_test/` |
 
-找测试时优先 `rg "TEST"` 和 `rg "BW_ADD_TEST"`。找运行时观测时优先 `rg "addWatchers"`，再看 Watcher path 如何挂到根节点。
+To find tests, prefer `rg "TEST"` and `rg "BW_ADD_TEST"`. To find runtime
+observation, prefer `rg "addWatchers"`, then see how the Watcher path mounts
+on the root node.
 
-## 交叉验证方法
+## Cross-verification method
 
-读 BigWorld 源码时，建议固定使用这些检索入口：
+When reading BigWorld source, keep these search entries fixed:
 
-| 要验证的问题 | 检索词 |
+| Question to verify | Search term |
 |---|---|
-| 某接口是否真的注册 | `registerWithInterface(` |
-| 某消息是谁发的 | `startMessage( Interface::message` |
-| 某 RPC 是否等回复 | `startRequest( Interface::message` |
-| 某属性怎么序列化 | `addToStream(`, `createFromStream(` |
-| 某字段是否只持久化 | `ONLY_PERSISTENT_DATA`, `isPersistent()` |
-| Cell 数据是否参与落库 | `WRITE_BASE_CELL_DATA`, `writeToDBRequest` |
-| 客户端协议在哪里处理 | `ClientInterface::`, `BaseAppExtInterface::`, `ServerConnection::` |
-| Offload 顺序如何保证 | `ghostSetNextReal`, `writeOffloadData`, `readOffloadData` |
-| handler 是否允许回调 | `callbacksPermitted` |
+| Whether an interface is actually registered | `registerWithInterface(` |
+| Who sends a message | `startMessage( Interface::message` |
+| Whether an RPC waits for a reply | `startRequest( Interface::message` |
+| How a property is serialized | `addToStream(`, `createFromStream(` |
+| Whether a field is persistence-only | `ONLY_PERSISTENT_DATA`, `isPersistent()` |
+| Whether Cell data participates in persistence | `WRITE_BASE_CELL_DATA`, `writeToDBRequest` |
+| Where the client protocol is handled | `ClientInterface::`, `BaseAppExtInterface::`, `ServerConnection::` |
+| How Offload ordering is guaranteed | `ghostSetNextReal`, `writeOffloadData`, `readOffloadData` |
+| Whether a handler permits callbacks | `callbacksPermitted` |
 
-源码分析结论至少要能同时回答三个问题：消息或数据从哪里来、被哪个 handler 接住、最终改变了哪个实体或数据库状态。
+A source-analysis conclusion must answer at least three questions together:
+where a message or data comes from, which handler catches it, and which
+entity or database state it ultimately changes.
 
-## 下一步
+## Next steps
 
-- 阅读 [架构研究方法](/architecture/research-method)，统一证据分级和源码引用口径。
-- 阅读 [进程拓扑与职责切分](/architecture/process-topology)，把 App 角色和进程关系先固定下来。
-- 阅读 [主循环、Tick 与事件分发](/architecture/event-loop)，再回到本章按调用链查源码。
-- 阅读 [持久化与 DB 线程模型](/architecture/persistence-db-model)，补齐 `.def`、DBApp、MySQL mapping 的落库路径。
+- Read the [architecture research method](/architecture/research-method) for a unified evidence-grading and source-citation standard.
+- Read [process topology and responsibility split](/architecture/process-topology) to fix App roles and process relationships first.
+- Read [main loop, tick, and event dispatch](/architecture/event-loop), then return to this chapter to inspect source along call chains.
+- Read [persistence and the DB thread model](/architecture/persistence-db-model) to complete the persistence path across `.def`, DBApp, and MySQL mapping.
