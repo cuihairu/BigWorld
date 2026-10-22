@@ -188,6 +188,19 @@ jobs:
                 -DCMAKE_CONFIGURATION_TYPES="Debug;Release" `
                 '-DCMAKE_CXX_FLAGS=/DWIN32 /D_WINDOWS /DPCH_SUPPORT=1 /W3 /Zi /MP /Gy /w34302 /d2Zi+ /WX-' 2>&1 | Tee-Object -FilePath cmake-configure.log
 
+      - name: Configure cstdmf unit test (MSVC x64)
+        if: ${{ matrix.module == 'cstdmf' }}
+        shell: pwsh
+        env:
+          CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+        run: |
+          $repo = ((Resolve-Path programming/bigworld).Path -replace '\\','/')
+          cmake -S "$repo/cmake/samples/cstdmf" `
+                -B "build/win_cstdmf_test" `
+                -Wno-dev `
+                -G "Visual Studio 18 2026" -A x64 `
+                -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" 2>&1 | Tee-Object -FilePath cmake-configure-test.log
+
       - name: Build (${{ matrix.module }})
         shell: pwsh
         run: |
@@ -199,16 +212,16 @@ jobs:
         if: ${{ matrix.module == 'cstdmf' }}
         shell: pwsh
         run: |
-          cmake --build "build/win_cstdmf" --config Release `
-                --target cstdmf_unit_test --parallel 2>&1 | `
+          cmake --build "build/win_cstdmf_test" --config Release `
+                --target cstdmf_test --parallel 2>&1 | `
                 Tee-Object -FilePath cmake-build-test.log
 
       - name: Test cstdmf unit test (MSVC x64)
         if: ${{ matrix.module == 'cstdmf' }}
         shell: pwsh
         run: |
-          ctest --test-dir "build/win_cstdmf" `
-                -C Release -R "cstdmf_unit_test" `
+          ctest --test-dir "build/win_cstdmf_test" `
+                -C Release -R "cstdmf_test" `
                 --output-on-failure 2>&1 | `
                 Tee-Object -FilePath ctest-unit-test.log
 
@@ -236,6 +249,7 @@ jobs:
           name: ci-windows-logs-${{ github.run_id }}-${{ matrix.module }}
           path: |
             cmake-configure.log
+            cmake-configure-test.log
             cmake-build.log
             cmake-build-test.log
             ctest-unit-test.log
