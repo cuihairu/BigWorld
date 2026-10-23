@@ -113,7 +113,7 @@ jobs:
     # cancel-in-progress false, so a manual build is never killed mid-flight
     # and a second dispatch queues behind it instead.
     concurrency:
-      group: ci-windows-msvc-${{ github.ref }}
+      group: ci-windows-msvc-${{ github.ref }}-${{ matrix.library }}
       cancel-in-progress: true
     strategy:
       fail-fast: false
