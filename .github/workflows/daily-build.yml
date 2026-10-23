@@ -31,7 +31,7 @@ concurrency:
 
 jobs:
   build-test-package:
-    runs-on: ubuntu-24.04
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
     timeout-minutes: 350
 
     steps:
@@ -162,7 +162,7 @@ jobs:
   # Artifacts only, no tags and no releases (repo rule).
   windows-products:
     name: Windows server products
-    runs-on: windows-latest
+    runs-on: ${{ vars.CI_RUNNER || 'windows-latest' }}
     timeout-minutes: 90
 
     steps:
