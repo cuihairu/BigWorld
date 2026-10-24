@@ -960,7 +960,7 @@ void LogMsg::linuxAssertAndAbort( const char stackTrace[] )
  */
 /*static*/ void LogMsg::createMiniDump()
 {
-	HMODULE hMod = ::LoadLibrary( L"DbgHelp.dll" );
+	HMODULE hMod = ::LoadLibraryW( L"DbgHelp.dll" );
 
 	if (!hMod)
 	{
@@ -995,7 +995,7 @@ void LogMsg::linuxAssertAndAbort( const char stackTrace[] )
 		BWUtil::executableBasename().c_str(),
 		1900+t->tm_year, t->tm_mon+1, t->tm_mday,
 		t->tm_hour, t->tm_min, t->tm_sec );
-	HANDLE hFile = CreateFile ( filename,
+	HANDLE hFile = CreateFileW( filename,
 		GENERIC_READ | GENERIC_WRITE,
 		0,
 		NULL,

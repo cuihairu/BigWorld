@@ -184,12 +184,20 @@ add_library(cstdmf STATIC
 	${BW_LIB_DIR}/cstdmf/watcher.cpp
 	${BW_LIB_DIR}/cstdmf/watcher_path_request.cpp
 )
-target_compile_definitions(cstdmf PRIVATE CSTDMF_EXPORT) # exportFor = cstdmf
+# CSTDMF_EXPORT/IMPORT drive extern-template declarations on GCC (see
+# cstdmf_dll.hpp and bw_string.hpp) and, on MSVC, dllexport/dllimport. The
+# cstdmf sample builds cstdmf STATIC, so dllimport/dllexport is wrong here
+# (MSVC C2375/C4273 and unresolved __imp_ thunks at static-link time), and
+# the extern-template block in bw_string.hpp is skipped on MSVC anyway
+# (its guard is !_MSC_VER || _MSC_VER<1700). Gate the defines to non-MSVC.
+if(NOT MSVC)
+	target_compile_definitions(cstdmf PRIVATE CSTDMF_EXPORT) # exportFor = cstdmf
 
-# consumers get CSTDMF_IMPORT like the make build (explicit-instantiation
-# declarations; see cstdmf_dll.hpp)
-target_compile_definitions(CppUnitLite2 PRIVATE CSTDMF_IMPORT)
-target_compile_definitions(unit_test_lib PRIVATE CSTDMF_IMPORT)
+	# consumers get CSTDMF_IMPORT like the make build (explicit-instantiation
+	# declarations; see cstdmf_dll.hpp)
+	target_compile_definitions(CppUnitLite2 PRIVATE CSTDMF_IMPORT)
+	target_compile_definitions(unit_test_lib PRIVATE CSTDMF_IMPORT)
+endif()
 
 # --- cstdmf_test (lib/cstdmf/unit_test/Makefile.rules cxxSource, 49 TUs) -----
 # test_object_pool.cpp exists on disk but is NOT in the make cxxSource (does
@@ -245,8 +253,8 @@ add_executable(cstdmf_test
 	${BW_LIB_DIR}/cstdmf/unit_test/test_watcher_gaps.cpp
 	${BW_LIB_DIR}/cstdmf/unit_test/test_watcher.cpp
 )
-target_compile_definitions(cstdmf_test PRIVATE CSTDMF_IMPORT)
 if(NOT MSVC)
+	target_compile_definitions(cstdmf_test PRIVATE CSTDMF_IMPORT)
 	target_compile_options(cstdmf_test PRIVATE -Wno-float-equal) # unit_test profile
 endif()
 
