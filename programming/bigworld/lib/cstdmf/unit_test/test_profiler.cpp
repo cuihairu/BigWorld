@@ -9,10 +9,18 @@
 #include <sys/types.h>
 #if defined( _WIN32 )
 #include <windows.h>
+#include <direct.h>
 #define BW_TEST_SLEEP_MS(ms) Sleep(ms)
+// The profiler dump tests scratch a dir; /tmp is POSIX-only, so on Windows
+// use a relative dir under the ctest working directory. _mkdir (single
+// arg, no mode) replaces the POSIX mkdir(path, mode) call.
+#define BW_PROF_DUMP_DIR  "pf_batch23"
+#define BW_PROF_MKDIR(p)  _mkdir(p)
 #else
 #include <unistd.h>
 #define BW_TEST_SLEEP_MS(ms) usleep((ms) * 1000)
+#define BW_PROF_DUMP_DIR  "/tmp/pf_batch23"
+#define BW_PROF_MKDIR(p)  mkdir((p), 0755)
 #endif // defined( _WIN32 )
 
 BW_BEGIN_NAMESPACE
@@ -310,8 +318,8 @@ TEST( Profiler_basic_entries_statistics )
 {
 	// Dump files must land outside the repo; default dir is the executable
 	// directory (the game/ tree) which we must not pollute.
-	mkdir( "/tmp/pf_batch23", 0755 );
-	g_profiler.setJsonDumpDir( "/tmp/pf_batch23" );
+	BW_PROF_MKDIR( BW_PROF_DUMP_DIR );
+	g_profiler.setJsonDumpDir( BW_PROF_DUMP_DIR );
 
 	// forceJsonDump makes tick() process entries synchronously -> every
 	// assertion below is deterministic (no background-task race). Side
@@ -785,7 +793,7 @@ TEST( Profiler_json_dump_success )
 
 	// The path is published both through the getter and the SafeWatcher.
 	BW::string outputPath = g_profiler.getJsonOutputFilePath();
-	CHECK( contains( outputPath, "/tmp/pf_batch23" ) );
+	CHECK( contains( outputPath, BW_PROF_DUMP_DIR ) );
 	CHECK( contains( outputPath, ".json" ) );
 	CHECK( Watcher::rootWatcher().getAsString( NULL,
 		"profiler/dumpFilePath", result, desc, mode ) );
@@ -849,10 +857,10 @@ TEST( Profiler_json_dump_failure )
 	CHECK_EQUAL( BW::string( "3" ), result );
 
 	// Last successful path is still published by the getter.
-	CHECK( contains( g_profiler.getJsonOutputFilePath(), "/tmp/pf_batch23" ) );
+	CHECK( contains( g_profiler.getJsonOutputFilePath(), BW_PROF_DUMP_DIR ) );
 
 	// Restore for any later dump.
-	g_profiler.setJsonDumpDir( "/tmp/pf_batch23" );
+	g_profiler.setJsonDumpDir( BW_PROF_DUMP_DIR );
 }
 
 
@@ -862,7 +870,7 @@ TEST( Profiler_json_dump_failure )
 TEST( Profiler_csv_output )
 {
 	BW::string msg;
-	CHECK( g_profiler.setNewHistory( "/tmp/pf_batch23/out.csv", "Main",
+	CHECK( g_profiler.setNewHistory( BW_PROF_DUMP_DIR "/out.csv", "Main",
 		&msg ) );
 	CHECK( contains( msg, "MainThread" ) );
 	CHECK( contains( msg, "Opened file" ) );
@@ -909,7 +917,7 @@ TEST( Profiler_csv_output )
 	// Close flushes the history through the background task, then closes.
 	g_profiler.closeHistory();
 
-	FILE* csvFile = fopen( "/tmp/pf_batch23/out.csv", "r" );
+	FILE* csvFile = fopen( BW_PROF_DUMP_DIR "/out.csv", "r" );
 	CHECK( csvFile != NULL );
 	if (csvFile)
 	{

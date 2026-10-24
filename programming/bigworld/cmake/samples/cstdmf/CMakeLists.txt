@@ -58,6 +58,10 @@ set(CMAKE_INTERPROCEDURAL_OPTIMIZATION OFF) # make profile does not use LTO
 if(MSVC)
 	add_compile_options(
 		/MP /W3 /Zi /WX-
+		# Mirror the GCC lane's -Wno-write-strings: VS18 (MSVC 14.5x) defaults
+		# /Zc:strictStrings ON, which makes `char* p = "lit"` a C2440 error
+		# across legacy unit-test TUs. The Linux build keeps it as a warning.
+		/Zc:strictStrings-
 	)
 else()
 	add_compile_options(
