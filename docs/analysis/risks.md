@@ -1,125 +1,145 @@
-# 源码风险边界
+# Source Risk Boundaries
 
-> [English](risks.en.md) | **中文**
 
-## 风险不是单点问题
+## Risk is not a single-point problem
 
-BigWorld 的风险主要来自跨进程状态、协议契约和脚本/C++ 边界叠加。源码分析时不要把风险简化成“某个库旧”或“某个目录复杂”，而要追踪具体闭环是否能被验证。
+BigWorld's risks arise mainly from the superposition of cross-process state,
+protocol contracts, and the script/C++ boundary. In source analysis do not
+reduce risk to "some library is old" or "some directory is complex"; trace
+whether the concrete closed loop can be verified.
 
-## 高风险一：接口宏隐藏真实调用边界
+## High risk 1: interface macros hide the real call boundary
 
-Mercury interface 通过宏定义消息，再由 `registerWithInterface()` 注册到 `NetworkInterface`。这让调用边界不如普通函数调用直观。
+Mercury interfaces define messages through macros, which
+`registerWithInterface()` then registers on a `NetworkInterface`. This makes
+the call boundary less direct than an ordinary function call.
 
-风险表现：
+Risk symptoms:
 
-| 表现 | 需要验证的源码 |
+| Symptom | Source to verify |
 |---|---|
-| 只看到 handler，看不到发送方 | `bundle.startMessage()` / `bundle.startRequest()` |
-| 只看到接口定义，看不到注册进程 | `registerWithInterface()` |
-| 不清楚是否等待回复 | `startRequest()` 和 reply handler |
-| 不清楚消息可靠性 | interface 宏、Bundle 和 Channel 参数 |
+| You see the handler but not the sender | `bundle.startMessage()` / `bundle.startRequest()` |
+| You see the interface definition but not the registering process | `registerWithInterface()` |
+| Unclear whether it waits for a reply | `startRequest()` and the reply handler |
+| Unclear about message reliability | Interface macros and Bundle/Channel parameters |
 
-处理方式：每个跨进程结论都必须同时引用接口定义、注册点和至少一个发送点。
+Handling: every cross-process conclusion must cite the interface definition,
+the registration point, and at least one send point.
 
-## 高风险二：EntityDef 同时影响多条链
+## High risk 2: EntityDef affects several chains at once
 
-`.def` 不是单纯实体配置。它会影响：
+A `.def` is not plain entity configuration. It affects:
 
-| 影响面 | 代表源码 |
+| Affected surface | Representative source |
 |---|---|
-| 属性域 | `DataDescription`, `EntityDescription` |
-| 方法参数 | `MethodDescription`, `MethodArgs` |
-| 网络序列化 | `addToStream()`, `createFromStream()` |
-| 客户端同步 | `ClientInterface::entityProperty`, `nestedEntityProperty`, `sliceEntityProperty` |
-| DB 持久化 | `ONLY_PERSISTENT_DATA`, `PropertyMapping::create()` |
-| digest 一致性 | `EntityDescriptionMap::addPersistentPropertiesToMD5()` |
+| Property domains | `DataDescription`, `EntityDescription` |
+| Method arguments | `MethodDescription`, `MethodArgs` |
+| Network serialization | `addToStream()`, `createFromStream()` |
+| Client synchronization | `ClientInterface::entityProperty`, `nestedEntityProperty`, `sliceEntityProperty` |
+| DB persistence | `ONLY_PERSISTENT_DATA`, `PropertyMapping::create()` |
+| Digest consistency | `EntityDescriptionMap::addPersistentPropertiesToMD5()` |
 
-风险表现是字段改动看似局部，实际可能破坏客户端协议、DB schema、实体迁移流或热更新路径。
+The risk is that a field change looks local but can actually break the
+client protocol, DB schema, entity migration streams, or hot-reload paths.
 
-## 高风险三：属性同步和落库不是同一机制
+## High risk 3: property sync and persistence are not the same mechanism
 
-属性变化链和数据库写入链不同：
+The property-change chain and database-write chain differ:
 
-| 链路 | 代表源码 | 风险 |
+| Chain | Representative source | Risk |
 |---|---|---|
-| 运行时同步 | `PropertyChange`, `Entity::onOwnedPropertyChanged()` | 误以为发送给客户端就等于已持久化 |
-| 显式落库 | `Base::writeToDB()`, `DBApp::writeEntity()`, `IDatabase::putEntity()` | 误以为属性变化会自动 flush 到 DB |
+| Runtime sync | `PropertyChange`, `Entity::onOwnedPropertyChanged()` | Mistaking "sent to the client" for "persisted" |
+| Explicit persistence | `Base::writeToDB()`, `DBApp::writeEntity()`, `IDatabase::putEntity()` | Mistaking property changes for an automatic flush to DB |
 
-如果把 BigWorld 当成 ORM，会误判保存语义。数据库写入依赖 `writeToDB`、`Persistent` 数据域、Base/Cell 数据快照和 DBApp 后端任务，而不是对象字段自动脏检查。
+Treating BigWorld as an ORM leads to wrong save-semantics judgments. Database
+writes depend on `writeToDB`, the `Persistent` data domain, Base/Cell data
+snapshots, and DBApp backend tasks — not automatic dirty checking of object
+fields.
 
-## 高风险四：Cell 迁移依赖消息顺序和状态转换
+## High risk 4: Cell migration depends on message order and state transitions
 
-Offload/Ghost/Witness 不是普通对象迁移。
+Offload/Ghost/Witness are not ordinary object migration.
 
-关键源码：
+Key source:
 
-| 源码 | 风险点 |
+| Source | Risk point |
 |---|---|
-| `EntityGhostMaintainer::check()` | 判断是否创建 ghost 或 offload |
-| `Entity::offload()` | real entity 转移入口 |
-| `RealEntity::writeOffloadData()` | 迁移流写出顺序 |
-| `Space::createGhost()` | 目标 Cell 创建 ghost/real 的入口之一 |
-| `Entity::ghostSetNextReal()` | real 切换期间的消息顺序约束 |
-| `Witness::writeOffloadData()` | 客户端视野状态迁移 |
+| `EntityGhostMaintainer::check()` | Decides whether to create a ghost or offload |
+| `Entity::offload()` | Real-entity transfer entry |
+| `RealEntity::writeOffloadData()` | Migration stream write order |
+| `Space::createGhost()` | One of the entries for creating ghost/real on the target Cell |
+| `Entity::ghostSetNextReal()` | Message-ordering constraints during the real switch |
+| `Witness::writeOffloadData()` | Client view-state migration |
 
-风险表现是局部改动可能破坏 real/ghost 生命周期、buffered ghost message、AOI 连续性或客户端位置同步。
+The risk is that a local change can break real/ghost lifecycle, buffered
+ghost messages, AOI continuity, or client position synchronization.
 
-## 高风险五：主循环是同步 handler 驱动
+## High risk 5: the main loop is synchronous-handler driven
 
-`EventDispatcher::processOnce()` 在同一事件循环中处理 timer、网络和 frequent task。具体 App 的 handler 直接在这条链上执行。
+`EventDispatcher::processOnce()` handles timers, networking, and frequent
+tasks in the same event loop. The concrete App's handlers execute directly
+on this chain.
 
-风险表现：
+Risk symptoms:
 
-| 风险 | 代表源码 |
+| Risk | Representative source |
 |---|---|
-| handler 耗时影响 tick | `EventDispatcher::processOnce()`, `ServerApp::advanceTime()` |
-| Base/Cell tick 逻辑与网络回调交织 | `BaseApp::tickGameTime()`, `CellApp::handleGameTickTimeSlice()` |
-| 脚本回调可能改变对象生命周期 | `callbacksPermitted(false/true)`, entity migration code |
-| 后台任务完成仍需回主循环收尾 | DBApp、MySQL task、background task manager |
+| Handler cost affects the tick | `EventDispatcher::processOnce()`, `ServerApp::advanceTime()` |
+| Base/Cell tick logic interleaves with network callbacks | `BaseApp::tickGameTime()`, `CellApp::handleGameTickTimeSlice()` |
+| Script callbacks can change object lifecycle | `callbacksPermitted(false/true)`, entity migration code |
+| Background-task completion still needs main-loop finalization | DBApp, MySQL tasks, the background task manager |
 
-阅读源码时要确认代码是在主线程事件循环、timer 回调、网络 handler 还是后台任务中执行。
+When reading source, confirm whether code runs in the main-thread event
+loop, a timer callback, a network handler, or a background task.
 
-## 高风险六：Watcher 既是观测也是控制面
+## High risk 6: Watcher is both an observability and a control plane
 
-Watcher 不只是指标导出。部分 Watcher 支持写操作，Manager 还会通过 forwarding watcher 汇聚多个进程的状态。
+Watcher is not just metric export. Some Watchers support writes, and the
+Managers also aggregate state across processes through forwarding watchers.
 
-关键源码：
+Key source:
 
-| 源码 | 关注点 |
+| Source | Focus |
 |---|---|
-| `lib/network/watcher_nub.hpp` | Watcher 网络入口 |
-| `lib/server/watcher_forwarding_collector.cpp` | Watcher 跨进程汇聚 |
-| 各 App 的 `addWatchers()` | 暴露哪些运行时状态和控制项 |
+| `lib/network/watcher_nub.hpp` | Watcher network entry |
+| `lib/server/watcher_forwarding_collector.cpp` | Cross-process Watcher aggregation |
+| Each App's `addWatchers()` | Which runtime state and controls are exposed |
 
-风险表现是把 Watcher 当成只读监控后，忽视它对运行时状态和管理面的影响。涉及 Watcher 的文档结论必须说明读写边界。
+The risk is treating Watcher as read-only monitoring and overlooking its
+effect on runtime state and the management plane. Documentation conclusions
+involving Watcher must state the read/write boundary.
 
-## 高风险七：构建配置和源码树可能漂移
+## High risk 7: build configuration and source tree can drift
 
-构建脚本、工程文件、PDF 文档和当前源码树不一定完全一致。
+Build scripts, project files, PDF documents, and the current source tree are
+not necessarily fully consistent.
 
-验证点：
+Verification points:
 
-| 问题 | 检查方式 |
+| Question | How to check |
 |---|---|
-| 构建脚本引用路径是否存在 | `rg` 配置中的脚本名和目标名 |
-| CMake/Make 是否覆盖同一目标 | 对比 `CMakeLists.txt` 与 `Makefile.rules` |
-| 文档描述是否仍对应源码 | 用函数名、接口名、文件路径回查 |
-| 测试目标是否可构建 | 查 `BW_ADD_TEST` 和对应源码 |
+| Whether paths referenced by build scripts exist | `rg` script and target names in configuration |
+| Whether CMake/Make cover the same targets | Compare `CMakeLists.txt` against `Makefile.rules` |
+| Whether documentation still matches source | Look back by function name, interface name, file path |
+| Whether test targets build | Check `BW_ADD_TEST` and the corresponding source |
 
-如果只能从旧文档看到结论，但当前源码找不到对应文件，应标记为文档漂移，不应直接写成源码事实。
+If a conclusion appears only in old documents and the corresponding file
+cannot be found in the current source, mark it as documentation drift rather
+than writing it as a source fact.
 
-## 风险验证清单
+## Risk verification checklist
 
-每个风险结论至少回答这些问题：
+Each risk conclusion answers at least these questions:
 
-| 问题 | 检索入口 |
+| Question | Search entry |
 |---|---|
-| 消息是谁定义的 | `BEGIN_MERCURY_INTERFACE` |
-| 接口在哪里注册 | `registerWithInterface(` |
-| 谁发送消息 | `startMessage(`, `startRequest(` |
-| 数据如何编码 | `addToStream(`, `createFromStream(` |
-| 状态在哪里改变 | 具体 App、Entity、Manager、DB handler |
-| 是否有测试覆盖 | `BW_ADD_TEST`, `TEST(` |
-| 是否有运行时观测 | `addWatchers()` |
+| Who defines the message | `BEGIN_MERCURY_INTERFACE` |
+| Where the interface is registered | `registerWithInterface(` |
+| Who sends the message | `startMessage(`, `startRequest(` |
+| How data is encoded | `addToStream(`, `createFromStream(` |
+| Where state changes | The concrete App, Entity, Manager, or DB handler |
+| Whether tests cover it | `BW_ADD_TEST`, `TEST(` |
+| Whether runtime observation exists | `addWatchers()` |
 
-这份清单比泛泛描述“技术债”更有用，因为它能把风险落到可复查的源码证据链上。
+This checklist is more useful than vague "technical debt" descriptions,
+because it pins risk to a re-checkable source evidence chain.

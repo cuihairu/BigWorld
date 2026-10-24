@@ -1,97 +1,124 @@
-# 打包与每日构建分析
+# Packaging and Daily-Build Analysis
 
-> [English](packaging-and-daily-build.en.md) | **中文**
 
 <div class="arch-hero">
 
-回答三个问题：打包是不是只有 RPM？Windows 能不能支持？每日构建怎么做？结论先行——**打包不欠构建只欠格式**（make 全量构建已产出完整安装树），**Windows 今天可用 WSL2、原生支持是分层工程**，**每日构建已落地为 GitHub Actions 工作流**（构建 + 21 模块单测门禁 + tar/deb/rpm 三格式产物）。
+Three questions: is packaging RPM-only? Can Windows be supported? How should a
+daily build work? Conclusions first — **packaging owes no build work, only
+formats** (a full make build already produces the complete install tree),
+**Windows is usable today via WSL2 while native support is a layered
+project**, and **the daily build has landed as a GitHub Actions workflow**
+(build + 21-module unit-test gate + tar/deb/rpm artifacts in three formats).
 
 </div>
 
-## 打包现状：RPM 是遗产，不是上限
+## Packaging status: RPM is legacy, not the ceiling
 
-仓库根的三个 RPM（`bigworld-devel` / `bigworld-bwmachined` / `bigworld-web-integration`，均为 `14.4.1.el7.x86_64`）是上游发行遗产；历史打包链是 `build/bw_internal/scripts/makeRPM.py` → `make rpm`，配套 `build/docker/Dockerfile`（centos:7）。这条链有两个硬伤：
+The three RPMs in the repository root (`bigworld-devel` /
+`bigworld-bwmachined` / `bigworld-web-integration`, all
+`14.4.1.el7.x86_64`) are upstream distribution legacy; the historical
+packaging chain is `build/bw_internal/scripts/makeRPM.py` → `make rpm`, with
+the accompanying `build/docker/Dockerfile` (centos:7). This chain has two
+hard problems:
 
-- CentOS 7 已于 2024-06 EOL，其 gcc 4.8 无法承载现代化后的 C++23 构建口径；
-- `makeRPM.py` 指向的是历史 `src/server` 布局，与本仓 `game/` 安装树已不一致，未随 vcpkg / Python 3.13 迁移验证。
+- CentOS 7 went EOL in 2024-06, and its gcc 4.8 cannot carry the modernized
+  C++23 build standard;
+- `makeRPM.py` points at the historical `src/server` layout, which no longer
+  matches this repository's `game/` install tree and was not revalidated
+  through the vcpkg / Python 3.13 migration.
 
-关键事实是：**make 全量构建本身就完成了打包的大部分工作**——安装规则把产物铺进 `game/bin/server/el7/`（约 1.4 GB：examples / server / tools / unit_tests / third_party）和 `game/res/`（约 90 MB）。打包层只差“装进格式”：
+The key fact is: **a full make build already does most of packaging** — the
+install rules lay artifacts out into `game/bin/server/el7/` (about 1.4 GB:
+examples / server / tools / unit_tests / third_party) and `game/res/`
+(about 90 MB). The packaging layer only needs "putting it into a format":
 
 <div class="decision-table">
 
-| 格式 | 产出方式 | 定位 |
+| Format | How produced | Positioning |
 |------|----------|------|
-| tar.gz | `tar` 直接打包安装树 | 保底格式，任何环境可解；`tar -C / -xzf` 即落位 `/opt/bigworld` |
-| .deb | `dpkg-deb`（ubuntu/debian 自带） | Debian 系装机口径，声明 libc/libstdc++/mysql client 依赖，第三方库为 vcpkg 静态链接 |
-| .rpm | `rpmbuild`（`apt install rpm` 即可，无需 CentOS） | 保留 RPM 交付口径，与历史 el7 产物对齐 |
+| tar.gz | `tar` directly archives the install tree | The floor format; extractable in any environment; `tar -C / -xzf` lands it at `/opt/bigworld` |
+| .deb | `dpkg-deb` (shipped with ubuntu/debian) | Debian-family installation standard; declares libc/libstdc++/mysql client dependencies; third-party libraries are vcpkg static links |
+| .rpm | `rpmbuild` (`apt install rpm` suffices; no CentOS needed) | Preserves the RPM delivery standard, aligned with historical el7 artifacts |
 
 </div>
 
-三种格式共用同一 `/opt/bigworld/{bin,res}` 布局，版本口径统一为 `14.4.1+daily<UTC日期>.<git短sha>`（源头是 `vcpkg.json` 的 `version` 字段）。
+All three formats share the same `/opt/bigworld/{bin,res}` layout, with a
+unified version standard `14.4.1+daily<UTC date>.<short git sha>` (sourced
+from the `version` field of `vcpkg.json`).
 
-## Windows 支持分层分析
+## Layered Windows-support analysis
 
-“平时开发在 Windows”对应的近期与远期路径不同，分层看：
+"Daily development on Windows" maps to different near- and long-term paths:
 
 <div class="decision-table">
 
-| 层级 | 可行性 | 依据 | 建议 |
+| Layer | Feasibility | Basis | Recommendation |
 |------|--------|------|------|
-| WSL2（立即） | ✅ 今天可用 | `platform_info.py` 在 3.13 迁移期已把无 `/etc/redhat-release` 的 Debian 系主机映射为 el7 工具链配置；WSL2 即 Ubuntu 用户态，vcpkg 依赖清单（openssl/curl/jsoncpp/zlib/libpng/sqlite3/bzip2）全部可用 | Windows 开发机上直接走完整构建 + 21 模块单测，与 CI 同口径 |
-| MSVC 冒烟（中期） | ⚠️ 需工程投入 | CMake 链与 `build/*.bat` 是历史 Windows 工程生成面（client / tools）；现存 `.vcproj` 是 VS2003 时代格式；vcpkg 本身跨平台已就位，缺的是工程文件现代化 | 先让平台无关库（cstdmf / math）过 MSVC 编译门禁，再逐步外扩 |
-| 服务端原生 Windows（远期） | ⚠️ 大工程 | platform mak 无 win32 配置；`event_poller` 已抽象 select/poll/epoll（Windows select 有现成落点），但 I/O、路径、信号等平台层面广 | 不纳入每日构建范围 |
+| WSL2 (immediate) | ✅ usable today | During the 3.13 migration `platform_info.py` already maps Debian-family hosts without `/etc/redhat-release` to the el7 toolchain configuration; WSL2 is Ubuntu user space, and the full vcpkg dependency list (openssl/curl/jsoncpp/zlib/libpng/sqlite3/bzip2) is available | Run the complete build + 21-module unit tests directly on a Windows dev machine, same standard as CI |
+| MSVC smoke (medium term) | ⚠️ needs engineering | The CMake chain and `build/*.bat` are the historical Windows project-generation surface (client / tools); the existing `.vcproj` files are VS2003-era formats; vcpkg itself is cross-platform and in place, what is missing is project-file modernization | First get the platform-independent libraries (cstdmf / math) through the MSVC compile gate, then expand outward |
+| Native Windows server (long term) | ⚠️ large project | Platform mak files have no win32 configuration; `event_poller` already abstracts select/poll/epoll (Windows select has a ready landing point), but I/O, paths, signals and other platform surfaces are broad | Keep it out of the daily-build scope |
 
 </div>
 
-## 每日构建设计（已落地）
+## Daily-build design (landed)
 
-`.github/workflows/daily-build.yml` + `scripts/package-daily.sh`：
+`.github/workflows/daily-build.yml` + `scripts/package-daily.sh`:
 
 <div class="decision-table">
 
-| 环节 | 设计 | 关键点 |
+| Stage | Design | Key points |
 |------|------|--------|
-| 触发 | `schedule: 23 21 * * *`（UTC，= 北京时间每日 05:23）+ `workflow_dispatch` | GitHub 只在**默认分支（main）**上跑 schedule——合并到 main 后自动生效；dev 分支用手动触发 |
-| 48 小时判定 | schedule 触发时 `git rev-list --count --since='48 hours ago' HEAD`，为 0 则跳过全部构建步骤（checkout 需 `fetch-depth: 0`）；`workflow_dispatch` 无条件构建 | 无提交的空转日不产包、不烧 runner；"每日构建=48 小时内有更新才发二进制更新"的语义落在这一步 |
-| 环境 | ubuntu-24.04 固定版本 + gcc-14（update-alternatives 指到 g++ 默认位） | 平台探测的 Debian 回退使其自动落在 el7 工具链配置，无需覆盖 |
-| 系统依赖 | readline/ncurses/bz2/sqlite3/gdbm/mysqlclient/ffi 等 dev 包 | `libmysqlclient-dev` 必装——`third_party_mysql.mak` 在编译链内；vendored CPython 3.13 构建需要这组头文件 |
-| UDP 缓冲 | `sysctl net.core.rmem_max=16777216` | network_test 的 ConfigTest 门禁阈值，低于它整模块红 |
-| 第三方 | 克隆官方 vcpkg 并 checkout 到 manifest 的 `builtin-baseline`（从 vcpkg.json 提取，单一事实源）+ bootstrap；vcpkg binary cache 经 `actions/cache` 跨 run 复用（`VCPKG_DEFAULT_BINARY_CACHE`，缓存键=baseline+manifest 哈希） | 依赖版本不随 vcpkg 上游漂移（钉版机制见 [第三方依赖切换到 vcpkg](/vcpkg-migration) §1.1） |
-| 门禁 | 全量构建 → `bw-run-all-unit-tests`（21 模块） | 打包只在上游两步全绿后执行 |
-| 产物 | tar.gz / deb / rpm 三格式，artifact 名 `bigworld-daily-<version>+daily<UTC 日期>.<git 短 sha>-linux-x86_64`（读 `out/pkg-version.txt`），保留 14 天 | 包文件名同口径（见下）；**不打 tag、不发 GitHub Release**（仓库规则）；每日产物随保留期自动过期 |
+| Trigger | `schedule: 23 21 * * *` (UTC = 05:23 Beijing time daily) + `workflow_dispatch` | GitHub only runs schedule on the **default branch (main)** — it activates automatically after merging to main; the dev branch uses manual triggers |
+| 48-hour rule | On schedule trigger, `git rev-list --count --since='48 hours ago' HEAD`; if 0, skip all build steps (checkout needs `fetch-depth: 0`); `workflow_dispatch` builds unconditionally | Idle days with no commits produce no packages and burn no runner; the "daily build = ship a binary update only when something changed in 48 hours" semantics live in this step |
+| Environment | Pinned ubuntu-24.04 + gcc-14 (update-alternatives points g++ to the default slot) | Platform detection's Debian fallback lands it on the el7 toolchain configuration automatically; no override needed |
+| System dependencies | dev packages for readline/ncurses/bz2/sqlite3/gdbm/mysqlclient/ffi etc. | `libmysqlclient-dev` is mandatory — `third_party_mysql.mak` is in the compile chain; the vendored CPython 3.13 build needs this header set |
+| UDP buffers | `sysctl net.core.rmem_max=16777216` | The ConfigTest gate threshold in network_test; below it the whole module goes red |
+| Third party | Clone official vcpkg and checkout the manifest's `builtin-baseline` (extracted from vcpkg.json, single source of truth) + bootstrap; the vcpkg binary cache is reused across runs via `actions/cache` (`VCPKG_DEFAULT_BINARY_CACHE`, cache key = baseline + manifest hash) | Dependency versions do not drift with upstream vcpkg (pinning mechanism in [third-party dependency switch to vcpkg](/vcpkg-migration) §1.1) |
+| Gate | Full build → `bw-run-all-unit-tests` (21 modules) | Packaging runs only after both upstream steps are green |
+| Artifacts | Three formats tar.gz / deb / rpm; artifact name `bigworld-daily-<version>+daily<UTC date>.<short git sha>-linux-x86_64` (read from `out/pkg-version.txt`), retained 14 days | Package filenames use the same standard (below); **no tag, no GitHub Release** (repository rule); daily artifacts expire automatically with the retention period |
 
 </div>
 
-三种包文件由 `scripts/package-daily.sh` 从 make 安装树一次性产出，命名规则：
+The three package files are produced in one pass by
+`scripts/package-daily.sh` from the make install tree, naming rules:
 
-- tar.gz：`bigworld-14.4.1+daily20261012.<sha>-linux-x86_64.tar.gz`
-- deb：`bigworld_14.4.1+daily20261012.<sha>_amd64.deb`
-- rpm：`bigworld-14.4.1-1.daily20261012.<sha>.x86_64.rpm`
+- tar.gz: `bigworld-14.4.1+daily20261012.<sha>-linux-x86_64.tar.gz`
+- deb: `bigworld_14.4.1+daily20261012.<sha>_amd64.deb`
+- rpm: `bigworld-14.4.1-1.daily20261012.<sha>.x86_64.rpm`
 
-本地一条等价命令：`bash scripts/package-daily.sh <out-dir>`（要求先完成全量
-make；脚本从 `vcpkg.json` 的 `version` 取版本基线）。**exe 缺口**：Windows
-原生构建未迁移（R3，见上文分层表），每日构建暂无 exe 产物，已在 workflow
-与本页登记为卡点，非遗漏。
+Local one-line equivalent: `bash scripts/package-daily.sh <out-dir>` (requires
+a completed full make first; the script takes the version baseline from the
+`version` field of `vcpkg.json`). **The exe gap**: native Windows build is not
+migrated (R3, see the layered table above), so the daily build currently has
+no exe artifact; this is registered as a blocker in the workflow and on this
+page, not an omission.
 
+### Validation standard (full chain opened on dev branch 2026-09-28)
 
-
-### 验证口径（2026-09-28 dev 分支全链打通）
-
-workflow 在 dev 分支经**五轮 `workflow_dispatch` 实跑迭代**后全链贯通（终局 run `36420988341`，39m29s，全部步骤 ✓，1113 用例 CI 门禁全绿）：
+After **five rounds of live `workflow_dispatch` iteration** the workflow's
+full chain is connected (final run `36420988341`, 39m29s, every step ✓,
+1113-case CI gate fully green):
 
 <div class="decision-table">
 
-| 轮 | 失败点 | 根因 | 修复 |
+| Round | Failure point | Root cause | Fix |
 |------|--------|------|------|
-| 1 | Build | runner 缺 `liblzma-dev`，`_lzma` 落出 CPython 模块集，`bwsentinel` 的逐模块存在性检查断裂 | 补 `liblzma-dev` / `libgdbm-compat-dev` / `tk-dev` |
-| 2 | 单测 | `python_install` 被 `user_shouldInstallPython=1` 门控且全构建系统无默认值——标准库从未安装，嵌 Python 测试死于 `No module named 'encodings'` | workflow 注入该环境变量 |
-| 3 | 单测 1 用例 | `test_py_traceback` 硬编码 `/tmp/opencode`（本地会话临时目录），干净机器 `mkfifo ENOENT`（现为 `/tmp/pyscript_py_traceback_fifo.py`，`test_py_traceback.cpp:350`） | 测试路径挪 `/tmp` 根（`876561a4`） |
-| 4 | Package.rpm | 打包脚本 rpm 段中转拷贝错层寻址（本机无 rpmbuild 恰好从未执行到该行） | `bwsrc` 宏直连暂存树（`f74985bb`） |
+| 1 | Build | The runner lacked `liblzma-dev`; `_lzma` fell out of the CPython module set, breaking `bwsentinel`'s per-module existence checks | Add `liblzma-dev` / `libgdbm-compat-dev` / `tk-dev` |
+| 2 | Unit tests | `python_install` is gated by `user_shouldInstallPython=1` with no default anywhere in the build system — the stdlib was never installed, and embedded-Python tests died with `No module named 'encodings'` | The workflow injects the environment variable |
+| 3 | 1 unit-test case | `test_py_traceback` hardcoded `/tmp/opencode` (the local session temp directory); on a clean machine `mkfifo ENOENT` (now `/tmp/pyscript_py_traceback_fifo.py`, `test_py_traceback.cpp:350`) | Move the test path to the `/tmp` root (`876561a4`) |
+| 4 | Package.rpm | The packaging script's rpm section addressed a staging-copy level incorrectly (without rpmbuild locally that line had simply never executed) | The `bwsrc` macro points directly at the staging tree (`f74985bb`) |
 
 </div>
 
-终局产物共 2.5 GB：**tar.gz 1.4G / deb 905M / rpm 169M**（版本 `14.4.1+daily20260928.f74985bb`），以 workflow artifact 交付（保留 14 天）。每日 schedule 自动运行仍需合并到 main 后生效；dev 上保持手动 dispatch。
+Final artifacts total 2.5 GB: **tar.gz 1.4G / deb 905M / rpm 169M** (version
+`14.4.1+daily20260928.f74985bb`), delivered as workflow artifacts (retained
+14 days). The automatic daily schedule still requires a merge to main to take
+effect; dev keeps manual dispatch.
 
-### 与覆盖率工程的关系
+### Relationship to the coverage work
 
-每日构建不改变本地门禁口径（仍以 `bw-run-all-unit-tests` 全绿为准），它把“干净环境全绿”从本机事实升级为**每日外部事实**；覆盖率现状见[迁移与覆盖率现状](/upgrade-plan/migration-status)，逐批过程见[全量台账](/python-313-migration)。
+The daily build does not change the local gate standard (full green under
+`bw-run-all-unit-tests` remains the rule); it upgrades "green in a clean
+environment" from a local fact to a **daily external fact**. Coverage status
+is in [migration and coverage status](/upgrade-plan/migration-status), and
+the batch-by-batch process is in the [full ledger](/python-313-migration).

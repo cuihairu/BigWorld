@@ -1,56 +1,59 @@
-# 进程拓扑与职责切分
+# Process Topology and Responsibility Split
 
-> [English](process-topology.en.md) | **中文**
 
 <div class="arch-hero">
 
-BigWorld 服务端不是单进程游戏服务器，而是多进程 MMO 运行时。理解它的第一步，是把“玩家会话”“全局实体”“空间模拟”“数据库”“登录入口”“控制面”和“故障恢复”拆开看。
+The BigWorld server is not a single-process game server. It is a multi-process
+MMO runtime. The first step to understanding it is to separate player sessions,
+global entities, space simulation, database access, login ingress, the control
+plane, and failure recovery.
 
 </div>
 
-## 核心结论
+## Core Conclusions
 
-BigWorld 的进程拓扑体现了典型 MMO 服务器分层：
+The topology follows classic MMO server layering:
 
-- `LoginApp` 面向客户端登录入口。
-- `BaseApp` 承载玩家会话、Base 实体、全局逻辑和与客户端的连接关系。
-- `CellApp` 承载空间内实体、AOI、物理/位置、Cell 实体逻辑。
-- `DBApp` 承载数据库交互、实体持久化、账号/实体查询。
-- `BaseAppMgr`、`CellAppMgr`、`DBAppMgr` 是控制面和注册中心的一部分。
-- `Reviver` 负责监控关键组件并请求 `machined` 拉起恢复进程。
+- `LoginApp` is the external client login entry point.
+- `BaseApp` owns player sessions, Base entities, global logic, and client-connectivity relationships.
+- `CellApp` owns in-space entities, AOI, physics/position, and Cell entity logic.
+- `DBApp` owns database interaction, entity persistence, and account/entity queries.
+- `BaseAppMgr`, `CellAppMgr`, and `DBAppMgr` are part of the control plane and registry.
+- `Reviver` monitors critical components and asks `machined` to start replacement processes.
 
-这不是现代微服务式按业务域切分，而是围绕 MMO 的运行时权威域切分。
+This is not a modern microservice split by business domain. It is a split by
+runtime authority domains in an MMO.
 
-## 进程拓扑
+## Process Topology
 
 <div class="topology-grid">
   <div class="topology-card">
     <h3>LoginApp</h3>
-    <p>处理外部登录请求，完成挑战、认证、分配后续连接目标。</p>
+    <p>Handles external login requests, performs challenge/authentication, and assigns the next connection target.</p>
   </div>
   <div class="topology-card">
     <h3>BaseApp</h3>
-    <p>管理玩家在线会话、Base 实体、跨 Cell 协调和客户端通信。</p>
+    <p>Owns online player sessions, Base entities, cross-Cell coordination, and client communication.</p>
   </div>
   <div class="topology-card">
     <h3>CellApp</h3>
-    <p>负责空间模拟、实体位置、AOI、Ghost、Cell 内逻辑。</p>
+    <p>Owns space simulation, entity position, AOI, ghosts, and in-Cell logic.</p>
   </div>
   <div class="topology-card">
     <h3>DBApp</h3>
-    <p>封装数据库任务，把阻塞数据库操作隔离到后台任务模型中。</p>
+    <p>Encapsulates database tasks and isolates blocking database work in the background-task model.</p>
   </div>
   <div class="topology-card">
-    <h3>Mgr 组件</h3>
-    <p>负责注册、发现、负载信息、扩展接纳、恢复协调和全局控制。</p>
+    <h3>Manager components</h3>
+    <p>Own registration, discovery, load information, scaling admission, recovery coordination, and global control.</p>
   </div>
   <div class="topology-card">
     <h3>Reviver</h3>
-    <p>通过 ping、birth/death 消息和 machined 交互做进程级恢复。</p>
+    <p>Provides process-level recovery through pings, birth/death messages, and machined.</p>
   </div>
 </div>
 
-<MermaidDiagram title="BigWorld 服务端进程关系">
+<MermaidDiagram title="BigWorld server process relationships">
 flowchart LR
   Client[Client]
   Login[LoginApp]
@@ -79,31 +82,33 @@ flowchart LR
   Rev -. ping/death .-> CAM
 </MermaidDiagram>
 
-## 启动与注册链路
+## Startup and Registration Chain
 
-**概述：** BigWorld 服务端进程启动后，需要向 machined 注册，并与 Mgr 组件建立连接。这是进程发现和负载均衡的基础。
+**Summary**: after startup, a BigWorld server process registers with machined
+and connects with the Manager components. This underpins discovery and load
+balancing.
 
-**源码入口：** [baseappmgr.cpp:389](/home/cui/workspaces/BigWorld/programming/bigworld/server/baseappmgr/baseappmgr.cpp:389)
+**Source entry**: baseappmgr.cpp:389
 
 ```cpp
-// baseappmgr.cpp:389 - BaseAppMgr 注册
+// baseappmgr.cpp:389 - BaseAppMgr registration
 bool BaseAppMgr::init( bool isReload )
 {
-    // 1. 注册 Mercury 接口
+    // 1. Register the Mercury interface
     if (!this->BaseAppMgrInterface::registerWithInterface())
     {
         ERROR_MSG( "BaseAppMgr::init: Failed to register interface\n" );
         return false;
     }
-    
-    // 2. 向 machined 注册
+
+    // 2. Register with machined
     if (!this->registerWithMachined())
     {
         ERROR_MSG( "BaseAppMgr::init: Failed to register with machined\n" );
         return false;
     }
-    
-    // 3. 监听其他组件 birth/death
+
+    // 3. Listen for birth/death of other components
     this->BaseAppMgrInterface::registerBirthListener( 
         &BaseAppMgr::onBaseAppBirth );
     this->BaseAppMgrInterface::registerDeathListener(
@@ -113,198 +118,206 @@ bool BaseAppMgr::init( bool isReload )
 }
 ```
 
-**流程图：**
-
-<MermaidDiagram title="进程启动与注册流程">
+<MermaidDiagram title="Process startup and registration">
 sequenceDiagram
-    participant Process as 服务进程
+    participant Process as Server process
     participant Machined as machined
-    participant Mgr as Mgr 组件
-    participant Other as 其他进程
+    participant Mgr as Manager
+    participant Other as Other processes
 
-    Process->>Process: 初始化
+    Process->>Process: initialize
     Process->>Process: registerWithInterface()
-    Process->>Machined: 注册 (birth 消息)
-    Machined->>Mgr: 广播 birth
+    Process->>Machined: register (birth message)
+    Machined->>Mgr: broadcast birth
     Mgr->>Mgr: addApp()
-    Mgr->>Process: 注册成功
-    Process->>Other: 监听 birth/death
+    Mgr->>Process: registration success
+    Process->>Other: listen for birth/death
 </MermaidDiagram>
 
-**详细讲解：**
+Detailed interpretation:
 
-1. **接口注册**：`registerWithInterface()` 注册 Mercury 消息处理器，让进程可以接收和处理消息。
+1. **Interface registration**: `registerWithInterface()` registers Mercury message handlers so the process can receive and process messages.
 
-2. **machined 注册**：`registerWithMachined()` 向 machined 发送 birth 消息，machined 会广播给其他进程。
+2. **machined registration**: `registerWithMachined()` sends a birth message to machined, which broadcasts it to other processes.
 
-3. **Mgr 接纳**：Mgr 组件收到 birth 消息后，调用 `addApp()` 接纳新进程，更新进程列表和负载信息。
+3. **Manager admission**: after receiving a birth message, the Manager calls `addApp()`, admitting the process and updating process and load information.
 
-4. **birth/death 监听**：进程监听其他组件的 birth/death 消息，用于服务发现和故障检测。
+4. **Birth/death listening**: processes listen for other components' birth/death messages for service discovery and failure detection.
 
-### BaseAppMgr 启动流程
+### BaseAppMgr startup flow
 
-**源码入口：** [baseappmgr.cpp:389](/home/cui/workspaces/BigWorld/programming/bigworld/server/baseappmgr/baseappmgr.cpp:389)
+**Source entry**: baseappmgr.cpp:389
 
 ```cpp
-// baseappmgr.cpp:389 - BaseAppMgr 启动
+// baseappmgr.cpp:389 - BaseAppMgr startup
 bool BaseAppMgr::init( bool isReload )
 {
-    // ... 其他初始化 ...
-    
-    // 注册接口
+    // ... other initialization ...
+
+    // Register the interface
     if (!this->BaseAppMgrInterface::registerWithInterface())
     {
         return false;
     }
-    
-    // 向 machined 注册
+
+    // Register with machined
     if (!this->registerWithMachined())
     {
         return false;
     }
-    
-    // 监听 BaseApp birth
+
+    // Listen for BaseApp birth
     this->BaseAppMgrInterface::registerBirthListener(
         &BaseAppMgr::onBaseAppBirth );
-    
-    // 监听 CellAppMgr birth
+
+    // Listen for CellAppMgr birth
     this->CellAppMgrInterface::registerBirthListener(
         &BaseAppMgr::onCellAppMgrBirth );
-    
+
     return true;
 }
 ```
 
-**关键细节：**
+Key details:
 
-- BaseAppMgr 需要知道所有 BaseApp 和 CellAppMgr
-- 通过 birth/death 消息维护进程列表
-- 负载信息通过定期上报收集
+- BaseAppMgr must know all BaseApps and CellAppMgr.
+- It maintains process lists through birth/death messages.
+- Load information is collected through periodic reports.
 
-### CellAppMgr 启动流程
+### CellAppMgr startup flow
 
-**源码入口：** [cellappmgr.cpp:238](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellappmgr/cellappmgr.cpp:238)
+**Source entry**: cellappmgr.cpp:238
 
 ```cpp
-// cellappmgr.cpp:238 - CellAppMgr 启动
+// cellappmgr.cpp:238 - CellAppMgr startup
 bool CellAppMgr::init( bool isReload )
 {
-    // ... 其他初始化 ...
-    
-    // 注册接口
+    // ... other initialization ...
+
+    // Register the interface
     if (!this->CellAppMgrInterface::registerWithInterface())
     {
         return false;
     }
-    
-    // 向 machined 注册
+
+    // Register with machined
     if (!this->registerWithMachined())
     {
         return false;
     }
-    
-    // 监听 CellApp birth
+
+    // Listen for CellApp birth
     this->CellAppMgrInterface::registerBirthListener(
         &CellAppMgr::onCellAppBirth );
-    
+
     return true;
 }
 ```
 
-**关键细节：**
+Key details:
 
-- CellAppMgr 管理所有 CellApp，负责空间分配和负载均衡
-- 收到 CellApp birth 后，调用 `addApp()` 接纳
-- 收到 CellApp death 后，触发实体恢复流程
+- CellAppMgr owns all CellApps, space assignment, and load balancing.
+- On CellApp birth it calls `addApp()` for admission.
+- On CellApp death it starts the entity-recovery flow.
 
-## 职责边界
+## Responsibility Boundaries
 
 ### LoginApp
 
-`LoginApp` 的职责是入口而不是长期会话承载。它注册外部 `LoginInterface` 和内部 `LoginIntInterface`，并监听 `DBAppMgr` 出生消息。源码入口在 [loginapp.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/loginapp/loginapp.cpp:296)。
+`LoginApp` is an entry point, not the long-term session owner. It registers the
+external `LoginInterface` and internal `LoginIntInterface`, and listens for
+`DBAppMgr` birth: loginapp.cpp.
 
-设计取舍：
+Trade-off:
 
-- 优点：登录入口与游戏会话隔离，便于限流和认证。
-- 代价：登录成功后的连接迁移、挑战协议、DB 查询链路更复杂。
+- Benefit: isolating login ingress from game sessions simplifies rate limiting and authentication.
+- Cost: post-login connection migration, challenge protocol, and database-query chains become more complex.
 
 ### BaseApp
 
-`BaseApp` 是玩家在线会话和 Base 实体的核心进程。它需要知道 `BaseAppMgr`、`CellAppMgr`，并处理其他 BaseApp 的 birth 消息。源码入口：
+`BaseApp` is the core process for online sessions and Base entities. It needs to
+know `BaseAppMgr` and `CellAppMgr`, and handles birth of other BaseApps. Source
+entry points:
 
-- 注册内部接口：[baseapp.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/baseapp/baseapp.cpp:3066)
-- 注册外部接口：[baseapp.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/baseapp/baseapp.cpp:3069)
-- 处理 `CellAppMgr` birth：[baseapp.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/baseapp/baseapp.cpp:1894)
-- 处理 `BaseAppMgr` birth：[baseapp.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/baseapp/baseapp.cpp:1910)
+- Internal interface registration: baseapp.cpp
+- External interface registration: baseapp.cpp
+- CellAppMgr birth handling: baseapp.cpp
+- BaseAppMgr birth handling: baseapp.cpp
 
 ### CellApp
 
-`CellApp` 是空间模拟进程。它向 `CellAppMgr` 注册，由 `CellAppMgr` 统一做空间、Cell、负载均衡和恢复协调。CellApp 接入 CellAppMgr 的网关请求在 [cellappmgr_gateway.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/cellappmgr_gateway.cpp:37)。
+`CellApp` is the space-simulation process. It registers with `CellAppMgr`, which
+coordinates spaces, Cells, load balancing, and recovery. CellApp's gateway
+request to CellAppMgr begins in cellappmgr_gateway.cpp.
 
-### Manager 组件
+### Manager components
 
-Mgr 组件不是业务微服务，而是控制面：
+Managers are not business microservices; they are the control plane:
 
-- `BaseAppMgr` 管理 BaseApp 集合、负载和 BaseApp 之间的发现。
-- `CellAppMgr` 管理 CellApp、空间、Cell 边界、负载均衡和恢复。
-- `DBAppMgr` 管理 DBApp、数据库组件出生死亡、与 Base/Cell 管理器协调。
+- `BaseAppMgr` manages the BaseApp set, load, and discovery between BaseApps.
+- `CellAppMgr` manages CellApps, spaces, Cell boundaries, load balancing, and recovery.
+- `DBAppMgr` manages DBApps, database-component birth/death, and coordination with Base/Cell managers.
 
-`CellAppMgr::addApp()` 是运行时接纳新 CellApp 的关键入口，见 [cellappmgr.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellappmgr/cellappmgr.cpp:1245)。
+`CellAppMgr::addApp()` is the key runtime admission entry point:
+cellappmgr.cpp.
 
-## 动态扩展的真实含义
+## What Dynamic Scaling Actually Means
 
-BigWorld 支持运行中接纳新 `BaseApp` / `CellApp`，但源码里的扩展入口是进程注册、Mgr 接纳、负载再平衡和状态迁移，不是单纯拉起无状态副本。
+BigWorld can admit new `BaseApp` / `CellApp` processes at runtime, but the
+source path is process registration, Manager admission, load rebalancing, and
+state migration—not merely starting stateless replicas.
 
-更准确的模型是：
+The more accurate model is:
 
 <div class="flow-strip">
-  <span class="flow-node">外部启动进程</span>
+  <span class="flow-node">External process start</span>
   <span class="flow-arrow">-></span>
-  <span class="flow-node">向 machined / Mgr 注册</span>
+  <span class="flow-node">register with machined / Manager</span>
   <span class="flow-arrow">-></span>
-  <span class="flow-node">Mgr 接纳</span>
+  <span class="flow-node">Manager admission</span>
   <span class="flow-arrow">-></span>
-  <span class="flow-node">负载再平衡</span>
+  <span class="flow-node">load rebalance</span>
   <span class="flow-arrow">-></span>
-  <span class="flow-node">实体/Cell 迁移</span>
+  <span class="flow-node">entity/Cell migration</span>
 </div>
 
-这种设计的重点是运行时迁移和控制面协调，而不是只增加进程数量。
+The design emphasizes runtime migration and control-plane coordination, not
+process count alone.
 
-## 源码取舍
+## Source Trade-Offs
 
-BigWorld 的进程拆分服务于明确的运行时职责边界：
+The process split serves clear runtime responsibilities:
 
-- 多进程天然隔离崩溃域，比单进程多线程更容易定位故障。
-- C++ 主循环加 Python 脚本嵌入，适合把性能敏感路径留在引擎层。
-- Manager 作为权威控制面，避免每个 App 都维护全局复杂状态。
-- `machined` 和 `Reviver` 形成进程级发现、启动和恢复能力。
-- BaseApp、CellApp、DBApp、LoginApp 的进程角色和内部接口在源码中分别注册，便于按职责排查。
+- Multiple processes isolate crash domains and make failures easier to localize than a single-process, multithreaded design.
+- A C++ main loop with embedded Python keeps performance-sensitive paths in the engine layer.
+- Managers act as authoritative control planes, preventing every App from maintaining complex global state.
+- `machined` and `Reviver` provide process-level discovery, startup, and recovery.
+- LoginApp, BaseApp, CellApp, DBApp, and their interfaces are registered separately, supporting responsibility-oriented diagnosis.
 
-源码代价也很清楚：
+The costs are equally clear:
 
-- 组件间耦合强，进程拓扑必须和 Mercury 接口、birth/death 通知、Mgr 状态一致。
-- 扩容是否有效取决于 Base/Cell 负载迁移，不取决于进程是否已经启动。
-- DBApp、BaseAppMgr、CellAppMgr 等控制面异常会影响多个业务路径。
-- 排障必须跨 machined、Manager、App 自身日志和 watcher 状态一起看。
+- Components are strongly coupled through Mercury interfaces, birth/death notifications, and Manager state.
+- Scaling is effective only if Base/Cell load migrates; starting a process is not sufficient.
+- Failures in DBApp, BaseAppMgr, CellAppMgr, or other control-plane components affect many business paths.
+- Diagnosis requires machined, Manager, App logs, and watcher state together.
 
-## 源码验证重点
+## Source-Code Verification Focus
 
-进程拓扑验证应覆盖注册、接纳和状态传播：
+Topology verification should cover registration, admission, and state propagation:
 
-- 各进程启动时必须注册对应 Mercury interface。
-- App 向 machined 注册的 component 类型、地址、pid 和 watcher nub 信息应正确。
-- `CellAppMgr::addApp()` 在缺少 BaseApp 或 Alpha DBApp 时不能接纳新 CellApp。
-- 新 BaseApp/CellApp 接纳后，Mgr watcher 中的数量、负载和 App 列表应同步更新。
-- birth/death 通知应能传播到依赖方，不能只在本地进程可见。
-- Reviver 或 machined 层面的重启不能绕过 BigWorld 自身的状态恢复流程。
+- Every process must register its corresponding Mercury interface at startup.
+- Component type, address, PID, and watcher nub information registered with machined must be correct.
+- `CellAppMgr::addApp()` must not admit a new CellApp when BaseApp or Alpha DBApp is unavailable.
+- After a new BaseApp/CellApp is admitted, Manager watcher counts, load, and app lists must update.
+- Birth/death notifications must propagate to dependents, not remain visible only to the local process.
+- Reviver- or machined-level restart must not bypass BigWorld's own state-recovery flow.
 
-## 后续研究入口
+## Follow-Up Research Entry Points
 
-进程拓扑只是外壳。真正决定性能和扩展边界的是：
+Topology is only the shell. Performance and scaling boundaries are determined by:
 
-- 每个进程内部的事件循环模型，详见 [主循环、Tick 与事件分发](/architecture/event-loop)。
-- Mercury 网络栈如何把 socket 事件转成消息，详见 [网络 I/O 模型选择](/architecture/network-io-model)。
-- EntityDef 如何把脚本类型、协议流和持久化绑定在一起，详见 [序列化与 EntityDef](/architecture/serialization-entitydef)。
-- CellAppMgr 如何做 Cell 分区、负载均衡和实体迁移，详见 [Cell 分区与负载均衡](/architecture/cell-partition-load-balance)。
-- 进程故障恢复机制，详见 [动态扩展与容灾](/architecture/scaling-fault-tolerance)。
+- The event-loop model inside each process: [Main loop, ticks, and event dispatch](/architecture/event-loop).
+- How Mercury turns socket events into messages: [Network I/O model selection](/architecture/network-io-model).
+- How EntityDef binds script types, protocol streams, and persistence: [Serialization and EntityDef](/architecture/serialization-entitydef).
+- How CellAppMgr partitions Cells, balances load, and migrates entities: [Cell partitioning and load balancing](/architecture/cell-partition-load-balance).
+- Process failure recovery: [Scaling and fault tolerance](/architecture/scaling-fault-tolerance).

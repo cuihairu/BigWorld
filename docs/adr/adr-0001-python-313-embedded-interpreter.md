@@ -1,55 +1,68 @@
-# ADR-0001：嵌入式解释器 Python 2.7 → 3.13
+# ADR-0001: Embedded Interpreter Python 2.7 → 3.13
 
-> [English](adr-0001-python-313-embedded-interpreter.en.md) | **中文**
 
-- **状态**：已接受（2026-09-26 起分批落地，2026-10-12 升至 3.13.16）
-- **范围**：`programming/bigworld/third_party/python`（vendored CPython）、
-  `lib/pyscript`、构建链 `third_party_python.mak`、运行期资源树
+- **Status**: Accepted (landed in batches from 2026-09-26; bumped to 3.13.16 on 2026-10-12)
+- **Scope**: `programming/bigworld/third_party/python` (vendored CPython),
+  `lib/pyscript`, the build chain `third_party_python.mak`, the runtime resource tree
 
-## 背景
+## Context
 
-引擎把 Python 作为实体脚本与工具层嵌在服务进程里（`Script::init()` 自建
-sys.path、冻结 stdlib 之外的加载面），原为 CPython 2.7 魔改树：
+The engine embeds Python in the server processes as the entity-scripting and
+tools layer (`Script::init()` builds its own sys.path and a loading surface
+beyond the frozen stdlib); it was originally a heavily modified CPython 2.7 tree:
 
-- 2.7 已于 2020 年 EOL，现代工具链（gcc 15 / glibc 新环境）与安全面都不可维；
-- 引擎通过在 `obmalloc.c`/`pymem.h` 里 `#define malloc BW_Py_malloc` 的方式
-  把 CPython 全部堆分配接入 BigWorld 内存统计（BWHooks）——这是对解释器
-  **私有实现细节**的侵入，跨大版本不可移植；
-- 服务端 Python 生态（twisted/sqlalchemy 等，见 R2）与脚本资产都停在 2.x。
+- 2.7 reached EOL in 2020 and is unmaintainable on modern toolchains
+  (gcc 15 / new glibc) and from a security standpoint;
+- the engine feeds all CPython heap allocations into BigWorld memory
+  statistics (BWHooks) by way of `#define malloc BW_Py_malloc` inside
+  `obmalloc.c`/`pymem.h` — an intrusion into the interpreter's
+  **private implementation details**, not portable across major versions;
+- both the server-side Python ecosystem (twisted/sqlalchemy etc., see R2)
+  and the script assets are stuck on 2.x.
 
-## 决策
+## Decision
 
-把 vendored 解释器整体换为 **CPython 3.13（跟随 3.13.x 安全补丁序列）**，
-保留 vendored 方式（不取发行版 python），BWHooks 改走 **官方嵌入接口**：
+Replace the vendored interpreter wholesale with **CPython 3.13 (following
+the 3.13.x security-patch series)**, keeping it vendored (no distro python),
+and rewire BWHooks through the **official embedding APIs**:
 
-1. `PyMem_SetAllocator(PYMEM_DOMAIN_RAW, ...)` 把 raw 域四个入口全部转发到
-   BW 钩子层（钩子表为空时直通 libc，保持 size==0→1 语义）；
-2. `PyObject_SetArenaAllocator` 覆盖 pymalloc arena 分配；
-3. 两者都在 `Script::init()` 里、`Py_Initialize()` 之前安装；
-4. 钩子符号加 `visibility("default")` 并用 `-Wl,-u` 强拉 `bwhooks.o`
-   （3.13 内部不再引用钩子，否则 `_hashlib` 等共享模块导入失败）。
+1. `PyMem_SetAllocator(PYMEM_DOMAIN_RAW, ...)` forwards all four raw-domain
+   entry points to the BW hook layer (with an empty hook table it passes
+   straight through to libc, preserving the size==0→1 semantics);
+2. `PyObject_SetArenaAllocator` overrides pymalloc arena allocation;
+3. both are installed in `Script::init()`, before `Py_Initialize()`;
+4. hook symbols get `visibility("default")` and `bwhooks.o` is force-pulled
+   with `-Wl,-u` (3.13 no longer references the hooks internally; without
+   this, shared modules such as `_hashlib` fail to import).
 
-配套：`bw_site.py` 空模块随源码跟踪并安装进资源树；`PlatformInfo` 增加
-Debian→el7 回退使 `lib-dynload` 目录名一致（否则全部 C 扩展导入失败）。
+Accompaniments: the empty `bw_site.py` module is tracked with the source and
+installed into the resource tree; `PlatformInfo` gains a Debian→el7 fallback
+so that `lib-dynload` directory names match (otherwise every C extension
+import fails).
 
-## 取舍
+## Trade-offs
 
-| 备选 | 否掉的原因 |
+| Alternative | Reason for rejection |
 |---|---|
-| 留在 2.7 只做工具链修补 | gcc15/C23 下编译不过、无安全更新；等于冻结债务 |
-| 升 3.8/3.10 等中间版本 | 仍需再迁一次；3.13 的自由线程/embedding 改造离当前需求近且维护期长 |
-| 用发行版/conda Python | 无法带 BWHooks 补丁、无法控制 stdlib 冻结面，破坏离线可复现构建 |
-| 保持 `#define malloc` 侵入式钩子 | 3.13 obmalloc 结构完全变化，不可移植；官方 allocator 接口等价且稳定 |
+| Stay on 2.7 with toolchain patches only | Does not compile under gcc15/C23; no security updates; amounts to freezing the debt |
+| Move to an intermediate 3.8/3.10 | Would still require another migration later; 3.13's free-threading/embedding changes are closer to current needs and have a longer maintenance window |
+| Use distro/conda Python | Cannot carry the BWHooks patch or control the frozen-stdlib surface; breaks offline reproducible builds |
+| Keep the intrusive `#define malloc` hooks | The 3.13 obmalloc layout changed completely, so it is not portable; the official allocator APIs are equivalent and stable |
 
-## 后果
+## Consequences
 
-- **正面**：`_ssl`/`_hashlib` 经 vcpkg OpenSSL 恢复（联动
-  [ADR-0002](adr-0002-vcpkg-third-party-deps)）；21 模块单测门禁在 3.13 上
-  全绿；现代 Py3 生态可选。
-- **代价/风险**：
-  - R2——资源树里的 Py2 生态包（twisted 11 / sqlalchemy 0.6 / zope 2.11 等）
-    不可用，需逐包升级后再启用安装规则（暂缓，不在编译关键路径）；
-  - R3——Windows（PCbuild/VS）侧未迁移，工具链断裂面在 Windows 构建。
-- **后续**：3.13.x 安全补丁跟随（3.13.15→3.13.16 先例）；R2/R3 单独立项。
+- **Positive**: `_ssl`/`_hashlib` are restored via vcpkg OpenSSL (ties to
+  [ADR-0002](adr-0002-vcpkg-third-party-deps.md)); the 21-module
+  unit-test gate is fully green on 3.13; the modern Py3 ecosystem is available.
+- **Costs/risks**:
+  - R2 — the Py2 ecosystem packages in the resource tree (twisted 11 /
+    sqlalchemy 0.6 / zope 2.11 etc.) do not work; each must be upgraded
+    before its install rule is re-enabled (deferred; not on the compile
+    critical path);
+  - R3 — the Windows (PCbuild/VS) side is not migrated; the toolchain break
+    is in the Windows build.
+- **Follow-ups**: track 3.13.x security patches (precedent: 3.13.15→3.13.16);
+  R2/R3 become separate projects.
 
-过程与逐批证据：[Python 3.13 迁移全量台账](/python-313-migration)。
+Process narrative and per-batch evidence:
+[full Python 3.13 migration ledger](/python-313-migration).

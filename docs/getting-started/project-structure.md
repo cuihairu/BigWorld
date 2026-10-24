@@ -1,198 +1,200 @@
-# 项目结构
+# Project Structure
 
-> [English](project-structure.en.md) | **中文**
 
 <div class="arch-hero">
 
-BigWorld 是一个大型 C/C++ MMO 引擎，本文档说明项目的目录布局和职责划分。
+BigWorld is a large C/C++ MMO engine. This document describes the project's
+directory layout and responsibility split.
 
 </div>
 
-## 顶层目录
+## Top-level directories
 
 ```
 BigWorld/
-├── programming/          # 源代码 (核心)
-├── docs/                 # 文档 (VitePress)
-├── game/                 # 构建输出根 (Makefile 默认安装目录)
-├── scripts/              # 辅助脚本 (CMake 样板构建/每日打包)
-├── .github/              # GitHub 配置
-├── logo.svg              # 项目 Logo
-├── package.json          # Node.js 配置 (文档)
-├── README.md             # 项目说明
-├── CONTRIBUTING.md       # 贡献指南
-├── MAINTAINTERS.md       # 维护者
-├── TESTING.md            # 测试口径与陷阱登记
-├── todo.md               # 巡检待办账本
-├── LICENSE               # 许可证
-└── THIRD-PARTY-NOTICES   # 第三方声明
+├── programming/          # Source code (core)
+├── docs/                 # Documentation (VitePress)
+├── game/                 # Build output root (Makefile default install directory)
+├── scripts/              # Helper scripts (CMake sample builds / daily packaging)
+├── .github/              # GitHub configuration
+├── logo.svg              # Project logo
+├── package.json          # Node.js configuration (docs)
+├── README.md             # Project overview
+├── CONTRIBUTING.md       # Contributing guide
+├── MAINTAINTERS.md       # Maintainers
+├── TESTING.md            # Testing standards and pitfall log
+├── todo.md               # Patrol to-do ledger
+├── LICENSE               # License
+└── THIRD-PARTY-NOTICES   # Third-party notices
 ```
 
-## 源代码目录
+## Source directories
 
 ### `programming/`
 
 ```
 programming/
-├── bigworld/             # BigWorld 主体
-│   ├── server/           # 服务端进程
-│   ├── client/           # 客户端
-│   ├── lib/              # 核心库
-│   ├── tools/            # 工具
-│   ├── third_party/      # 第三方依赖
-│   ├── build/            # 构建脚本
-│   ├── common/           # 共享定义
-│   └── examples/         # 示例代码
-├── fantasydemo/          # FantasyDemo 示例
-├── Makefile              # 顶层 Makefile
-└── Makefile.rules        # Make 规则
+├── bigworld/             # BigWorld main body
+│   ├── server/           # Server processes
+│   ├── client/           # Client
+│   ├── lib/              # Core libraries
+│   ├── tools/            # Tools
+│   ├── third_party/      # Third-party dependencies
+│   ├── build/            # Build scripts
+│   ├── common/           # Shared definitions
+│   └── examples/         # Example code
+├── fantasydemo/          # FantasyDemo sample
+├── Makefile              # Top-level Makefile
+└── Makefile.rules        # Make rules
 ```
 
 ### `programming/bigworld/server/`
 
-服务端进程目录：
+Server process directories:
 
-| 目录 | 进程 | 职责 |
+| Directory | Process | Responsibility |
 |------|------|------|
-| `baseapp/` | BaseApp | 玩家基础数据管理 |
-| `cellapp/` | CellApp | 游戏世界逻辑 |
-| `dbapp/` | DBApp | 数据库代理 |
-| `loginapp/` | LoginApp | 登录服务 |
-| `baseappmgr/` | BaseAppMgr | BaseApp 管理器 |
-| `cellappmgr/` | CellAppMgr | CellApp 管理器 |
-| `dbappmgr/` | DBAppMgr | DBApp 管理器 |
-| `reviver/` | Reviver | 进程恢复 |
-| `tools/` | - | 服务端工具 |
-| `*_extensions/` | - | 扩展模块 |
+| `baseapp/` | BaseApp | Player base-data management |
+| `cellapp/` | CellApp | Game-world logic |
+| `dbapp/` | DBApp | Database proxy |
+| `loginapp/` | LoginApp | Login service |
+| `baseappmgr/` | BaseAppMgr | BaseApp manager |
+| `cellappmgr/` | CellAppMgr | CellApp manager |
+| `dbappmgr/` | DBAppMgr | DBApp manager |
+| `reviver/` | Reviver | Process recovery |
+| `tools/` | - | Server tools |
+| `*_extensions/` | - | Extension modules |
 
 ### `programming/bigworld/lib/`
 
-核心库目录 (57 个子库)：
+Core library directories (57 sub-libraries):
 
-#### 基础设施
+#### Infrastructure
 
-| 库 | 职责 |
-|---|------|
-| `cstdmf` | 基础工具库 (调试、内存、计时器) |
-| `network` | 网络栈 (Mercury) |
-| `math` | 数学库 |
-| `resmgr` | 资源管理 |
+| Library | Responsibility |
+|---|---|
+| `cstdmf` | Foundation utility library (debug, memory, timers) |
+| `network` | Network stack (Mercury) |
+| `math` | Math library |
+| `resmgr` | Resource management |
 
-#### 服务器共享
+#### Server shared
 
-| 库 | 职责 |
-|---|------|
-| `entitydef` | 实体定义系统 |
-| `script` | 脚本绑定抽象 |
-| `pyscript` | Python 桥接层 |
-| `db` | 数据库抽象 |
-| `server` | 服务器共享代码 |
+| Library | Responsibility |
+|---|---|
+| `entitydef` | Entity definition system |
+| `script` | Script binding abstraction |
+| `pyscript` | Python bridge layer |
+| `db` | Database abstraction |
+| `server` | Server shared code |
 
-#### 渲染与场景
+#### Rendering and scene
 
-| 库 | 职责 |
-|---|------|
-| `moo` | 渲染引擎 |
-| `scene` | 场景管理 |
-| `space` | 空间管理 |
-| `chunk` | 室内场景 |
-| `terrain` | 地形系统 |
+| Library | Responsibility |
+|---|---|
+| `moo` | Rendering engine |
+| `scene` | Scene management |
+| `space` | Space management |
+| `chunk` | Indoor scenes |
+| `terrain` | Terrain system |
 
-#### 客户端专用
+#### Client-specific
 
-| 库 | 职责 |
-|---|------|
-| `connection` | 客户端连接 |
-| `connection_model` | 连接模型 |
-| `camera` | 相机系统 |
-| `controls` | 输入控制 |
+| Library | Responsibility |
+|---|---|
+| `connection` | Client connection |
+| `connection_model` | Connection model |
+| `camera` | Camera system |
+| `controls` | Input controls |
 
 ### `programming/bigworld/tools/`
 
-编辑器和工具：
+Editors and tools:
 
-| 工具 | 职责 |
+| Tool | Responsibility |
 |------|------|
-| `worldeditor/` | 世界编辑器 |
-| `modeleditor/` | 模型编辑器 |
-| `particle_editor/` | 粒子编辑器 |
-| `assetprocessor/` | 资源处理器 |
-| `navgen/` | 导航网格生成 |
+| `worldeditor/` | World editor |
+| `modeleditor/` | Model editor |
+| `particle_editor/` | Particle editor |
+| `assetprocessor/` | Asset processor |
+| `navgen/` | Navigation mesh generation |
 
 ### `programming/bigworld/third_party/`
 
-第三方依赖：22 个 vendored 目录（另有 7 个依赖走 vcpkg，见下）。
+Third-party dependencies: 22 vendored directories (another 7 dependencies
+come through vcpkg; see below).
 
-| 依赖 | 用途 |
+| Dependency | Purpose |
 |------|------|
-| `python` | 内嵌 Python 3.13 解释器（BigWorld 补丁版，不走 vcpkg） |
-| `mongodb` | legacy MongoDB C++ 驱动（vcpkg mongo-cxx-driver 3.x API 不兼容，保留） |
-| `CppUnitLite2` | 单元测试框架 |
-| `re2` | 正则表达式 |
-| `recastnavigation` | 导航网格 |
-| `nedalloc` / `nvtt` / `nvmeshmender` | 内存分配 / 纹理压缩 / 网格修正 |
-| `png` / `zip` / `sqlite` / `curl` | 历史 vendored 副本（平台相关） |
-| `openssl-vs2010` … `openssl-vs2015` / `openssl_android` | 历史平台构建副本 |
-| `putty` / `WTL` / `openautomate` / `cmake-win32-x86` / `python_modules` | 工具库与构建支持 |
+| `python` | Embedded Python 3.13 interpreter (BigWorld-patched version; not via vcpkg) |
+| `mongodb` | Legacy MongoDB C++ driver (the vcpkg mongo-cxx-driver 3.x API is incompatible; kept) |
+| `CppUnitLite2` | Unit-test framework |
+| `re2` | Regular expressions |
+| `recastnavigation` | Navigation meshes |
+| `nedalloc` / `nvtt` / `nvmeshmender` | Memory allocation / texture compression / mesh fixing |
+| `png` / `zip` / `sqlite` / `curl` | Historical vendored copies (platform-dependent) |
+| `openssl-vs2010` … `openssl-vs2015` / `openssl_android` | Historical platform build copies |
+| `putty` / `WTL` / `openautomate` / `cmake-win32-x86` / `python_modules` | Tool libraries and build support |
 
-el7 构建路径的 vcpkg 端口（`programming/bigworld/vcpkg.json`）：
-`openssl`、`curl`（openssl feature）、`jsoncpp`、`zlib`、`libpng`、`sqlite3`、`bzip2`（后者仅供 CPython `_bz2` 扩展）。
+vcpkg ports on the el7 build path (`programming/bigworld/vcpkg.json`):
+`openssl`, `curl` (openssl feature), `jsoncpp`, `zlib`, `libpng`,
+`sqlite3`, `bzip2` (the last only for the CPython `_bz2` extension).
 
 ### `programming/bigworld/build/`
 
-构建脚本：
+Build scripts:
 
 ```
 build/
-├── make/                 # Linux Make 构建
-│   ├── Makefile          # 主 Makefile
-│   ├── platform_el6.mak  # CentOS 6 配置
-│   ├── platform_el7.mak  # CentOS 7 配置
+├── make/                 # Linux Make build
+│   ├── Makefile          # Main Makefile
+│   ├── platform_el6.mak  # CentOS 6 configuration
+│   ├── platform_el7.mak  # CentOS 7 configuration
 │   └── third_party_python.mak
-├── cmake/                # CMake 配置
-├── docker/               # Docker 配置
+├── cmake/                # CMake configuration
+├── docker/               # Docker configuration
 │   └── Dockerfile
-└── *.bat                 # Windows 批处理
+└── *.bat                 # Windows batch scripts
 ```
 
-## 文档目录
+## Documentation directories
 
 ### `docs/`
 
 ```
 docs/
-├── index.md              # 首页
-├── .vitepress/           # VitePress 配置
-├── public/               # 静态资源 (logo.svg、pdf/)
-├── getting-started/      # 快速开始
-├── architecture/         # 架构研究 (28 章)
-├── analysis/             # 项目分析
-├── upgrade-plan/         # 迁移与升级专题 (6 篇)
-├── references/           # 参考资料
-├── pdf/                  # 原始 PDF（服务端白皮书/构建指南/安装指南，3 份）
-├── python-313-migration.md  # Python 3.13 迁移全量台账
-├── vcpkg-migration.md    # vcpkg 迁移专题
-└── cpp23-migration.md    # C++23 迁移专题
+├── index.md              # Home page
+├── .vitepress/           # VitePress configuration
+├── public/               # Static assets (logo.svg, pdf/)
+├── getting-started/      # Getting started
+├── architecture/         # Architecture research (28 chapters)
+├── analysis/             # Project analysis
+├── upgrade-plan/         # Migration and upgrade topics (6 documents)
+├── references/           # Reference material
+├── pdf/                  # Original PDFs (server whitepaper / build guide / installation guide, 3 files)
+├── python-313-migration.md  # Full Python 3.13 migration ledger
+├── vcpkg-migration.md    # vcpkg migration topic
+└── cpp23-migration.md    # C++23 migration topic
 ```
 
-## 依赖关系
+## Dependency relationships
 
 ```
 ┌─────────────┐
-│   server/   │ ← 服务端进程
+│   server/   │ ← server processes
 └──────┬──────┘
        │
 ┌──────▼──────┐
-│    lib/     │ ← 核心库
+│    lib/     │ ← core libraries
 └──────┬──────┘
        │
 ┌──────▼──────┐
-│ third_party │ ← 第三方依赖
+│ third_party │ ← third-party dependencies
 └─────────────┘
 ```
 
-## 下一步
+## Next steps
 
-- [快速开始](/getting-started/) - 构建运行
-- [源码导读](/analysis/source-code-guide) - 阅读路径
-- [架构研究方法](/architecture/research-method) - 深入学习
+- [Getting started](/getting-started/) — building and running
+- [Source code guide](/analysis/source-code-guide) — reading paths
+- [Architecture research method](/architecture/research-method) — deeper study

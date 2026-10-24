@@ -1,201 +1,242 @@
-# Mercury 可靠 UDP
+# Mercury Protocol and Reliable UDP
+
 
 <div class="arch-hero">
 
-BigWorld 的网络核心不是“epoll + socket”这么薄的一层，而是 Mercury 在 UDP 之上实现的游戏协议运行时。它把消息聚合、可靠/不可靠语义、ACK、重发、乱序窗口、分片、piggyback、indexed channel 和实体迁移版本号放在同一个 Channel 模型里。
+BigWorld's network core is not a thin layer of "epoll plus socket". It is a game
+protocol runtime that Mercury implements on top of UDP. Message aggregation,
+reliable and unreliable semantics, ACKs, resend, the out-of-order window,
+fragmentation, piggyback and the entity-migration version number all live in the
+same Channel model.
 
 </div>
 
-## 先给结论
+## Conclusion First
 
-Mercury 可靠 UDP 解决的不是普通 RPC 的可靠投递问题，而是 MMO 高频状态同步中的选择性可靠问题：
+Mercury reliable UDP does not solve the problem of reliable RPC delivery. It
+solves selective reliability in the high-frequency state synchronisation of an
+MMO:
 
-- 移动、AOI、属性同步等消息需要低延迟，很多数据过期后不值得重传。
-- 登录、创建实体、跨进程迁移、关键生命周期消息必须可靠。
-- 同一个 UDP 包里可以混合可靠消息和不可靠消息。
-- 外部客户端链路带宽更紧，丢包时只重发可靠数据，不可靠数据会被剥离或丢弃。
-- 内部服务器链路默认低延迟、高带宽、低丢包，可以采用更激进的可靠策略。
+- Movement, AoI and attribute synchronisation need low latency, and much of the
+  data is not worth resending once it is stale.
+- Login, entity creation, cross-process migration and key lifecycle messages
+  must be reliable.
+- One UDP packet may mix reliable and unreliable messages.
+- The external client link has tighter bandwidth, so on loss only reliable data
+  is resent while unreliable data is stripped or dropped.
+- The internal server link assumes low latency, high bandwidth and low loss, and
+  can use a more aggressive reliability policy.
 
-源码入口：
+Source entries:
 
-- `UDPChannel::Traits` 明确区分 `INTERNAL` 与 `EXTERNAL`，见 [udp_channel.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/udp_channel.hpp:57)。
-- 可靠机制入口包括 `addResendTimer()`、`handleCumulativeAck()`、`handleAck()`、`checkResendTimers()`、`resend()`，见 [udp_channel.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/udp_channel.hpp:151)。
-- 发送窗口状态在 `smallOutSeqAt_`、`largeOutSeqAt_`、`oldestUnackedSeq_`、`unackedPackets_`，见 [udp_channel.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/udp_channel.hpp:383)。
-- 接收窗口状态在 `inSeqAt_`、`bufferedReceives_`、`pFragments_`、`highestAck_`，见 [udp_channel.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/udp_channel.hpp:440)。
+- `UDPChannel::Traits` explicitly distinguishes `INTERNAL` from `EXTERNAL`, see
+  udp_channel.hpp.
+- The reliability entry points are `addResendTimer()`, `handleCumulativeAck()`,
+  `handleAck()`, `checkResendTimers()` and `resend()`, see
+  udp_channel.hpp.
+- The send window state lives in `smallOutSeqAt_`, `largeOutSeqAt_`,
+  `oldestUnackedSeq_` and `unackedPackets_`, see
+  udp_channel.hpp.
+- The receive window state lives in `inSeqAt_`, `bufferedReceives_`,
+  `pFragments_` and `highestAck_`, see
+  udp_channel.hpp.
 
-## 为什么不用纯 TCP
+## Why Not Pure TCP
 
-TCP 提供字节流可靠有序传输，但游戏状态同步不总是需要“所有历史状态按顺序到达”。
+TCP provides ordered, reliable byte-stream transfer, but game state
+synchronisation does not always require that "every piece of historical state
+arrives in order".
 
-BigWorld 需要的能力更接近：
+What BigWorld actually needs is closer to:
 
 <div class="decision-grid">
   <div class="decision-card">
-    <h3>可靠消息</h3>
-    <p>实体创建、销毁、迁移、请求/回复、关键生命周期事件必须到达。</p>
+    <h3>Reliable messages</h3>
+    <p>Entity creation, destruction, migration, request/reply and key lifecycle events must arrive.</p>
   </div>
   <div class="decision-card">
-    <h3>不可靠消息</h3>
-    <p>位置、朝向、部分 AOI 更新过期后没有重传价值，新状态覆盖旧状态。</p>
+    <h3>Unreliable messages</h3>
+    <p>Position and orientation, and part of the AoI updates, have no resend value once stale. New state supersedes old state.</p>
   </div>
   <div class="decision-card">
-    <h3>混合 Bundle</h3>
-    <p>同一个发送批次内同时携带可靠和不可靠消息，降低包头和 syscall 开销。</p>
+    <h3>Mixed bundle</h3>
+    <p>One send batch carries reliable and unreliable messages at the same time, cutting packet-header and syscall cost.</p>
   </div>
   <div class="decision-card">
-    <h3>实体迁移</h3>
-    <p>Channel 不只是网络连接，还要承载 Base/Cell 实体 offload 的版本语义。</p>
+    <h3>Entity migration</h3>
+    <p>The Channel is not just a network connection. It also carries the version semantics of Base/Cell entity offload.</p>
   </div>
 </div>
 
-如果全部使用 TCP，会获得简单可靠流，但会付出这些代价：
+Going all-in on TCP would buy a simple reliable stream, at these costs:
 
-- head-of-line blocking 会让旧可靠数据阻塞后续新状态。
-- 无法天然表达“这条消息可靠，那条消息不可靠”。
-- 多条逻辑流要么多 TCP 连接，要么在应用层重新多路复用。
-- MMO 状态同步常常需要按消息语义而不是按连接统一重传。
+- Head-of-line blocking would let old reliable data stall newer state behind it.
+- There is no natural way to say "this message is reliable, that one is not".
+- Several logical flows mean either several TCP connections, or re-multiplexing
+  at the application layer.
+- MMO state synchronisation often needs to resend by message semantics rather
+  than uniformly per connection.
 
-这也是当时很多游戏服务器选择 UDP + 自研可靠层的根本原因。
+This is also the fundamental reason many game servers at the time chose UDP plus
+a homegrown reliability layer.
 
-## Channel 分类
+## Channel Classification
 
-`UDPChannel::Traits` 的注释已经给出核心设计判断：
+The comments on `UDPChannel::Traits` already give the core design judgment:
 
-- `INTERNAL`：服务器到服务器，低延迟、高带宽、低丢包。
-- `EXTERNAL`：客户端到服务器，高延迟、低带宽、高丢包。
-- 外部通道只重发可靠数据，不可靠数据从丢包中剥离并丢弃。
+- `INTERNAL`: server to server, low latency, high bandwidth, low loss.
+- `EXTERNAL`: client to server, high latency, low bandwidth, high loss.
+- An external channel resends only reliable data; unreliable data is stripped
+  out of a lost packet and discarded.
 
-这不是简单的网络类型标签，而是重发策略、带宽策略和包内容裁剪策略的输入。
+This is not a mere network-type label. It is an input to resend policy,
+bandwidth policy and packet content trimming.
 
-<MermaidDiagram title="Mercury Channel 语义">
+<MermaidDiagram title="Mercury Channel semantics">
 flowchart TD
   A[UDP Socket] --> B[NetworkInterface]
   B --> C[UDPChannel]
   C --> D{Traits}
   D -- INTERNAL --> E[Server-Server Channel]
   D -- EXTERNAL --> F[Client-Server Channel]
-  E --> G[可靠与不可靠消息都更偏向保留吞吐]
-  F --> H[重发可靠消息 剥离不可靠负载]
-  C --> I[Bundle 消息聚合]
+  E --> G[Both reliable and unreliable messages lean toward keeping throughput]
+  F --> H[Resend reliable messages, strip unreliable payload]
+  C --> I[Bundle message aggregation]
   I --> J[ReliableOrder]
   I --> K[Piggyback]
 </MermaidDiagram>
 
-## 可靠等级
+## Reliability Levels
 
-**概述：** 可靠性不是简单的 bool 值。BigWorld 定义了四种可靠类型，允许在同一个 Bundle 中混合可靠和不可靠消息。这是 MMO 状态同步的关键：位置更新可以丢弃，但实体创建必须可靠。
+**Overview:** reliability is not a plain boolean. BigWorld defines four
+reliability types and allows reliable and unreliable messages to be mixed in the
+same Bundle. This is the key to MMO state synchronisation: a position update may
+be dropped, but entity creation must be reliable.
 
-**源码入口：** [bundle.hpp:27](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/bundle.hpp:27)
+**Source entry:** bundle.hpp:27
 
 ```cpp
-// bundle.hpp:27 - 可靠类型定义
+// bundle.hpp:27 - reliability type definitions
 enum ReliableType
 {
-    RELIABLE_NO,        // 不可靠消息
-    RELIABLE_DRIVER,    // 驱动可靠包
-    RELIABLE_PASSENGER, // 搭车可靠消息
-    RELIABLE_CRITICAL   // 关键可靠消息
+    RELIABLE_NO,        // unreliable message
+    RELIABLE_DRIVER,    // driving reliable packet
+    RELIABLE_PASSENGER, // piggyback reliable message
+    RELIABLE_CRITICAL   // critical reliable message
 };
 ```
 
-<div class=”decision-table”>
+<div class="decision-table">
 
-| 类型 | 含义 | 设计目的 |
+| Type | Meaning | Design purpose |
 | --- | --- | --- |
-| `RELIABLE_NO` | 不可靠消息 | 允许丢弃，适合过期即无价值的数据 |
-| `RELIABLE_DRIVER` | 驱动可靠包 | 让当前 UDPBundle 具备可靠投递基础 |
-| `RELIABLE_PASSENGER` | 搭车可靠消息 | 只有同 Bundle 有 driver 时才可靠发送 |
-| `RELIABLE_CRITICAL` | 关键可靠消息 | 等价 driver，并把 Bundle 标记为 critical |
+| `RELIABLE_NO` | Unreliable message | May be dropped; suited to data that is worthless once stale |
+| `RELIABLE_DRIVER` | Driving reliable packet | Gives the current UDPBundle a basis for reliable delivery |
+| `RELIABLE_PASSENGER` | Piggyback reliable message | Sent reliably only when the same Bundle contains a driver |
+| `RELIABLE_CRITICAL` | Critical reliable message | Equivalent to a driver, and marks the Bundle as critical |
 
 </div>
 
-**流程图：**
+**Flowchart:**
 
-<MermaidDiagram title=”可靠消息发送流程”>
+<MermaidDiagram title="Reliable message send flow">
 sequenceDiagram
-    participant Sender as 发送方
+    participant Sender as Sender
     participant Bundle as UDPBundle
     participant Channel as UDPChannel
-    participant Receiver as 接收方
+    participant Receiver as Receiver
 
-    Sender->>Bundle: 添加消息 (RELIABLE_DRIVER)
-    Bundle->>Bundle: 标记为可靠
-    Sender->>Bundle: 添加消息 (RELIABLE_PASSENGER)
-    Bundle->>Bundle: 搭车可靠
-    Sender->>Bundle: 添加消息 (RELIABLE_NO)
-    Bundle->>Bundle: 不可靠
-    
-    Bundle->>Channel: 发送 Bundle
-    Channel->>Channel: 记录到 unackedPackets_
-    Channel->>Receiver: UDP 包
-    
-    Receiver->>Receiver: 解析消息
-    Receiver->>Channel: 发送 ACK
-    Channel->>Channel: 从 unackedPackets_ 移除
+    Sender->>Bundle: add message (RELIABLE_DRIVER)
+    Bundle->>Bundle: mark as reliable
+    Sender->>Bundle: add message (RELIABLE_PASSENGER)
+    Bundle->>Bundle: piggyback reliable
+    Sender->>Bundle: add message (RELIABLE_NO)
+    Bundle->>Bundle: unreliable
+
+    Bundle->>Channel: send Bundle
+    Channel->>Channel: record in unackedPackets_
+    Channel->>Receiver: UDP packet
+
+    Receiver->>Receiver: parse messages
+    Receiver->>Channel: send ACK
+    Channel->>Channel: remove from unackedPackets_
 </MermaidDiagram>
 
-**详细讲解：**
+**Detailed walkthrough:**
 
-1. **RELIABLE_DRIVER**：第一个可靠消息，让整个 Bundle 具备可靠投递基础。如果没有 driver，Bundle 中的 passenger 消息不会重发。
+1. **RELIABLE_DRIVER**: the first reliable message, giving the whole Bundle a
+   basis for reliable delivery. Without a driver, passenger messages in the
+   Bundle are not resent.
 
-2. **RELIABLE_PASSENGER**：搭车消息，只有 Bundle 中有 driver 时才可靠发送。这允许批量发送多个可靠消息，减少 ACK 开销。
+2. **RELIABLE_PASSENGER**: a piggyback message, sent reliably only when the
+   Bundle contains a driver. This allows batching several reliable messages and
+   cuts ACK overhead.
 
-3. **RELIABLE_CRITICAL**：关键消息，等价于 driver，并标记 Bundle 为 critical。critical Bundle 会占用 `unackedCriticalSeq_`，用于判断是否需要等待关键消息确认。
+3. **RELIABLE_CRITICAL**: a critical message, equivalent to a driver, and marks
+   the Bundle as critical. A critical Bundle occupies `unackedCriticalSeq_`, used
+   to decide whether to wait for the critical message to be acknowledged.
 
-4. **混合 Bundle**：同一个 Bundle 中可以混合可靠和不可靠消息。例如，移动更新（不可靠）和属性变更（可靠）可以在同一个包中发送。
+4. **Mixed bundle**: one Bundle may mix reliable and unreliable messages. For
+   example, a movement update (unreliable) and an attribute change (reliable) can
+   be sent in the same packet.
 
-**为什么不用 TCP：**
+**Why not TCP:**
 
-- TCP 是连接级可靠，无法区分”这条消息可靠，那条消息不可靠”
-- TCP 的 head-of-line blocking 会让旧可靠数据阻塞后续新状态
-- MMO 状态同步需要按消息语义选择可靠性，不是按连接统一重传
+- TCP is connection-level reliable and cannot distinguish "this message is
+  reliable, that one is not"
+- TCP head-of-line blocking would let old reliable data stall newer state behind
+  it
+- MMO state synchronisation needs to pick reliability per message semantics, not
+  resend uniformly per connection
 
-## 发送窗口
+## Send Window
 
-**概述：** Mercury 维护自己的滑动窗口和未确认包集合。这不是”发出去后等回调”的简单模型，而是类似 TCP 的窗口机制，但针对游戏协议优化。
+**Overview:** Mercury keeps its own sliding window and its own set of
+unacknowledged packets. This is not a simple "send and wait for a callback"
+model. It is a window mechanism similar to TCP's, optimised for a game protocol.
 
-**源码入口：** [udp_channel.hpp:383](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/udp_channel.hpp:383)
+**Source entry:** udp_channel.hpp:383
 
 ```cpp
-// udp_channel.hpp:383 - 发送窗口状态
+// udp_channel.hpp:383 - send window state
 class UDPChannel
 {
 private:
-    // 发送窗口状态
-    SeqNum smallOutSeqAt_;      // 下一个要发送的序号（不含 overflow）
-    SeqNum largeOutSeqAt_;      // 下一个要发送的序号（含 overflow）
-    SeqNum oldestUnackedSeq_;   // 最早未 ACK 的包
-    UnackedPackets unackedPackets_;  // 未确认包集合
-    int windowSize_;            // 当前窗口大小
-    int maxWindowSize_;         // 最大窗口大小
-    
-    // 重发相关
-    int roundTripTime_;         // RTT 估计
-    int resendTimeout_;         // 重发超时
-    int lastSendTime_;          // 上次发送时间
+    // send window state
+    SeqNum smallOutSeqAt_;      // next sequence number to send (without overflow)
+    SeqNum largeOutSeqAt_;      // next sequence number to send (with overflow)
+    SeqNum oldestUnackedSeq_;   // oldest unacknowledged packet
+    UnackedPackets unackedPackets_;  // set of unacknowledged packets
+    int windowSize_;            // current window size
+    int maxWindowSize_;         // maximum window size
+
+    // resend related
+    int roundTripTime_;         // RTT estimate
+    int resendTimeout_;         // resend timeout
+    int lastSendTime_;          // last send time
 };
 ```
 
-**流程图：**
+**Flowchart:**
 
-<MermaidDiagram title=”发送窗口滑动机制”>
+<MermaidDiagram title="Send window sliding mechanism">
 stateDiagram-v2
     [*] --> Idle
-    Idle --> Sending: 有数据要发
-    Sending --> WindowFull: 窗口满
-    WindowFull --> Sending: 收到 ACK
-    Sending --> Resending: 超时未 ACK
-    Resending --> Sending: 收到 ACK
-    Sending --> Idle: 无数据
-    
+    Idle --> Sending: data to send
+    Sending --> WindowFull: window full
+    WindowFull --> Sending: ACK received
+    Sending --> Resending: timed out unacknowledged
+    Resending --> Sending: ACK received
+    Sending --> Idle: no data
+
     state Sending {
         [*] --> CheckWindow
-        CheckWindow --> SendPacket: 窗口有空间
-        CheckWindow --> WaitACK: 窗口满
+        CheckWindow --> SendPacket: window has room
+        CheckWindow --> WaitACK: window full
         SendPacket --> RecordUnacked
         RecordUnacked --> CheckWindow
     }
-    
+
     state Resending {
         [*] --> FindOldest
         FindOldest --> ResendPacket
@@ -204,131 +245,143 @@ stateDiagram-v2
     }
 </MermaidDiagram>
 
-**详细讲解：**
+**Detailed walkthrough:**
 
-1. **序号管理**：`smallOutSeqAt_` 和 `largeOutSeqAt_` 区分普通包和 overflow 包。overflow 包用于窗口满时的特殊处理。
+1. **Sequence management**: `smallOutSeqAt_` and `largeOutSeqAt_` distinguish
+   ordinary packets from overflow packets. Overflow packets exist for special
+   handling when the window is full.
 
-2. **未确认包集合**：`unackedPackets_` 保存所有已发送但未收到 ACK 的包。每个包记录发送时间、可靠消息列表。
+2. **Set of unacknowledged packets**: `unackedPackets_` holds every packet sent
+   but not yet acknowledged. Each packet records its send time and its list of
+   reliable messages.
 
-3. **窗口大小**：`windowSize_` 动态调整，根据网络状况和 ACK 速度变化。`maxWindowSize_` 是上限。
+3. **Window size**: `windowSize_` adjusts dynamically with network conditions and
+   ACK speed. `maxWindowSize_` is the ceiling.
 
-4. **重发机制**：如果包在 `resendTimeout_` 内未收到 ACK，触发重发。重发超时基于 RTT 估计。
+4. **Resend mechanism**: if a packet has not been acknowledged within
+   `resendTimeout_`, resend is triggered. The resend timeout is based on the RTT
+   estimate.
 
-5. **RTT 估计**：`roundTripTime_` 通过 ACK 时间差估算，用于调整重发超时和窗口大小。
+5. **RTT estimation**: `roundTripTime_` is estimated from ACK time differences,
+   and is used to adjust the resend timeout and the window size.
 
-### 发送流程
+### Send Flow
 
-**源码入口：** [udp_channel.cpp:1513](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/udp_channel.cpp:1513)
+**Source entry:** udp_channel.cpp:1513
 
 ```cpp
-// udp_channel.cpp:1513 - 发送 Bundle
+// udp_channel.cpp:1513 - send a Bundle
 void UDPChannel::send( Bundle * pBundle )
 {
     UDPBundle * pUDPBundle = static_cast<UDPBundle *>(pBundle);
-    
-    // 1. 检查窗口是否有空间
+
+    // 1. Check whether the window has room
     if (this->windowSize() >= this->maxWindowSize())
     {
-        // 窗口满，等待 ACK
+        // window full, wait for ACK
         return;
     }
-    
-    // 2. 分配序号
+
+    // 2. Allocate a sequence number
     SeqNum seq = largeOutSeqAt_++;
-    
-    // 3. 记录到未确认包集合
+
+    // 3. Record it in the set of unacknowledged packets
     unackedPackets_.add( seq, pUDPBundle );
-    
-    // 4. 写入 packet header
+
+    // 4. Write the packet header
     this->writeFlags( pUDPBundle );
     this->writeFooter( pUDPBundle );
-    
-    // 5. 发送
+
+    // 5. Send
     pUDPBundle->send();
 }
 ```
 
-**关键细节：**
+**Key details:**
 
-- 窗口满时，新消息会排队等待，不会丢弃
-- 序号单调递增，用于接收方检测乱序和重复
-- 未确认包集合支持快速查找和重发
-- packet header 包含 ACK 信息，用于确认之前发送的包
+- When the window is full, new messages queue and wait; they are not dropped
+- Sequence numbers increase monotonically, so the receiver can detect
+  out-of-order and duplicate packets
+- The set of unacknowledged packets supports fast lookup and resend
+- The packet header carries ACK information, used to acknowledge packets sent
+  earlier
 
-## 接收窗口
+## Receive Window
 
-**概述：** 接收窗口负责处理乱序包、检测重复包、维护接收顺序。这是可靠 UDP 的核心：允许短暂乱序，但最终按序交付。
+**Overview:** the receive window handles out-of-order packets, detects duplicates
+and maintains receive order. This is the core of reliable UDP: brief reordering
+is allowed, but delivery ends up in order.
 
-**源码入口：** [udp_channel.cpp:1208](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/udp_channel.cpp:1208)
+**Source entry:** udp_channel.cpp:1208
 
 ```cpp
-// udp_channel.cpp:1208 - 添加到接收窗口
+// udp_channel.cpp:1208 - add to the receive window
 UDPChannel::AddToReceiveWindowResult UDPChannel::addToReceiveWindow(
     SeqNum seq, Packet * pPacket, bool isReliable )
 {
-    // 1. 校验 sequence number 是否在合法范围
+    // 1. Check that the sequence number is in the valid range
     if (seq >= inSeqAt_ + windowSize_ || seq < oldestUnackedSeq_)
     {
         return ADD_TO_RECEIVE_WINDOW_RESULT_OUT_OF_WINDOW;
     }
-    
-    // 2. 校验源地址
+
+    // 2. Check the source address
     if (!this->checkSourceAddress( pPacket ))
     {
         return ADD_TO_RECEIVE_WINDOW_RESULT_CORRUPT;
     }
-    
-    // 3. 对非 piggyback 包加入 ACK 队列
+
+    // 3. For non-piggyback packets, enqueue an ACK
     if (!pPacket->isPiggyback())
     {
         acksToSend_.push_back( seq );
     }
-    
-    // 4. 检查是否为预期的下一个包
+
+    // 4. Check whether this is the next expected packet
     if (seq == inSeqAt_)
     {
-        // 推进接收窗口
+        // advance the receive window
         inSeqAt_++;
-        
-        // 检查是否有缓存的乱序包可以串起来
+
+        // check whether buffered out-of-order packets can be chained
         while (bufferedReceives_.contains( inSeqAt_ ))
         {
             pPacket = bufferedReceives_.get( inSeqAt_ );
             this->processPacket( pPacket );
             inSeqAt_++;
         }
-        
+
         return ADD_TO_RECEIVE_WINDOW_RESULT_NEXT;
     }
-    
-    // 5. 检查是否为重复包
+
+    // 5. Check whether this is a duplicate packet
     if (seq < inSeqAt_)
     {
         return ADD_TO_RECEIVE_WINDOW_RESULT_DUPLICATE;
     }
-    
-    // 6. 乱序包，缓存到接收窗口
+
+    // 6. Out-of-order packet, buffer it in the receive window
     bufferedReceives_.add( seq, pPacket );
     return ADD_TO_RECEIVE_WINDOW_RESULT_BUFFERED;
 }
 ```
 
-**流程图：**
+**Flowchart:**
 
-<MermaidDiagram title="接收窗口处理流程">
+<MermaidDiagram title="Receive window processing flow">
 sequenceDiagram
-    participant Receiver as 接收方
-    participant Window as 接收窗口
-    participant Buffer as 缓冲区
-    participant Handler as 消息处理
+    participant Receiver as Receiver
+    participant Window as Receive Window
+    participant Buffer as Buffer
+    participant Handler as Message Handler
 
     Receiver->>Window: addToReceiveWindow(seq)
-    
-    alt seq 非法
+
+    alt invalid seq
         Window->>Receiver: OUT_OF_WINDOW
     else seq == inSeqAt_
         Window->>Window: inSeqAt_++
-        loop 有缓存的连续包
+        loop while there are contiguous buffered packets
             Window->>Buffer: get(inSeqAt_)
             Buffer->>Handler: processPacket()
             Window->>Window: inSeqAt_++
@@ -336,37 +389,46 @@ sequenceDiagram
         Window->>Receiver: NEXT
     else seq < inSeqAt_
         Window->>Receiver: DUPLICATE
-    else seq 在窗口内
+    else seq is inside the window
         Window->>Buffer: add(seq, packet)
         Window->>Receiver: BUFFERED
     end
 </MermaidDiagram>
 
-**详细讲解：**
+**Detailed walkthrough:**
 
-1. **窗口范围**：`inSeqAt_` 是期望的下一个包序号，`oldestUnackedSeq_` 是最早未 ACK 的包。窗口大小限制了可以缓存的乱序包数量。
+1. **Window range**: `inSeqAt_` is the expected next packet sequence number, and
+   `oldestUnackedSeq_` is the oldest unacknowledged packet. The window size limits
+   how many out-of-order packets may be buffered.
 
-2. **重复检测**：`seq < inSeqAt_` 表示包已经收到过，直接丢弃。这防止了重发包被重复处理。
+2. **Duplicate detection**: `seq < inSeqAt_` means the packet has already been
+   received and is dropped. This prevents a resent packet from being processed
+   twice.
 
-3. **乱序缓存**：`bufferedReceives_` 缓存乱序包，当 `inSeqAt_` 推进时，检查是否有连续的缓存包可以串起来。
+3. **Out-of-order buffering**: `bufferedReceives_` buffers out-of-order packets.
+   When `inSeqAt_` advances, the code checks whether contiguous buffered packets
+   can be chained together.
 
-4. **ACK 生成**：收到包后，将序号加入 `acksToSend_` 队列，下次发送时携带 ACK。
+4. **ACK generation**: after receiving a packet, its sequence number is appended
+   to the `acksToSend_` queue and carried along on the next send.
 
-5. **地址校验**：`checkSourceAddress()` 防止伪造包。如果允许 `shouldAutoSwitchToSrcAddr_`，可以根据 channel version 切换地址。
+5. **Address check**: `checkSourceAddress()` prevents forged packets. If
+   `shouldAutoSwitchToSrcAddr_` is allowed, the address can switch according to
+   the channel version.
 
-### 接收窗口状态机
+### Receive Window State Machine
 
-<MermaidDiagram title="接收窗口状态机">
+<MermaidDiagram title="Receive window state machine">
 stateDiagram-v2
     [*] --> ValidateSeq
-    ValidateSeq --> Corrupt: seq 非法
-    ValidateSeq --> CheckAddress: seq 合法
-    CheckAddress --> Corrupt: 源地址错误
-    CheckAddress --> AckQueued: 地址合法
+    ValidateSeq --> Corrupt: invalid seq
+    ValidateSeq --> CheckAddress: seq valid
+    CheckAddress --> Corrupt: wrong source address
+    CheckAddress --> AckQueued: address valid
     AckQueued --> Next: seq == inSeqAt_
     AckQueued --> Duplicate: seq < inSeqAt_
-    AckQueued --> Buffered: seq 在窗口内但乱序
-    AckQueued --> OutOfWindow: seq 超过窗口
+    AckQueued --> Buffered: seq inside window but out of order
+    AckQueued --> OutOfWindow: seq beyond the window
     Next --> AdvanceWindow
     AdvanceWindow --> AttachBuffered
     AttachBuffered --> [*]
@@ -376,119 +438,161 @@ stateDiagram-v2
     Corrupt --> [*]
 </MermaidDiagram>
 
-这个状态机是可靠 UDP 的核心之一。它保证可靠消息能按 Channel 序号恢复顺序，同时允许短暂乱序进入缓冲。
+This state machine is one of the cores of reliable UDP. It guarantees that
+reliable messages recover their order along the Channel sequence number, while
+still letting brief reordering enter the buffer.
 
-## ACK 与 cumulative ACK
+## ACK and Cumulative ACK
 
-`writeFlags()` 和 `writeFooter()` 负责把 Channel 元数据写入 packet，源码见：
+`writeFlags()` and `writeFooter()` write Channel metadata into the packet, see:
 
-- [udp_channel.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/udp_channel.cpp:1513)
-- [udp_channel.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/udp_channel.cpp:1580)
+- udp_channel.cpp
+- udp_channel.cpp
 
-关键策略：
+Key policy:
 
-- 所有 channel 包写 `FLAG_ON_CHANNEL`。
-- indexed channel 额外写 `FLAG_INDEXED_CHANNEL`、`ChannelID`、`ChannelVersion`。
-- 如果空间足够，写 cumulative ACK，表达某个序号之前全部收到。
-- 如果还有空间，写有限数量的离散 ACK。
-- 第一个内部可靠包会写 `FLAG_CREATE_CHANNEL`。
+- Every Channel packet writes `FLAG_ON_CHANNEL`.
+- An indexed Channel additionally writes `FLAG_INDEXED_CHANNEL`, `ChannelID` and
+  `ChannelVersion`.
+- If there is room, a cumulative ACK is written, expressing that everything before
+  a given sequence number has been received.
+- If there is still room, a limited number of discrete ACKs is written.
+- The first internal reliable packet writes `FLAG_CREATE_CHANNEL`.
 
-这是一种很典型的“累计确认 + 选择性确认”混合策略：
+This is a very typical "cumulative acknowledgement plus selective
+acknowledgement" hybrid strategy:
 
-- cumulative ACK 压缩连续确认范围。
-- 离散 ACK 处理乱序洞。
-- ACK piggyback 到出站包，减少独立 ACK 包。
-- ACK 数量受 packet 空间限制，避免 ACK 把负载挤爆。
+- The cumulative ACK compresses a contiguous acknowledged range.
+- Discrete ACKs handle holes from reordering.
+- ACKs are piggybacked onto outbound packets, cutting standalone ACK packets.
+- The number of ACKs is bounded by packet space, so ACKs cannot squeeze the
+  payload out.
 
-## 重发路径
+## Resend Path
 
-`UDPChannel::resend()` 的策略不是机械重发原包，见 [udp_channel.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/udp_channel.cpp:1156)。
+The policy in `UDPChannel::resend()` is not a mechanical resend of the original
+packet, see
+udp_channel.cpp.
 
-对于外部通道，如果未确认包不是 fragment，并且当前发送窗口不会溢出，会尝试把可靠内容 piggyback 到下一个 outgoing bundle：
+For an external channel, if the unacknowledged packet is not a fragment and the
+current send window will not overflow, it tries to piggyback the reliable content
+onto the next outgoing Bundle:
 
-<MermaidDiagram title="重发策略">
+<MermaidDiagram title="Resend strategy">
 flowchart TD
   A[unacked packet timeout or ack hole] --> B{External channel?}
-  B -- no --> E[sendUnacked 原包重发]
-  B -- yes --> C{非 fragment 且窗口可容纳?}
-  C -- yes --> D[piggyback 到新 Bundle]
+  B -- no --> E[sendUnacked resend original packet]
+  B -- yes --> C{Non-fragment and window has room?}
+  C -- yes --> D[piggyback onto a new Bundle]
   C -- no --> E
-  D --> F[handleAck 原序号]
+  D --> F[handleAck original sequence]
   E --> G[sendPacket isResend=true]
 </MermaidDiagram>
 
-这体现了外部客户端链路的带宽优先策略：能搭车就不单独重发，能只重发可靠内容就不重复发送已经过期的不可靠数据。
+This reflects the bandwidth-first policy of the external client link: piggyback
+when you can instead of resending standalone, and resend only the reliable content
+rather than repeating unreliable data that has already gone stale.
 
 ## Indexed Channel
 
-`UDPChannel` 支持 indexed channel，源码注释见 [udp_channel.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/udp_channel.hpp:364)。
+`UDPChannel` supports indexed channels, see the source comments at
+udp_channel.hpp.
 
-indexed channel 的作用是：在同一对地址之间复用多个逻辑 channel。典型场景是 Base 和 Cell 实体之间需要多个独立流，仅靠地址无法区分。
+The point of an indexed Channel is to reuse several logical channels between the
+same pair of addresses. The typical case is Base and Cell entities, which need
+several independent flows that an address alone cannot distinguish.
 
-它包含两个关键字段：
+It has two key fields:
 
-- `ChannelID id_`：逻辑 channel 标识。
-- `ChannelVersion version_`：记录 indexed channel 被 offload 的次数，用于识别过期包和恢复场景下的最新实体信息。
+- `ChannelID id_`: the logical channel identifier.
+- `ChannelVersion version_`: records how many times the indexed Channel has been
+  offloaded, used to recognise stale packets and to recover the latest entity
+  information in a recovery scenario.
 
-这点对理解实体迁移非常重要。BigWorld 的网络连接不是纯传输概念，它嵌入了实体迁移和恢复语义。
+This matters a lot for understanding entity migration. BigWorld's network
+connection is not a pure transport concept. It embeds entity migration and
+recovery semantics.
 
-## Regular 与 Irregular
+## Regular and Irregular
 
-`isLocalRegular_` 和 `isRemoteRegular_` 会影响 ACK 与重发策略，源码见 [udp_channel.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/udp_channel.hpp:462)。
+`isLocalRegular_` and `isRemoteRegular_` affect ACK and resend policy, see
+udp_channel.hpp.
 
-含义：
+Meaning:
 
-- local irregular 时，本地会定期检查重发，并更倾向立即发送 ACK。
-- remote regular 时，可以基于 ACK 洞推断丢包，而不是只靠静默超时。
+- When the local side is irregular, the local side periodically checks for
+  resends and leans toward sending ACKs immediately.
+- When the remote side is regular, packet loss can be inferred from ACK holes
+  instead of relying on silence timeout alone.
 
-这说明 Mercury 的可靠层利用了游戏服务器通信模式：有些 Channel 会持续发包，有些 Channel 是间歇发包。不同流量形态应使用不同 ACK/重发策略。
+This shows that Mercury's reliability layer exploits game server communication
+patterns: some Channels send continuously, while others send intermittently.
+Different traffic shapes should use different ACK and resend policies.
 
-## 与 Bundle 的关系
+## Relationship with Bundle
 
-`UDPChannel::newBundle()` 创建 `UDPBundle`，见 [udp_channel.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/udp_channel.cpp:1501)。
+`UDPChannel::newBundle()` creates a `UDPBundle`, see
+udp_channel.cpp.
 
-`UDPBundle` 负责：
+`UDPBundle` is responsible for:
 
-- `startMessage()`、`startRequest()`、`startReply()`。
-- 记录 `ReliableOrder`。
-- `preparePackets()` 将消息序列切成 UDP packet。
-- `piggyback()` 把重发内容挂到新包。
-- `ack_` 处理 off-channel ack。
+- `startMessage()`, `startRequest()`, `startReply()`.
+- Recording `ReliableOrder`.
+- `preparePackets()` slicing the message sequence into UDP packets.
+- `piggyback()` hanging resent content onto a new packet.
+- `ack_` handling off-channel ack.
 
-源码见 [udp_bundle.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/udp_bundle.hpp:37)。
+Source: udp_bundle.hpp.
 
-所以 Channel 管连接状态和可靠窗口，Bundle 管消息聚合与 packet 编排。两者合起来才是 Mercury 的游戏网络协议。
+So the Channel owns connection state and the reliable window, while the Bundle
+owns message aggregation and packet arrangement. Only together are they Mercury's
+game network protocol.
 
-## 源码取舍
+## Trade-offs in the Source
 
-Mercury 可靠 UDP 与引擎状态模型深度绑定：
+Mercury reliable UDP is deeply coupled to the engine state model:
 
-- TCP 无法表达同一逻辑流内可靠/不可靠混合语义。
-- 服务器内部多进程 MMO 通信需要可控协议头、可观测统计和引擎级调试能力。
-- Python 脚本层和 EntityDef 类型系统需要与网络协议紧密结合。
-- Channel version、critical reliable、piggyback、fragment 和 ACK 都参与实体迁移、恢复和内部 RPC 的正确性。
+- TCP cannot express mixed reliable/unreliable semantics within the same logical
+  flow.
+- Multi-process MMO communication inside the server needs controllable protocol
+  headers, observable statistics and engine-level debugging.
+- The Python scripting layer and the EntityDef type system need to stay tightly
+  bound to the network protocol.
+- Channel version, critical reliability, piggyback, fragmentation and ACKs all
+  take part in the correctness of entity migration, recovery and internal RPC.
 
-源码代价同样明确：
+The source costs are just as explicit:
 
-- 协议复杂度高，正确性依赖大量边界测试。
-- 与通用生态脱节，外部工具难以直接解析。
-- 拥塞、路径 MTU、NAT、加密和攻击面需要结合外部入口、PacketFilter 和部署拓扑一起分析。
-- I/O 后端只能影响收发方式，不能替代 Channel 的可靠顺序和实体语义。
+- Protocol complexity is high, and correctness depends on heavy boundary testing.
+- It is disconnected from the general ecosystem, so external tooling cannot parse
+  it directly.
+- Congestion, path MTU, NAT, encryption and attack surface need to be analysed
+  together with the external entry point, PacketFilter and deployment topology.
+- An I/O backend can only change how data is sent and received. It cannot replace
+  the Channel's reliable ordering and entity semantics.
 
-## 源码验证重点
+## Source-Code Verification Focus
 
-可靠 UDP 的测试不能只测“能收发”。至少要覆盖：
+Testing reliable UDP cannot stop at "can send and receive". At minimum it must
+cover:
 
-- 连续 ACK、离散 ACK、ACK 丢失、ACK 延迟。
-- 乱序包、重复包、窗口外包、损坏包。
-- fragment 包重发与 piggyback 的边界。
-- `INTERNAL` 与 `EXTERNAL` 重发策略差异。
-- indexed channel 的 version 过期包丢弃。
-- `RELIABLE_CRITICAL` 未确认时的恢复行为。
-- 发送窗口溢出和 `maxWindowSize()` 边界。
+- Contiguous ACK, discrete ACK, ACK loss and ACK delay.
+- Out-of-order packets, duplicate packets, out-of-window packets and corrupt
+  packets.
+- The boundaries of fragment packet resend and piggyback.
+- The resend policy difference between `INTERNAL` and `EXTERNAL`.
+- Dropping of stale-version packets on an indexed Channel.
+- Recovery behaviour when `RELIABLE_CRITICAL` is unacknowledged.
+- Send window overflow and the `maxWindowSize()` boundary.
 
-源码已经有网络单元测试目录，例如 `lib/network/unit_test/test_receive_window.cpp`、`test_reliable.cpp`、`test_fragment.cpp`、`test_channel_version.cpp`。后续测试章节会专门分析覆盖范围与缺口。
+The source already has a network unit-test directory, for example
+`lib/network/unit_test/test_receive_window.cpp`, `test_reliable.cpp`,
+`test_fragment.cpp`, `test_channel_version.cpp`. A later testing chapter will
+analyse the coverage and the gaps.
 
-## 本章边界
+## Chapter Boundary
 
-本章只解释 Channel 可靠层。下一章继续分析 Mercury 的通信抽象：`InterfaceElement` 如何定义消息头，`Bundle` 如何组织 RPC，请求/回复如何与可靠层衔接。
+This chapter covers only the Channel reliability layer. The next chapter continues
+with Mercury's communication abstractions: how `InterfaceElement` defines a
+message header, how `Bundle` organises RPC, and how request/reply connects with
+the reliability layer.

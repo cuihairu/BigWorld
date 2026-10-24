@@ -1,21 +1,25 @@
-# ADR 索引
+# ADR Index
 
-> [English](index.en.md) | **中文**
 
-架构决策记录（Architecture Decision Records）：一项重大决策一页，只记
-**背景 / 决策 / 取舍 / 后果**，不展开过程——过程与逐批证据在对应的长文台账里，
-每页末尾给出链接。新决策追加新编号，不回改已接受的 ADR（状态字段除外）。
+Architecture Decision Records: one page per major decision, recording only
+**context / decision / trade-offs / consequences** — no process narrative.
+Process detail and per-batch evidence live in the corresponding long-form
+ledgers, linked at the end of each page. New decisions take new numbers;
+accepted ADRs are never rewritten (the status field excepted).
 
-| 编号 | 状态 | 决策 |
+| Number | Status | Decision |
 |---|---|---|
-| [0001](adr-0001-python-313-embedded-interpreter) | 已接受 | 嵌入式解释器 Python 2.7 → 3.13（vendored 树 + BWHooks 官方接口） |
-| [0002](adr-0002-vcpkg-third-party-deps) | 已接受 | 第三方依赖从 vendored 源码树切换到 vcpkg manifest（钉 baseline） |
-| [0003](adr-0003-make-cmake-dual-track) | 已接受 | 构建系统 make 主链 + 按组件 CMake 样板双轨并存 |
+| [0001](adr-0001-python-313-embedded-interpreter.md) | Accepted | Embedded interpreter Python 2.7 → 3.13 (vendored tree + official BWHooks interface) |
+| [0002](adr-0002-vcpkg-third-party-deps.md) | Accepted | Third-party dependencies switch from vendored source trees to a vcpkg manifest (pinned baseline) |
+| [0003](adr-0003-make-cmake-dual-track.md) | Accepted | Dual-track build: make main chain plus per-component CMake samples |
 
-## 写法约定
+## Writing conventions
 
-- 文件名：`adr-<四位编号>-<短横线短名>.md`。
-- 必备小节：**状态**（已接受/已替代/提议中 + 日期）、**背景**（要解决的问题与
-  约束）、**决策**（一句话可执行结论 + 要点）、**取舍**（被否掉的备选与理由）、
-  **后果**（正面 / 代价与风险 / 触发的后续）。
-- 决策涉及的长文证据（迁移台账、构建分析等）只链接，不复述。
+- File name: `adr-<four-digit-number>-<kebab-case-short-name>.md`.
+- Required sections: **Status** (accepted/superseded/proposed + date),
+  **Context** (the problem to solve and the constraints), **Decision**
+  (a one-sentence actionable conclusion plus key points), **Trade-offs**
+  (rejected alternatives and reasons), **Consequences**
+  (positives / costs and risks / follow-ups triggered).
+- Long-form evidence a decision refers to (migration ledgers, build analyses)
+  is linked, not repeated.

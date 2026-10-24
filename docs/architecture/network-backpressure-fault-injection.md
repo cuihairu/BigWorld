@@ -1,60 +1,66 @@
-# 网络背压与故障注入
+# Network Backpressure and Fault Injection
 
-> [English](network-backpressure-fault-injection.en.md) | **中文**
 
 <div class="arch-hero">
 
-BigWorld 的网络层不仅是 epoll + UDP。真正影响游戏服务器稳定性的，是接收预算、发送队列满、人工丢包/延迟、Channel overflow、可靠重发、rate limit 和 tick 公平性如何一起工作。这章专门分析背压和故障注入。
+BigWorld's network layer is not merely epoll plus UDP. Server stability depends
+on how receive budgets, full send queues, artificial loss/latency, channel
+overflow, reliable resends, rate limiting, and tick fairness interact. This
+chapter focuses on backpressure and fault injection.
 
 </div>
 
-## 先给结论
+## Key Takeaways
 
-BigWorld 网络层已经有多处“保护主循环”的机制：
+The network layer already has several mechanisms that protect the main loop:
 
-- `PacketReceiver` 一次 socket 通知处理多个包，但可用 `maxSocketProcessingTime` 限制本轮处理时长。
-- `BWMessageForwarder` 默认可把最大 socket 处理时间设为 `1 / gameUpdateHertz`。
-- `PacketSender` 支持人工丢包和人工延迟，用于测试可靠 UDP。
-- 发送遇到 `EAGAIN` / `ENOBUFS` 时，会用 `select()` 等待 10ms 再重试。
-- 网络接口暴露 artificial loss、latency 和 max socket processing time 到 Watcher。
-- 网络单测大量使用 `dropNextSend()` 验证可靠层。
+- `PacketReceiver` processes multiple packets for one readiness notification, but `maxSocketProcessingTime` bounds the processing interval.
+- `BWMessageForwarder` defaults its maximum socket-processing time to `1 / gameUpdateHertz`.
+- `PacketSender` supports artificial packet loss and delay for reliable-UDP testing.
+- `EAGAIN` / `ENOBUFS` on send waits about 10 ms through `select()` before retrying.
+- The network interface exposes artificial loss, latency, and maximum socket-processing time through Watcher.
+- Network unit tests use `dropNextSend()` extensively to exercise the reliable layer.
 
-关键源码：
+Key source code:
 
-- 接收预算在 [packet_receiver.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/packet_receiver.cpp:83)。
-- `maxSocketProcessingTime()` watcher 在 [packet_receiver.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/packet_receiver.cpp:1367)。
-- `BWMessageForwarder` 配置 socket 处理预算在 [bw_message_forwarder.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/bw_message_forwarder.cpp:47)。
-- 人工丢包/延迟在 [packet_sender.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/packet_sender.cpp:137)。
-- 发送队列满等待在 [packet_sender.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/packet_sender.cpp:304)。
-- 逐包 `sendto()` 在 [packet_sender.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/packet_sender.cpp:347)。
-- 网络测试中使用 `dropNextSend()`，例如 [test_reliable.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/unit_test/test_reliable.cpp:415)。
+- Receive budget: packet_receiver.cpp.
+- `maxSocketProcessingTime()` watcher: packet_receiver.cpp.
+- `BWMessageForwarder` processing-budget configuration: bw_message_forwarder.cpp.
+- Artificial loss/latency: packet_sender.cpp.
+- Full-send-queue wait: packet_sender.cpp.
+- Per-packet `sendto()`: packet_sender.cpp.
+- `dropNextSend()` in network tests, for example: test_reliable.cpp.
 
-## 接收侧背压
+## Receive-Side Backpressure
 
-**概述：** `PacketReceiver::handleInputNotification()` 在收到 socket 可读通知后循环调用 `processSocket()`，但有时间限制。这不是内核级背压，而是主线程公平性保护：防止一次 UDP burst 把 Timer、FrequentTask、脚本和其他消息饿死。
+**Summary**: `PacketReceiver::handleInputNotification()` repeatedly calls
+`processSocket()` after a readable-socket notification, but only within a time
+budget. This is not kernel backpressure; it protects main-thread fairness and
+prevents one UDP burst from starving timers, frequent tasks, scripts, and other
+messages.
 
-**源码入口：** [packet_receiver.cpp:83](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/packet_receiver.cpp:83)
+**Source entry**: packet_receiver.cpp:83
 
 ```cpp
-// packet_receiver.cpp:83 - 接收预算
+// packet_receiver.cpp:83 - receive budget
 void PacketReceiver::handleInputNotification()
 {
-    // 1. 记录开始时间
+    // 1. Record the start time
     uint64 startTime = timestamp();
-    
-    // 2. 循环处理 socket 中的包
+
+    // 2. Drain packets from the socket
     while (true)
     {
-        // 3. 处理一个包
+        // 3. Process one packet
         if (!this->processSocket())
         {
             break;
         }
-        
-        // 4. 计算已用时间
+
+        // 4. Measure elapsed time
         uint64 elapsed = timestamp() - startTime;
-        
-        // 5. 检查是否超时
+
+        // 5. Stop when over budget
         if (elapsed > maxSocketProcessingTimeStamps_)
         {
             WARNING_MSG( "PacketReceiver::handleInputNotification: "
@@ -71,171 +77,170 @@ void PacketReceiver::handleInputNotification()
 }
 ```
 
-**流程图：**
-
-<MermaidDiagram title="接收预算处理流程">
+<MermaidDiagram title="Receive-budget processing">
 flowchart TD
-    A[EPOLLIN 事件] --> B[handleInputNotification]
-    B --> C[记录开始时间]
-    C --> D{socket 有数据?}
-    D -- 否 --> E[返回 dispatcher]
-    D -- 是 --> F[processSocket]
-    F --> G[计算已用时间]
-    G --> H{超过 maxSocketProcessingTime?}
-    H -- 否 --> D
-    H -- 是 --> I[打印警告]
+    A[EPOLLIN event] --> B[handleInputNotification]
+    B --> C[record start time]
+    C --> D{socket has data?}
+    D -- no --> E[return to dispatcher]
+    D -- yes --> F[processSocket]
+    F --> G[measure elapsed time]
+    G --> H{over maxSocketProcessingTime?}
+    H -- no --> D
+    H -- yes --> I[log warning]
     I --> E
 </MermaidDiagram>
 
-**详细讲解：**
+Detailed interpretation:
 
-1. **时间限制**：`maxSocketProcessingTimeStamps_` 限制单次 socket 处理的最大时间。默认值由 `gameUpdateHertz` 推导。
+1. **Time bound**: `maxSocketProcessingTimeStamps_` caps one socket-processing interval. Its default is derived from `gameUpdateHertz`.
 
-2. **循环处理**：在时间限制内，循环调用 `processSocket()` 处理包。每处理一个包检查一次时间。
+2. **Loop**: within budget, `processSocket()` runs repeatedly. Time is checked after every packet.
 
-3. **超时处理**：超时后打印警告，包含：
-   - 处理耗时
-   - 来源地址
-   - 已处理包数
-   - 剩余队列大小
+3. **Timeout path**: the warning includes processing duration, source address, number of packets processed, and remaining queue size.
 
-4. **公平性保护**：允许 receive queue 留到下一轮处理，确保 Timer、FrequentTask、脚本和其他消息有机会执行。
+4. **Fairness**: a non-empty receive queue can remain for the next dispatcher round, giving timers, frequent tasks, scripts, and other messages a chance to run.
 
-5. **与 Tick 的关系**：`maxSocketProcessingTime` 默认为 `1 / gameUpdateHertz`，即一个 tick 的长度。如果 `gameUpdateHertz = 10`，一个 tick 是 100ms。
+5. **Tick relationship**: `maxSocketProcessingTime` defaults to `1 / gameUpdateHertz`, the length of one tick. With `gameUpdateHertz = 10`, one tick is 100 ms.
 
-### BWMessageForwarder 配置
+### `BWMessageForwarder` configuration
 
-**源码入口：** [bw_message_forwarder.cpp:47](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/bw_message_forwarder.cpp:47)
+**Source entry**: bw_message_forwarder.cpp:47
 
 ```cpp
-// bw_message_forwarder.cpp:47 - socket 处理预算配置
+// bw_message_forwarder.cpp:47 - socket-processing budget
 void BWMessageForwarder::init( NetworkInterface & networkInterface )
 {
-    // 1. 读取配置
+    // 1. Read configuration
     float maxInternalSocketProcessingTime = 
         Config::maxInternalSocketProcessingTime();
     float gameUpdateHertz = Config::gameUpdateHertz();
-    
-    // 2. 如果配置值小于 0，使用默认值
+
+    // 2. Use the tick-derived default when the configured value is negative
     if (maxInternalSocketProcessingTime < 0)
     {
         maxInternalSocketProcessingTime = 1.f / gameUpdateHertz;
     }
-    
-    // 3. 设置到 NetworkInterface
+
+    // 3. Install it on the NetworkInterface
     networkInterface.maxSocketProcessingTime( 
         maxInternalSocketProcessingTime );
 }
 ```
 
-**关键细节：**
+Key details:
 
-- 配置值可以覆盖默认值，提供灵活性
-- 默认值与游戏 tick 频率绑定，确保公平性
-- 可以通过 Watcher 动态调整，便于调试
+- configuration can override the default, providing flexibility;
+- the default is tied to game-tick frequency to preserve fairness;
+- Watcher can adjust it dynamically for debugging.
 
-## 与 Tick 的关系
+## Relationship to the Tick
 
-`BWMessageForwarder` 读取：
+`BWMessageForwarder` reads `maxInternalSocketProcessingTime` and
+`gameUpdateHertz`. If the configured value is negative, it uses
+`1.f / gameUpdateHertz` and calls
+`networkInterface.maxSocketProcessingTime()`:
+bw_message_forwarder.cpp.
 
-- `maxInternalSocketProcessingTime`
-- `gameUpdateHertz`
+The receive budget is therefore not an isolated parameter; it is tied to the
+game-tick frequency.
 
-如果配置值小于 0，则设置为 `1.f / gameUpdateHertz`，然后调用 `networkInterface.maxSocketProcessingTime()`。源码见 [bw_message_forwarder.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/bw_message_forwarder.cpp:47)。
+Design implications:
 
-这说明接收预算不是孤立参数，它和游戏 tick 频率绑定。
+- with `gameUpdateHertz = 10`, one tick is 100 ms;
+- the internal socket budget can be inferred from tick length;
+- a burst of packets cannot consume the main loop indefinitely.
 
-设计含义：
+Observability should split this metric into:
 
-- 如果 `gameUpdateHertz = 10`，一个 tick 是 100ms。
-- 内部 socket 单轮处理预算可按 tick 长度推导。
-- 高峰网络包不会无限吃掉主循环。
+- network-processing time per tick;
+- packets processed per socket notification;
+- number of over-budget exits;
+- receive-queue size;
+- handler dispatch duration.
 
-源码观测应把这个指标拆成：
+## Send-Side Backpressure
 
-- 每 tick 网络处理耗时。
-- 每次 socket notification 处理包数。
-- 超预算次数。
-- receive queue size。
-- handler 分发耗时。
-
-## 发送侧背压
-
-发送路径使用 `sendto()`：
+The send path uses `sendto()`:
 
 ```cpp
 int len = socket_.sendto( pPacket->data(), pPacket->totalSize(), addr.port, addr.ip );
 ```
 
-源码见 [packet_sender.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/packet_sender.cpp:350)。
+Source: packet_sender.cpp.
 
-错误映射：
+Error mapping:
 
 - `ECONNREFUSED` -> `REASON_NO_SUCH_PORT`
 - `EAGAIN` -> `REASON_RESOURCE_UNAVAILABLE`
 - `ENOBUFS` -> `REASON_TRANSMIT_QUEUE_FULL`
 - `EMSGSIZE` -> `REASON_MESSAGE_TOO_LONG`
 
-源码见 [packet_sender.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/packet_sender.cpp:372)。
+Source: packet_sender.cpp.
 
-遇到 `REASON_RESOURCE_UNAVAILABLE` 或 `REASON_TRANSMIT_QUEUE_FULL` 时，`basicSendWithRetries()` 会：
+On `REASON_RESOURCE_UNAVAILABLE` or `REASON_TRANSMIT_QUEUE_FULL`,
+`basicSendWithRetries()`:
 
-- 打印 `Transmit queue full` warning。
-- 用 `select()` 等待 socket 可写 10ms。
-- 然后继续重试。
+- logs a `Transmit queue full` warning;
+- uses `select()` to wait up to 10 ms for socket writability;
+- retries afterward.
 
-源码见 [packet_sender.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/packet_sender.cpp:304)。
+Source: packet_sender.cpp.
 
-这是发送侧背压的源码取舍：
+This is the source-level trade-off on the send side:
 
-- 简单稳妥。
-- 能处理短暂 kernel transmit queue 满。
-- 但会在发送路径引入最多 10ms 等待，可能拖慢主线程。
+- simple and robust;
+- absorbs transient kernel transmit-queue pressure;
+- but can stall the main thread by up to 10 ms in the send path.
 
-应优先统计这条路径出现频率和等待耗时，再判断发送侧背压是否是主线程抖动来源。
+Measure this path's frequency and wait duration before concluding that send-side
+backpressure is the source of main-thread jitter.
 
-## 人工丢包与延迟
+## Artificial Loss and Latency
 
-`PacketSender::rescheduleSend()` 支持两类故障注入：
+`PacketSender::rescheduleSend()` supports two fault-injection modes:
 
-- `dropNextSend()` 或按 `dropPerMillion()` 概率人工丢包。
-- 按 `minLatencyMillion()` / `maxLatencyMillion()` 人工延迟发送。
+- `dropNextSend()` or probability loss via `dropPerMillion()`;
+- artificial delay via `minLatencyMillion()` / `maxLatencyMillion()`.
 
-源码见 [packet_sender.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/packet_sender.cpp:158)。
+Source: packet_sender.cpp.
 
-如果延迟大于等于 2ms，会创建 `RescheduledSender` 稍后发送。见 [packet_sender.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/packet_sender.cpp:221)。
+A delay of at least 2 ms creates a `RescheduledSender`:
+packet_sender.cpp.
 
-设计价值：
+Design value:
 
-- 可测试 Mercury 可靠 UDP 重传。
-- 可模拟公网延迟和丢包。
-- 可验证 ACK、piggyback、fragment、receive window。
-- 可在不依赖外部 netem 的情况下做单元测试。
+- makes Mercury reliable-UDP retransmission testable;
+- simulates public-network loss and delay;
+- verifies ACKs, piggybacks, fragments, and receive windows;
+- enables unit tests without external netem.
 
-网络单测中可以看到大量 `dropNextSend()` 用法，例如可靠层测试见 [test_reliable.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/unit_test/test_reliable.cpp:415)。
+Network tests contain many `dropNextSend()` uses; the reliable-layer test begins
+at test_reliable.cpp.
 
-## 故障注入与测试的边界
+## Fault-Injection and Test Boundaries
 
-BigWorld 的人工故障注入偏网络层：
+BigWorld's artificial injection is network-focused:
 
-- 丢下一包。
-- 按概率丢包。
-- 延迟包。
-- flood/mangle/fragment 等单测覆盖。
+- drop the next packet;
+- probabilistic packet loss;
+- delayed packets;
+- flood/mangle/fragment unit-test coverage.
 
-但它不是完整 chaos framework：
+It is not a complete chaos framework:
 
-- 不能直接模拟 DBApp 卡死。
-- 不能完整模拟 clock jump。
-- 不能自动验证 CellApp death 后实体恢复。
-- 不能跨多进程注入部分网络分区。
-- 缺少统一 scenario 描述和自动报告。
+- cannot directly simulate a stalled DBApp;
+- cannot fully simulate clock jumps;
+- cannot automatically validate entity recovery after CellApp death;
+- cannot inject partial network partitions across processes;
+- lacks a unified scenario description and automatic report.
 
-所以它很适合可靠 UDP 单元测试，但不等于现代混沌测试平台。
+It is excellent for reliable-UDP unit tests, but not equivalent to a modern
+chaos-testing platform.
 
-## 背压链路
+## Backpressure Chain
 
-<MermaidDiagram title="网络背压链路">
+<MermaidDiagram title="Network backpressure chain">
 flowchart LR
   A[Kernel RX Queue] --> B[PacketReceiver budget]
   B --> C[Mercury decode]
@@ -251,76 +256,79 @@ flowchart LR
   H --> M[artificial drop/latency]
 </MermaidDiagram>
 
-这条链说明：真正的背压不只是 socket。
+Backpressure is therefore not just the socket. Possible bottlenecks include:
 
-可能瓶颈包括：
+- kernel receive queue;
+- per-notification processing budget;
+- Mercury packet parsing;
+- reliable-layer resend and ACK logic;
+- handler execution;
+- Python scripts;
+- Entity/AOI updates;
+- bundle aggregation;
+- kernel transmit queue.
 
-- Kernel receive queue。
-- 单轮 socket 处理预算。
-- Mercury 包解析。
-- 可靠层重发和 ACK。
-- handler 执行。
-- Python 脚本。
-- Entity/AOI 更新。
-- Bundle 聚合。
-- Kernel transmit queue。
+Observe each stage first; otherwise every problem is easily misattributed to
+epoll or the absence of io_uring.
 
-必须先观测每一段，否则容易把所有问题都归因于 epoll 或 io_uring。
+## Why There Is No io_uring Backpressure Model
 
-## 为什么没有 io_uring 背压模型
+`io_uring` did not exist in BigWorld's design era. More importantly, the current
+model is readiness events plus synchronous handlers:
 
-BigWorld 设计年代没有 `io_uring`。更关键的是，当前模型是 readiness + 同步 handler：
+- epoll announces readability;
+- the main thread synchronously processes packets;
+- handlers run immediately;
+- timers and network work share one dispatcher.
 
-- epoll 通知可读。
-- 主线程同步处理包。
-- handler 立即执行。
-- Timer 和 network 在同一 dispatcher 中调度。
+`io_uring` is a completion model and introduces:
 
-`io_uring` 是 completion 模型，引入：
+- submit queues;
+- completion queues;
+- buffer lifetimes;
+- multiple outstanding I/O operations;
+- decoupling between completion events and handler scheduling.
 
-- submit queue。
-- completion queue。
-- buffer 生命周期。
-- 多 outstanding I/O。
-- 完成事件与 handler 调度解耦。
+It changes the execution model, not merely the `recvfrom()` implementation.
 
-这会改变执行模型，不只是替换 `recvfrom()`。
+## Source Trade-Offs
 
-## 源码取舍
+The source intentionally exposes network pressure to the main loop:
 
-背压和故障注入的源码取舍是把网络压力显式暴露到主循环：
+- `PacketReceiver::maxSocketProcessingTime` bounds one readiness drain and protects tick fairness.
+- `PacketSender::basicSendWithRetries()` retries with a short wait on send failure, but can still occupy the main thread.
+- Artificial loss/latency and `dropNextSend()` make reliable-layer loss and reordering reproducible.
+- Channel-overflow configuration turns reliable-window pressure into an observable, handleable state.
 
-- `PacketReceiver::maxSocketProcessingTime` 限制一次可读事件处理时间，保护 Tick 公平性。
-- `PacketSender::basicSendWithRetries()` 在发送失败时有重试和短等待路径，但仍可能占用主线程。
-- artificial loss/latency、`dropNextSend()` 等测试钩子让可靠层可复现丢包和乱序。
-- Channel overflow 配置把可靠窗口压力转成可观测/可处理状态。
+Costs:
 
-源码代价：
+- a full send queue can still make the main thread wait;
+- fault injection is largely confined to engine test hooks and cannot cover all real network variance;
+- the receive budget bounds socket processing, not business time inside handlers;
+- changing the I/O backend affects buffer lifetimes and handler scheduling, not just a syscall replacement.
 
-- 发送队列满路径仍可能让主线程等待。
-- 故障注入主要在引擎测试钩子内，不能覆盖所有真实网络抖动。
-- 接收预算只能限制单次 socket 处理，不限制 handler 内部业务耗时。
-- I/O 后端变化会牵动 buffer 生命周期和 handler 调度，不只是替换系统调用。
+## Source-Code Verification Focus
 
-## 源码验证重点
+Backpressure and fault-injection tests should cover pressure propagation:
 
-背压和故障注入测试应覆盖网络压力传播：
+- `PacketReceiver::handleInputNotification()` should record packet count, duration, and over-budget exits.
+- `PacketSender::basicSendWithRetries()` should cover EAGAIN, ENOBUFS, select waiting, and final failure.
+- `dropNextSend()` and artificial loss/latency should reproduce lost ACKs, lost data, lost replies, and reordering.
+- When a channel reaches its overflow threshold, configuration should drop, block, or report—not silently corrupt reliable state.
+- Login floods, malformed packets, oversized bundles, and invalid message IDs should be rejected before entering heavy business logic.
+- Fault scenarios should cover both external client channels and internal server channels.
 
-- `PacketReceiver::handleInputNotification()` 应记录处理包数、耗时和超预算退出。
-- `PacketSender::basicSendWithRetries()` 应覆盖 EAGAIN、ENOBUFS、select 等待和最终失败。
-- `dropNextSend()`、artificial loss/latency 应能复现 ACK 丢失、数据包丢失、回复丢失和乱序。
-- Channel overflow 达到阈值后应按配置丢弃、阻塞或报错，不能静默损坏可靠状态。
-- 登录 flood、畸形包、超大 Bundle 和非法 message id 应在进入重业务逻辑前被拦截。
-- 故障注入场景应同时覆盖 external client channel 和 internal server channel。
+## Chapter Boundary
 
-## 本章边界
+This chapter analyzes network backpressure and fault injection. It complements
+[Network I/O model selection](/architecture/network-io-model): that chapter
+explains the epoll/recvfrom model, while this one explains runtime tick
+protection and reliable-layer validation.
 
-本章分析网络背压和故障注入。它与 [网络 I/O 模型选择](/architecture/network-io-model) 互补：前者解释选择 epoll/recvfrom 的模型，本文解释运行时如何保护 Tick 和验证可靠层。
+## Related Documentation
 
-## 相关文档
-
-- 网络 I/O 模型，详见 [网络 I/O 模型选择](/architecture/network-io-model)。
-- Mercury 可靠 UDP，详见 [Mercury 可靠 UDP](/architecture/mercury-reliable-udp)。
-- 通信抽象与 RPC，详见 [通信抽象与 RPC](/architecture/communication-rpc)。
-- 主循环与事件分发，详见 [主循环、Tick 与事件分发](/architecture/event-loop)。
-- 测试与故障注入，详见 [测试体系、故障注入与覆盖边界](/architecture/testing-fault-injection-coverage)。
+- Network I/O model: [Network I/O model selection](/architecture/network-io-model).
+- Mercury reliable UDP: [Mercury reliable UDP](/architecture/mercury-reliable-udp).
+- Communication and RPC: [Communication abstraction and RPC](/architecture/communication-rpc).
+- Main loop and dispatch: [Main loop, ticks, and event dispatch](/architecture/event-loop).
+- Testing and fault injection: [Testing, fault injection, and coverage boundaries](/architecture/testing-fault-injection-coverage).

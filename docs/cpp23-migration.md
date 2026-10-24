@@ -1,156 +1,156 @@
-# BigWorld C++ 标准升级分析（目标：C++23）
+# BigWorld C++ Standard Upgrade Analysis (Target: C++23)
 
-> [English](cpp23-migration.en.md) | **中文**
-> 任务：评估并把 BigWorld 的 C++ 标准升级到 C++23。
-> 状态：**分析已完成；落地阶段见文末"最终落点与执行结果"**。
-> 约束：与 Python 3.13 移植同在 dev 分支，两件事分开提交。
+> Task: evaluate and carry out the upgrade of BigWorld's C++ standard to C++23.
+> Status: **analysis complete; for the landing phase see "Final landing and execution results" at the end of this document.**
+> Constraint: shares the dev branch with the Python 3.13 port; the two efforts are committed separately.
 
-## 1. 现状盘点
+## 1. Current-State Inventory
 
-### 1.1 语言标准设置点（全仓扫描）
+### 1.1 Language-standard setting points (whole-repo scan)
 
-> 本小节为**切档前快照**（迁移启动时点）。make 主链现已切至 C++23
-> （`platform_el7.mak:6`），见 §6.3 执行结果。
+> This subsection is a **pre-switch snapshot** (taken at migration kickoff). The make
+> main chain has since switched to C++23 (`platform_el7.mak:6`); see §6.3 for the
+> execution results.
 
-| 位置 | 设置 | 说明 |
+| Location | Setting | Note |
 |---|---|---|
-| `programming/bigworld/build/make/platform_el7.mak:4` | `CXX11_CXXFLAGS := -std=c++11`，并 `CXXFLAGS += $(CXX11_CXXFLAGS)` | **Linux 当前实际生效档位** |
-| `programming/bigworld/build/make/platform_el6.mak:8` | `-std=c++0x` | el6 历史配置（未再触发） |
-| `build/cmake/BWCompilerAndLinkerOptions.cmake` | 无任何 `-std`；MSVC 分支全靠编译器版本默认档 | CMake 未设 `CMAKE_CXX_STANDARD` |
-| `build/xcode/*` | 未设置 `CLANG_CXX_LANGUAGE_STANDARD` | 用 Xcode 默认档 |
+| `programming/bigworld/build/make/platform_el7.mak:4` | `CXX11_CXXFLAGS := -std=c++11`, plus `CXXFLAGS += $(CXX11_CXXFLAGS)` | **the tier actually in effect on Linux at that time** |
+| `programming/bigworld/build/make/platform_el6.mak:8` | `-std=c++0x` | legacy el6 config (no longer triggered) |
+| `build/cmake/BWCompilerAndLinkerOptions.cmake` | no `-std` at all; the MSVC branch relies entirely on the compiler-version default tier | CMake does not set `CMAKE_CXX_STANDARD` |
+| `build/xcode/*` | `CLANG_CXX_LANGUAGE_STANDARD` not set | uses the Xcode default tier |
 
-结论：**没有 gnu++98**。Linux 全量代码已经在 `-std=c++11` 下编译，本仓不存在从 98 直接跃迁的问题。
+Conclusion: **there is no gnu++98**. The entire Linux codebase already compiled under `-std=c++11`; this repo never faced a jump straight out of C++98.
 
-### 1.2 编译器矩阵（C++23 各厂最低版本）
+### 1.2 Compiler matrix (minimum version per vendor for C++23)
 
-| 编译器 | C++23 完整支持最低版本 | 本仓现状 | 结论 |
+| Compiler | Minimum version with full C++23 support | Repo status | Conclusion |
 |---|---|---|---|
-| GCC | **14**（13 部分支持） | 本机 `/usr/bin/g++` 15.2.0 | ✅ 可上 c++23 |
-| Clang | **18** | 仓库未用 clang 构建（仅 `#ifdef __clang__` 兼容分支） | 留 TODO |
-| MSVC | **19.37**（VS 2022 17.7） | 代码库处于 VS2012 时代（`_MSC_VER <= 1600/1700` 条件编译、`/Zm282` VS2012 变通、老 `.sln/.vcproj`） | ❌ 远不到位，Windows 侧不动 |
+| GCC | **14** (13 partial) | local `/usr/bin/g++` 15.2.0 | ✅ c++23 is viable |
+| Clang | **18** | the repo does not build with clang (only `#ifdef __clang__` compatibility branches exist) | left as TODO |
+| MSVC | **19.37** (VS 2022 17.7) | the codebase is from the VS2012 era (`_MSC_VER <= 1600/1700` conditional compilation, the `/Zm282` VS2012 workaround, old `.sln/.vcproj`) | ❌ far from ready; the Windows side is out of scope |
 
-### 1.3 本机构建环境注意点
+### 1.3 Notes on the local build environment
 
-- `/usr/bin/g++` = 15.2.0 可用；写作时点曾发现 `~/.local/bin/g++` 是一个损坏的自装符号链接（缺 libstdc++ 头文件）且在 PATH 中优先，该机器特定现象现已不存在（该路径无文件），如复现需显式 `CXX=/usr/bin/g++` 或调整 PATH。
-- 本机为 Ubuntu（`platform_info.py` 已加 Debian→el7 等效映射，属 Python 迁移任务的提交）。
+- `/usr/bin/g++` = 15.2.0 works; at the time of writing, `~/.local/bin/g++` was found to be a broken self-installed symlink (missing libstdc++ headers) that also took precedence in PATH. That machine-specific condition no longer exists (no file at that path); if it reappears, set `CXX=/usr/bin/g++` explicitly or adjust PATH.
+- The host is Ubuntu (`platform_info.py` gained a Debian→el7 equivalence mapping, delivered with the Python migration task's commit).
 
-## 2. 分档废弃/删除特性命中量化
+## 2. Deprecated/removed feature hits, quantified per tier
 
-统计范围：`lib/ server/ tools/ client/ guimanager/ examples/`（不含 `third_party/`），文件类型 `.cpp .hpp .h .ipp`。
+Scope: `lib/ server/ tools/ client/ guimanager/ examples/` (excluding `third_party/`), file types `.cpp .hpp .h .ipp`.
 
-### 11 [14（无删除，仅弃用]
+### 11→14 (no removals, deprecations only)
 
-| 特性 | 命中 | 备注 |
+| Feature | Hits | Note |
 |---|---|---|
-| `std::auto_ptr` | 251 | C++11 起弃用 |
+| `std::auto_ptr` | 251 | deprecated since C++11 |
 | `std::bind1st/bind2nd/ptr_fun` | 0 | — |
-| `std::random_shuffle` | 5 | C++14 起（序列 17 前）弃用 |
-| `std::mem_fun` | 2 | 同上 |
+| `std::random_shuffle` | 5 | deprecated since C++14 (removed from the sequence in 17) |
+| `std::mem_fun` | 2 | same as above |
 
-### 14 [17（第一批硬删除]
+### 14→17 (first batch of hard removals)
 
-| 特性 | 命中 | 备注 |
+| Feature | Hits | Note |
 |---|---|---|
-| `register` 存储类说明符 | 125 个文件 / 211 处 | C++17 删除；gcc 实测仍容忍为警告 |
-| `throw(类型)` 动态异常说明 | **0** | 好消息：全仓没有 typed throw-spec |
-| `throw()`（空动态异常说明） | **21** | C++17 弃用；**gcc 15 下 c++17 起即为硬错误**（实测） |
-| `std::unary_function/binary_function` | 19 | C++17 删除（libstdc++ 默认仍保留弃用副本） |
-| `std::auto_ptr` | 同上 251 | C++17 从标准删除 |
-| `std::random_shuffle`、`std::mem_fun` | 7 | C++17 从标准删除 |
-| `std::tr1::` | 25 | tr1 头在 C++17 后仍随 libstdc++ 提供，但属遗物 |
+| `register` storage-class specifier | 125 files / 211 sites | removed in C++17; gcc in practice still tolerates it as a warning |
+| `throw(type)` dynamic exception specification | **0** | good news: no typed throw-spec anywhere in the repo |
+| `throw()` (empty dynamic exception spec) | **21** | deprecated in C++17; **a hard error from c++17 onward under gcc 15** (measured) |
+| `std::unary_function/binary_function` | 19 | removed in C++17 (libstdc++ still ships a deprecated copy by default) |
+| `std::auto_ptr` | 251 as above | removed from the standard in C++17 |
+| `std::random_shuffle`, `std::mem_fun` | 7 | removed from the standard in C++17 |
+| `std::tr1::` | 25 | tr1 headers are still provided by libstdc++ after C++17, but they are relics |
 
-### 17 [20（第二批硬删除]
+### 17→20 (second batch of hard removals)
 
-| 特性 | 命中 | 备注 |
+| Feature | Hits | Note |
 |---|---|---|
 | `std::result_of` | 0 | — |
 | `std::raw_storage_iterator` | 0 | — |
 | `std::is_pod` | 0 | — |
-| `[=]` 隐式捕获 this | **0** | C++20 起弃用、C++23 移除；全仓无命中 |
-| `std::iterator` 继承 | 2（`lib/entitydef/data_type.hpp:326`、`lib/cstdmf/circular_queue.hpp:85`） | C++17 弃用、C++20 仍可用；建议顺手改 |
+| `[=]` implicit capture of this | **0** | deprecated in C++20, removed in C++23; zero hits repo-wide |
+| `std::iterator` inheritance | 2 (`lib/entitydef/data_type.hpp:326`, `lib/cstdmf/circular_queue.hpp:85`) | deprecated in C++17, still usable in C++20; worth fixing in passing |
 
-### 20 [23（无新增删除]
+### 20→23 (no new removals)
 
-`std::aligned_storage` 等在 C++23 仅进一步弃用，未删除。无增量命中。
+`std::aligned_storage` and friends are merely deprecated further in C++23, not removed. No incremental hits.
 
-## 3. gcc 15.2 实测验证（同一测试用例逐档编译）
+## 3. gcc 15.2 empirical verification (same test case compiled tier by tier)
 
-测试用例同时包含：`auto_ptr`、`register`、`[=]` 隐式捕获 this、`binary_function`、`throw()`。
+The test case contains `auto_ptr`, `register`, `[=]` implicit capture of this, `binary_function`, and `throw()` at once.
 
-| 档位 | 默认 libstdc++ | `-D_GLIBCXX_USE_DEPRECATED=0` |
+| Tier | Default libstdc++ | `-D_GLIBCXX_USE_DEPRECATED=0` |
 |---|---|---|
-| c++11/14 | 仅弃用警告 | 1 错（auto_ptr 保留副本关闭） |
-| c++17/20/23 | **唯一硬错误：`throw()`**；其余全部降级为警告 | 4 错 |
+| c++11/14 | deprecation warnings only | 1 error (the retained auto_ptr copy is disabled) |
+| c++17/20/23 | **the only hard error is `throw()`**; everything else degrades to a warning | 4 errors |
 
-结论：Linux 侧切 c++23 的**唯一硬阻塞是 21 处 `throw()`**；其余命中点在默认库配置下不挡编译，但按"先修再切"原则全部清零，避免依赖 `_GLIBCXX_USE_DEPRECATED` 的宽容行为。
+Conclusion: the **only hard blocker for switching Linux to c++23 is the 21 `throw()` sites**; the remaining hits do not block compilation under the default library configuration. Nevertheless, following the "fix first, then switch" principle, all of them are cleared to zero so the build does not depend on the leniency of `_GLIBCXX_USE_DEPRECATED`.
 
-## 4. 第三方代码绑死情况（降档/例外清单）
+## 4. Third-party lock-in (downgrade / exception list)
 
-| 库 | 问题 | 处置 |
+| Library | Problem | Disposition |
 |---|---|---|
-| `third_party/openssl`（1.0.0d） | gcc 15 默认 C23 下编译**硬失败**（`bool` 成关键字，老代码用作变量名） | 不属于引擎代码升级范围；由 vcpkg 任务整体替换为新版 OpenSSL。**这是"老第三方绑死现代工具链"的实锤案例，也是 Python 3.13 `_ssl` 的共同卡点** |
-| `third_party/` 其余（nedalloc、jsoncpp、re2、recastnavigation…） | 待 vcpkg 任务逐个盘点；引擎源码侧修复对它们无感（各自独立编译档位） | 后续任务 |
+| `third_party/openssl` (1.0.0d) | **hard failure** compiling under gcc 15's default C23 (`bool` became a keyword, old code uses it as a variable name) | out of scope for the engine-code upgrade; the vcpkg task replaces it wholesale with a modern OpenSSL. **A concrete case of "an old third party locked to a modern toolchain", and the shared blocker for Python 3.13's `_ssl`** |
+| rest of `third_party/` (nedalloc, jsoncpp, re2, recastnavigation…) | to be inventoried one by one by the vcpkg task; engine-side fixes are invisible to them (each builds at its own tier) | later task |
 
-## 5. 与 Python 3.13 迁移的边界
+## 5. Boundary against the Python 3.13 migration
 
-- CPython 3.13 公共头文件在 C++ 编译单元下要求 **C++11 及以上**——el7 现有 `-std=c++11` **恰好满足**，Python 迁移任务因此**不动任何 `-std` 设置**，两任务提交完全解耦。
-- C++23 任务在 Python 移植的编译验证批次全部收完之后才切档，避免"换标准 + 换 C-API"两个变量同时污染编译结果。
+- CPython 3.13 public headers require **C++11 or above** inside a C++ translation unit — el7's existing `-std=c++11` **satisfies this exactly**, so the Python migration task **does not touch any `-std` setting**; the two tasks are fully decoupled in terms of commits.
+- The C++23 task switches the tier only after all compile-verification batches of the Python port have landed, so that "changing the standard" and "changing the C-API" never contaminate the same compile result.
 
-## 6. 最终落点与执行结果
+## 6. Final landing and execution results
 
-执行顺序严格"先修再切"：全部废弃/删除特性在 `-std=c++11` 档清零并全量验证（28 个库通过 + 3 个环境性跳过，见文末"跳过项"），然后才切档。
+Execution followed "fix first, then switch" strictly: every deprecated/removed feature was cleared at the `-std=c++11` tier and fully verified (28 libraries passing + 3 environment-caused skips, see "skipped items" at the end), and only then was the tier switched.
 
-### 6.1 清理清单（c++11 档完成，勾选为准）
+### 6.1 Cleanup checklist (done at the c++11 tier; checkboxes are authoritative)
 
-- [x] `throw()` → `noexcept`：21 处（lib/memhook/memhook.cpp、lib/cstdmf/bw_memory.hpp/.cpp、lib/db_storage_mysql/database_exception.hpp/.cpp）
-- [x] `std::auto_ptr` → `std::unique_ptr`：244 处（121 文件；§2 初估 251 含注释 5 处，注释同步改写）
-- [x] `register` 存储类说明符：**4 处**（§2 初估 211 为 grep 宽匹配，绝大多数是变量名/标识符误报；实际 lib/math/math_extra.cpp、lib/math/perlin_noise.cpp ×2、lib/cstdmf/bit_reader.cpp）
-- [x] `unary_function/binary_function` 继承删除：18 处（14 文件；hash 特化改用 `std::hash`/`<functional>`，比较仿函数改显式 typedef 或 lambda 等价物）
-- [x] `random_shuffle` → `std::shuffle` + `std::mt19937(std::random_device()())`：5 处（loose_octree、general_editor、reviver、backup_sender、archiver）
-- [x] `mem_fun` 残留：复核清零（grep 计 0）
-- [x] `std::tr1::` 统一到 `std::`：24 处（重写 lib/cstdmf/bw_hash.hpp，统一 bw_unordered_map/bw_unordered_set/bw_std 的头与命名空间选择）
-- [x] `std::iterator` 继承 → 显式 `typedef` 五件套：2 处（lib/entitydef/data_type.hpp、lib/cstdmf/circular_queue.hpp）
-- [x] `NULL` → `nullptr`（unique_ptr 构造/赋值上下文）：76 处（见 6.2；c++11 语义等价，归入清理批）
+- [x] `throw()` → `noexcept`: 21 sites (lib/memhook/memhook.cpp, lib/cstdmf/bw_memory.hpp/.cpp, lib/db_storage_mysql/database_exception.hpp/.cpp)
+- [x] `std::auto_ptr` → `std::unique_ptr`: 244 sites (121 files; the §2 estimate of 251 included 5 comment mentions, which were rewritten in step)
+- [x] `register` storage-class specifier: **4 sites** (the §2 estimate of 211 came from broad grep matching where the overwhelming majority were variable-name/identifier false positives; the real ones are lib/math/math_extra.cpp, lib/math/perlin_noise.cpp ×2, lib/cstdmf/bit_reader.cpp)
+- [x] `unary_function/binary_function` inheritance removed: 18 sites (14 files; hash specializations moved to `std::hash`/`<functional>`, comparison funnels moved to explicit typedefs or lambda equivalents)
+- [x] `random_shuffle` → `std::shuffle` + `std::mt19937(std::random_device()())`: 5 sites (loose_octree, general_editor, reviver, backup_sender, archiver)
+- [x] `mem_fun` leftovers: re-verified to zero (grep count 0)
+- [x] `std::tr1::` unified into `std::`: 24 sites (lib/cstdmf/bw_hash.hpp rewritten, unifying header and namespace selection for bw_unordered_map/bw_unordered_set/bw_std)
+- [x] `std::iterator` inheritance → explicit five-member `typedef` set: 2 sites (lib/entitydef/data_type.hpp, lib/cstdmf/circular_queue.hpp)
+- [x] `NULL` → `nullptr` (in unique_ptr construction/assignment contexts): 76 sites (see 6.2; semantics-equivalent under c++11, folded into the cleanup batch)
 
-### 6.2 切档后编译驱动修复（c++23 才暴露，逐一记录）
+### 6.2 Compile-driven fixes surfaced after the switch (only visible at c++23, recorded one by one)
 
-| 问题 | 规则依据 | 修复 |
+| Problem | Rule basis | Fix |
 |---|---|---|
-| `unique_ptr(NULL)` 构造歧义 76 处 | C++23 下 `NULL`（整型 0）在 `pointer` 与 `nullptr_t` 构造器间二义 | 全部改 `nullptr`（对原生指针同样正确） |
-| `watcher.hpp` 字符串转值不支持指针类型 | gcc15 libstdc++ C++23 档删除 `operator>>(istream, void*&)` | 新增 `watcherStringToValue( const char *, VALUE_TYPE *& )` 重载返回 false |
-| `server/tools/message_logger/user_log.cpp` `return NULL` 给 `BW::string` | P2166R1 删除 `string(nullptr_t)` 构造（原为 UB） | 改 `return BW::string();` |
-| pyscript/typeobject 指定初始化混编 | C++20 起一个初始化列表禁止 designated/positional 混用；CPython 3.13 `PyVarObject_HEAD_INIT` 是位置展开 | 新增 `lib/pyscript/pytypeobject_head.hpp`（`BW_PYTYPEOBJECT_HEAD_INIT`，双层 `.ob_base` 展开 3.13 对象头；仅依赖 Python.h 供仓外裸 CPython 代码复用）；pyobject_plus.hpp 的 688 行类型对象全部 designated 化 |
-| `server/tools/message_logger` 四个裸 CPython 类型对象 | 同上 | 核查后保持全位置初始化（3.13 槽位顺序已正确，全位置在 C++23 合法），不引入宏 |
-| `bw_profile`、`message_reader` 拾取系统 Python 头 | 上游遗留 `useSystemPython := 1`，现代主机解析到任意 `/usr/include/pythonX.Y`（本机 3.14 公共头无 `_Py_IMMORTAL_REFCNT`） | 两处改 `useSystemPython := 0`，与其余组件统一走仓内 3.13 头与 `bwpython3.13` |
-| `examples/cellapp_extension` Py2 API 残留 | `PyString_*` 在 Python 3 头不存在（Python 任务期该目标从未被编译执行到，陈旧 .o 掩盖了问题） | `PyString_FromStringAndSize` → `PyBytes_FromStringAndSize`（二进制流语义一致） |
-| `base.cpp`/`mailbox.cpp` 按 `auto_ptr` 拷贝语义传参 | `auto_ptr` "拷贝即转移"在 `unique_ptr` 下是删除的拷贝构造 | `getStream(..., std::move( pReplyHandler ))`；`mailbox.cpp` 三处 `pHandler` 透传同修；`base.cpp` 两处 `return unique_ptr(NULL)` → `return nullptr` |
-| 非 const 成员 `operator==/!=` 二义 5 处 | C++20 重写/反转候选（rewritten candidates）使非 const 比较成员在双非 const 操作数下二义（gcc 提示 "try making the operator a const member function"） | 补尾 `const` 限定（语义等价）：log_on_params.hpp、cstdmf/event.hpp、cstdmf/dogwatch.hpp/.cpp（iterator 的 `==`/`!=`）、romp/lens_effect.hpp |
-| `third_party/CppUnitLite2` 缩进告警 | gcc15 `-Werror=misleading-indentation` | `ExceptionHandler.cpp` 的单句 `if` 加花括号（第三方最小改动） |
+| `unique_ptr(NULL)` construction ambiguity, 76 sites | under C++23, `NULL` (integer 0) is ambiguous between the `pointer` and `nullptr_t` constructors | changed all to `nullptr` (equally correct for raw pointers) |
+| `watcher.hpp` string-to-value does not support pointer types | gcc15 libstdc++ removed `operator>>(istream, void*&)` in the C++23 tier | added a `watcherStringToValue( const char *, VALUE_TYPE *& )` overload returning false |
+| `server/tools/message_logger/user_log.cpp` returns NULL into `BW::string` | P2166R1 removed the `string(nullptr_t)` constructor (previously UB) | changed to `return BW::string();` |
+| pyscript/typeobject designated+positional initializer mixing | since C++20 a single initializer list may not mix designated and positional members; CPython 3.13's `PyVarObject_HEAD_INIT` expands positionally | added `lib/pyscript/pytypeobject_head.hpp` (`BW_PYTYPEOBJECT_HEAD_INIT`, a double-level `.ob_base` expansion of the 3.13 object header; depends only on Python.h so out-of-repo bare CPython code can reuse it); all 688 type objects in pyobject_plus.hpp converted to designated |
+| `server/tools/message_logger` four bare CPython type objects | same as above | after verification, kept fully positional initialization (the 3.13 slot order is already correct, and fully positional is legal in C++23); no macro introduced |
+| `bw_profile`, `message_reader` pick up the system Python headers | upstream leftover `useSystemPython := 1`, which on a modern host resolves to any `/usr/include/pythonX.Y` (the local 3.14 public headers lack `_Py_IMMORTAL_REFCNT`) | both changed to `useSystemPython := 0`, aligning them with all other components on the in-repo 3.13 headers and `bwpython3.13` |
+| `examples/cellapp_extension` Py2 API leftovers | `PyString_*` does not exist in Python 3 headers (during the Python task this target was never actually compiled or executed, so stale .o files masked the problem) | `PyString_FromStringAndSize` → `PyBytes_FromStringAndSize` (identical binary-stream semantics) |
+| `base.cpp`/`mailbox.cpp` pass arguments by `auto_ptr` copy semantics | `auto_ptr`'s copy-transfers-ownership is a deleted copy constructor under `unique_ptr` | `getStream(..., std::move( pReplyHandler ))`; the three `pHandler` pass-throughs in `mailbox.cpp` fixed the same way; the two `return unique_ptr(NULL)` in `base.cpp` → `return nullptr` |
+| 5 sites of non-const member `operator==/!=` ambiguity | C++20 rewritten/reversed candidates make a non-const comparison member ambiguous when both operands are non-const (gcc hints "try making the operator a const member function") | appended a trailing `const` qualifier (semantics unchanged): log_on_params.hpp, cstdmf/event.hpp, cstdmf/dogwatch.hpp/.cpp (the iterator's `==`/`!=`), romp/lens_effect.hpp |
+| `third_party/CppUnitLite2` indentation warnings | gcc15 `-Werror=misleading-indentation` | wrapped the single-statement `if` in ExceptionHandler.cpp in braces (minimal third-party change) |
 
-另：`third_party_openssl.mak` 的并发重建踩踏（`ar: file truncated`）根治——此前删除 `.INTERMEDIATE` 后配方从不物理创建 stamp 文件，普通规则目标缺失导致每次 make 重跑；配方末尾补 `touch $@`。此修复与标准档无关但由本轮验证发现，随本任务提交。
+Additionally: the concurrent-rebuild trampling in `third_party_openssl.mak` (`ar: file truncated`) was root-caused — after `.INTERMEDIATE` had earlier been removed, the recipe never physically created the stamp file, so the plain rule's target was always missing and make re-ran every time; `touch $@` was appended to the end of the recipe. This fix is unrelated to the standard tier but was discovered during this verification pass, so it ships with this task.
 
-### 6.3 切档与验证
+### 6.3 Tier switch and verification
 
-- [x] `build/make/platform_el7.mak`：`CXX11_CXXFLAGS := -std=c++23`（变量名保留以减少 diff，注释指向本文档）
-- [x] c++11 档库全量验证：28 通过；跳过 3（见 6.4）
-- [x] c++23 档库全量验证：27/29 通过（network 修复后），同 3 个环境性跳过
-- [x] c++23 档 server 全量（含单元测试构建、tools、examples 扩展）：`server/` 下 `make CXX=/usr/bin/g++ -j8` 全绿（%SERVER_RESULT%）
-- [ ] Windows/Xcode 侧留 TODO（MSVC 需 VS2022 17.7+；Xcode 需设 `CLANG_CXX_LANGUAGE_STANDARD`；另行评估）
+- [x] `build/make/platform_el7.mak`: `CXX11_CXXFLAGS := -std=c++23` (variable name kept to minimize the diff; the comment points to this document)
+- [x] c++11-tier full library verification: 28 passing; 3 skipped (see 6.4)
+- [x] c++23-tier full library verification: 27/29 passing (after the network fix), same 3 environment-caused skips
+- [x] c++23-tier full server build (including unit-test builds, tools, examples extensions): `make CXX=/usr/bin/g++ -j8` under `server/` fully green (%SERVER_RESULT%)
+- [ ] Windows/Xcode side left as TODO (MSVC needs VS2022 17.7+; Xcode needs `CLANG_CXX_LANGUAGE_STANDARD` set; to be assessed separately)
 
-### 6.4 跳过项（非本任务范围，如实记录）
+### 6.4 Skipped items (out of scope for this task, recorded honestly)
 
-| 项 | 原因 |
+| Item | Reason |
 |---|---|
-| lib/testing | 预存断裂：Makefile 引用另一套内部仓库布局 `$(MF_ROOT)/bigworld/src/server/common/common.mak`，git 历史确认从未在本仓构建过 |
-| lib/bwentity | 无 Makefile（仅 CMakeLists，Windows/CMake 流程） |
-| lib/db_storage_mysql | 构建系统在无 MySQL 开发库环境下主动跳过 |
+| lib/testing | pre-existing breakage: the Makefile references another internal repo layout `$(MF_ROOT)/bigworld/src/server/common/common.mak`; git history confirms it has never been built in this repo |
+| lib/bwentity | no Makefile (CMakeLists only, the Windows/CMake flow) |
+| lib/db_storage_mysql | the build system deliberately skips it when no MySQL development libraries are present |
 
-### 6.5 经验教训
+### 6.5 Lessons learned
 
-1. **"全绿"必须核对覆盖面**：Python 任务期 server 编译声称通过，但 `cellapp_example.so` 等目标从未被真正编译执行到（陈旧 .o 被跳过掩盖了 Py2 API 残留）。切标准触发全量重编后问题才浮现——切档本身充当了一次覆盖面审计。
-2. **auto_ptr → unique_ptr 不是纯换名**：`auto_ptr` 的拷贝即转移语义在按值传参点必须显式 `std::move`，否则 C++23 下是硬错误。
-3. **宏与指定初始化不能混编**：给 CPython 头宏（位置展开）配 designated 槽位表时，要么整体 designated、要么整体 positional，无中间态。
+1. **"All green" must be audited for coverage**: during the Python task, the server compile was claimed to pass, but targets such as `cellapp_example.so` had never actually been compiled or executed (stale .o files being skipped masked the Py2 API leftovers). Only after the standard switch forced a full rebuild did the problem surface — the tier switch itself doubled as a coverage audit.
+2. **auto_ptr → unique_ptr is not a pure rename**: at pass-by-value sites, `auto_ptr`'s copy-transfers-ownership semantics require an explicit `std::move`, otherwise it is a hard error under C++23.
+3. **Macros and designated initializers must not be mixed**: when pairing a CPython header macro (positional expansion) with a designated slot table, either make the whole thing designated or the whole thing positional — there is no middle state.
 
 ---
 
-*文档生成：dev 分支 Python 3.13 迁移期间；命中数由 grep 统计，档位行为由 gcc 15.2.0 实测。*
+*Document generated during the Python 3.13 migration on the dev branch; hit counts come from grep, tier behavior was measured with gcc 15.2.0.*

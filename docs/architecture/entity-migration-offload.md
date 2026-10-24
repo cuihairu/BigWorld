@@ -1,71 +1,106 @@
-# 实体迁移与 Offload
+# Entity Migration and Offload
 
-> [English](entity-migration-offload.en.md) | **中文**
 
 <div class="arch-hero">
 
-BigWorld 的实体迁移不是把对象 memcpy 到另一个进程。它是 Real/Ghost 状态转换、脚本回调、属性序列化、Channel 迁移、Ghost sign-off、buffered messages 和 Cell 边界控制共同完成的状态机。
+BigWorld's entity migration is not a memcpy of an object into another process. It
+is a state machine completed jointly by Real/Ghost state transitions, script
+callbacks, property serialisation, channel migration, ghost sign-off, buffered
+messages and Cell boundary control.
 
 </div>
 
-## 先给结论
+## Conclusion First
 
-Cell 实体 offload 的核心路径：
+The core path of a Cell entity offload:
 
-1. Cell 周期性执行 `checkOffloadsAndGhosts()`。
-2. `OffloadChecker` 遍历 real entities。
-3. `EntityGhostMaintainer` 判断实体位置属于哪个 home cell。
-4. 确认目标 CellApp channel 健康并已准备 ghost。
-5. `Cell::offloadEntity()` 调用 `onLeavingCell`。
-6. `Entity::offload()` 向目标 CellApp 写 `onload` 消息。
-7. `Entity::convertRealToGhost()` 写 real 数据、设置 `nextRealAddr_`、销毁 real part。
-8. 目标 CellApp 读取 real 数据，ghost 转 real。
-9. 旧 real 通知其他 ghosts 下一个 real 地址。
-10. Ghost 播放 buffered messages。
+1. The Cell periodically runs `checkOffloadsAndGhosts()`.
+2. `OffloadChecker` walks the real entities.
+3. `EntityGhostMaintainer` decides which home cell the entity's position belongs
+   to.
+4. The target CellApp channel is confirmed healthy and the ghost prepared.
+5. `Cell::offloadEntity()` calls `onLeavingCell`.
+6. `Entity::offload()` writes the `onload` message to the target CellApp.
+7. `Entity::convertRealToGhost()` writes the real data, sets `nextRealAddr_` and
+   destroys the real part.
+8. The target CellApp reads the real data and turns the ghost into a real.
+9. The old real tells the other ghosts the next real address.
+10. The ghost plays back buffered messages.
 
-关键源码：
+Key sources:
 
-- `Cell::checkOffloadsAndGhosts()` 创建 `OffloadChecker`，见 [cell.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/cell.cpp:157)。
-- `OffloadChecker::run()` 遍历 real entities 并发送 offloads，见 [offload_checker.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/offload_checker.cpp:43)。
-- `EntityGhostMaintainer::checkEntityForOffload()` 依据 `Space::pCellAt()` 和目标 Channel 状态判断是否迁移，见 [entity_ghost_maintainer.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity_ghost_maintainer.cpp:81)。
-- `Cell::offloadEntity()` 调用 `onLeavingCell` 并把 real 变 ghost，见 [cell.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/cell.cpp:183)。
-- `Entity::offload()` 写 `CellAppInterface::onload` 并调用 `convertRealToGhost()`，见 [entity.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity.cpp:1968)。
-- `Entity::readRealDataFromStreamForOnloadInternal()` 按 offload 相同顺序读 real data，见 [entity.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity.cpp:4723)。
+- `Cell::checkOffloadsAndGhosts()` creates the `OffloadChecker`, see
+  cell.cpp.
+- `OffloadChecker::run()` walks the real entities and sends the offloads, see
+  offload_checker.cpp.
+- `EntityGhostMaintainer::checkEntityForOffload()` decides whether to migrate
+  based on `Space::pCellAt()` and the target channel's state, see
+  entity_ghost_maintainer.cpp.
+- `Cell::offloadEntity()` calls `onLeavingCell` and turns the real into a ghost,
+  see
+  cell.cpp.
+- `Entity::offload()` writes `CellAppInterface::onload` and calls
+  `convertRealToGhost()`, see
+  entity.cpp.
+- `Entity::readRealDataFromStreamForOnloadInternal()` reads the real data in the
+  same order the offload writes it, see
+  entity.cpp.
 
-## Offload 触发条件
+## Offload Trigger Conditions
 
-实体不是一跨边界就立即迁移。`EntityGhostMaintainer::checkEntityForOffload()` 会检查：
+An entity does not migrate the moment it crosses a boundary.
+`EntityGhostMaintainer::checkEntityForOffload()` checks:
 
-- `Space::pCellAt(position.x, position.z)` 找到 home cell。
-- home cell 不能是当前 cell。
-- home cell 不能处于 delete pending。
-- 目标 `CellAppChannel` 必须存在。
-- 目标 channel 必须 `isGood()`。
+- `Space::pCellAt(position.x, position.z)` finds the home cell.
+- The home cell must not be the current cell.
+- The home cell must not be delete-pending.
+- The target `CellAppChannel` must exist.
+- The target channel must be `isGood()`.
 
-源码见 [entity_ghost_maintainer.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity_ghost_maintainer.cpp:83)。
+Source: entity_ghost_maintainer.cpp.
 
-这避免把实体迁移到不可用或正在删除的 Cell。
+This avoids migrating entities to an unavailable or deleting Cell.
 
-## Ghost 维护顺序
+## Ghost Maintenance Order
 
-`OffloadChecker::run()` 不是只检查是否跨边界。它在 Space 没有 shutdown 时遍历本 Cell 的 `realEntities()`，每个 real entity 交给 `EntityGhostMaintainer::check()`，最后统一 `sendOffloads()`，见 [offload_checker.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/offload_checker.cpp:43)。
+`OffloadChecker::run()` does more than check a boundary crossing. While the
+Space is not shutting down it walks this Cell's `realEntities()`, hands each
+real entity to `EntityGhostMaintainer::check()`, and finally calls
+`sendOffloads()` collectively, see
+offload_checker.cpp.
 
-`EntityGhostMaintainer::check()` 的顺序很关键：
+The order inside `EntityGhostMaintainer::check()` matters:
 
-1. 如果 `Cell::shouldOffload()` 为 true，先执行 `checkEntityForOffload()`，可能把 `pOffloadDestination_` 填好并加入 offload list。
-2. `markHaunts()` 把当前 real entity 的所有 haunts 标记为待检查，同时记录目标 offload Cell 是否已有 ghost。
-3. `createOrUnmarkRequiredHaunts()` 按 `ghostDistance + appealRadius` 构造 interest area，遍历 `Space::visitRect()` 命中的 Cell。
-4. `visit()` 对已有 haunt 清 mark；对新需要的 Cell 调 `addHaunt()` 和 `Entity::createGhost()`。
-5. 如果正在 offload，只允许在目标 Cell 上创建 ghost，避免给非目标 Cell 创建多余 channel。
-6. `deleteMarkedHaunts()` 删除仍被 mark 的过期 ghosts，但受 `maxGhostsToDelete()`、new real 保留时间和 `minGhostLifespanInTicks()` 限制。
+1. If `Cell::shouldOffload()` is true, run `checkEntityForOffload()` first,
+   which may fill `pOffloadDestination_` and add it to the offload list.
+2. `markHaunts()` marks all haunts of the current real entity as due for
+   checking, while recording whether the target offload Cell already has a
+   ghost.
+3. `createOrUnmarkRequiredHaunts()` builds an interest area from
+   `ghostDistance + appealRadius` and walks the Cells hit by
+   `Space::visitRect()`.
+4. `visit()` clears the mark on existing haunts; for newly needed Cells it calls
+   `addHaunt()` and `Entity::createGhost()`.
+5. While offloading, ghosts may only be created on the target Cell, which avoids
+   creating extra channels for non-target Cells.
+6. `deleteMarkedHaunts()` deletes expired ghosts that are still marked, bounded
+   by `maxGhostsToDelete()`, the new-real retention time and
+   `minGhostLifespanInTicks()`.
 
-源码见 [entity_ghost_maintainer.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity_ghost_maintainer.cpp:46)、[entity_ghost_maintainer.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity_ghost_maintainer.cpp:184) 和 [entity_ghost_maintainer.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity_ghost_maintainer.cpp:248)。
+Source: entity_ghost_maintainer.cpp,
+entity_ghost_maintainer.cpp
+and
+entity_ghost_maintainer.cpp.
 
-所以“目标 CellApp 已准备 ghost”不是口头约束：源码用 `doesOffloadDestinationHaveGhost || numGhostsCreated_ == 1` 断言目标 ghost 已存在或本轮刚创建，见 [entity_ghost_maintainer.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity_ghost_maintainer.cpp:60)。
+So "the target CellApp already has a ghost" is not a verbal constraint: the
+source asserts it with
+`doesOffloadDestinationHaveGhost || numGhostsCreated_ == 1`, i.e. the target
+ghost exists or was just created this round, see
+entity_ghost_maintainer.cpp.
 
-## Offload 状态机
+## The Offload State Machine
 
-<MermaidDiagram title="实体 Offload 状态机">
+<MermaidDiagram title="Entity offload state machine">
 stateDiagram-v2
   [*] --> RealOnSource
   RealOnSource --> GhostPreparedOnDest: create/unmark haunt
@@ -79,222 +114,354 @@ stateDiagram-v2
   RealOnDest --> [*]
 </MermaidDiagram>
 
-这不是单步操作，而是跨进程、多消息、多对象状态转换。
+This is not a single-step operation but a cross-process, multi-message,
+multi-object state transition.
 
-## 写入顺序与读取顺序
+## Write Order and Read Order
 
-`Entity::convertRealToGhost()` 中，如果有目标 channel：
+Inside `Entity::convertRealToGhost()`, if there is a target channel:
 
-- 写 real data 到 stream。
-- 设置 `pRealChannel_`。
-- 设置 `nextRealAddr_`。
-- 调用 `offloadReal()` 删除 real part。
-- 删除 real-only properties，只留下 ghost + real shared 属性。
+- Writes the real data to the stream.
+- Sets `pRealChannel_`.
+- Sets `nextRealAddr_`.
+- Calls `offloadReal()` to delete the real part.
+- Deletes the real-only properties, leaving only the ghost + real shared
+  properties.
 
-源码见 [entity.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity.cpp:2005)。
+Source: entity.cpp.
 
-实际写流发生在 `Entity::writeRealDataToStream()` 和 `Entity::writeRealDataToStreamInternal()`：
+The actual stream write happens in `Entity::writeRealDataToStream()` and
+`Entity::writeRealDataToStreamInternal()`:
 
-1. 先写 `EntityID`。
-2. 再写 `teleportFailure = false`。
-3. 用 `internalNetworkCompressionType()` 包一层压缩流。
-4. 写 real-only properties，也就是 `propCountGhost()` 到 `propCountGhostPlusReal()` 之间的属性。
-5. 写 token `RealProps`。
-6. 调 `RealEntity::writeOffloadData()` 写 RealEntity 状态。
-7. 写 exposed-for-replay 的 base properties。
+1. Write the `EntityID` first.
+2. Then write `teleportFailure = false`.
+3. Wrap a compression stream with `internalNetworkCompressionType()`.
+4. Write the real-only properties, i.e. the properties between
+   `propCountGhost()` and `propCountGhostPlusReal()`.
+5. Write the `RealProps` token.
+6. Call `RealEntity::writeOffloadData()` to write the RealEntity state.
+7. Write the exposed-for-replay base properties.
 
-源码见 [entity.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity.cpp:2068) 和 [entity.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity.cpp:2090)。
+Source: entity.cpp
+and entity.cpp.
 
-`RealEntity::writeOffloadData()` 继续写：
+`RealEntity::writeOffloadData()` continues writing:
 
-- channel 状态。
-- velocity、topSpeed、topSpeedY、physicsCorrections。
-- `shouldAutoBackup_`。
-- 当前 `spaceID` 和 `isTeleport`。
-- haunt 地址列表，并且如果当前 CellApp 地址不在 haunt 里，会强制追加当前地址，因为源端 offload 后会变成 ghost。
-- `controlledBy_`、profiler、real controllers、`periodsWithoutWitness_`、`recordingSpaceEntryID_`。
-- 如果有 Witness，写标记 `'W'` 并写 witness offload data；否则写 `'-'`。
+- Channel state.
+- velocity, topSpeed, topSpeedY, physicsCorrections.
+- `shouldAutoBackup_`.
+- The current `spaceID` and `isTeleport`.
+- The haunt address list; and if the current CellApp address is not among the
+  haunts, the current address is force-appended, because the source becomes a
+  ghost after offloading.
+- `controlledBy_`, profiler, real controllers, `periodsWithoutWitness_`,
+  `recordingSpaceEntryID_`.
+- If there is a Witness, write the marker `'W'` and the witness offload data;
+  otherwise write `'-'`.
 
-源码见 [real_entity.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/real_entity.cpp:487)。
+Source: real_entity.cpp.
 
-目标端读取时，`readRealDataFromStreamForOnloadInternal()` 注释明确要求按照 offload 相同顺序读取：
+On the receiving side, the comment of `readRealDataFromStreamForOnloadInternal()`
+explicitly requires reading in the same order as the offload writes:
 
-- 先 Entity。
-- 再 script 相关数据。
-- 再 real 数据。
+- Entity first.
+- Then the script-related data.
+- Then the real data.
 
-源码见 [entity.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity.cpp:4723)。
+Source: entity.cpp.
 
-目标端具体顺序：
+The concrete order on the target side:
 
-1. `Entity::onload()` 从 `GHOST_ONLY` 的 raw varlen 消息里读 `teleportFailure`，先触发 `onEnteringCell`，再调用 `convertGhostToReal()`，见 [entity.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity.cpp:4560)。
-2. `convertGhostToReal()` 禁止普通回调，清掉指向旧 real 的 `pRealChannel_`，再 `readRealDataFromStreamForOnload()`，见 [entity.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity.cpp:4657)。
-3. `readRealDataFromStreamForOnloadInternal()` 先补齐 real-only properties，校验 `RealProps` token，再 `createReal()` 并调用 `RealEntity::init(..., CREATE_REAL_FROM_OFFLOAD, ...)`，见 [entity.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity.cpp:4730)。
-4. 读取 exposed-for-replay base properties 后，启动 real controllers，见 [entity.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity.cpp:4762)。
-5. `convertGhostToReal()` 把实体加入 Cell 的 real 列表，调用 `relocated()`，再用 high-priority callback buffer 触发 `onEnteredCell`，见 [entity.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity.cpp:4676)。
+1. `Entity::onload()` reads `teleportFailure` from the `GHOST_ONLY` raw varlen
+   message, fires `onEnteringCell` first, then calls `convertGhostToReal()`, see
+   entity.cpp.
+2. `convertGhostToReal()` disables ordinary callbacks, clears the `pRealChannel_`
+   pointing at the old real, then calls `readRealDataFromStreamForOnload()`, see
+   entity.cpp.
+3. `readRealDataFromStreamForOnloadInternal()` first restores the real-only
+   properties, validates the `RealProps` token, then `createReal()` and calls
+   `RealEntity::init(..., CREATE_REAL_FROM_OFFLOAD, ...)`, see
+   entity.cpp.
+4. After reading the exposed-for-replay base properties, it starts the real
+   controllers, see
+   entity.cpp.
+5. `convertGhostToReal()` adds the entity to the Cell's real list, calls
+   `relocated()`, then fires `onEnteredCell` through the high-priority callback
+   buffer, see
+   entity.cpp.
 
-这说明 wire format 和状态转换强耦合，不能随意调整字段顺序。
+This shows the wire format is strongly coupled to the state transitions; the
+field order cannot be rearranged freely.
 
-## 脚本回调顺序
+## Script Callback Order
 
-Cell offload 会触发脚本回调：
+A Cell offload fires script callbacks:
 
-- 源 Cell：`onLeavingCell`。
-- 源 Cell 转为 ghost 后：`onLeftCell`。
-- 目标 Cell：`onEnteringCell`。
-- 目标 ghost 转 real 后：`onEnteredCell`。
+- Source Cell: `onLeavingCell`.
+- After the source Cell becomes a ghost: `onLeftCell`.
+- Target Cell: `onEnteringCell`.
+- After the target ghost becomes a real: `onEnteredCell`.
 
-源码注释见 [entity.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity.cpp:831)。
+Source comment: entity.cpp.
 
-文档里必须强调源码注释中的提醒：这些回调“Think twice before using”，很多情况应该用更好的数据类型避免。
+The documentation must stress the reminder in the source comment: these callbacks
+are "Think twice before using", and in many cases a better data type should be
+used instead.
 
-原因是回调能执行脚本，脚本可能销毁、teleport、再次 offload 或修改状态。
+The reason is that a callback can run script, and the script may destroy,
+teleport, offload again or change state.
 
-## Channel 与 nextRealAddr
+## Channel and nextRealAddr
 
-`Entity::convertRealToGhost()` 会把 `nextRealAddr_` 设置成目标 CellApp 地址，见 [entity.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity.cpp:2028)。
+`Entity::convertRealToGhost()` sets `nextRealAddr_` to the target CellApp address,
+see entity.cpp.
 
-`RealEntity::destroy()` 在 offload 时会通知所有非目标 ghosts：
+`RealEntity::destroy()` notifies all non-target ghosts on offload:
 
-- 发送 `ghostSetNextReal`。
-- 告诉 ghost 新 real 的地址。
-- reset/destroy 当前 real channel。
+- Sends `ghostSetNextReal`.
+- Tells the ghost the address of the new real.
+- Resets/destroys the current real channel.
 
-源码见 [real_entity.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/real_entity.cpp:246)。
+Source: real_entity.cpp.
 
-`Entity::ghostSetNextReal()` 设置 `nextRealAddr_` 后，会播放 buffered messages，见 [entity.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity.cpp:4868)。
+`Entity::ghostSetNextReal()` sets `nextRealAddr_` and then plays the buffered
+messages, see
+entity.cpp.
 
-目标端 `RealEntity::readOffloadData()` 读取 haunt 地址列表后，会对每个有效 ghost 发送 `ghostSetReal`，告诉它新的 owner 地址和 `numTimesRealOffloaded`，见 [real_entity.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/real_entity.cpp:296)。
+On the target side, after `RealEntity::readOffloadData()` reads the haunt address
+list, it sends `ghostSetReal` to every valid ghost, telling it the new owner
+address and `numTimesRealOffloaded`, see
+real_entity.cpp.
 
-源端和其他 ghost 的握手顺序是：
+The handshake order on the source side and with the other ghosts is:
 
-1. 源 real 在 `convertRealToGhost()` 中设置 `nextRealAddr_`，然后 `offloadReal()`。
-2. `RealEntity::destroy( pNextRealAddr )` 给所有非目标 haunt 发送 `ghostSetNextReal`，这是当前 real 发给这些 ghosts 的最后一条消息。
-3. 目标 real 创建后，`readOffloadData()` 给保留的 ghosts 发送 `ghostSetReal`。
-4. ghost 收到 `ghostSetNextReal` 后，只接受来自 `nextRealAddr_` 的后续 GHOST_ONLY 消息，并播放该地址对应的 buffered subsequence。
-5. ghost 收到 `ghostSetReal` 时，如果 `numTimesRealOffloaded` 不是期望值，会把这条消息作为新 subsequence 延迟，等前序 offload 完成。
+1. The source real sets `nextRealAddr_` in `convertRealToGhost()`, then calls
+   `offloadReal()`.
+2. `RealEntity::destroy( pNextRealAddr )` sends `ghostSetNextReal` to every
+   non-target haunt - this is the last message the current real sends to those
+   ghosts.
+3. After the target real is created, `readOffloadData()` sends `ghostSetReal` to
+   the retained ghosts.
+4. After a ghost receives `ghostSetNextReal`, it accepts only the following
+   GHOST_ONLY messages from `nextRealAddr_`, and plays the buffered subsequence
+   belonging to that address.
+5. When a ghost receives `ghostSetReal`, if `numTimesRealOffloaded` is not the
+   expected value, it delays this message as a new subsequence until the previous
+   offload completes.
 
-源码见 [real_entity.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/real_entity.cpp:246)、[entity.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity.cpp:4831) 和 [entity.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity.cpp:4868)。
+Source: real_entity.cpp,
+entity.cpp
+and entity.cpp.
 
-这正是 Mercury indexed channel version 的业务背景：offload 后旧 real、新 real、缓冲包可能交错到达，必须用 owner 地址、offload 次数和子序列边界识别消息来源。
+This is exactly the business background of Mercury's indexed channel versioning:
+after an offload the old real, the new real and buffered packets may arrive
+interleaved, so message origins must be identified by owner address, offload
+count and subsequence boundaries.
 
-## Buffered ghost messages
+## Buffered Ghost Messages
 
-`BufferedGhostMessages` 按 `EntityID` 管理缓冲，再按来源 `Mercury::Address` 分 queue：
+`BufferedGhostMessages` buffers by `EntityID`, then queues by source
+`Mercury::Address`:
 
-- `BufferedGhostMessages::add()` 把消息放进某实体某来源队列，见 [buffered_ghost_messages.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/buffered_ghost_messages.cpp:11)。
-- `playSubsequenceFor(entityID, srcAddr)` 只播放当前应该接收的来源地址队列，见 [buffered_ghost_messages.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/buffered_ghost_messages.cpp:22)。
-- `BufferedGhostMessagesForEntity::playSubsequence()` 如果找不到当前来源队列，会保留其它来源队列，不会错误播放，见 [buffered_ghost_messages_for_entity.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/buffered_ghost_messages_for_entity.cpp:59)。
-- `BufferedGhostMessageQueue::playSubsequence()` 会播放到下一个 subsequence end 为止；如果播放到 `ghostSetNextReal`，可能递归触发下一来源队列，见 [buffered_ghost_message_queue.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/buffered_ghost_message_queue.cpp:144)。
-- `delaySubsequence()` 要求第一条消息是 subsequence start，并把旧的 unexpected subsequence 一起延迟，见 [buffered_ghost_message_queue.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/buffered_ghost_message_queue.cpp:173)。
+- `BufferedGhostMessages::add()` puts the message into a queue for a given
+  entity and source, see
+  buffered_ghost_messages.cpp.
+- `playSubsequenceFor(entityID, srcAddr)` only plays the queue of the source
+  address that should currently receive, see
+  buffered_ghost_messages.cpp.
+- `BufferedGhostMessagesForEntity::playSubsequence()` keeps the other source
+  queues when the current source queue is missing, instead of playing them by
+  mistake, see
+  buffered_ghost_messages_for_entity.cpp.
+- `BufferedGhostMessageQueue::playSubsequence()` plays up to the next subsequence
+  end; reaching a `ghostSetNextReal` may recursively trigger the next source
+  queue, see
+  buffered_ghost_message_queue.cpp.
+- `delaySubsequence()` requires the first message to be a subsequence start, and
+  delays the old unexpected subsequence along with it, see
+  buffered_ghost_message_queue.cpp.
 
-`BufferedGhostMessages::isSubsequenceStart()` 把 `ghostSetReal` 视为子序列开始，`isSubsequenceEnd()` 把 `ghostSetNextReal` 和 `delGhost` 视为子序列结束，见 [buffered_ghost_messages.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/buffered_ghost_messages.hpp:58)。
+`BufferedGhostMessages::isSubsequenceStart()` treats `ghostSetReal` as the start of
+a subsequence, and `isSubsequenceEnd()` treats `ghostSetNextReal` and `delGhost`
+as subsequence ends, see
+buffered_ghost_messages.hpp.
 
-`Space::createGhost()` 也参与乱序处理：如果同 ID 实体已经存在，或该实体从同来源已有缓冲消息，就把 `createGhost` 包装成 `BufferedCreateGhostMessage`，而不是直接创建或覆盖，见 [space.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/space.cpp:228)。
+`Space::createGhost()` takes part in the reordering handling too: if an entity
+with the same id already exists, or the entity already has buffered messages
+from that source, `createGhost` is wrapped as a `BufferedCreateGhostMessage`
+rather than creating or overwriting directly, see
+space.cpp.
 
-消息入口处还有一层保护：
+There is another layer of protection at the message entry point:
 
-- `EntityMessageHandler::handleMessage()` 对 `GHOST_ONLY` 消息，如果实体不存在、`shouldBufferMessagesFrom(srcAddr)` 为 true、或同来源正在 delay，就创建 buffered message，见 [message_handlers.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/message_handlers.cpp:117)。
-- 如果 `GHOST_ONLY` 消息明显发给已销毁 ghost，例如当前实体已经是 real、或当前实体正在 offload 到该来源但消息不是 subsequence start，会丢弃并回失败，见 [message_handlers.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/message_handlers.cpp:126)。
-- `REAL_ONLY` 消息到达时，如果本进程没有 real，会查 ghost 上缓存的 real channel 或 population 的 real channel 并转发，见 [message_handlers.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/message_handlers.cpp:183)。
-- `Entity::shouldBufferMessagesFrom()` 的规则很直接：real 和 zombie ghost 不缓冲；如果设置了 `nextRealAddr_`，只接受 next real；否则只接受当前 real，见 [entity.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity.cpp:7730)。
+- `EntityMessageHandler::handleMessage()` creates a buffered message for a
+  `GHOST_ONLY` message when the entity does not exist,
+  `shouldBufferMessagesFrom(srcAddr)` is true, or that source is currently being
+  delayed, see
+  message_handlers.cpp.
+- If a `GHOST_ONLY` message is clearly addressed to an already-destroyed ghost -
+  for example the current entity is already real, or it is offloading to that
+  source but the message is not a subsequence start - it is dropped and a failure
+  returned, see
+  message_handlers.cpp.
+- When a `REAL_ONLY` message arrives and this process has no real, it looks up
+  the real channel cached on the ghost or the population's real channel and
+  forwards it, see
+  message_handlers.cpp.
+- The rule in `Entity::shouldBufferMessagesFrom()` is direct: a real and a
+  zombie ghost do not buffer; if `nextRealAddr_` is set, only the next real is
+  accepted; otherwise only the current real, see
+  entity.cpp.
 
-这几层共同保证：旧 real 的尾包、新 real 的首包、ghost 创建包、ghost 删除包可以乱序到达，但不会直接按到达顺序破坏实体生命周期。
+Together these layers guarantee that the old real's tail packets, the new real's
+first packets, ghost creation packets and ghost deletion packets may arrive out
+of order without breaking the entity lifecycle in arrival order.
 
-## Offload 与 Ghost 的关系
+## The Relationship Between Offload and Ghosts
 
-`OffloadChecker::sendOffload()` 注释说，单个 offload 受 ghosting capacity 和 channel 状态约束，见 [offload_checker.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/offload_checker.cpp:102)。
+The comment of `OffloadChecker::sendOffload()` says a single offload is bounded
+by the ghosting capacity and the channel state, see
+offload_checker.cpp.
 
-虽然当前函数实现只是调用 `cell_.offloadEntity()`，但前置的 `EntityGhostMaintainer` 已经保证目标条件。
+Although the current implementation merely calls `cell_.offloadEntity()`, the
+preceding `EntityGhostMaintainer` has already guaranteed the target conditions.
 
-换句话说：
+In other words:
 
-- Ghost 不是 offload 的附属品。
-- Ghost 是 offload 安全执行的前置条件之一。
+- Ghosts are not an accessory of offload.
+- Ghosts are one of the preconditions for offloading safely.
 
-## Cell 删除边界
+## The Cell Deletion Boundary
 
-Cell 删除也依赖 offload 完成。
+Cell deletion also depends on offloads completing.
 
-`Cell::isReadyForDeletion()` 要求：
+`Cell::isReadyForDeletion()` requires:
 
-- buffered entity messages 为空。
-- buffered input messages 为空。
-- `isRemoved_` 为 true。
-- real entities 为空。
-- space entities 为空。
-- pending ACK 为空。
+- No buffered entity messages.
+- No buffered input messages.
+- `isRemoved_` is true.
+- No real entities.
+- No space entities.
+- No pending ACKs.
 
-源码见 [cell.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/cell.cpp:140)。
+Source: cell.cpp.
 
-这说明 BigWorld 不会在迁移消息未清空时粗暴删除 Cell。
+This shows BigWorld does not brutally delete a Cell while migration messages are
+still outstanding.
 
-## Teleport 分支
+## The Teleport Branch
 
-普通 offload 是相邻 Cell 之间的权威迁移；teleport 允许跨空间或跨远端 CellApp，因此源码走了单独消息 `CellAppInterface::onloadTeleportedEntity`，见 [cellapp_interface.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/cellapp_interface.hpp:143)。
+An ordinary offload is an authoritative migration between neighbouring Cells;
+a teleport allows crossing spaces or distant CellApps, so the source takes a
+separate message `CellAppInterface::onloadTeleportedEntity`, see
+cellapp_interface.hpp.
 
-源端 `RealEntity::teleport()` 的关键差异：
+The key differences in `RealEntity::teleport()` on the source side:
 
-- 如果 mailbox id 为 0，只在本地改位置并调用 `onTeleportSuccess(NULL)`，不走 offload。
-- 远端 teleport 会先调用 `onLeavingCell`，再向目标 CellApp 写 `onloadTeleportedEntity`。
-- 该消息先携带 nearby entity id，再携带 createGhost 数据长度和 ghost 数据。
-- 源端会调用 `Cell::offloadEntity(..., isTeleport=true)`，此时 `Cell::offloadEntity()` 不再重复调用 `onLeavingCell`。
-- 源端临时改 local position/direction 写入 offload 数据，发送后恢复旧位置，避免源端 ghost 状态被错误位置污染。
+- If the mailbox id is 0, only the local position changes and
+  `onTeleportSuccess(NULL)` is called, without an offload.
+- A remote teleport first calls `onLeavingCell`, then writes
+  `onloadTeleportedEntity` to the target CellApp.
+- That message first carries the nearby entity id, then the createGhost data
+  length and the ghost data.
+- The source calls `Cell::offloadEntity(..., isTeleport=true)`, and at that point
+  `Cell::offloadEntity()` no longer calls `onLeavingCell` again.
+- The source temporarily changes the local position/direction to write into the
+  offload data and restores the old position afterwards, so that the source
+  ghost state is not polluted by a wrong position.
 
-源码见 [real_entity.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/real_entity.cpp:1169) 和 [real_entity.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/real_entity.cpp:1283)。
+Source: real_entity.cpp
+and real_entity.cpp.
 
-目标端 `CellApp::onloadTeleportedEntity()` 会把一条复合消息拆成两条内部消息：
+`CellApp::onloadTeleportedEntity()` on the target side splits one composite
+message into two internal messages:
 
-1. 用 nearby entity 的 space id 补齐 createGhost stream。
-2. 调 `CellAppInterface::createGhost` handler，先创建 ghost。
-3. 调 `CellAppInterface::onload` handler，把 ghost 转 real。
-4. 找到新实体后调用 `onTeleportSuccess( nearbyEntity )`。
+1. Complete the createGhost stream with the nearby entity's space id.
+2. Call the `CellAppInterface::createGhost` handler to create the ghost first.
+3. Call the `CellAppInterface::onload` handler to turn the ghost into a real.
+4. Once the new entity is found, call `onTeleportSuccess( nearbyEntity )`.
 
-如果 nearby entity 不存在，目标端丢弃 createGhost 数据，并把剩余 onload 数据回送给源端，设置 `teleportFailure=true`。源端 `Entity::onload()` 看到 teleport failure 后会移除失败目的地 haunt，并调用 `onTeleportFailure`，见 [cellapp.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/cellapp.cpp:2037) 和 [entity.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/entity.cpp:4618)。
+If the nearby entity does not exist, the target side drops the createGhost data
+and sends the remaining onload data back to the source with
+`teleportFailure=true`. After seeing the teleport failure, the source's
+`Entity::onload()` removes the failed destination haunt and calls
+`onTeleportFailure`, see
+cellapp.cpp
+and entity.cpp.
 
-## 与 Base Offload 的区别
+## Differences from Base Offload
 
-本章主要讲 Cell entity offload。BaseApp 也有 Base offload，用于 BaseApp retiring、备份和恢复。
+This chapter is mostly about Cell entity offload. BaseApp also has Base offload,
+used for BaseApp retiring, backup and recovery.
 
-Base 侧有：
+The Base side has:
 
 - `Base::backupTo()`
 - `Base::writeBackupData()`
 - `Base::offload()`
 - `Base::readBackupData()`
 
-见 [base.hpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/baseapp/base.hpp:109)。
+See base.hpp.
 
-两者区别：
+The differences:
 
-- Cell offload 是空间权威迁移。
-- Base offload 是会话/实体长期部分在 BaseApp 间迁移。
-- 两者都依赖 Mercury、BinaryStream、EntityDef 和 Mailbox。
+- Cell offload is a spatial authoritative migration.
+- Base offload migrates the session/long-lived part of an entity between BaseApps.
+- Both rely on Mercury, BinaryStream, EntityDef and Mailbox.
 
-## 源码取舍
+## Trade-offs in the Source
 
-BigWorld 的 offload 机制复杂，但源码里的复杂性主要来自这些约束：
+BigWorld's offload mechanism is complex, but the complexity in the source comes
+mainly from these constraints:
 
-- Real/Ghost 是同一 Entity 在不同 CellApp 上的不同权威状态，不能直接 memcpy。
-- 目标端必须先有 ghost，才能把 ghost 转 real；否则 real-only 属性、controller、witness、history 和 channel 都缺上下文。
-- Wire format 和读写顺序强耦合，`RealProps` token 只是开发期校验，不是 schema 演进机制。
-- 脚本回调被插在迁移关键点，源码必须用 `callbacksPermitted(false)` 和 high-priority callback buffering 缩小破坏窗口。
-- Ghost 消息只能保证单个 CellApp channel 内有序，跨旧 real 和新 real 的消息要靠 subsequence 拼接。
-- Cell 删除必须等 buffered messages、real entities、space entities 和 removal ACK 全部清空。
+- Real/Ghost are different authoritative states of the same Entity on different
+  CellApps, so they cannot simply be memcpy'd.
+- The target must have a ghost before it can turn a ghost into a real; otherwise
+  real-only properties, controllers, witnesses, history and channels all lack
+  context.
+- The wire format is strongly coupled to the read/write order; the `RealProps`
+  token is only a development-time check, not a schema evolution mechanism.
+- Script callbacks are inserted at critical migration points, so the source must
+  use `callbacksPermitted(false)` and high-priority callback buffering to shrink
+  the window for damage.
+- Ghost messages can only be guaranteed ordered within a single CellApp channel;
+  messages spanning the old and new reals have to be stitched by subsequences.
+- Cell deletion must wait until buffered messages, real entities, space entities
+  and removal ACKs are all empty.
 
-这套设计换来的是在线边界迁移、AoI 连续和 CellApp 负载均衡，但代价是状态机难以局部推理。阅读或修改源码时，应优先保护消息顺序、回调顺序和 Real/Ghost 生命周期边界，不要先抽象成“对象迁移”。
+What this design buys is online boundary migration, AOI continuity and CellApp
+load balancing; what it costs is a state machine that is hard to reason about
+locally. When reading or modifying the source, protect the message order, the
+callback order and the Real/Ghost lifecycle boundaries first, instead of
+abstracting it as "object migration".
 
-## 源码验证重点
+## What Source-Verified Tests Should Cover
 
-1. 在普通 offload 场景确认源端顺序：`onLeavingCell` -> `Cell::realEntities_.remove()` -> `Entity::offload()` -> `offloadReal()` -> `onLeftCell`。
-2. 检查目标端 `onload` 消息必须打到 ghost：`CellAppInterface::onload` 是 `GHOST_ONLY`，不是普通 CellApp RPC。
-3. 给 `writeRealDataToStreamInternal()` 和 `readRealDataFromStreamForOnloadInternal()` 加 token/golden stream 测试，确保 real-only 属性顺序不变。
-4. 构造目标 ghost 不存在的情况，确认 `EntityGhostMaintainer::check()` 会在 offload 前创建目标 ghost，或触发断言。
-5. 构造 `ghostSetReal` 先于 `ghostSetNextReal` 到达，确认 `Entity::ghostSetReal()` 会 delay subsequence，而不是立刻切换 real channel。
-6. 构造 `createGhost` 到达时实体仍存在，确认 `Space::createGhost()` 会进入 `BufferedCreateGhostMessage`，不会覆盖实体。
-7. 构造 teleport nearby entity 不存在，确认目标端回送 `teleportFailure=true`，源端触发 `onTeleportFailure`。
-8. 删除 Cell 时确认 `isReadyForDeletion()` 的 buffered entity messages、buffered input messages、real entities、space entities、pending ACK 全部为空。
+1. In an ordinary offload scenario confirm the source-side order:
+   `onLeavingCell` -> `Cell::realEntities_.remove()` -> `Entity::offload()` ->
+   `offloadReal()` -> `onLeftCell`.
+2. Check that the target-side `onload` message must land on a ghost:
+   `CellAppInterface::onload` is `GHOST_ONLY`, not an ordinary CellApp RPC.
+3. Add token/golden-stream tests for `writeRealDataToStreamInternal()` and
+   `readRealDataFromStreamForOnloadInternal()`, so the real-only property order
+   cannot drift.
+4. Construct the case where the target ghost does not exist, and confirm
+   `EntityGhostMaintainer::check()` creates the target ghost before the offload,
+   or fires an assertion.
+5. Construct `ghostSetReal` arriving before `ghostSetNextReal` and confirm
+   `Entity::ghostSetReal()` delays the subsequence instead of switching the real
+   channel immediately.
+6. Construct `createGhost` arriving while the entity still exists and confirm
+   `Space::createGhost()` goes into `BufferedCreateGhostMessage` rather than
+   overwriting the entity.
+7. Construct a teleport whose nearby entity does not exist and confirm the target
+   returns `teleportFailure=true` and the source fires `onTeleportFailure`.
+8. When deleting a Cell confirm `isReadyForDeletion()` has empty buffered entity
+   messages, buffered input messages, real entities, space entities and pending
+   ACKs.
 
-## 本章边界
+## Scope of This Chapter
 
-本章解释 Cell entity offload。下一章分析持久化与 DB 线程模型，解释实体状态如何落库、备份和恢复。
+This chapter explains Cell entity offload. The next chapter analyses the
+persistence and DB thread model, explaining how entity state is stored,
+backed up and restored.

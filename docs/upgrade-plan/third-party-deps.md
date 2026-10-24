@@ -1,137 +1,147 @@
-# 第三方依赖升级清单
+# Third-Party Dependency Upgrade List
 
-> [English](third-party-deps.en.md) | **中文**
 
 <div class="arch-hero">
 
-BigWorld 内嵌了大量第三方库，版本普遍老旧。本文档盘点当前依赖状态，提供升级建议。
+BigWorld embeds a large number of third-party libraries, generally at old
+versions. This document inventories the current dependency state and offers
+upgrade recommendations.
 
 </div>
 
-::: tip 状态更新（2026-09-28）
-下表的 Python 行已落地：嵌入式解释器现运行 **Python 3.13**（原计划 3.12，随依赖链上调），过程见 [迁移全量台账](/python-313-migration)。C/C++ 行中 OpenSSL、curl、jsoncpp、zlib、libpng、sqlite3、bzip2 已切换到 **vcpkg manifest**（实测装出 OpenSSL 3.6.4 / curl 8.22.0 / sqlite3 3.53.4，见 `vcpkg.json` 与 [vcpkg 迁移](/vcpkg-migration)），仅 CPython（BWHooks 魔改树）与 MongoDB legacy 驱动保留 vendored。
+::: tip Status update (2026-09-28)
+The Python row of the table below has landed: the embedded interpreter now
+runs **Python 3.13** (originally planned as 3.12, raised along the
+dependency chain); the process is in the [full migration ledger](/python-313-migration).
+Among the C/C++ rows, OpenSSL, curl, jsoncpp, zlib, libpng, sqlite3, and
+bzip2 have switched to a **vcpkg manifest** (measured installs: OpenSSL
+3.6.4 / curl 8.22.0 / sqlite3 3.53.4; see `vcpkg.json` and the [vcpkg
+migration](/vcpkg-migration)); only CPython (the BWHooks-modified tree) and
+the MongoDB legacy driver remain vendored.
 :::
 
-## 依赖现状
+## Dependency status
 
-### Python 相关
+### Python-related
 
-| 依赖 | 当前版本 | Python 3 兼容 | 建议 |
+| Dependency | Current version | Python 3 compatible | Recommendation |
 |------|----------|---------------|------|
-| Python | 2.7.x → **3.13** | ✅ | 已完成迁移（见[迁移台账](/python-313-migration)） |
-| SQLAlchemy | 0.6.6 | ❌ | 升级到 2.0+ |
-| oursql | 0.9.2 | ❌ | 替换为 mysqlclient |
-| Pympler | 0.3.0 | ❌ | 升级到 1.0+ |
-| pika | 0.9.13 | ❌ | 升级到 1.0+ |
+| Python | 2.7.x → **3.13** | ✅ | Migration complete (see the [migration ledger](/python-313-migration)) |
+| SQLAlchemy | 0.6.6 | ❌ | Upgrade to 2.0+ |
+| oursql | 0.9.2 | ❌ | Replace with mysqlclient |
+| Pympler | 0.3.0 | ❌ | Upgrade to 1.0+ |
+| pika | 0.9.13 | ❌ | Upgrade to 1.0+ |
 
-### C/C++ 依赖
+### C/C++ dependencies
 
-| 依赖 | 当前版本 | 状态 | 建议 |
+| Dependency | Current version | Status | Recommendation |
 |------|----------|------|------|
-| OpenSSL | **3.6.4（vcpkg）**，原 1.0.x | ✅ | 已完成（R1，`vcpkg.json`） |
-| curl | **8.22.0（vcpkg，openssl 特性）**，原 7.x | ✅ | 已完成 |
-| SQLite | **3.53.4（vcpkg）** | ✅ | 已完成 |
-| MongoDB C Driver | 旧版（vendored 保留） | ⚠️ | 评估是否需要 |
-| jsoncpp | vcpkg 提供（`vcpkg.json`） | ✅ | 已完成 |
-| re2 | 旧版 | ✅ | 可选升级 |
-| recastnavigation | 旧版 | ✅ | 保持 |
+| OpenSSL | **3.6.4 (vcpkg)**, originally 1.0.x | ✅ | Done (R1, `vcpkg.json`) |
+| curl | **8.22.0 (vcpkg, openssl feature)**, originally 7.x | ✅ | Done |
+| SQLite | **3.53.4 (vcpkg)** | ✅ | Done |
+| MongoDB C Driver | Old version (kept vendored) | ⚠️ | Assess whether needed |
+| jsoncpp | Provided by vcpkg (`vcpkg.json`) | ✅ | Done |
+| re2 | Old version | ✅ | Optional upgrade |
+| recastnavigation | Old version | ✅ | Keep |
 
-### 构建工具
+### Build tools
 
-| 工具 | 当前版本 | 建议 |
+| Tool | Current version | Recommendation |
 |------|----------|------|
-| CMake | 2.8.12 | 升级到 3.20+ |
-| GCC | 4.8.x | 升级到 11+ |
-| Make | GNU Make | 保持 |
+| CMake | 2.8.12 | Upgrade to 3.20+ |
+| GCC | 4.8.x | Upgrade to 11+ |
+| Make | GNU Make | Keep |
 
-## 升级优先级
+## Upgrade priorities
 
-### P0 - 必须升级
+### P0 — must upgrade
 
-1. **Python 2.7 → 3.13（已完成，3.13.16）**
-   - 影响范围：全仓库
-   - 详见 [Python 升级路线图](/upgrade-plan/python-upgrade-plan)
+1. **Python 2.7 → 3.13 (done, 3.13.16)**
+   - Blast radius: the whole repository
+   - See the [Python upgrade roadmap](/upgrade-plan/python-upgrade-plan)
 
 2. **OpenSSL 1.0 → 3.x**
-   - 原因：安全漏洞，不再维护
-   - 影响：网络加密、证书处理
-   - 风险：API 变更较大
+   - Reason: security vulnerabilities, no longer maintained
+   - Impact: network encryption, certificate handling
+   - Risk: sizeable API changes
 
-### P1 - 建议升级
+### P1 — recommended upgrades
 
 3. **SQLAlchemy 0.6 → 2.0**
-   - 原因：Python 3 兼容
-   - 影响：数据库操作
-   - 风险：API 变更
+   - Reason: Python 3 compatibility
+   - Impact: database operations
+   - Risk: API changes
 
 4. **CMake 2.8 → 3.20**
-   - 原因：现代 C++ 支持
-   - 影响：构建系统
-   - 风险：低
+   - Reason: modern C++ support
+   - Impact: build system
+   - Risk: low
 
 5. **GCC 4.8 → 11**
-   - 原因：C++17/20 支持
-   - 影响：编译器
-   - 风险：可能引入新警告
+   - Reason: C++17/20 support
+   - Impact: compiler
+   - Risk: may introduce new warnings
 
-### P2 - 可选升级
+### P2 — optional upgrades
 
-6. **curl、SQLite、jsoncpp**
-   - 原因：功能更新
-   - 影响：低
-   - 风险：低
+6. **curl, SQLite, jsoncpp**
+   - Reason: feature updates
+   - Impact: low
+   - Risk: low
 
-## 替换方案
+## Replacement options
 
-### oursql [mysqlclient]
+### oursql → [mysqlclient]
 
-**原因**: oursql 不再维护，mysqlclient 是 MySQL 官方推荐。
+**Reason**: oursql is no longer maintained; mysqlclient is officially
+recommended by MySQL.
 
 ```python
-# 旧代码
+# Old code
 import oursql
 conn = oursql.connect(host='localhost', user='root', passwd='')
 
-# 新代码（示例用的是 mysql-connector-python；若选 mysqlclient，
-# API 为 MySQLdb.connect，包名与 API 二选一保持一致）
+# New code (the example uses mysql-connector-python; if mysqlclient is
+# chosen, the API is MySQLdb.connect — keep the package name and API choice
+# consistent)
 import mysql.connector
 conn = mysql.connector.connect(host='localhost', user='root', password='')
 ```
 
-### SQLAlchemy 0.6 [2.0]
+### SQLAlchemy 0.6 → [2.0]
 
-**主要变更**:
-- Session API 变更
-- 查询语法变更
-- 类型系统变更
+**Main changes**:
+- Session API changes
+- Query syntax changes
+- Type-system changes
 
 ```python
-# 旧代码 (0.6)
+# Old code (0.6)
 session.query(User).filter_by(name='Alice').first()
 
-# 新代码 (2.0)
+# New code (2.0)
 stmt = select(User).where(User.name == 'Alice')
 result = session.execute(stmt).first()
 ```
 
-### OpenSSL 1.0 [3.x]
+### OpenSSL 1.0 → [3.x]
 
-**主要变更**:
-- 废弃旧 API
-- 新的 Provider 机制
-- 默认安全级别提高
+**Main changes**:
+- Old APIs deprecated
+- New Provider mechanism
+- Higher default security level
 
 ```cpp
-// 旧代码
+// Old code
 SSL_CTX_new(SSLv23_method());
 
-// 新代码
+// New code
 SSL_CTX_new(TLS_method());
 ```
 
-## 兼容性矩阵
+## Compatibility matrix
 
-| 依赖 | Python 2.7 | Python 3.8 | Python 3.13 |
+| Dependency | Python 2.7 | Python 3.8 | Python 3.13 |
 |------|------------|------------|-------------|
 | SQLAlchemy 0.6 | ✅ | ❌ | ❌ |
 | SQLAlchemy 2.0 | ❌ | ✅ | ✅ |
@@ -140,40 +150,40 @@ SSL_CTX_new(TLS_method());
 | OpenSSL 1.0 | ✅ | ⚠️ | ❌ |
 | OpenSSL 3.x | ⚠️ | ✅ | ✅ |
 
-## 迁移策略
+## Migration strategy
 
-### 阶段一：评估
+### Phase 1: assessment
 
-1. 扫描源码，确认每个依赖的实际使用点
-2. 评估替换成本
-3. 确定升级顺序
+1. Scan the source and confirm the actual usage points of each dependency
+2. Assess replacement cost
+3. Decide the upgrade order
 
-### 阶段二：替换
+### Phase 2: replacement
 
-按依赖顺序替换：
+Replace in dependency order:
 
-1. Python 解释器
-2. Python 标准库模块
-3. Python 第三方包
-4. C/C++ 依赖
+1. The Python interpreter
+2. Python standard-library modules
+3. Python third-party packages
+4. C/C++ dependencies
 
-### 阶段三：验证
+### Phase 3: validation
 
-1. 编译测试
-2. 单元测试
-3. 集成测试
-4. 性能测试
+1. Compile tests
+2. Unit tests
+3. Integration tests
+4. Performance tests
 
-## 风险提示
+## Risk notes
 
-::: warning 注意
-- 不要同时升级多个依赖
-- 每次升级后充分测试
-- 保留旧版本回退能力
+::: warning Caution
+- Do not upgrade several dependencies at once
+- Test thoroughly after each upgrade
+- Keep the ability to roll back to old versions
 :::
 
-## 参考资料
+## References
 
-- [Python 升级路线图](/upgrade-plan/python-upgrade-plan)
-- [构建系统现代化](/upgrade-plan/build-system-modernization)
-- [技术债与风险](/analysis/risks)
+- [Python upgrade roadmap](/upgrade-plan/python-upgrade-plan)
+- [Build system modernization](/upgrade-plan/build-system-modernization)
+- [Technical debt and risks](/analysis/risks)

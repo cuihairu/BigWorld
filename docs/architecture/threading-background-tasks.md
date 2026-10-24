@@ -1,38 +1,41 @@
-# 线程架构与后台任务
+# Thread Architecture and Background Tasks
 
-> [English](threading-background-tasks.en.md) | **中文**
 
 <div class="arch-hero">
 
-BigWorld 服务端不是“每个玩家一个线程”，也不是把实体逻辑拆成全并行 job。源码呈现的是单 Reactor 主线程 + 后台任务池 + 少量专用线程。线程的主要职责是隔离阻塞 I/O、延迟任务和后台准备工作，而不是并发修改实体状态。
+The BigWorld server does not use one thread per player, nor does it split entity
+logic into fully parallel jobs. The source code shows a single Reactor main
+thread, a background task pool, and a small number of dedicated threads. Threads
+primarily isolate blocking I/O, delayed work, and background preparation; they
+do not concurrently mutate entity state.
 
 </div>
 
-## 先给结论
+## Key Takeaways
 
-BigWorld 服务端线程模型可以分成四类：
+The BigWorld server thread model has four categories:
 
-| 类型 | 代表源码 | 职责 |
+| Category | Representative source | Responsibility |
 |---|---|---|
-| 主 Reactor 线程 | `EventDispatcher`, `ServerApp` | 网络、timer、frequent task、handler、实体逻辑 |
-| 通用后台任务池 | `BgTaskManager`, `TaskManager` | 后台执行阻塞/耗时任务，再可选回主线程收尾 |
-| 文件 I/O 线程 | `FileIOTaskManager` | 资源和文件 I/O 专用后台任务 |
-| BaseApp 延迟线程 | `BaseApp::WorkerThread` | 按时间排序执行 `WorkerJob` |
+| Main Reactor thread | `EventDispatcher`, `ServerApp` | Network, timers, frequent tasks, handlers, and entity logic |
+| General background task pool | `BgTaskManager`, `TaskManager` | Executes blocking or expensive work, optionally completing on the main thread |
+| File I/O thread | `FileIOTaskManager` | Dedicated background work for resources and files |
+| BaseApp delayed thread | `BaseApp::WorkerThread` | Executes `WorkerJob` objects in time order |
 
-关键源码：
+Key source code:
 
-- 主循环顺序见 [event_dispatcher.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/network/event_dispatcher.cpp:428)。
-- `ServerApp::advanceTime()` 推进 tick 生命周期，见 [server_app.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/server/server_app.cpp:311)。
-- `TaskManager::addBackgroundTask()` 投递后台任务，见 [bgtask_manager.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/cstdmf/bgtask_manager.cpp:693)。
-- `TaskManager::addMainThreadTask()` 投递主线程收尾任务，见 [bgtask_manager.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/cstdmf/bgtask_manager.cpp:709)。
-- `TaskManager::tick()` 在 owning thread 处理 foreground task，见 [bgtask_manager.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/cstdmf/bgtask_manager.cpp:744)。
-- `BackgroundTaskThread::run()` 拉取并执行后台任务，见 [bgtask_manager.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/cstdmf/bgtask_manager.cpp:137)。
-- `WorkerThread::run()` 按时间调度 `WorkerJob`，见 [worker_thread.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/baseapp/worker_thread.cpp:66)。
-- `Script::initThread()` 初始化后台线程的脚本 thread state，见 [script.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/pyscript/script.cpp:815)。
+- Main-loop ordering: event_dispatcher.cpp.
+- `ServerApp::advanceTime()` advances the tick lifecycle: server_app.cpp.
+- `TaskManager::addBackgroundTask()` queues background work: bgtask_manager.cpp.
+- `TaskManager::addMainThreadTask()` queues main-thread completion: bgtask_manager.cpp.
+- `TaskManager::tick()` consumes foreground tasks on the owning thread: bgtask_manager.cpp.
+- `BackgroundTaskThread::run()` pulls and executes background tasks: bgtask_manager.cpp.
+- `WorkerThread::run()` schedules `WorkerJob` objects by time: worker_thread.cpp.
+- `Script::initThread()` initializes the script thread state for a background thread: script.cpp.
 
-## 主线程边界
+## Main-Thread Boundary
 
-服务端主线程由 `EventDispatcher` 驱动：
+`EventDispatcher` drives the server main thread:
 
 <div class="flow-strip">
   <span class="flow-node">FrequentTasks</span>
@@ -44,178 +47,207 @@ BigWorld 服务端线程模型可以分成四类：
   <span class="flow-node">Network</span>
 </div>
 
-这条链路意味着：
+This sequence has four consequences:
 
-- Mercury handler 通常在主线程同步执行。
-- BaseApp、CellApp 的 tick 逻辑在主线程推进。
-- 实体状态、AOI、Ghost、Witness、Proxy 等核心对象默认按主线程所有权推理。
-- handler 或脚本回调阻塞，会直接影响本进程 tick 和网络处理。
+- Mercury handlers normally execute synchronously on the main thread.
+- BaseApp and CellApp tick logic advances on the main thread.
+- Core objects such as entities, AOI, ghosts, witnesses, and proxies are inferred
+  to have main-thread ownership by default.
+- A blocking handler or script callback directly delays the process tick and
+  network processing.
 
-主线程不是因为“简单”而存在，而是因为实体状态跨 Base/Cell/Client/DB 多个域流动，随意并发修改会破坏消息顺序、生命周期和回调边界。
+The main thread exists not because the model is simple, but because entity state
+flows across the Base, Cell, Client, and DB domains. Uncontrolled concurrent
+mutation would break message ordering, lifecycle rules, and callback boundaries.
 
-## BgTaskManager 链
+## The `BgTaskManager` Chain
 
-`BgTaskManager` 是后台任务池。任务对象有两个阶段：
+`BgTaskManager` is the background task pool. A task object has two phases:
 
-| 阶段 | 方法 | 执行线程 | 用途 |
+| Phase | Method | Executing thread | Purpose |
 |---|---|---|---|
-| 后台阶段 | `doBackgroundTask()` | 后台线程 | 执行阻塞 I/O 或耗时准备 |
-| 前台阶段 | `doMainThreadTask()` | owning/main thread | 提交结果、回调主线程状态 |
+| Background phase | `doBackgroundTask()` | Background thread | Performs blocking I/O or expensive preparation |
+| Foreground phase | `doMainThreadTask()` | Owning/main thread | Publishes results and returns control to main-thread state |
 
-基本调用链：
+The basic call chain is:
 
-```
+```text
 TaskManager::addBackgroundTask()
-  -> bgTaskList_ 入队
-  -> bgTaskSemaphore_ 唤醒后台线程
+  -> bgTaskList_ enqueue
+  -> bgTaskSemaphore_ wake a background thread
   -> BackgroundTaskThread::run()
   -> BackgroundTask::doBackgroundTask()
-  -> 可选 TaskManager::addMainThreadTask()
+  -> optionally TaskManager::addMainThreadTask()
   -> TaskManager::tick()
   -> BackgroundTask::doMainThreadTask()
 ```
 
-源码里的关键边界：
+The source establishes these boundaries:
 
-| 边界 | 代表源码 |
+| Boundary | Representative source |
 |---|---|
-| 后台任务可以从任意线程入队 | `TaskManager::addBackgroundTask()` |
-| 主线程任务可以从后台线程投递 | `TaskManager::addMainThreadTask()` |
-| foreground task 由 owning thread 消费 | `TaskManager::tick()` |
-| 后台线程退出通过 `ThreadFinisher` 回主线程清理 | `BackgroundTaskThread::run()` |
-| 长任务取消依赖协作检查 | `TaskManager::shouldAbortTask()` |
+| Background tasks can be queued from any thread | `TaskManager::addBackgroundTask()` |
+| Main-thread tasks can be posted from a background thread | `TaskManager::addMainThreadTask()` |
+| Foreground tasks are consumed by the owning thread | `TaskManager::tick()` |
+| Background-thread exit returns a `ThreadFinisher` to the main thread | `BackgroundTaskThread::run()` |
+| Long-task cancellation relies on cooperative checks | `TaskManager::shouldAbortTask()` |
 
-这说明后台任务不是并发实体逻辑，而是“后台准备 + 主线程提交”的两阶段模型。
+Background work is therefore not concurrent entity logic. It is a two-phase
+model: prepare in the background, publish on the main thread.
 
-## EntityApp 如何消费后台任务
+## How `EntityApp` Consumes Background Tasks
 
-`EntityApp::onTickProcessingComplete()` 会在 tick 收尾阶段处理后台任务的主线程回调，见 [entity_app.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/server/entity_app.cpp:136)。
+`EntityApp::onTickProcessingComplete()` handles main-thread callbacks from
+background tasks at the end of a tick: entity_app.cpp.
 
-这形成了一个重要节奏：
+This creates the following rhythm:
 
-```
-App tick / 网络 handler
-  -> 后台任务执行阻塞工作
+```text
+App tick / network handler
+  -> background task performs blocking work
   -> addMainThreadTask()
-  -> tick 收尾
+  -> end of tick
   -> doMainThreadTask()
-  -> 更新主线程可见状态
+  -> update main-thread-visible state
 ```
 
-因此，后台任务结果并不是完成后立即改变游戏状态，而是等主线程在安全点消费。分析 DB、文件加载、资源处理等异步路径时，要确认最终提交点是不是 `doMainThreadTask()`。
+A background result therefore does not immediately mutate game state. It waits
+until the main thread consumes it at a safe point. When analyzing asynchronous
+database, file-loading, or resource paths, identify whether the final publication
+point is `doMainThreadTask()`.
 
-## DB 后台任务
+## Database Background Tasks
 
-MySQL 后端大量使用后台任务：
+The MySQL backend makes extensive use of background tasks:
 
-| 源码 | 行为 |
+| Source | Behavior |
 |---|---|
-| `lib/db_storage_mysql/mysql_database.cpp` | 将 get/put/delete/lookUp 等 DB 操作投递到 `bgTaskManager_` |
-| `lib/db_storage_mysql/tasks/background_task.cpp` | DB task 完成后可回主线程执行收尾 |
-| `lib/db_storage_mysql/buffered_entity_tasks.cpp` | 对同一实体相关任务做缓冲和顺序控制 |
-| `server/dbapp/write_entity_handler.cpp` | `DBApp::writeEntity()` 后续写入 handler |
+| `lib/db_storage_mysql/mysql_database.cpp` | Posts get, put, delete, and look-up operations to `bgTaskManager_` |
+| `lib/db_storage_mysql/tasks/background_task.cpp` | Returns a completed database task to the main thread for finalization |
+| `lib/db_storage_mysql/buffered_entity_tasks.cpp` | Buffers and sequences tasks related to the same entity |
+| `server/dbapp/write_entity_handler.cpp` | Continues writing after `DBApp::writeEntity()` |
 
-这条链说明 DBApp 不应在主线程直接做阻塞 SQL。主线程负责接收 Mercury 请求和发起 DB task；后台线程做数据库 I/O；完成后再通过 handler 回到主线程语义。
+This chain means DBApp should not execute blocking SQL on the main thread. The
+main thread receives Mercury requests and starts database tasks; background
+threads perform database I/O; handlers then restore main-thread semantics when
+the work completes.
 
-## FileIOTaskManager
+## `FileIOTaskManager`
 
-CellApp 初始化时启动文件 I/O 线程：
+CellApp initialization starts a file I/O thread:
 
-```
+```text
 fileIOTaskManager_.initWatchers("FileIO")
 fileIOTaskManager_.startThreads("FileIO", 1)
 ```
 
-源码见 [cellapp.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/cellapp.cpp:574)。
+Source: cellapp.cpp.
 
-CellApp tick 中也会处理文件 I/O task manager，见 [cellapp.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/cellapp.cpp:958)。
+The CellApp tick also services the file I/O task manager:
+cellapp.cpp.
 
-这说明 CellApp 把部分资源加载和文件访问从主线程挪出，但仍通过 tick 安全点处理主线程收尾。它不是通用 job graph，也不改变实体主逻辑的线程归属。
+CellApp therefore moves some resource loading and file access off the main
+thread, but still finalizes it through the tick safe point. This is not a general
+job graph and does not change the thread ownership of core entity logic.
 
-## BaseApp WorkerThread
+## BaseApp `WorkerThread`
 
-`server/baseapp/worker_thread.cpp` 是 BaseApp 的另一套线程机制。它不是 `BgTaskManager` 的封装，而是一个时间排序的 `WorkerJob` 调度器。
+`server/baseapp/worker_thread.cpp` is another BaseApp-specific thread mechanism.
+It is not a wrapper around `BgTaskManager`; it is a time-ordered `WorkerJob`
+scheduler.
 
-`WorkerThread::run()` 的核心行为：
+The core behavior of `WorkerThread::run()` is:
 
-1. 队列为空时等待，最多睡眠一段时间。
-2. 队列按 `nextTime_` 排序。
-3. 到期后取出 `WorkerJob` 执行。
-4. job 返回下次延迟秒数。
-5. 返回非负数则重新入队。
-6. 返回负数则停止调度，必要时删除 job。
+1. Wait, at most for a bounded interval, when the queue is empty.
+2. Keep the queue ordered by `nextTime_`.
+3. Pop and execute a `WorkerJob` when it is due.
+4. Let the job return its next delay in seconds.
+5. Requeue when the returned value is non-negative.
+6. Stop scheduling when the returned value is negative, deleting the job when
+   ownership requires it.
 
-这更像延迟后台轮询器，用于 BaseApp 的特定后台工作，而不是面向实体逻辑的并行调度器。
+This is closer to a delayed background polling mechanism for specific BaseApp
+work than a parallel scheduler for entity logic.
 
-## 脚本线程边界
+## Scripting Thread Boundary
 
-BigWorld 的脚本层通过嵌入式解释器运行。源码中线程进入脚本层必须显式管理 thread state 和解释器锁。
+The scripting layer runs in an embedded interpreter. A thread must explicitly
+manage thread state and the interpreter lock before entering script code.
 
-关键链：
+The key chain is:
 
-| 源码 | 作用 |
+| Source | Purpose |
 |---|---|
-| `Script::init()` | 初始化解释器，保存主线程状态，设置主线程 idle 时释放/恢复锁的函数 |
-| `Script::initThread()` | 为新线程创建或绑定 thread state |
-| `Script::releaseLock()` | 通过解释器 API 释放脚本锁 |
-| `Script::acquireLock()` | 恢复脚本 thread state 并重新进入脚本执行上下文 |
+| `Script::init()` | Initializes the interpreter, saves the main-thread state, and installs main-thread idle lock release/restore callbacks |
+| `Script::initThread()` | Creates or binds the thread state for a new thread |
+| `Script::releaseLock()` | Releases the script lock through the interpreter API |
+| `Script::acquireLock()` | Restores the script thread state and re-enters the script execution context |
 
-源码见 [script.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/pyscript/script.cpp:411)、[script.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/pyscript/script.cpp:815)、[script.cpp](/home/cui/workspaces/BigWorld/programming/bigworld/lib/pyscript/script.cpp:935)。
+Source: script.cpp, script.cpp, and script.cpp.
 
-这条链的结论是：后台线程可以进入脚本相关代码，但不能把脚本逻辑当成无约束并行执行。每个进入脚本层的线程都必须遵守解释器锁和 thread state 管理。
+A background thread may enter script-related code, but script logic is not
+unconstrained parallel execution. Every thread entering the scripting layer must
+honor the interpreter lock and thread-state rules.
 
-## 为什么后台任务要回主线程
+## Why Background Tasks Return to the Main Thread
 
-后台线程可以做准备工作，但不能随意提交游戏状态。原因来自源码边界：
+Background threads can prepare work, but cannot freely publish game state. The
+source boundaries explain why:
 
-| 状态 | 主线程提交原因 |
+| State | Reason for main-thread publication |
 |---|---|
-| Entity / Base / Cell | 生命周期、脚本回调、mailbox、migration 状态强依赖执行顺序 |
-| Mercury Channel / Bundle | 很多路径按主线程网络 handler 和发送队列推理 |
-| Witness / AOI / Ghost | 客户端可见性和 ghost 同步必须保持 tick 内一致 |
-| Watcher 暴露状态 | 观测和控制面读写需要避免跨线程对象生命周期问题 |
-| 脚本对象 | 需要解释器锁和 thread state，跨线程析构风险高 |
+| Entity / Base / Cell | Lifecycle, script callbacks, mailboxes, and migration depend strongly on execution order |
+| Mercury Channel / Bundle | Many paths assume main-thread network handlers and send queues |
+| Witness / AOI / Ghost | Client visibility and ghost synchronization must remain consistent within a tick |
+| Watcher-exposed state | Read/write observation and control need predictable object lifetimes |
+| Script objects | They require the interpreter lock and thread state; cross-thread destruction is risky |
 
-因此 BigWorld 的后台任务更准确地说是“异步 I/O/准备层”，不是“并行业务状态层”。
+BigWorld background tasks are therefore best understood as an asynchronous
+I/O and preparation layer, not a parallel business-state layer.
 
-## 源码取舍
+## Source Trade-Offs
 
-BigWorld 采用这种线程模型的源码取舍：
+The source model makes these trade-offs:
 
-| 收益 | 代价 |
+| Benefit | Cost |
 |---|---|
-| 主线程状态顺序清晰 | 单个 BaseApp/CellApp 有主线程瓶颈 |
-| Entity/AOI/Ghost/Proxy 生命周期更容易推理 | 后台任务无法解决实体脚本热点 |
-| 阻塞 DB 和文件 I/O 可被隔离 | foreground task 堆积仍会拖慢 tick |
-| 跨线程提交点集中在 `doMainThreadTask()` | 任务取消依赖协作检查 |
-| 与多进程 Base/Cell 分片模型一致 | 调试异步任务仍需同时看后台和主线程日志 |
+| Clear ordering for main-thread state | One BaseApp or CellApp can become a main-thread bottleneck |
+| Entity/AOI/ghost/proxy lifecycles are easier to reason about | Background tasks cannot solve entity-script hot spots |
+| Blocking database and file I/O can be isolated | Accumulated foreground tasks still slow the tick |
+| Cross-thread publication concentrates in `doMainThreadTask()` | Cancellation depends on cooperative checks |
+| Matches the multi-process Base/Cell sharding model | Debugging still spans background and main-thread logs |
 
-这不是通用线程模型优劣比较，而是 BigWorld 源码在实体状态复杂度、分布式进程模型和脚本边界下形成的具体取舍。
+This is not a comparison of general-purpose thread models. It is the concrete
+trade-off shaped by entity-state complexity, the distributed process model, and
+the scripting boundary.
 
-## 源码验证重点
+## Source-Code Verification Focus
 
-验证线程相关结论时，优先检查：
+When verifying thread-related conclusions, start with:
 
-| 问题 | 检索入口 |
+| Question | Search entry point |
 |---|---|
-| 后台任务在哪里创建 | `addBackgroundTask(` |
-| 后台任务在哪里回主线程 | `addMainThreadTask(` |
-| foreground task 由谁消费 | `TaskManager::tick()` |
-| 哪些 App 在 tick 中处理任务 | `onTickProcessingComplete`, `fileIOTaskManager_.tick()` |
-| DB 是否走后台任务 | `bgTaskManager_.addBackgroundTask`, `BufferedEntityTasks` |
-| 文件 I/O 是否走专用线程 | `FileIOTaskManager` |
-| 长任务是否支持取消 | `shouldAbortTask()` |
-| 后台线程是否进入脚本 | `Script::initThread`, `releaseLock`, `acquireLock` |
+| Where are background tasks created? | `addBackgroundTask(` |
+| Where do they return to the main thread? | `addMainThreadTask(` |
+| Who consumes foreground tasks? | `TaskManager::tick()` |
+| Which apps service tasks during a tick? | `onTickProcessingComplete`, `fileIOTaskManager_.tick()` |
+| Do database paths use background tasks? | `bgTaskManager_.addBackgroundTask`, `BufferedEntityTasks` |
+| Does file I/O use a dedicated thread? | `FileIOTaskManager` |
+| Can long tasks be cancelled? | `shouldAbortTask()` |
+| Can background threads enter scripts? | `Script::initThread`, `releaseLock`, `acquireLock` |
 
-测试入口：
+Test entry points:
 
-| 测试目录 | 覆盖方向 |
+| Test directory | Coverage focus |
 |---|---|
-| `lib/cstdmf/unit_test/test_bgtasks.cpp` | `BgTaskManager` 启停、任务执行和队列行为 |
-| `lib/cstdmf/unit_test/test_background_file_writer.cpp` | 后台文件写入 |
-| `lib/terrain/unit_test/` | 资源任务与 `BgTaskManager::tick()` 使用 |
-| `server/baseapp/unit_test/` | BaseApp 相关异步路径的局部验证 |
+| `lib/cstdmf/unit_test/test_bgtasks.cpp` | `BgTaskManager` startup/shutdown, task execution, and queue behavior |
+| `lib/cstdmf/unit_test/test_background_file_writer.cpp` | Background file writing |
+| `lib/terrain/unit_test/` | Resource tasks and `BgTaskManager::tick()` usage |
+| `server/baseapp/unit_test/` | Local verification of BaseApp asynchronous paths |
 
-## 本章边界
+## Chapter Boundary
 
-本章只解释源码中的线程、后台任务和主线程提交边界。脚本热更新、EntityDef 迁移、实体 offload 和 DB 持久化会复用这些线程边界，但它们的状态机分别在后续专题中展开。
+This chapter explains the source-level boundaries for threads, background tasks,
+and main-thread publication. Script hot reload, EntityDef migration, entity
+offload, and database persistence reuse these boundaries, but their state
+machines are covered by later topics.

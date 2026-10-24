@@ -1,91 +1,92 @@
-# 构建系统现代化
+# Build System Modernization
 
-> [English](build-system-modernization.en.md) | **中文**
 
 <div class="arch-hero">
 
-BigWorld 的构建系统混合了 Make、CMake 和平台脚本，版本老旧。本文档规划构建系统的现代化路径。
+BigWorld's build system mixes Make, CMake, and platform scripts, all at old
+versions. This document plans the modernization path for the build system.
 
 </div>
 
-## 当前状态
+## Current state
 
-### 构建入口
+### Build entries
 
-| 入口 | 平台 | 状态 |
+| Entry | Platform | Status |
 |------|------|------|
-| `programming/Makefile` | Linux | 主要 |
-| `programming/bigworld/CMakeLists.txt` | Windows | 主要 |
-| `programming/bigworld/build/docker/Dockerfile` | Docker | 辅助 |
-| `programming/bigworld/build/*.bat` | Windows | 辅助 |
+| `programming/Makefile` | Linux | Primary |
+| `programming/bigworld/CMakeLists.txt` | Windows | Primary |
+| `programming/bigworld/build/docker/Dockerfile` | Docker | Auxiliary |
+| `programming/bigworld/build/*.bat` | Windows | Auxiliary |
 
-### 版本基线
+### Version baseline
 
-| 工具 | 当前版本 | 推荐版本 |
+| Tool | Current version | Recommended version |
 |------|----------|----------|
 | CMake | 2.8.12 | 3.20+ |
-| GCC | 14（CI 样板）/ 15（el7 镜像），C++23 已生效 | 保持 |
-| Clang | - | 14+ (可选) |
-| Make | GNU Make | 保持 |
+| GCC | 14 (CI samples) / 15 (el7 image), C++23 in effect | Keep |
+| Clang | - | 14+ (optional) |
+| Make | GNU Make | Keep |
 | Docker | CentOS 7 | Ubuntu 22.04 |
 
-> C++23 已在 make 主链生效（`programming/bigworld/build/make/platform_el7.mak:6`），
-> 详见 [C++23 迁移](/cpp23-migration)。
+> C++23 is already in effect on the make main chain
+> (`programming/bigworld/build/make/platform_el7.mak:6`); see the
+> [C++23 migration](/cpp23-migration).
 
-## 升级路径
+## Upgrade path
 
-### 第一阶段：CMake 现代化
+### Phase 1: CMake modernization
 
-**目标**: 从 CMake 2.8 升级到 3.20+
+**Goal**: upgrade from CMake 2.8 to 3.20+
 
-**主要变更**:
+**Main changes**:
 
-1. **最低版本要求**
+1. **Minimum version requirement**
 ```cmake
-# 旧
+# Old
 cmake_minimum_required(VERSION 2.8.12)
 
-# 新
+# New
 cmake_minimum_required(VERSION 3.20)
 ```
 
-2. **目标属性**
+2. **Target properties**
 ```cmake
-# 旧
+# Old
 include_directories(${CMAKE_SOURCE_DIR}/lib)
 add_executable(bigworld main.cpp)
 target_link_libraries(bigworld network)
 
-# 新
+# New
 add_executable(bigworld main.cpp)
 target_include_directories(bigworld PRIVATE ${CMAKE_SOURCE_DIR}/lib)
 target_link_libraries(bigworld PRIVATE network)
 ```
 
-3. **生成器表达式**
+3. **Generator expressions**
 ```cmake
-# 旧
+# Old
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     add_definitions(-DDEBUG)
 endif()
 
-# 新
+# New
 target_compile_definitions(bigworld PRIVATE
     $<$<CONFIG:Debug>:DEBUG>
 )
 ```
 
-### 第二阶段：平台基线更新
+### Phase 2: platform baseline update
 
-**目标**: 从 CentOS 7 升级到现代 Linux
+**Goal**: upgrade from CentOS 7 to modern Linux
 
-**新 Dockerfile**:
+**New Dockerfile**:
 
 ```dockerfile
-# 旧
+# Old
 FROM centos:7
 
-# 新
+# New
 FROM ubuntu:22.04
 
 RUN apt-get update && apt-get install -y \
@@ -98,21 +99,23 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 ```
 
-**依赖变更**:
+**Dependency changes**:
 
-| CentOS 7 包 | Ubuntu 22.04 包 |
+| CentOS 7 package | Ubuntu 22.04 package |
 |-------------|-----------------|
 | python-devel | python3-dev |
 | mariadb-devel | libmysqlclient-dev |
 | sqlite-devel | libsqlite3-dev |
 | openssl-devel | libssl-dev |
 
-### 第三阶段：编译器升级
+### Phase 3: compiler upgrade
 
-**目标**: 支持 C++17/20（该阶段目标已达成并超越：make 主链已切 C++23，
-见 `platform_el7.mak:6` 与 [C++23 迁移](/cpp23-migration)；以下配置为升级路径存档）
+**Goal**: support C++17/20 (this phase's goal has been met and exceeded:
+the make main chain has switched to C++23, see `platform_el7.mak:6` and the
+[C++23 migration](/cpp23-migration); the configuration below is kept as an
+archive of the upgrade path)
 
-**CMake 配置**:
+**CMake configuration**:
 
 ```cmake
 set(CMAKE_CXX_STANDARD 17)
@@ -120,96 +123,101 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 ```
 
-**编译器标志**:
+**Compiler flags**:
 
 ```cmake
-# 警告级别
+# Warning level
 add_compile_options(-Wall -Wextra -Wpedantic)
 
-# 安全检查
+# Security checks
 add_compile_options(-fstack-protector-strong -D_FORTIFY_SOURCE=2)
 ```
 
-## CI/CD 集成
+## CI/CD integration
 
-### GitHub Actions（已落地，2026-10-12）
+### GitHub Actions (landed 2026-10-12)
 
-实际生效的是两条构建 workflow（另有 `deploy-docs.yml` 文档发布）：
+What actually takes effect is two build workflows (plus the
+`deploy-docs.yml` documentation deployment):
 
-- `.github/workflows/ci.yml` —— **push/PR 门禁**：vcpkg manifest 钉版
-  baseline 克隆 + binary cache（键=baseline+manifest 哈希）→ 配置/构建
-  CMake 样板 matrix（`[cstdmf, resmgr, network, entitydef]`，`fail-fast: false`；
-  [vcpkg-migration §3.1–§3.5](/vcpkg-migration)）→ ctest。
-  步骤具名，失败时上传一个含 configure/build/ctest 三日志的 artifact，
-  失败可按步骤定位。
-- `.github/workflows/daily-build.yml` —— **每日构建**：48 小时新鲜度判定 →
-  全量 make + 21 模块单测门禁 → tar.gz/deb/rpm 三格式打包，artifact 交付。
-  详见[打包与每日构建](/upgrade-plan/packaging-and-daily-build)。
+- `.github/workflows/ci.yml` — the **push/PR gate**: clone of the vcpkg
+  manifest's pinned baseline + binary cache (key = baseline + manifest
+  hash) → configure/build the CMake sample matrix
+  (`[cstdmf, resmgr, network, entitydef]`, `fail-fast: false`;
+  [vcpkg-migration §3.1–§3.5](/vcpkg-migration)) → ctest. Steps are named,
+  and on failure an artifact with the configure/build/ctest logs is
+  uploaded, so failures can be located by step.
+- `.github/workflows/daily-build.yml` — the **daily build**: 48-hour
+  freshness check → full make + the 21-module unit-test gate →
+  tar.gz/deb/rpm packaging in three formats, delivered as artifacts. See
+  [packaging and daily build](/upgrade-plan/packaging-and-daily-build).
 
-本地等价命令：CMake 样板各一条命令（`scripts/build-cstdmf-cmake.sh` /
-`scripts/build-resmgr-cmake.sh` / `scripts/build-network-cmake.sh` /
-`scripts/build-entitydef-cmake.sh`；vendored CPython 一腿另由
-`scripts/build-python-cmake.sh` 单独构建，被 entitydef 样板自动带入）；
-打包一条命令 `bash scripts/package-daily.sh <out-dir>`。
+Local equivalents: one command per CMake sample
+(`scripts/build-cstdmf-cmake.sh` / `scripts/build-resmgr-cmake.sh` /
+`scripts/build-network-cmake.sh` / `scripts/build-entitydef-cmake.sh`; the
+vendored CPython leg is built separately by
+`scripts/build-python-cmake.sh` and pulled in automatically by the entitydef
+sample); packaging is one command, `bash scripts/package-daily.sh <out-dir>`.
 
-### Docker 构建
+### Docker build
 
 ```bash
-# 构建镜像（路径相对仓库根；Dockerfile 头注释同此形式）
+# Build the image (path relative to the repository root; the Dockerfile
+# header comment uses the same form)
 docker buildx build -t bigworld-build \
   -f programming/bigworld/build/docker/Dockerfile .
 
-# 运行构建
+# Run the build
 docker run --rm -v $(pwd):/src bigworld-build \
     cmake -B build -DCMAKE_BUILD_TYPE=Release
 docker run --rm -v $(pwd):/src bigworld-build \
     cmake --build build -j$(nproc)
 ```
 
-## 迁移步骤
+## Migration steps
 
-### 步骤一：CMake 升级
+### Step 1: CMake upgrade
 
-1. 更新 `cmake_minimum_required`
-2. 替换废弃命令
-3. 添加现代目标属性
-4. 测试所有平台
+1. Update `cmake_minimum_required`
+2. Replace deprecated commands
+3. Add modern target properties
+4. Test all platforms
 
-### 步骤二：平台升级
+### Step 2: platform upgrade
 
-1. 创建新 Dockerfile
-2. 更新依赖包名
-3. 测试构建
-4. 更新文档
+1. Create a new Dockerfile
+2. Update dependency package names
+3. Test the build
+4. Update documentation
 
-### 步骤三：编译器升级
+### Step 3: compiler upgrade
 
-1. 设置 C++ 标准
-2. 修复编译警告
-3. 启用安全检查
-4. 性能测试
+1. Set the C++ standard
+2. Fix compile warnings
+3. Enable security checks
+4. Performance testing
 
-## 风险与缓解
+## Risks and mitigations
 
-| 风险 | 影响 | 缓解措施 |
+| Risk | Impact | Mitigation |
 |------|------|----------|
-| CMake 命令废弃 | 构建失败 | 逐步替换，保持兼容 |
-| 依赖包名变更 | 安装失败 | 文档更新，脚本适配 |
-| 编译器警告增多 | 构建噪音 | 逐步修复，分阶段启用 |
-| 性能回退 | 运行变慢 | 基准测试，回退机制 |
+| Deprecated CMake commands | Build failure | Replace step by step, keep compatibility |
+| Dependency package-name changes | Installation failure | Documentation updates, script adaptation |
+| More compiler warnings | Build noise | Fix gradually, enable in phases |
+| Performance regression | Slower runtime | Benchmarking, rollback mechanism |
 
-## 验证清单
+## Validation checklist
 
-- [ ] Linux 构建通过
-- [ ] Windows 构建通过
-- [ ] Docker 构建通过
-- [ ] 单元测试通过
-- [ ] 集成测试通过
-- [ ] 性能无回退
-- [ ] 文档更新
+- [ ] Linux build passes
+- [ ] Windows build passes
+- [ ] Docker build passes
+- [ ] Unit tests pass
+- [ ] Integration tests pass
+- [ ] No performance regression
+- [ ] Documentation updated
 
-## 参考资料
+## References
 
-- [CMake 文档](https://cmake.org/cmake/help/latest/)
-- [GCC 文档](https://gcc.gnu.org/onlinedocs/)
-- [构建与运行体系](/getting-started/build-from-source)
+- [CMake documentation](https://cmake.org/cmake/help/latest/)
+- [GCC documentation](https://gcc.gnu.org/onlinedocs/)
+- [Build and runtime system](/getting-started/build-from-source)

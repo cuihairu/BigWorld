@@ -1,309 +1,327 @@
-# Python 3.12 路线图
+# Python 3.12 Roadmap
 
-> [English](python-upgrade-plan.en.md) | **中文**
 
-::: tip 状态更新（2026-09-28）
-本路线图写于迁移启动前，保留作为决策记录。实际迁移已在此后完成并合入 dev 分支：嵌入式解释器从 Python 2.7 切换到 **Python 3.13**（版本随依赖链从规划期的 3.12 上调）。逐批过程与验收见 [Python 3.13 迁移全量台账](/python-313-migration)，当前状态一览见 [迁移与覆盖率现状](/upgrade-plan/migration-status)。
-2026-10-13 审计补记：最终**未建**统一兼容包装层，采用逐点直接替换（见 [python-c-api-guide 状态注](/upgrade-plan/python-c-api-guide)）。
+::: tip Status update (2026-09-28)
+This roadmap was written before the migration started and is kept as a
+decision record. The actual migration has since been completed and merged
+into dev: the embedded interpreter switched from Python 2.7 to **Python
+3.13** (the version was raised from the planned 3.12 along the dependency
+chain). The batch-by-batch process and acceptance are in the [full Python
+3.13 migration ledger](/python-313-migration), and a current-state overview
+is in [migration and coverage status](/upgrade-plan/migration-status).
+2026-10-13 audit addendum: in the end **no** unified compatibility wrapper
+layer was built; point-by-point direct replacement was used instead (see the
+[python-c-api-guide status note](/upgrade-plan/python-c-api-guide)).
 :::
 
-## 目标定义
+## Definition of the goal
 
-这里的“切换为更现代的 Python 3.12”在 BigWorld 语境下，至少包含四件事：
+In the BigWorld context, "switching to a more modern Python 3.12" comprises
+at least four things:
 
-1. 内嵌解释器从 Python 2.7 迁移到 Python 3.12
-2. C/C++ 与 Python 的桥接层完成 Python 3 API 适配
-3. 项目自带共享模块与第三方 Python 包完成替换或重建
-4. 构建、打包、部署和运行时资源布局完成同步调整
+1. Migrating the embedded interpreter from Python 2.7 to Python 3.12
+2. Completing the Python 3 API adaptation of the C/C++ ↔ Python bridge layer
+3. Replacing or rebuilding the project's own shared modules and third-party Python packages
+4. Synchronizing adjustments to build, packaging, deployment, and the runtime resource layout
 
-如果只完成第 1 项，不算迁移成功。
+Completing only item 1 does not count as a successful migration.
 
-## 先给结论
+## Conclusion first
 
-不建议直接在当前主线一次性切到 Python 3.12。推荐采用“四阶段迁移策略”。
+Switching straight to Python 3.12 on the current main line in one shot is not
+recommended. A "four-phase migration strategy" is recommended.
 
-## 阶段 0：建立可信基线
+## Phase 0: establish a trustworthy baseline
 
-目标是回答一个问题：当前仓库到底能否稳定构建和运行。
+The goal is to answer one question: whether the current repository can
+actually build and run stably.
 
-### 必做事项
+### Required work
 
-- 校验 Linux 服务端在当前文档假设下能否完整构建。
-- 校验关键服务进程最小启动链路。
-- 校验客户端/工具链是否具备最小可编译性。
-- 补齐缺失脚本和漂移路径，例如 `control_cluster.py` 的真实来源。
-- 固化一份“现状构建手册”和“现状依赖清单”。
+- Verify whether the Linux server builds completely under the current documentation assumptions.
+- Verify the minimal startup chain of the key server processes.
+- Verify minimal compilability of the client/tool chains.
+- Fill in missing scripts and drifted paths, for example the real source of `control_cluster.py`.
+- Fix a "current-state build manual" and a "current-state dependency list".
 
-### 输出物
+### Outputs
 
-- 可复现的构建步骤
-- 可执行的 smoke test
-- 当前 Python 耦合点清单
+- Reproducible build steps
+- An executable smoke test
+- A list of current Python coupling points
 
-没有这一步，后续迁移不可控。
+Without this step, the later migration is uncontrollable.
 
-## 阶段 1：先升级到 Python 3 兼容抽象层
+## Phase 1: first upgrade to a Python 3-compatible abstraction layer
 
-目标不是直接接入 3.12，而是先把代码从 Python 2 专有 API 中抽离出来。
+The goal is not to plug in 3.12 directly, but first to detach the code from
+Python-2-specific APIs.
 
-### 核心动作
+### Core actions
 
-- 在 `lib/pyscript`、`lib/script` 建立统一兼容包装层。
-- 把散落的 `PyString_*`、`PyInt_*`、`Py_InitModule` 收口到局部适配接口。
-- 统一处理：
-  - 字符串
+- Build a unified compatibility wrapper layer in `lib/pyscript` and `lib/script`.
+- Funnel the scattered `PyString_*`, `PyInt_*`, and `Py_InitModule` calls into local adaptation interfaces.
+- Handle uniformly:
+  - strings
   - bytes
-  - 整数
-  - 模块初始化
-  - 异常格式化
-  - `pickle/cPickle` 行为
+  - integers
+  - module initialization
+  - exception formatting
+  - `pickle/cPickle` behavior
 
-### 原则
+### Principles
 
 - `KISS`
-  先做 API 收口，不要一开始重写所有脚本系统。
+  Funnel the APIs first; do not start by rewriting the whole script system.
 - `DRY`
-  不要在每个子模块里独立写一份 Python 2/3 判断分支。
+  Do not write an independent Python 2/3 branch in every submodule.
 - `YAGNI`
-  只抽象当前真实使用的 API，不预建“大而全”的绑定框架。
+  Abstract only the APIs actually used today; do not pre-build a "comprehensive" binding framework.
 
-### 预期结果
+### Expected result
 
-- 业务层不再直接依赖大面积 Python 2 专有符号
-- 为后续切换解释器版本创造局部替换条件
+- The business layer no longer depends directly on a large surface of Python-2-specific symbols
+- Local replacement conditions are created for the later interpreter-version switch
 
-## 阶段 2：迁移嵌入式运行时与标准库布局
+## Phase 2: migrate the embedded runtime and stdlib layout
 
-### 核心动作
+### Core actions
 
-- 替换 `third_party/python` 的来源策略
-- 重新设计 `third_party_python.mak` 的构建逻辑
-- 重新确认以下目录约定：
+- Replace the sourcing strategy for `third_party/python`
+- Redesign the build logic of `third_party_python.mak`
+- Reconfirm the following directory conventions:
   - `Lib`
   - `lib-dynload-*`
   - `site-packages`
-- 调整动态模块打包方式
+- Adjust how dynamic modules are packaged
 
-### 重点阻塞
+### Key blockers
 
-- Python 3.12 的构建方式与 Python 2.7 显著不同
-- 旧版 OpenSSL/系统依赖可能不再适配
-- 旧式 `configure + make` 定制补丁要重新评估
+- Python 3.12's build process differs significantly from Python 2.7
+- Old OpenSSL/system dependencies may no longer fit
+- The old `configure + make` custom patches must be re-evaluated
 
-### 建议
+### Recommendation
 
-在这一阶段同步评估平台升级，优先考虑：
+Evaluate a platform upgrade in parallel in this phase, prioritizing:
 
-- 新版 Rocky / Alma / Ubuntu LTS 构建环境
-- 更新 CMake 基线
-- 更新编译器基线
+- New Rocky / Alma / Ubuntu LTS build environments
+- An updated CMake baseline
+- An updated compiler baseline
 
-如果继续锁死在 CentOS 7，迁移成本会被显著放大。
+If you stay locked to CentOS 7, migration costs are amplified significantly.
 
-## 阶段 3：迁移 Python 业务脚本和第三方包
+## Phase 3: migrate Python business scripts and third-party packages
 
-### Python 脚本本身
+### The Python scripts themselves
 
-首方 `.py` 文件数量不算大，理论上是迁移成本较低的一层，但仍需检查：
+The number of first-party `.py` files is not large, so in theory this is a
+lower-cost layer, but it still needs checking for:
 
-- `print` 语法
+- `print` syntax
 - `except Exception, e`
 - `iteritems`
 - `xrange`
 - `unicode/str/bytes`
 - `cPickle`
 
-### 第三方包
+### Third-party packages
 
-当前打包的旧依赖不能直接带入 Python 3.12，应按“替换优先”处理：
+The currently packaged old dependencies cannot be carried directly into
+Python 3.12; handle them with "replace first":
 
 - `oursql`
-  优先考虑替换为现代 MySQL 驱动，而不是继续修补。
+  Prefer replacing with a modern MySQL driver rather than continuing to patch.
 - `SQLAlchemy 0.6.6`
-  若必须保留，需评估 API 改造成本；更现实的是隔离旧调用并升级到现代版本。
-- `Pympler`、`pika`
-  视实际使用面决定升级或移除。
+  If it must be kept, assess the API-change cost; more realistically, isolate the old calls and upgrade to a modern version.
+- `Pympler`, `pika`
+  Upgrade or remove depending on the actual usage surface.
 
-### 原则
+### Principles
 
-- 先证明“哪些依赖仍被真实使用”
-- 再决定“升级、替换还是删除”
+- First prove "which dependencies are still really used"
+- Then decide "upgrade, replace, or delete"
 
-这符合 `YAGNI`，避免为死代码支付迁移成本。
+This follows `YAGNI` and avoids paying migration costs for dead code.
 
-## 阶段 4：端到端验证与双轨切换
+## Phase 4: end-to-end validation and dual-track switch
 
-### 验证范围
+### Validation scope
 
-- 服务端进程启动
-- 实体脚本加载
-- 数据库交互
-- 日志与消息系统
-- 编辑器脚本功能
-- 客户端脚本调用
+- Server-process startup
+- Entity-script loading
+- Database interaction
+- Logging and messaging systems
+- Editor script functionality
+- Client script calls
 
-### 建议策略
+### Recommended strategy
 
-- 保留 Python 2.7 基线分支
-- 新建 Python 3.12 迁移分支
-- 建立最小回归清单
-- 采用双轨验证，而不是原地覆盖
+- Keep the Python 2.7 baseline branch
+- Create a new Python 3.12 migration branch
+- Build a minimal regression list
+- Use dual-track validation rather than overwriting in place
 
-## 迁移优先级建议
+## Migration priority recommendations
 
 ### P0
 
-- 建立 Python C API 兼容层
-- 梳理 `lib/pyscript` / `lib/script`
-- 明确缺失脚本与失效构建路径
+- Build the Python C API compatibility layer
+- Survey `lib/pyscript` / `lib/script`
+- Identify missing scripts and broken build paths
 
 ### P1
 
-- 重新设计嵌入式 Python 构建链
-- 替换过期第三方 Python 包
-- 补齐自动化 smoke test
+- Redesign the embedded Python build chain
+- Replace expired third-party Python packages
+- Add automated smoke tests
 
 ### P2
 
-- 平台基线升级
-- 工具链升级
-- 清理历史兼容残留
+- Platform-baseline upgrade
+- Toolchain upgrade
+- Clean up historical compatibility residue
 
-## 不建议的做法
+## Approaches not recommended
 
-- 直接全局替换 `PyString_` -> `PyUnicode_`
-- 不做基线验证就引入 Python 3.12
-- 继续把所有旧第三方包强行 patch 到 3.12
-- 在服务端先切而忽略编辑器和客户端
+- Global `PyString_` → `PyUnicode_` replacement
+- Introducing Python 3.12 without baseline validation
+- Forcing every old third-party package onto 3.12 by patching
+- Switching the server side first while ignoring the editors and client
 
-这些做法短期看快，长期一定返工。
+These look fast short-term but are guaranteed rework long-term.
 
-## 推荐的近期行动
+## Recommended near-term actions
 
-如果下一步要真正启动迁移，建议先做三件事：
+If the migration is actually to start next, do three things first:
 
-1. 建一个 `python-modernization` 分支外的分析清单，但不要立即改业务逻辑。
-2. 对 `lib/pyscript` 和 `lib/script` 做一次专门的接口普查，形成 Python 2 专有 API 清单。
-3. 在当前仓库内补一套最小构建与启动验证脚本，先让现状可测。
+1. Build an analysis list outside a `python-modernization` branch, but do not change business logic immediately.
+2. Run a dedicated interface survey of `lib/pyscript` and `lib/script`, producing a list of Python-2-specific APIs.
+3. Add a minimal build-and-startup validation script set inside the current repository, making the current state testable first.
 
-## 最终判断
+## Final judgment
 
-BigWorld 切换到 Python 3.12 是可做的，但它本质上是一次”嵌入式脚本运行时现代化工程”，不是简单版本升级。
+Switching BigWorld to Python 3.12 is feasible, but in essence it is an
+"embedded scripting runtime modernization project", not a simple version
+upgrade.
 
-如果按正确顺序推进：
+If advanced in the correct order:
 
-- 先基线
-- 再抽象
-- 再替换运行时
-- 最后迁移脚本与依赖
+- baseline first
+- then abstraction
+- then replace the runtime
+- finally migrate scripts and dependencies
 
-这件事是可控的。
+the work is controllable.
 
-如果跳过前两步直接升级解释器，失败概率很高。
+Skipping the first two steps and upgrading the interpreter directly has a
+high failure probability.
 
 ---
 
-## 重要更新：Python 3.13 free-threaded 模式 (no-GIL)
+## Important update: Python 3.13 free-threaded mode (no-GIL)
 
-### 概述
+### Overview
 
-Python 3.13 (2024 年 10 月发布) 引入了 **free-threaded 模式** (PEP 703)，也称为 no-GIL。这是一个实验性特性，可以彻底改变 BigWorld 的线程模型。
+Python 3.13 (released October 2024) introduced **free-threaded mode**
+(PEP 703), also known as no-GIL. This is an experimental feature that could
+fundamentally change BigWorld's threading model.
 
-### 关键特性
+### Key features
 
-| 特性 | 说明 |
+| Feature | Notes |
 |------|------|
-| 编译选项 | `--disable-gil` 或使用 `python3.13t` |
-| 状态 | 实验性，非默认启用 |
-| 性能开销 | 单线程 ~5-10% |
-| C 扩展兼容性 | 需要重新编译和测试 |
-| 内存管理 | 线程安全的引用计数 |
-| 内部数据结构 | 线程安全 |
+| Build option | `--disable-gil`, or use `python3.13t` |
+| Status | Experimental, not enabled by default |
+| Performance cost | ~5-10% single-threaded |
+| C-extension compatibility | Requires recompilation and testing |
+| Memory management | Thread-safe reference counting |
+| Internal data structures | Thread-safe |
 
-### 对 BigWorld 的影响
+### Impact on BigWorld
 
-#### 线程模型变革
+#### Threading-model transformation
 
-当前 BigWorld 的线程模型：
+BigWorld's current threading model:
 ```
-主线程 (Reactor + 所有脚本逻辑)
-├── 后台线程 1 (数据库)
-├── 后台线程 2 (文件 I/O)
-└── 后台线程 3 (定时任务)
-```
-
-Python 3.13 no-GIL 后的可能模型：
-```
-主线程 (Reactor + 网络)
-├── 脚本线程池 (并行执行实体逻辑)
-├── 后台线程 1 (数据库)
-├── 后台线程 2 (文件 I/O)
-└── 后台线程 3 (定时任务)
+Main thread (Reactor + all script logic)
+├── Background thread 1 (database)
+├── Background thread 2 (file I/O)
+└── Background thread 3 (scheduled tasks)
 ```
 
-#### 性能提升潜力
+A possible model after Python 3.13 no-GIL:
+```
+Main thread (Reactor + networking)
+├── Script thread pool (parallel entity logic)
+├── Background thread 1 (database)
+├── Background thread 2 (file I/O)
+└── Background thread 3 (scheduled tasks)
+```
 
-- **BaseApp**：可并行处理多个玩家的脚本逻辑
-- **CellApp**：可并行处理不同 Cell 的实体更新
-- **吞吐量**：理论上可提升 N 倍 (N = CPU 核心数)
+#### Performance-gain potential
 
-### 迁移路径建议
+- **BaseApp**: could process multiple players' script logic in parallel
+- **CellApp**: could process entity updates for different Cells in parallel
+- **Throughput**: theoretically N-fold (N = number of CPU cores)
 
-#### 阶段 1：验证兼容性 (当前)
+### Migration path recommendations
+
+#### Phase 1: compatibility verification (current)
 
 ```bash
-# 1. 测试 Python 3.13 标准构建
+# 1. Test the standard Python 3.13 build
 python3.13 --version
 
-# 2. 测试 free-threaded 构建
+# 2. Test the free-threaded build
 python3.13t --version
 
-# 3. 运行现有测试
+# 3. Run the existing tests
 python3.13t -m pytest tests/
 ```
 
-#### 阶段 2：C 扩展适配
+#### Phase 2: C-extension adaptation
 
 ```cpp
-// 检查 C 扩展兼容性
-// Python 3.13 free-threaded 需要：
-// 1. 使用新的引用计数 API
-// 2. 避免全局状态
-// 3. 使用线程安全的数据结构
+// Check C-extension compatibility
+// Python 3.13 free-threaded requires:
+// 1. Use of the new reference-counting APIs
+// 2. Avoidance of global state
+// 3. Thread-safe data structures
 ```
 
-#### 阶段 3：逐步启用并行
+#### Phase 3: enable parallelism step by step
 
 ```cpp
-// 1. 先在非关键路径测试
-// 2. 逐步启用并行脚本执行
-// 3. 监控性能和稳定性
+// 1. First test on non-critical paths
+// 2. Gradually enable parallel script execution
+// 3. Monitor performance and stability
 ```
 
-### 风险与缓解
+### Risks and mitigations
 
-| 风险 | 缓解措施 |
+| Risk | Mitigation |
 |------|----------|
-| C 扩展不兼容 | 逐步测试，优先级排序 |
-| 单线程性能下降 | Profile 驱动优化 |
-| 调试复杂度增加 | 保留单线程模式作为回退 |
-| 第三方库支持不全 | 选择性启用，关键路径保守 |
+| Incompatible C extensions | Test step by step, prioritize |
+| Single-threaded performance drop | Profile-driven optimization |
+| Increased debugging complexity | Keep single-threaded mode as fallback |
+| Incomplete third-party library support | Enable selectively; stay conservative on critical paths |
 
-### 建议策略
+### Recommended strategy
 
 ```
-当前状态: Python 2.7 + GIL
+Current state: Python 2.7 + GIL
     ↓
-阶段 1: Python 3.12 + GIL (稳定优先)
+Phase 1: Python 3.12 + GIL (stability first)
     ↓
-阶段 2: Python 3.13 + GIL (验证兼容性)
+Phase 2: Python 3.13 + GIL (verify compatibility)
     ↓
-阶段 3: Python 3.13t + no-GIL (非关键路径测试)
+Phase 3: Python 3.13t + no-GIL (test on non-critical paths)
     ↓
-阶段 4: 全面启用 no-GIL (性能优化)
+Phase 4: fully enable no-GIL (performance optimization)
 ```
 
-### 参考资料
+### References
 
 - [PEP 703: Making the Global Interpreter Lock Optional](https://peps.python.org/pep-0703/)
 - [Python 3.13 Release Notes](https://docs.python.org/3.13/whatsnew/3.13.html)
