@@ -30,6 +30,16 @@ BW_BEGIN_NAMESPACE
 
 class StringBuilder;
 
+// Forward-declared with CSTDMF_DLL so the friend declaration inside LogMsg
+// below and the standalone declaration in debug.hpp carry the same
+// dllimport/dllexport linkage on MSVC. Without this, the friend declaration
+// is the first namespace-scope declaration (no attribute) and debug.hpp later
+// redeclares it with CSTDMF_DLL, which MSVC flags as C2375 (redefinition;
+// different linkage).
+class LogMsg;
+CSTDMF_DLL LogMsg & addMessageMetadataForScope( LogMsg & msg );
+CSTDMF_DLL LogMsg & constWrapper_addMessageMetadataForScope( const LogMsg & msg );
+
 class LogMsg
 {
 public:

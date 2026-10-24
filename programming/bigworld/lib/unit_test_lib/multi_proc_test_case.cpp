@@ -7,12 +7,12 @@
 #include "cstdmf/debug.hpp"
 
 
-#ifdef MF_SERVER
+#if defined(MF_SERVER) && !defined(_WIN32)
 #include <sys/wait.h>
 #include <unistd.h>
+#include <sys/types.h>
 #endif
 
-#include <sys/types.h>
 #include <stdlib.h>
 #include <errno.h>
 #include <string.h>
@@ -53,7 +53,7 @@ void MultiProcTestCase::runChildren( int num,
  */
 bool MultiProcTestCase::runChild( ChildProcess * pChildProcess )
 {
-#ifdef MF_SERVER
+#if defined(MF_SERVER) && !defined(_WIN32)
 	int pid = fork();
 	if (pid == -1)
 	{
@@ -91,7 +91,7 @@ bool MultiProcTestCase::runChild( ChildProcess * pChildProcess )
  */
 void MultiProcTestCase::killChildren()
 {
-#ifdef MF_SERVER
+#if defined(MF_SERVER) && !defined(_WIN32)
 	for (ProcessIDs::iterator iter = pids_.begin(); iter != pids_.end(); ++iter)
 	{
 		::kill( *iter, SIGKILL );
@@ -109,7 +109,7 @@ void MultiProcTestCase::killChildren()
  */
 bool MultiProcTestCase::updateChildren( bool shouldBlock )
 {
-#ifdef MF_SERVER
+#if defined(MF_SERVER) && !defined(_WIN32)
 	int status = 0;
 
 	int options = shouldBlock ? 0 : WNOHANG;
@@ -202,7 +202,7 @@ int MultiProcTestCase::numRunningChildren()
  */
 bool MultiProcTestCase::checkAllChildrenPass()
 {
-#ifdef MF_SERVER
+#if defined(MF_SERVER) && !defined(_WIN32)
 	// If children were intentionally killed, just return immediately.
 	if (hasKilledChildren_)
 	{

@@ -7,7 +7,14 @@
 #include "cstdmf/stdmf.hpp"
 #include "bwentity/bwentity_api.hpp"
 
-#if defined(_WIN32) && !defined(BWENTITY_DLL)
+// D3DX-backed vector/matrix types are only used when the legacy DirectX SDK
+// is on the include path (math module-standalone build, root Windows server
+// build). Builds that transitively pull this header without that SDK (e.g. the
+// cstdmf unit-test sample, which reaches math/vector*.hpp via resmgr's
+// datasection.hpp) take the portable fallback below. __has_include probes the
+// same search path the #include would use, so DXSDK_DIR-driven -I paths still
+// select the D3DX branch exactly as before.
+#if defined(_WIN32) && !defined(BWENTITY_DLL) && __has_include("d3dx9math.h")
 
 #ifdef _XBOX
 #include "d3dx9math.h"
