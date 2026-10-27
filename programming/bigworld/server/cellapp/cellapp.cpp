@@ -2455,6 +2455,20 @@ bool CellApp::reloadScript( bool isFullReload )
 				}
 				break;
 
+			case ReloadScript::MIGRATED_ALL:
+				// The batch is over, tell each entity's script (failure mode
+				// F6: Entity::migratedAll had no caller anywhere in the tree,
+				// so onMigratedAll never fired). The hook is optional, and
+				// like onMigrate its exceptions are only printed - the
+				// collect-decide policy in P2 will count them as failures.
+				for (EntityPopulation::const_iterator iter =
+						Entity::population().begin();
+					iter != Entity::population().end(); ++iter)
+				{
+					iter->second->migratedAll();
+				}
+				break;
+
 			case ReloadScript::CLEANUP_AFTER_RELOAD:
 				EntityType::cleanupAfterReload( isFullReload );
 				break;

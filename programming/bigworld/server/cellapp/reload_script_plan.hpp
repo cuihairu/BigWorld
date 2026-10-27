@@ -22,7 +22,10 @@
 //     fail: EntityType::init(true) calls DataType::clearStaticsForReload()
 //     (entity_type.cpp:262) before parsing, and the failure path never
 //     reloads them (failure mode F8). planReload() reports that as
-//     dataTypesWiped so tests and future dry-run work can see it.
+//     dataTypesWiped so tests and future dry-run work can see it;
+//   * the batch-migration-complete hook fires after every entity has migrated
+//     and before cleanup (failure mode F6: Entity::migratedAll had no caller
+//     anywhere in the tree).
 //
 // The head of the sequence (swap in the scratch interpreter, load entity defs,
 // load UDOs) cannot be driven from a plan that is only complete once its own
@@ -52,6 +55,10 @@ enum Action
 	MIGRATE_USER_DATA_OBJECT_TYPES,
 	MIGRATE_MAIL_BOXES,			///< ServerEntityMailBox::migrateMailBoxes
 	MIGRATE_ENTITIES,			///< per-entity Entity::migrate, MF_VERIFY'd
+	MIGRATED_ALL,				///< per-entity Entity::migratedAll, after the
+								///< migration loop (failure mode F6: the
+								///< onMigratedAll hook was declared but never
+								///< called by anything in the tree)
 	CLEANUP_AFTER_RELOAD,		///< EntityType::cleanupAfterReload(isFullReload)
 	RECOVER_OLD_SCRIPTS,		///< EntityType::reloadScript(true), failure only
 	ACTION_COUNT
@@ -111,6 +118,7 @@ inline ReloadPlan planReload( const PlanInputs & inputs )
 		plan.actions[ plan.count++ ] = MIGRATE_USER_DATA_OBJECT_TYPES;
 		plan.actions[ plan.count++ ] = MIGRATE_MAIL_BOXES;
 		plan.actions[ plan.count++ ] = MIGRATE_ENTITIES;
+		plan.actions[ plan.count++ ] = MIGRATED_ALL;
 		plan.actions[ plan.count++ ] = CLEANUP_AFTER_RELOAD;
 	}
 	else

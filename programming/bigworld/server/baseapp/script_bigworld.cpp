@@ -1513,6 +1513,15 @@ bool reloadScript( bool isFullReload )
 			it->second->migrate();
 		}
 
+		// The batch is over, tell each base's script (failure mode F6:
+		// Base::migratedAll had no caller anywhere in the tree, so
+		// onMigratedAll never fired). The hook is optional; a destroyed base
+		// is skipped inside the method.
+		for (Bases::const_iterator it = b.begin(); it != b.end(); it++)
+		{
+			it->second->migratedAll();
+		}
+
 		EntityType::cleanupAfterReload( isFullReload );
 
 		return true;

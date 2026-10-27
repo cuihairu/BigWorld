@@ -69,7 +69,7 @@ TEST( ReloadScriptPlan_FullReloadSucceeds )
 
 	CHECK_EQUAL( true, plan.succeeded );
 	CHECK_EQUAL( false, plan.dataTypesWiped );
-	CHECK_EQUAL( 10, plan.count );
+	CHECK_EQUAL( 11, plan.count );
 
 	CHECK_EQUAL( ReloadScript::SWAP_IN_INTERPRETER, plan.actions[ 0 ] );
 	CHECK_EQUAL( ReloadScript::LOAD_ENTITY_DEFS, plan.actions[ 1 ] );
@@ -81,7 +81,8 @@ TEST( ReloadScriptPlan_FullReloadSucceeds )
 		plan.actions[ 6 ] );
 	CHECK_EQUAL( ReloadScript::MIGRATE_MAIL_BOXES, plan.actions[ 7 ] );
 	CHECK_EQUAL( ReloadScript::MIGRATE_ENTITIES, plan.actions[ 8 ] );
-	CHECK_EQUAL( ReloadScript::CLEANUP_AFTER_RELOAD, plan.actions[ 9 ] );
+	CHECK_EQUAL( ReloadScript::MIGRATED_ALL, plan.actions[ 9 ] );
+	CHECK_EQUAL( ReloadScript::CLEANUP_AFTER_RELOAD, plan.actions[ 10 ] );
 
 	// The ordering asymmetry that makes the migrate chain work: the scratch
 	// interpreter is gone before anything migrates, and cleanup is last.
@@ -108,7 +109,7 @@ TEST( ReloadScriptPlan_ScriptsOnlyReloadSucceeds )
 		ReloadScript::planReload( scriptInputs );
 
 	CHECK_EQUAL( true, scriptPlan.succeeded );
-	CHECK_EQUAL( 10, scriptPlan.count );
+	CHECK_EQUAL( 11, scriptPlan.count );
 
 	for (int i = 3; i < fullPlan.count; ++i)
 	{
@@ -246,10 +247,11 @@ TEST( ReloadScriptPlan_AllOutcomeCombinationsFit )
 				CHECK_EQUAL( (defs && udo), plan.succeeded );
 				CHECK_EQUAL( (full && !defs), plan.dataTypesWiped );
 
-				// head (2 + defs load) + success tail (7) or failure tail
-				// (3, plus the recovery on the scripts-only path).
+				// head (2 + defs load) + success tail (8, the migrate chain
+				// plus the batch-complete hook) or failure tail (3, plus the
+				// recovery on the scripts-only path).
 				CHECK_EQUAL( 2 + (defs ? 1 : 0) +
-					(plan.succeeded ? 7 : 3 + (full ? 0 : 1)),
+					(plan.succeeded ? 8 : 3 + (full ? 0 : 1)),
 					plan.count );
 			}
 		}
