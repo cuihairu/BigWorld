@@ -77,9 +77,11 @@
 - 不许把设计稿/分析章记成已完成；架构章的「源码验证重点」只是验收建议来源。
 - 每次巡检（patrol-*）更新本账并单独 commit。
 
-## D. docs 英文对应缺口（子目录）登记（2026-10-16）
+## D. docs 英文对应缺口（子目录）登记（2026-10-16，2026-10-24 全部闭合）
 
 登记背景：docs 双语化任务按「中文实质文档须有英文对应件 + 两侧顶部首屏语言切换器」口径推进；本轮只做 `docs/` 根目录，根目录已收口（清单见下），子目录全部为缺口，逐项登记于此，本轮不动工。
+
+**2026-10-24 口径变更（本节以下台账为历史记录）**：`.en.md` 镜像命名协议与页内手写切换器横幅已废弃，改为 VitePress 官方 `locales`——英文在 `docs/` 根、中文整体迁入 `docs/zh/`，49 个 `.en.md` 与 117 行手写横幅全部删除，切换器为内置组件；双语侧栏在 `config.mjs` 的 root 与 `zh` 两份 `themeConfig` 各挂一份；现行总量根 54 页 ↔ `docs/zh/` 54 页 1:1 全配对（含 docs/architecture 28 篇），内部链接检查 0 死链。
 
 docs 根目录收口状态（2026-10-16）：
 
@@ -93,16 +95,16 @@ docs 根目录收口状态（2026-10-16）：
 子目录缺口（判据与根目录轮一致：不重命名原件、对应件 `<原名>.en.md`、切换器在前 3 行内、命令/路径/专有名词不译）：
 
 - [x] docs/adr/：4 篇（index + adr-0001/0002/0003 决策记录）——2026-10-16 R1021PATROL 全配对（4 个 .en.md，中文 4 篇加切换器；`npm run docs:build` 绿，本提交）
-- [ ] docs/architecture/：28 篇（index/outline + 26 个架构章）——2026-10-17 PATROL1017B 已配对 11 篇（outline、modern-mmo-comparison、threading-background-tasks、research-method、machined-control-plane、build-platform-dependencies、testing-time-control、process-topology、entity-lifecycle-state-machine、hot-reload-script-migration、network-backpressure-fault-injection；中文页加切换器；`npm run docs:build` 绿），余 17 篇。**2026-10-20 PATROL1020-1434 续配对至 25 篇**：补 memory-lifecycle、mercury-reliable-udp、observability-watcher-profiler-logs、scaling-fault-tolerance、serialization-entitydef 五个 `.en.md`（`5e946eb2`），连同此前 dev 上已有的 cell-partition-load-balance、persistence-db-model；每篇按 1:1 结构核验（H2/H3 逐项相等、源码 file:line 链接与标识符逐条原样、CJK 仅剩语言切换行），`npm run docs:build` 绿。**余 3 篇（network-io-model、security-rate-limit、testing-fault-injection-coverage）的 `.en.md` 已在 main 侧落地**（`02993e95` docs: translate architecture safety chapters，并行会话车道），dev 合流后本目录 28/28 全配对——本条不重复翻译以免与 main 冲突
+- [x] docs/architecture/：28 篇（index/outline + 26 个架构章）——2026-10-17 PATROL1017B 已配对 11 篇（outline、modern-mmo-comparison、threading-background-tasks、research-method、machined-control-plane、build-platform-dependencies、testing-time-control、process-topology、entity-lifecycle-state-machine、hot-reload-script-migration、network-backpressure-fault-injection；中文页加切换器；`npm run docs:build` 绿），余 17 篇。**2026-10-20 PATROL1020-1434 续配对至 25 篇**：补 memory-lifecycle、mercury-reliable-udp、observability-watcher-profiler-logs、scaling-fault-tolerance、serialization-entitydef 五个 `.en.md`（`5e946eb2`），连同此前 dev 上已有的 cell-partition-load-balance、persistence-db-model；每篇按 1:1 结构核验（H2/H3 逐项相等、源码 file:line 链接与标识符逐条原样、CJK 仅剩语言切换行），`npm run docs:build` 绿。**余 3 篇（network-io-model、security-rate-limit、testing-fault-injection-coverage）的 `.en.md` 已在 main 侧落地**（`02993e95` docs: translate architecture safety chapters，并行会话车道），dev 合流后本目录 28/28 全配对——本条不重复翻译以免与 main 冲突。**2026-10-24 闭合**：官方 locales 迁移后本目录 28/28 全配对（en=28 ↔ zh=28，双向无缺页），main 侧余 3 篇译文经 `02993e95` 并入根英文，`.en.md` 协议随之删除；`npm run docs:build` 绿（23.42s），内部链接 385 条 0 死链 — `3ed88fe5`、`5b3775cf`
 - [x] docs/getting-started/：4 篇（index / build-from-source / project-structure / api-reference）——2026-10-16 R1021PATROL 全配对（4 个 .en.md，api-reference 全部 file:line 签名与代码块原样保留；本提交）
 - [x] docs/upgrade-plan/：7 篇（migration-status / python-upgrade-plan / python-c-api-guide / third-party-deps / build-system-modernization / hot-reload-productionization / packaging-and-daily-build）——2026-10-16 R1021PATROL 全配对（7 个 .en.md；历史规划件保留其写作时点口径，状态注同步翻译；命令/路径/标识符不译；本提交）
 - [x] docs/references/：1 篇（original-docs）——2026-10-16 R1021PATROL 配对（本提交）
 - [x] docs/analysis/：5 篇（overview / modules / build-and-runtime / risks / source-code-guide）——2026-10-16 R1021PATROL 全配对（5 个 .en.md；本提交）
-- 合计 49 篇：2026-10-16 R1021PATROL 后已配对 23 篇（adr 4 + getting-started 4 + upgrade-plan 7 + references 1 + analysis 5 + architecture 2），余 26 篇全部在 docs/architecture/（约 9.4k 行，含逐章 file:line 证据，建议分批推进）。**2026-10-20 更新：dev 已配对 46 篇**（adr 4 + getting-started 4 + upgrade-plan 7 + references 1 + analysis 5 + architecture 25），余 3 篇在 main 侧已配对、待合流（见 architecture 条）。
+- 合计 49 篇：2026-10-16 R1021PATROL 后已配对 23 篇（adr 4 + getting-started 4 + upgrade-plan 7 + references 1 + analysis 5 + architecture 2），余 26 篇全部在 docs/architecture/（约 9.4k 行，含逐章 file:line 证据，建议分批推进）。**2026-10-20 更新：dev 已配对 46 篇**（adr 4 + getting-started 4 + upgrade-plan 7 + references 1 + analysis 5 + architecture 25），余 3 篇在 main 侧已配对、待合流（见 architecture 条）。**2026-10-24 更新：49/49 全部闭合**——官方 locales 迁移后为根 54 页 ↔ `docs/zh/` 54 页 1:1（含 architecture 28 篇），49 个 `.en.md` 全部删除，本目录缺口清零。
 
 关联剩余项：
 
-- VitePress nav/sidebar（`docs/.vitepress/config.mjs`）目前只挂中文页路由，全部 .en.md（根目录 5 个 + 子目录 21 个）均无侧栏入口，仅能靠页内切换器互达；若要侧栏可见需另行设计双语挂载（rewrites 或按语言分路由前缀），本轮未动。
+- ~~VitePress nav/sidebar 双语挂载~~ **已闭合（2026-10-24 `3ed88fe5`）**：改用官方 `locales`（`config.mjs:205-268`，root=English、zh 键自带 `/zh/` 前缀），root 与 zh 两份 `themeConfig` 各挂一份侧栏（`config.mjs:222`、`config.mjs:253`），切换器为 VitePress 内置组件；不再依赖页内互达。
 - python-313-migration.md 全量翻译的技术门槛：file:line 引用、标识符与实测数值密集，单遍翻译易降质；如后续决定翻译，建议按 §1–§6 / §7.1–§7.18 / §7.19–§7.35 分段推进并逐段核数。
 
 本节事项开工时逐条打勾并附 commit hash，维护规则同前。
