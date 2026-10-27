@@ -126,7 +126,7 @@ In two phases:
 |----|------|----------|------|
 | P0 | Module-window semantics testable (`swapInModules` extraction) | cellapp/unit_test (landed, 2 cases) | Done 2026-10-15 |
 | P1 | dry-run mode + queryable digest + `expectedDigest` | The prepare phase must run `EntityType::init` (BWResource + entity defs + script import), unreachable in the current cellapp/unit_test harness — the same carrier gap as P2; needs the C-tier item first or cluster materials | Todo (carrier gap) |
-| P2 | Failure collect-decide + entity-level rollback | Needs an Entity-runtime carrier (C-tier gap; see below) | Todo |
+| P2 | Failure collect-decide + entity-level rollback | Decision core + outcome-class seam landed 2026-10-27 (`entity_migration_plan.hpp`; `Entity::migrate(FailureClass*)`; 7 cases in cellapp_test) | In progress: engine wiring + rollback execution pending — the rollback inverse is half expressible (see below) |
 | P3 | Dual-version compatibility window | Needs a cellapp tick-level carrier | Todo |
 | P4 | Engine-side barrier (the P2 period) | Needs the cluster black-box chain (C tier) | Todo |
 
@@ -150,3 +150,20 @@ In two phases:
   the failure path does not rebuild it; `planReload` flags this with the
   `dataTypesWiped` field. Migration-time half-migration and F8 share the P2
   carrier gap.
+- **Since batch 51 (2026-10-27) the P2 decision core has a test carrier**:
+  `EntityMigration::classify` (`entity_migration_plan.hpp`) names the three
+  ways `Entity::migrate` can fail — GUARD_OBSOLETE touches nothing,
+  CLASS_SWAP_REJECTED restores `pEntityType_`, and SCRIPT_EXCEPTION is still
+  reported as success — and is exactly what the new
+  `Entity::migrate(FailureClass*)` overload reports; `EntityMigration::advance`
+  carries the collect-decide policy (STOP_ON_FAILURE / CONTINUE_ON_FAILURE,
+  the stop is sticky, rollback is needed only when something migrated first).
+  The same extraction records why the migrate loop still `MF_VERIFY`s instead
+  of stopping and rolling back: of the four inverse steps, the two
+  pointer/class restores are plain assignments, but REVERT_SUPERSEDE_RENAME
+  has no inverse — `supersede()` prefixes the old description's cell methods
+  with `old_` and each call stacks another prefix, and `EntityType::old`
+  returns without renaming once `pOldSelf_` is set, so a failure observed on
+  the second entity of a type did not cause the rename it would have to undo —
+  and CLEAR_OLD_TYPE_LINK has no setter. `rollbackInverseComplete()` is false,
+  and that boundary is asserted, not assumed.

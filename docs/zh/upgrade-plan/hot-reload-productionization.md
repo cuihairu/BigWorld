@@ -80,7 +80,7 @@
 |----|------|----------|------|
 | P0 | 模块换窗语义可测（`swapInModules` 提取） | cellapp/unit_test（已落地，2 用例） | 2026-10-15 完成 |
 | P1 | dry-run 模式 + digest 可查询 + `expectedDigest` | prepare 阶段要跑 `EntityType::init`（BWResource + entity defs + 脚本导入），现 cellapp/unit_test harness 不可达——与 P2 同源承载缺口，需 C 档先行或集群物料 | 待做（承载缺口） |
-| P2 | 失败收集-决策 + 实体级回滚 | 需 Entity 运行时承载（C 档缺口，见下） | 待做 |
+| P2 | 失败收集-决策 + 实体级回滚 | 决策核 + 结果类缝已落地 2026-10-27（`entity_migration_plan.hpp`；`Entity::migrate(FailureClass*)`；cellapp_test 7 用例） | 进行中：引擎接线 + 回滚执行待做——回滚逆只有一半可表达（见下） |
 | P3 | 双版本兼容窗口 | 需 cellapp tick 级承载 | 待做 |
 | P4 | 引擎侧屏障（P2 期） | 需集群黑盒链（C 档） | 待做 |
 
@@ -88,3 +88,4 @@
 
 - 「迁移路径测试覆盖 `Entity::migrate` 语义保持」→ P2，承载缺口：`Entity::migrate` 需要 Entity 实例 + 脚本类型，现 cellapp/unit_test 只编入低耦合 TU（C 档"server 侧 reload 迁移语义测试承载"同源）。
 - 「失败无半迁移状态」→ 加载期失败今天已天然无半迁移（失败路径不触发 migrate）；迁移期半迁移由 P2 的收集-决策+回滚关闭。**批次 36（2026-10-15）起该性质有测试承载**：`ReloadScript::planReload`（`reload_script_plan.hpp`）把 `CellApp::reloadScript` 的动作序列做成数据，失败尾断言不含任何 `MIGRATE_*`，成功尾断言 scratch 解释器先销毁再 migrate、cleanup 最后（7 用例，cellapp_test）。同一提取如实上报 **F8**——全量重载失败时 `EntityType::init(true)`（`entity_type.cpp:262`）已调 `DataType::clearStaticsForReload()` 清空 `s_singletonMap_` 而失败路径不重建，`planReload` 以 `dataTypesWiped` 字段标出；迁移期半迁移与 F8 同属 P2 承载缺口。
+- **批次 51（2026-10-27）起 P2 决策核有了测试承载**：`EntityMigration::classify`（`entity_migration_plan.hpp`）命名 `Entity::migrate` 的三种失败——GUARD_OBSOLETE 什么都不动、CLASS_SWAP_REJECTED 恢复 `pEntityType_`、SCRIPT_EXCEPTION 仍报成功——也正是新增 `Entity::migrate(FailureClass*)` 重载上报的内容；`EntityMigration::advance` 承载收集-决策策略（STOP_ON_FAILURE / CONTINUE_ON_FAILURE，停止是粘性的，只有先前迁移过才需要回滚）。同一提取如实记录为何 migrate 循环仍在 `MF_VERIFY` 而非停下回滚：四个逆步骤中两个指针/类恢复是普通赋值，但 REVERT_SUPERSEDE_RENAME 没有逆——`supersede()` 给旧描述的 cell 方法加 `old_` 前缀且每次调用再叠一层，`EntityType::old` 在 `pOldSelf_` 已置时直接返回不改名，故同一类型的第二个实体上观察到的失败并未造成它需要撤销的那个改名——而 CLEAR_OLD_TYPE_LINK 根本没有 setter。`rollbackInverseComplete()` 为 false，这个边界是被断言的而非假设的。
