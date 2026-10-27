@@ -7,6 +7,7 @@
 
 #include "cellapp_interface.hpp"
 #include "controller.hpp"
+#include "entity_migration_plan.hpp"
 #include "entity_type.hpp"
 #include "history_event.hpp"
 #include "entity_callback_buffer.hpp"
@@ -281,6 +282,20 @@ public:
 
 	void reloadScript();	///< deprecated
 	bool migrate();
+
+	/**
+	 *	This overload additionally reports the failure class the migration
+	 *	failed with: the collect-decide loop in CellApp::reloadScript needs
+	 *	it to tell a guard rejection (nothing was touched) apart from a
+	 *	rejected __class__ swap (pEntityType_ restored) and from a raised
+	 *	onMigrate hook, which migrate() still reports as success.
+	 *
+	 *	@param pFailureClass	The observed outcome, one of the
+	 *			EntityMigration::FailureClass values. Must not be NULL.
+	 *	@return True when the entity now runs on the replacement type.
+	 */
+	bool migrate( EntityMigration::FailureClass * pFailureClass );
+
 	void migratedAll();
 
 	/**

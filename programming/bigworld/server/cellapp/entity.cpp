@@ -4250,9 +4250,12 @@ void Entity::reloadScript()
 
 /**
  *	This method migrates this entity to the new version of resources,
- *	in particular it switches it to use the new script class.
+ *	in particular it switches it to use the new script class, and reports
+ *	the way the migration failed: the type-id guard rejecting the
+ *	replacement, Python refusing the __class__ swap, or the onMigrate hook
+ *	raising - the last of which this method still reports as success.
  */
-bool Entity::migrate()
+bool Entity::migrate( EntityMigration::FailureClass * pFailureClass )
 {
 	AUTO_SCOPED_THIS_ENTITY_PROFILE;
 
@@ -4266,6 +4269,9 @@ bool Entity::migrate()
 			"(absent or type id mismatch %d => %d)\n",
 			id_, pOldType->name(), pOldType->typeID(),
 				pNewType?pNewType->typeID():-1 );
+		// The guard returns before touching the entity, so nothing needs
+		// rolling back.
+		*pFailureClass = EntityMigration::classify( true, false, false );
 		return false;
 	}
 
@@ -4294,7 +4300,13 @@ bool Entity::migrate()
 			"(could not change __class__ to new class)\n",
 			id_, pEntityType_->name() );
 		PyErr_Print();
+		// __class__ itself was left untouched, so only the type pointer needs
+		// restoring. The old description's superseded cell methods are not
+		// restored: EntityDescription has no inverse of supersede(), and the
+		// old-type link keeps its first setter, so this rename is not
+		// attributable to this entity (see entity_migration_plan.hpp).
 		pEntityType_ = pOldType;
+		*pFailureClass = EntityMigration::classify( false, true, false );
 		return false;
 	}
 
@@ -4302,14 +4314,31 @@ bool Entity::migrate()
 	// call, or maybe provide a method to do so, and/or do it if no onMigrate
 	// method.
 
-	// call the migrate method if it has one
+	// call the migrate method if it has one. The hook raising is a migration
+	// failure that this method does not report; the return value is kept so
+	// the collect-decide loop can see it.
 	Entity::nominateRealEntity( *(Entity*)pNewEntity );
-	Script::call( PyObject_GetAttrString( pNewEntity, "onMigrate" ),
+	const bool onMigrateRaised = !Script::call(
+		PyObject_GetAttrString( pNewEntity, "onMigrate" ),
 		Py_BuildValue("(O)",(PyObject*)this), "onMigrate", true/*okIfFnNull*/ );
 	Entity::nominateRealEntityPop();
 
+	*pFailureClass = EntityMigration::classify( false, false, onMigrateRaised );
+
 	// and we are done! sweet!
 	return true;
+}
+
+
+/**
+ *	This method migrates this entity to the new version of resources,
+ *	in particular it switches it to use the new script class. It discards the
+ *	failure class, which is how CellApp::reloadScript's MF_VERIFY sees it.
+ */
+bool Entity::migrate()
+{
+	EntityMigration::FailureClass failureClass;
+	return this->migrate( &failureClass );
 }
 
 /**

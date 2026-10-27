@@ -9,6 +9,7 @@ cxxSource =									\
 	test_buffered_ghost_messages			\
 	test_entity_message_log_scope			\
 	test_entity_message_routing				\
+	test_entity_migration_plan				\
 	test_entity_type_migration				\
 	test_reload_script_plan					\
 	../buffered_ghost_message				\
