@@ -38,7 +38,7 @@
 | F3 | 双版本窗口长度为零 | `cleanupAfterReload(isFullReload)` 在迁移同一 tick 调用（`cellapp.cpp:2364`），立刻 `old(NULL)` 断链 | `supersede` 机制实际只在迁移循环内有效，边界上的在途旧签名调用没有缓冲期 |
 | F4 | 无跨进程一致性 | `cellapp.cpp:2944-2946` 文档明示"用户负责在所有 server 组件上调用"；digest 已计算（`entity_type.cpp:280-287`）但只打印、不比对、不传播 | cellapp 已迁移而 baseapp/dbmgr 仍旧 defs 时，跨进程 type-id 漂移 |
 | F5 | 自定义数据类型实例不迁移 | `cellapp.cpp:2951-2960` 文档要求用户手工逐实例重指 `__class__` | 依赖调用方脚本正确性，无引擎侧保障 |
-| F6 | 批量迁移完成钩子是死代码 | `Entity::migratedAll`（`entity.hpp:284` 声明、`entity.cpp:4308` 定义）全仓无调用方 | `onMigratedAll` 永不触发 |
+| F6 | 批量迁移完成钩子是死代码 | `Entity::migratedAll`（`entity.hpp:284` 声明、`entity.cpp:4308` 定义）与 `Base::migratedAll`（`base.cpp:2837`）全仓无调用方 | `onMigratedAll` 永不触发。**2026-10-27 批次 52 闭合**：两个 migrate 循环现于批量后调 `migratedAll()`（`cellapp.cpp` `MIGRATED_ALL` plan 动作；`baseapp/script_bigworld.cpp`），顺序由 `ReloadScript` plan 测试钉住 |
 | F7 | 回滚后旧描述仍处于 superseded 态 | `entity.cpp:4267` `pNewType->old(pOldType)` 先于 `__class__` 尝试（`entity.cpp:4275`）执行；`entity_type.cpp:168-185` 首次调用即无条件对旧描述 `supersede(CELL)`（全部 cell 方法改名 `old_` 前缀、清名重建 map）；`entity.cpp:4287` `__class__` 失败回滚 `pEntityType_ = pOldType`，而全仓无 un-supersede（批次 33 实测：`find("cellTick")`→NULL、`find("old_cellTick")` 可达、`internalMethod`/`exposedMethod` 下标派发不受影响、digest 随改名漂移） | 回滚"成功"的实体按名字的 mailbox 方法查找全断（`mailbox.cpp:122/240` `findMethod` 返回 NULL→脚本侧报错），按 msgID 的暴露派发仍活——半残实体；第 4 节回滚设计必须连 un-supersede（或以窗口期重解析补偿），且 schema digest 必须在 supersede 前采集 |
 
 ## 设计
