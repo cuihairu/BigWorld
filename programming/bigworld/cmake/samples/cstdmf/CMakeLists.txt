@@ -36,7 +36,7 @@ if(NOT DEFINED VCPKG_TARGET_TRIPLET AND UNIX AND NOT APPLE)
 	set(VCPKG_TARGET_TRIPLET "x64-linux-bw")
 endif()
 
-project(bigworld_cstdmf_sample LANGUAGES CXX)
+project(bigworld_cstdmf_sample LANGUAGES C CXX)
 
 if(NOT DEFINED CMAKE_TOOLCHAIN_FILE AND NOT DEFINED VCPKG_TOOLCHAIN)
 	message(FATAL_ERROR
@@ -188,6 +188,31 @@ add_library(cstdmf STATIC
 	${BW_LIB_DIR}/cstdmf/watcher.cpp
 	${BW_LIB_DIR}/cstdmf/watcher_path_request.cpp
 )
+# --- Windows-only cstdmf TUs (MSVC gate, run 40504640975) -------------------
+# The make/Linux list above intentionally omits these, but on Windows the
+# core TUs' code paths reference their symbols and the cstdmf_test link
+# dies on LNK2019: allocator.obj -> NedAllocator::* (ned_allocator.cpp),
+# log_msg.obj -> Memory::* (memory_load.cpp), concurrency.obj ->
+# BW::ExceptionFilter (debug_exception_filter.cpp), critical_error_handler.obj
+# -> CriticalMsgBox (critical_message_box.cpp). Same set the
+# BWStandardProject build compiles for BW_IS_SERVER AND BW_PLATFORM_WINDOWS
+# (lib/cstdmf/CMakeLists.txt, run 38985715421). ned_allocator.cpp calls
+# nedmalloc directly, so vendor the driver exactly like the
+# third_party/nedalloc nedalloc target. Inert on Linux: MSVC-gated.
+if(MSVC)
+	target_sources(cstdmf PRIVATE
+		${BW_LIB_DIR}/cstdmf/debug_exception_filter.cpp
+		${BW_LIB_DIR}/cstdmf/memory_load.cpp
+		${BW_LIB_DIR}/cstdmf/ned_allocator.cpp
+		${BW_LIB_DIR}/cstdmf/critical_message_box.cpp
+	)
+
+	add_library(nedalloc STATIC
+		${BW_THIRD_PARTY_DIR}/nedalloc/nedmalloc.c
+	)
+	target_link_libraries(cstdmf PRIVATE nedalloc)
+endif()
+
 # CSTDMF_EXPORT/IMPORT drive extern-template declarations on GCC (see
 # cstdmf_dll.hpp and bw_string.hpp) and, on MSVC, dllexport/dllimport. The
 # cstdmf sample builds cstdmf STATIC, so dllimport/dllexport is wrong here

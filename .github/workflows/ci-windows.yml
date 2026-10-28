@@ -225,22 +225,12 @@ jobs:
                 --output-on-failure 2>&1 | `
                 Tee-Object -FilePath ctest-unit-test.log
 
-      - name: Build math unit test (MSVC x64)
-        if: ${{ matrix.module == 'math' }}
-        shell: pwsh
-        run: |
-          cmake --build "build/win_math" --config Release `
-                --target math_unit_test --parallel 2>&1 | `
-                Tee-Object -FilePath cmake-build-test.log
-
-      - name: Test math unit test (MSVC x64)
-        if: ${{ matrix.module == 'math' }}
-        shell: pwsh
-        run: |
-          ctest --test-dir "build/win_math" `
-                -C Release -R "math_unit_test" `
-                --output-on-failure 2>&1 | `
-                Tee-Object -FilePath ctest-unit-test.log
+      # No math unit-test carrier here: math_unit_test lives in the separate
+      # lib/math/unit_test BWStandardProject, which links cstdmf and
+      # unit_test_lib, so it cannot build in the module-standalone
+      # build/win_math tree (no such target: MSB1009, run 40504640975).
+      # The math leg stays a compile gate until it gets a standalone
+      # carrier like cmake/samples/cstdmf.
 
       - name: Upload logs on failure
         if: failure()

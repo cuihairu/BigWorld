@@ -23,11 +23,16 @@ TEST( Timestamp_stampsPerSecond )
 	CHECK( stampsPerSecond() > 0 );
 	CHECK( stampsPerSecondD() > 0.0 );
 
+#if defined( __linux__ )
+	// timestamp.cpp defines these only in its __linux__ branch; the
+	// Windows branch has no rdtsc/gettimeofday variants (MSVC gate,
+	// run 40504640975).
 	CHECK( stampsPerSecond_rdtsc() > 0 );
 	CHECK( stampsPerSecondD_rdtsc() > 0.0 );
 
 	CHECK( stampsPerSecond_gettimeofday() > 0 );
 	CHECK( stampsPerSecondD_gettimeofday() > 0.0 );
+#endif // __linux__
 }
 
 
