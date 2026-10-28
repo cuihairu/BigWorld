@@ -56,6 +56,11 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_INTERPROCEDURAL_OPTIMIZATION OFF) # make profile does not use LTO
 
 if(MSVC)
+	# BWStandardProject defaults to wide Win32 APIs (UNICODE/_UNICODE); the
+	# cstdmf Windows sources (ftp.hpp, critical_message_box.cpp, ...) are
+	# written against the *W entry points. Without this, MSVC resolves
+	# CreateFile et al. to the *A variants and the compile dies on C2664.
+	add_compile_definitions(UNICODE _UNICODE)
 	add_compile_options(
 		/MP /W3 /Zi /WX-
 		# Mirror the GCC lane's -Wno-write-strings: VS18 (MSVC 14.5x) defaults
