@@ -126,7 +126,7 @@ In two phases:
 |----|------|----------|------|
 | P0 | Module-window semantics testable (`swapInModules` extraction) | cellapp/unit_test (landed, 2 cases) | Done 2026-10-15 |
 | P1 | dry-run mode + queryable digest + `expectedDigest` | The prepare phase must run `EntityType::init` (BWResource + entity defs + script import), unreachable in the current cellapp/unit_test harness — the same carrier gap as P2; needs the C-tier item first or cluster materials | Todo (carrier gap) |
-| P2 | Failure collect-decide + entity-level rollback | Decision core + outcome-class seam landed 2026-10-27 (`entity_migration_plan.hpp`; `Entity::migrate(FailureClass*)`; 7 cases in cellapp_test); all four inverse primitives landed 2026-10-29 (`EntityDescription::unsupersede`, 3 cases in entitydef_test) | In progress: engine wiring + rollback execution pending — the inverse primitives are all expressible, the rename step's attribution is the remaining blocker (see below) |
+| P2 | Failure collect-decide + entity-level rollback | Decision core + outcome-class seam landed 2026-10-27 (`entity_migration_plan.hpp`; `Entity::migrate(FailureClass*)`; 7 cases in cellapp_test); all four inverse primitives landed 2026-10-29 (`EntityDescription::unsupersede`, 3 cases in entitydef_test); attribution decision modeled 2026-10-29 (`planRollback`, 3 more cases in cellapp_test) | In progress: engine wiring + rollback execution pending — the inverse primitives are all expressible and the attribution decision is modeled; what remains is the execution carrier (see below) |
 | P3 | Dual-version compatibility window | Needs a cellapp tick-level carrier | Todo |
 | P4 | Engine-side barrier (the P2 period) | Needs the cluster black-box chain (C tier) | Todo |
 
@@ -167,13 +167,11 @@ In two phases:
   DOES have an inverse — `EntityDescription::unsupersede` strips exactly one
   leading `old_` prefix per call, pairing with `supersede()`'s one-per-call
   stacking, and it is pinned by entitydef_test. So all four inverse primitives
-  are expressible (`rollbackInverseComplete()` is true). What keeps the loop
-  aborting is attribution: the rename happens once per (new, old) type pair —
-  `EntityType::old` returns without renaming once `pOldSelf_` is set — so only
-  the first migrated entity of a pair renames, and a failure observed on a
-  later entity of the same pair did not cause the rename it would have to
-  undo. The loop would have to track, per type pair, whether the strip still
-  needs doing and by which entity; `LoopState` does not model that, and
-  `rollbackAttributionComplete()` is false, a boundary that is asserted, not
-  assumed.
-- **Since batch 53 (2026-10-29) the supersede rename has its inverse**: `EntityDescription::unsupersede(component)` / `EntityMethodDescriptions::unsupersede()` strip exactly one leading `old_` prefix per call and rebuild the name map, the exact per-call pairing with `supersede()` (which adds one prefix per call, pinned by `EntityDescription_supersedeTwiceStacksPrefixes`). Three cases in entitydef_test pin it: one supersede + one unsupersede restores the original names to the same objects and the exposed dispatch name (base/client lists untouched), a doubled supersede needs a doubled unsupersede, and an unsupersede on a never-superseded description changes nothing (the strip only fires on a real prefix, so a miscounted strip cannot invent renames). This is the mechanism F7's rollback needs for REVERT_SUPERSEDE_RENAME; who runs the strip and when remains the attribution gap above.
+  are expressible (`rollbackInverseComplete()` is true). Batch 53's ledger had
+  also recorded attribution — who runs the per-pair type-level steps — as the
+  remaining blocker; batch 54 corrected that overstatement: the decision is
+  decidable and now modeled as `planRollback` (see below), so
+  `rollbackAttributionComplete()` is true. What keeps the loop unwired is the
+  execution carrier, not a missing decision.
+- **Since batch 53 (2026-10-29) the supersede rename has its inverse**: `EntityDescription::unsupersede(component)` / `EntityMethodDescriptions::unsupersede()` strip exactly one leading `old_` prefix per call and rebuild the name map, the exact per-call pairing with `supersede()` (which adds one prefix per call, pinned by `EntityDescription_supersedeTwiceStacksPrefixes`). Three cases in entitydef_test pin it: one supersede + one unsupersede restores the original names to the same objects and the exposed dispatch name (base/client lists untouched), a doubled supersede needs a doubled unsupersede, and an unsupersede on a never-superseded description changes nothing (the strip only fires on a real prefix, so a miscounted strip cannot invent renames). This is the mechanism F7's rollback needs for REVERT_SUPERSEDE_RENAME; the strip's attribution is settled by batch 54's `planRollback` below.
+- **Since batch 54 (2026-10-29) the rollback attribution decision is modeled**: `EntityMigration::planRollback` (`entity_migration_plan.hpp`) decides, for one touched entity, which rollback steps run — the entity-level restores only when the entity fully migrated (a rejected class swap already restored `pEntityType_` itself; a raised onMigrate hook reports success yet fully migrated), and the pair-level strip and link-clear only for the first touched entity of a renamed pair in rollback order, so no entity has to "own" a rename it did not cause. `touchedEntity` pins the rollback-set boundary: a guard-rejected entity never reaches the `old()` call, so it touches neither the entity nor its pair. This corrects batch 53's overstatement that attribution was the blocker; the boundary that actually keeps the migrate loop `MF_VERIFY`ing is the execution carrier — the loop and its rollback call Entity methods on live entities, unreachable in cellapp/unit_test (the C-tier gap).
