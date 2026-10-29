@@ -13,8 +13,11 @@
 //   * STOP_ON_FAILURE stops the rollout at the first failure and needs a
 //     rollback only when something migrated before it;
 //   * CONTINUE_ON_FAILURE records and keeps migrating;
-//   * the rollback inverse is only half expressible, which is why the loop
-//     still aborts instead of stopping and rolling back.
+//   * the rollback inverse is fully expressible (rollbackInverseComplete())
+//     and the attribution decision is modeled (planRollback), but the loop
+//     and its rollback call Entity methods on live entities, unreachable
+//     here - the C-tier execution-carrier gap - so the loop still aborts
+//     instead of stopping and rolling back.
 
 #include "pch.hpp"
 
@@ -177,13 +180,12 @@ TEST( EntityMigrationPlan_RenamedOldDescription )
  *	through the public setter old(NULL) (EntityType::old early-returns only
  *	when pOldSelf_ and the argument are both non-NULL, so a NULL argument
  *	always clears), and the supersede rename's inverse is
- *	EntityDescription::unsupersede, one stacked prefix per call. What keeps
- *	the loop aborting is attribution, not primitives: the rename happens
- *	once per (new, old) type pair, so a failure observed on a later entity
- *	of the pair did not cause the rename it would have to undo, and
- *	rollbackAttributionComplete() is false.
+ *	EntityDescription::unsupersede, one stacked prefix per call. Since batch
+ *	54 the attribution decision is modeled too (planRollback), so both
+ *	completeness facts hold; what still keeps the loop unwired is the
+ *	execution carrier, not a missing decision.
  */
-TEST( EntityMigrationPlan_RollbackNeedsAttribution )
+TEST( EntityMigrationPlan_RollbackDecisionModeled )
 {
 	CHECK( EntityMigration::revertible( EntityMigration::RESTORE_TYPE_POINTER ) );
 	CHECK( EntityMigration::revertible( EntityMigration::RESTORE_SCRIPT_CLASS ) );
@@ -191,7 +193,84 @@ TEST( EntityMigrationPlan_RollbackNeedsAttribution )
 		EntityMigration::REVERT_SUPERSEDE_RENAME ) );
 	CHECK( EntityMigration::revertible( EntityMigration::CLEAR_OLD_TYPE_LINK ) );
 	CHECK_EQUAL( true, EntityMigration::rollbackInverseComplete() );
-	CHECK_EQUAL( false, EntityMigration::rollbackAttributionComplete() );
+	CHECK_EQUAL( true, EntityMigration::rollbackAttributionComplete() );
+}
+
+
+/**
+ *	A guard-rejected entity never reaches the old() call, so it is not in
+ *	the rollback set; every other outcome touched the entity (or at least
+ *	the pair) and is rolled back.
+ */
+TEST( EntityMigrationPlan_TouchedEntity )
+{
+	CHECK( !EntityMigration::touchedEntity( EntityMigration::GUARD_OBSOLETE ) );
+	CHECK( EntityMigration::touchedEntity( EntityMigration::NONE ) );
+	CHECK( EntityMigration::touchedEntity(
+		EntityMigration::CLASS_SWAP_REJECTED ) );
+	CHECK( EntityMigration::touchedEntity(
+		EntityMigration::SCRIPT_EXCEPTION ) );
+}
+
+
+/**
+ *	planRollback() is the pair-pass attribution: the two type-level steps run
+ *	once per (new, old) type pair, on the first touched entity of the pair in
+ *	rollback order, so a later entity of the same pair inherits nothing and a
+ *	failure observed on it does not have to undo a rename it did not cause.
+ */
+TEST( EntityMigrationPlan_PlanRollbackPairPass )
+{
+	const EntityMigration::RollbackPlan first = EntityMigration::planRollback(
+		EntityMigration::NONE, /*pairRenamed=*/true,
+		/*alreadyStripped=*/false, /*alreadyCleared=*/false );
+	CHECK( first.restoreEntity );
+	CHECK( first.revertSupersede );
+	CHECK( first.clearOldLink );
+
+	// A later entity of the same renamed pair runs no pair-level step.
+	const EntityMigration::RollbackPlan later = EntityMigration::planRollback(
+		EntityMigration::NONE, /*pairRenamed=*/true,
+		/*alreadyStripped=*/true, /*alreadyCleared=*/true );
+	CHECK( later.restoreEntity );
+	CHECK( !later.revertSupersede );
+	CHECK( !later.clearOldLink );
+
+	// A pair that was never renamed gets no strip and no link break, no
+	// matter which entity of it is rolled back.
+	const EntityMigration::RollbackPlan unrenamed =
+		EntityMigration::planRollback( EntityMigration::NONE,
+			/*pairRenamed=*/false, /*alreadyStripped=*/false,
+			/*alreadyCleared=*/false );
+	CHECK( unrenamed.restoreEntity );
+	CHECK( !unrenamed.revertSupersede );
+	CHECK( !unrenamed.clearOldLink );
+}
+
+
+/**
+ *	An entity whose class swap was rejected restored pEntityType_ itself, so
+ *	the loop restoring it again is a no-op; but it still touched the pair
+ *	and can be the entity that runs the strip. A raised onMigrate hook
+ *	reports success yet fully migrated, so it is restored like any success.
+ */
+TEST( EntityMigrationPlan_PlanRollbackPerOutcome )
+{
+	const EntityMigration::RollbackPlan rejected =
+		EntityMigration::planRollback(
+			EntityMigration::CLASS_SWAP_REJECTED, /*pairRenamed=*/true,
+			/*alreadyStripped=*/false, /*alreadyCleared=*/false );
+	CHECK( !rejected.restoreEntity );
+	CHECK( rejected.revertSupersede );
+	CHECK( rejected.clearOldLink );
+
+	const EntityMigration::RollbackPlan hookRaised =
+		EntityMigration::planRollback( EntityMigration::SCRIPT_EXCEPTION,
+			/*pairRenamed=*/true, /*alreadyStripped=*/false,
+			/*alreadyCleared=*/false );
+	CHECK( hookRaised.restoreEntity );
+	CHECK( hookRaised.revertSupersede );
+	CHECK( hookRaised.clearOldLink );
 }
 
 

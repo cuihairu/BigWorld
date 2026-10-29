@@ -34,16 +34,18 @@
 // strips exactly one leading old_ prefix per call, pairing with
 // supersede()'s one-per-call stacking (entitydef_test
 // EntityDescription_unsupersede*; batch 53 - batch 51 wrongly recorded the
-// rename as having no inverse and the link as having no setter). What is
-// still missing is attribution: the rename happens once per (new, old)
-// type pair - EntityType::old (entity_type.cpp:178) returns without
-// renaming once pOldSelf_ is already set - so only the first migrated
-// entity of a pair renames, and a failure observed on a later entity of
-// the same pair did not cause the rename it would have to undo. The loop
-// would have to track, per type pair, whether the strip still needs doing
-// and by which entity; LoopState does not model that, which is what keeps
-// the migrate loop MF_VERIFYing instead of stopping and rolling back
-// (rollbackAttributionComplete() is false).
+// rename as having no inverse and the link as having no setter). The
+// attribution decision - who runs the per-pair type-level steps - is
+// decidable and modeled as planRollback() (batch 54): the strip and the
+// link-clear each run once per (new, old) type pair, on the first touched
+// entity of the pair in rollback order, so no entity has to "own" a rename
+// it did not cause (EntityType::old, entity_type.cpp:178, returns without
+// renaming once pOldSelf_ is already set). What keeps the migrate loop
+// MF_VERIFYing instead of stopping and rolling back is not a missing
+// decision but the execution carrier: the loop and its rollback call
+// Entity methods on live entities, unreachable in cellapp/unit_test (the
+// C-tier "server-side reload migration semantic test carrier" gap), so the
+// wiring is deferred until that carrier or cluster materials exist.
 
 #ifndef ENTITY_MIGRATION_PLAN_HPP
 #define ENTITY_MIGRATION_PLAN_HPP
@@ -145,17 +147,52 @@ inline bool rollbackInverseComplete()
 		revertible( CLEAR_OLD_TYPE_LINK );
 }
 
-/// Whether the rollback can decide who runs each step. It cannot: the
-/// supersede rename happens once per (new, old) type pair, so only the
-/// first migrated entity of a pair renames and a failure observed on a
-/// later entity of the same pair did not cause the rename it would have to
-/// undo. The loop would have to track, per type pair, whether the strip
-/// still needs doing and by which entity; LoopState does not model that
-/// yet, which is why the migrate loop still MF_VERIFYs instead of stopping
-/// and rolling back.
+/// Whether the rollback can decide who runs each step. Since batch 54 the
+/// decision is modeled as planRollback(): the two type-level steps run once
+/// per (new, old) type pair, on the first touched entity of the pair in
+/// rollback order, so the decision is decidable and no entity has to own a
+/// rename it did not cause. What still keeps the loop unwired is the
+/// execution carrier noted above, not the decision.
 inline bool rollbackAttributionComplete()
 {
-	return false;
+	return true;
+}
+
+/// Whether an entity is in the rollback set: a guard-rejected entity never
+/// reaches the old() call, so it touches neither the entity nor its pair.
+inline bool touchedEntity( FailureClass outcome )
+{
+	return outcome != GUARD_OBSOLETE;
+}
+
+/// What a rollback runs on one touched entity. The entity-level restores run
+/// only when the entity fully migrated (a rejected class swap already
+/// restored pEntityType_ itself, so restoring it again is a no-op); the
+/// pair-level steps run only for the first touched entity of a renamed pair
+/// in rollback order.
+struct RollbackPlan
+{
+	bool restoreEntity;		///< pEntityType_ = pOldType, __class__ = old
+	bool revertSupersede;	///< this entity's pair strips once (F7)
+	bool clearOldLink;		///< this entity's pair breaks old(NULL) once
+};
+
+/// Decide one touched entity's rollback steps. pairRenamed: whether the
+/// entity's (new, old) pair was renamed at all (a pair is renamed by its
+/// first touched entity, since EntityType::old returns without renaming once
+/// pOldSelf_ is set). pairAlreadyStripped / pairAlreadyCleared: whether an
+/// earlier touched entity of the same pair (in rollback order) already ran
+/// the step. A guard-rejected outcome never reaches this function: it is not
+/// in the rollback set.
+inline RollbackPlan planRollback( FailureClass outcome, bool pairRenamed,
+	bool pairAlreadyStripped, bool pairAlreadyCleared )
+{
+	RollbackPlan plan;
+	plan.restoreEntity =
+		outcome == NONE || outcome == SCRIPT_EXCEPTION;
+	plan.revertSupersede = pairRenamed && !pairAlreadyStripped;
+	plan.clearOldLink = pairRenamed && !pairAlreadyCleared;
+	return plan;
 }
 
 /// Collect-decide state for the per-entity migrate loop.
