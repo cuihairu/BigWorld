@@ -126,7 +126,7 @@ In two phases:
 |----|------|----------|------|
 | P0 | Module-window semantics testable (`swapInModules` extraction) | cellapp/unit_test (landed, 2 cases) | Done 2026-10-15 |
 | P1 | dry-run mode + queryable digest + `expectedDigest` | The prepare phase must run `EntityType::init` (BWResource + entity defs + script import), unreachable in the current cellapp/unit_test harness — the same carrier gap as P2; needs the C-tier item first or cluster materials | Todo (carrier gap) |
-| P2 | Failure collect-decide + entity-level rollback | Decision core + outcome-class seam landed 2026-10-27 (`entity_migration_plan.hpp`; `Entity::migrate(FailureClass*)`; 7 cases in cellapp_test) | In progress: engine wiring + rollback execution pending — the rollback inverse is half expressible (see below) |
+| P2 | Failure collect-decide + entity-level rollback | Decision core + outcome-class seam landed 2026-10-27 (`entity_migration_plan.hpp`; `Entity::migrate(FailureClass*)`; 7 cases in cellapp_test); all four inverse primitives landed 2026-10-29 (`EntityDescription::unsupersede`, 3 cases in entitydef_test) | In progress: engine wiring + rollback execution pending — the inverse primitives are all expressible, the rename step's attribution is the remaining blocker (see below) |
 | P3 | Dual-version compatibility window | Needs a cellapp tick-level carrier | Todo |
 | P4 | Engine-side barrier (the P2 period) | Needs the cluster black-box chain (C tier) | Todo |
 
@@ -159,11 +159,21 @@ In two phases:
   carries the collect-decide policy (STOP_ON_FAILURE / CONTINUE_ON_FAILURE,
   the stop is sticky, rollback is needed only when something migrated first).
   The same extraction records why the migrate loop still `MF_VERIFY`s instead
-  of stopping and rolling back: of the four inverse steps, the two
-  pointer/class restores are plain assignments, but REVERT_SUPERSEDE_RENAME
-  has no inverse — `supersede()` prefixes the old description's cell methods
-  with `old_` and each call stacks another prefix, and `EntityType::old`
-  returns without renaming once `pOldSelf_` is set, so a failure observed on
-  the second entity of a type did not cause the rename it would have to undo —
-  and CLEAR_OLD_TYPE_LINK has no setter. `rollbackInverseComplete()` is false,
-  and that boundary is asserted, not assumed.
+  of stopping and rolling back. Batch 51 recorded that the inverse was not
+  fully expressible, which had two parts wrong (corrected in batch 53): the
+  old-type link IS clearable through the public setter `old(NULL)` (the early
+  return in `EntityType::old` fires only when `pOldSelf_` and the argument are
+  both non-NULL, so a NULL argument always clears), and the supersede rename
+  DOES have an inverse — `EntityDescription::unsupersede` strips exactly one
+  leading `old_` prefix per call, pairing with `supersede()`'s one-per-call
+  stacking, and it is pinned by entitydef_test. So all four inverse primitives
+  are expressible (`rollbackInverseComplete()` is true). What keeps the loop
+  aborting is attribution: the rename happens once per (new, old) type pair —
+  `EntityType::old` returns without renaming once `pOldSelf_` is set — so only
+  the first migrated entity of a pair renames, and a failure observed on a
+  later entity of the same pair did not cause the rename it would have to
+  undo. The loop would have to track, per type pair, whether the strip still
+  needs doing and by which entity; `LoopState` does not model that, and
+  `rollbackAttributionComplete()` is false, a boundary that is asserted, not
+  assumed.
+- **Since batch 53 (2026-10-29) the supersede rename has its inverse**: `EntityDescription::unsupersede(component)` / `EntityMethodDescriptions::unsupersede()` strip exactly one leading `old_` prefix per call and rebuild the name map, the exact per-call pairing with `supersede()` (which adds one prefix per call, pinned by `EntityDescription_supersedeTwiceStacksPrefixes`). Three cases in entitydef_test pin it: one supersede + one unsupersede restores the original names to the same objects and the exposed dispatch name (base/client lists untouched), a doubled supersede needs a doubled unsupersede, and an unsupersede on a never-superseded description changes nothing (the strip only fires on a real prefix, so a miscounted strip cannot invent renames). This is the mechanism F7's rollback needs for REVERT_SUPERSEDE_RENAME; who runs the strip and when remains the attribution gap above.
