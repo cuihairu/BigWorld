@@ -137,6 +137,7 @@ public:
 			const BW::string & componentName,
 			const IEntityDistributionDecider * pDistributionDecider );
 	void	supersede( MethodDescription::Component component );
+	void	unsupersede( MethodDescription::Component component );
 
 	enum DataDomain
 	{

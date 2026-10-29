@@ -172,20 +172,26 @@ TEST( EntityMigrationPlan_RenamedOldDescription )
 
 
 /**
- *	The rollback inverse is half expressible. The two pointer and class
- *	restores are plain assignments; the supersede rename has no inverse and
- *	its old_ prefix stacks, and the old-type link is a private member without
- *	a setter. So rollbackInverseComplete() is false and the loop keeps
- *	aborting instead of stopping and rolling back.
+ *	All four rollback primitives exist since batch 53: the two pointer and
+ *	class restores are plain assignments, the old-type link is cleared
+ *	through the public setter old(NULL) (EntityType::old early-returns only
+ *	when pOldSelf_ and the argument are both non-NULL, so a NULL argument
+ *	always clears), and the supersede rename's inverse is
+ *	EntityDescription::unsupersede, one stacked prefix per call. What keeps
+ *	the loop aborting is attribution, not primitives: the rename happens
+ *	once per (new, old) type pair, so a failure observed on a later entity
+ *	of the pair did not cause the rename it would have to undo, and
+ *	rollbackAttributionComplete() is false.
  */
-TEST( EntityMigrationPlan_RollbackInverseIncomplete )
+TEST( EntityMigrationPlan_RollbackNeedsAttribution )
 {
 	CHECK( EntityMigration::revertible( EntityMigration::RESTORE_TYPE_POINTER ) );
 	CHECK( EntityMigration::revertible( EntityMigration::RESTORE_SCRIPT_CLASS ) );
-	CHECK( !EntityMigration::revertible(
+	CHECK( EntityMigration::revertible(
 		EntityMigration::REVERT_SUPERSEDE_RENAME ) );
-	CHECK( !EntityMigration::revertible( EntityMigration::CLEAR_OLD_TYPE_LINK ) );
-	CHECK_EQUAL( false, EntityMigration::rollbackInverseComplete() );
+	CHECK( EntityMigration::revertible( EntityMigration::CLEAR_OLD_TYPE_LINK ) );
+	CHECK_EQUAL( true, EntityMigration::rollbackInverseComplete() );
+	CHECK_EQUAL( false, EntityMigration::rollbackAttributionComplete() );
 }
 
 

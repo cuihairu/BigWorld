@@ -30,6 +30,13 @@ public:
 		const BW::string & componentName,
 		unsigned int * pNumLatestEventMembers = NULL );
 	void supersede();
+	/** The inverse of supersede(): strips one leading old_ prefix from each
+	 *  internal method name and rebuilds the name map. Each supersede() call
+	 *  adds one prefix, so each unsupersede() call removes exactly one;
+	 *  EntityType::old runs supersede once per type pair within a migration,
+	 *  so a rollback strips once per affected pair (which entity of the pair
+	 *  performs the strip is the attribution the migration plan tracks). */
+	void unsupersede();
 
 	BWENTITY_API unsigned int size() const;
 	BWENTITY_API

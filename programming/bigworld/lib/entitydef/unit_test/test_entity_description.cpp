@@ -2367,6 +2367,119 @@ TEST_F( EntityDefUnitTestHarness, EntityDescription_supersedeTwiceStacksPrefixes
 
 
 /**
+ *	unsupersede() is the per-call inverse of supersede(): after one of each,
+ *	the original names resolve again, the old_-prefixed ones do not, and the
+ *	index dispatch and untouched component lists survive the round trip.
+ */
+TEST_F( EntityDefUnitTestHarness, EntityDescription_unsupersedeRestoresNames )
+{
+	installFixtures();
+
+	writeFixtureFile( BW::string( FIXTURE_DIR ) + "/batch53Unsupersede.def",
+		"<root>\n"
+		"	<CellMethods>\n"
+		"		<cellTick/>\n"
+		"		<cellHeal>\n"
+		"			<Exposed/>\n"
+		"		</cellHeal>\n"
+		"	</CellMethods>\n"
+		"	<BaseMethods>\n"
+		"		<basePing>\n"
+		"			<Exposed/>\n"
+		"		</basePing>\n"
+		"	</BaseMethods>\n"
+		"</root>\n" );
+
+	EntityDescription description;
+	CHECK( description.parse( "batch53Unsupersede", "", NULL ) );
+
+	const MethodDescription * pOriginalTick =
+		description.cell().internalMethod( 0 );
+
+	description.supersede( MethodDescription::CELL );
+	CHECK( description.cell().find( "cellTick" ) == NULL );
+
+	description.unsupersede( MethodDescription::CELL );
+
+	// The original names resolve again, to the same objects ...
+	CHECK( description.cell().find( "cellTick" ) != NULL );
+	CHECK( description.cell().find( "cellHeal" ) != NULL );
+	CHECK( description.cell().find( "cellTick" ) == pOriginalTick );
+	CHECK( description.cell().internalMethod( 0 )->name() == "cellTick" );
+	// ... and the old_-prefixed names are gone.
+	CHECK( description.cell().find( "old_cellTick" ) == NULL );
+
+	// The exposed (index/msgID) dispatch name also round-trips.
+	CHECK( description.cell().exposedMethod( 0 ) != NULL );
+	CHECK( description.cell().exposedMethod( 0 )->name() == "cellHeal" );
+
+	// Only the cell list was touched by the pair of calls.
+	CHECK( description.base().find( "basePing" ) != NULL );
+}
+
+
+/**
+ *	unsupersede() strips exactly one stacked prefix per call, so a doubled
+ *	supersede needs a doubled unsupersede. This is the per-call pairing a
+ *	rollback must respect when it attributes the strip.
+ */
+TEST_F( EntityDefUnitTestHarness, EntityDescription_unsupersedeUndoesOnePrefix )
+{
+	installFixtures();
+
+	writeFixtureFile( BW::string( FIXTURE_DIR ) + "/batch53UnsupersedeStack.def",
+		"<root>\n"
+		"	<CellMethods>\n"
+		"		<cellTick/>\n"
+		"	</CellMethods>\n"
+		"</root>\n" );
+
+	EntityDescription description;
+	CHECK( description.parse( "batch53UnsupersedeStack", "", NULL ) );
+
+	description.supersede( MethodDescription::CELL );
+	description.supersede( MethodDescription::CELL );
+	CHECK( description.cell().find( "old_old_cellTick" ) != NULL );
+
+	description.unsupersede( MethodDescription::CELL );
+	CHECK( description.cell().find( "old_old_cellTick" ) == NULL );
+	CHECK( description.cell().find( "old_cellTick" ) != NULL );
+	CHECK( description.cell().find( "cellTick" ) == NULL );
+
+	description.unsupersede( MethodDescription::CELL );
+	CHECK( description.cell().find( "cellTick" ) != NULL );
+	CHECK( description.cell().size() == 1 );
+}
+
+
+/**
+ *	unsupersede() on a description that was never superseded changes
+ *	nothing: the strip only fires on an actual old_ prefix, so a miscounted
+ *	strip cannot invent renames.
+ */
+TEST_F( EntityDefUnitTestHarness, EntityDescription_unsupersedeWithoutPrefixIsNoop )
+{
+	installFixtures();
+
+	writeFixtureFile( BW::string( FIXTURE_DIR ) + "/batch53UnsupersedeNoop.def",
+		"<root>\n"
+		"	<CellMethods>\n"
+		"		<cellTick/>\n"
+		"	</CellMethods>\n"
+		"</root>\n" );
+
+	EntityDescription description;
+	CHECK( description.parse( "batch53UnsupersedeNoop", "", NULL ) );
+
+	description.unsupersede( MethodDescription::CELL );
+
+	CHECK( description.cell().find( "cellTick" ) != NULL );
+	CHECK( description.cell().internalMethod( 0 )->name() == "cellTick" );
+	CHECK( description.cell().size() == 1 );
+}
+
+
+/**
  *	A superseded description no longer digests the same: the rename feeds
  *	addToMD5 through every exposed method name, so a schema digest must be
  *	captured before supersede (the reload chain supersedes old descriptions

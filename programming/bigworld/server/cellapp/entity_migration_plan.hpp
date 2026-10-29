@@ -23,16 +23,27 @@
 //   * SCRIPT_EXCEPTION - the onMigrate hook raised; Script::call's return
 //     value is discarded (F2), so the entity still reports success.
 //
-// The rollback half of the design cannot be written from the state
-// Entity::migrate leaves, and that fact is recorded here rather than guessed
-// around: pNewType->old(pOldType) renames the old description's cell methods
-// with an old_ prefix (entity_description.cpp:892; the rename and its
-// stacking are pinned by entitydef_test EntityDescription_supersede*), and
-// EntityType::old (entity_type.cpp:178) returns without renaming once
-// pOldSelf_ is already set. A failure observed on the second entity of a
-// type therefore did not cause the rename it would have to undo, so the
-// inverse cannot attribute its REVERT_SUPERSEDE_RENAME step; one more step
-// of the inverse, CLEAR_OLD_TYPE_LINK, has no setter at all.
+// The rollback half of the design cannot be run yet, and the reason is
+// recorded here rather than guessed around. All four inverse steps have
+// primitives (rollbackInverseComplete()): the two pointer/class restores
+// are plain assignments, the old-type link is cleared through the public
+// setter old(NULL) (EntityType::old, entity_type.hpp:87 - the early return
+// only fires when both pOldSelf_ and the argument are non-NULL, and
+// cleanupAfterReload already uses old(NULL) to break the link), and the
+// supersede rename's inverse is EntityDescription::unsupersede, which
+// strips exactly one leading old_ prefix per call, pairing with
+// supersede()'s one-per-call stacking (entitydef_test
+// EntityDescription_unsupersede*; batch 53 - batch 51 wrongly recorded the
+// rename as having no inverse and the link as having no setter). What is
+// still missing is attribution: the rename happens once per (new, old)
+// type pair - EntityType::old (entity_type.cpp:178) returns without
+// renaming once pOldSelf_ is already set - so only the first migrated
+// entity of a pair renames, and a failure observed on a later entity of
+// the same pair did not cause the rename it would have to undo. The loop
+// would have to track, per type pair, whether the strip still needs doing
+// and by which entity; LoopState does not model that, which is what keeps
+// the migrate loop MF_VERIFYing instead of stopping and rolling back
+// (rollbackAttributionComplete() is false).
 
 #ifndef ENTITY_MIGRATION_PLAN_HPP
 #define ENTITY_MIGRATION_PLAN_HPP
@@ -77,7 +88,7 @@ enum RollbackStep
 	RESTORE_TYPE_POINTER,	///< pEntityType_ = pOldType
 	RESTORE_SCRIPT_CLASS,	///< __class__ = pOldType->pPyType()
 	REVERT_SUPERSEDE_RENAME,///< undo EntityType::old's supersede()
-	CLEAR_OLD_TYPE_LINK,	///< pNewType->pOldSelf_ = NULL
+	CLEAR_OLD_TYPE_LINK,	///< pNewType->old(NULL), clears pOldSelf_
 	ROLLBACK_STEP_COUNT
 };
 
@@ -111,23 +122,40 @@ inline bool renamedOldDescription( FailureClass failure, bool distinctType )
 	return failure != GUARD_OBSOLETE && distinctType;
 }
 
-/// Whether a rollback step can be expressed in today's engine. The two
-/// pointer/class restores are; the supersede rename has no inverse and stacks
-/// prefixes, and the old-type link is a private member without a setter.
+/// Whether a rollback step's primitive exists in today's engine. The two
+/// pointer/class restores are plain assignments, the old-type link is
+/// cleared through the public setter old(NULL), and the supersede rename's
+/// inverse is EntityDescription::unsupersede (batch 53): it strips exactly
+/// one leading old_ prefix per call, pairing with supersede()'s one-per-
+/// call stacking.
 inline bool revertible( RollbackStep step )
 {
-	return step == RESTORE_TYPE_POINTER || step == RESTORE_SCRIPT_CLASS;
+	return step == RESTORE_TYPE_POINTER || step == RESTORE_SCRIPT_CLASS ||
+		step == CLEAR_OLD_TYPE_LINK || step == REVERT_SUPERSEDE_RENAME;
 }
 
-/// Whether the whole rollback inverse is expressible. It is not, which is
-/// why the migrate loop still MF_VERIFYs instead of stopping and rolling
-/// back.
+/// Whether the whole rollback inverse is expressible. Since batch 53 all
+/// four primitives exist, so this is true; what keeps the migrate loop
+/// MF_VERIFYing is rollbackAttributionComplete() below.
 inline bool rollbackInverseComplete()
 {
 	return revertible( RESTORE_TYPE_POINTER ) &&
 		revertible( RESTORE_SCRIPT_CLASS ) &&
 		revertible( REVERT_SUPERSEDE_RENAME ) &&
 		revertible( CLEAR_OLD_TYPE_LINK );
+}
+
+/// Whether the rollback can decide who runs each step. It cannot: the
+/// supersede rename happens once per (new, old) type pair, so only the
+/// first migrated entity of a pair renames and a failure observed on a
+/// later entity of the same pair did not cause the rename it would have to
+/// undo. The loop would have to track, per type pair, whether the strip
+/// still needs doing and by which entity; LoopState does not model that
+/// yet, which is why the migrate loop still MF_VERIFYs instead of stopping
+/// and rolling back.
+inline bool rollbackAttributionComplete()
+{
+	return false;
 }
 
 /// Collect-decide state for the per-entity migrate loop.

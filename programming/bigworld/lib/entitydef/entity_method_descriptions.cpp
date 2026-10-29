@@ -232,6 +232,28 @@ void EntityMethodDescriptions::supersede()
 
 
 /**
+ *	This method undoes one supersede() pass on this collection.
+ */
+void EntityMethodDescriptions::unsupersede()
+{
+	map_.clear();
+	MF_ASSERT( internalMethods_.size() <= UINT_MAX );
+	uint32 i = 0;
+	for (List::iterator it = internalMethods_.begin();
+		it != internalMethods_.end(); it++, ++i )
+	{
+		BW::string & str = const_cast<BW::string&>( it->name() );
+		if (str.compare( 0, 4, "old_" ) == 0)
+		{
+			str = str.substr( 4 );
+		}
+
+		map_[ it->name().c_str() ] = i;
+	}
+}
+
+
+/**
  *	This method returns the number of methods associated with this entity.
  *
  *	@return The number of methods associated with this entity.

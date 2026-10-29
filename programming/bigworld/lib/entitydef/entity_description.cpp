@@ -906,6 +906,25 @@ void EntityDescription::supersede( MethodDescription::Component component )
 }
 
 /**
+ *	This method undoes one supersede() pass on this entity description.
+ */
+void EntityDescription::unsupersede( MethodDescription::Component component )
+{
+	if (component == MethodDescription::BASE)
+	{
+		base_.unsupersede();
+	}
+	else if (component == MethodDescription::CELL)
+	{
+		cell_.unsupersede();
+	}
+	else
+	{
+		WARNING_MSG("only baseApp and cellApp can call unsupersede method. Ignored\n");
+	}
+}
+
+/**
   * Tell entity description which directory it should try read
   * the .def files from
   */
