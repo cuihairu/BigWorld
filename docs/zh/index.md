@@ -28,6 +28,8 @@ features:
     details: 先理解引擎架构，再判断哪些属于源码核心约束，哪些只是外围依赖或工具链问题。
 ---
 
+![BigWorld 分布式 MMO 引擎架构](/images/architecture-zh.svg)
+
 <div class="arch-hero">
 
 **研究主线**：BigWorld 不是普通 Python 项目，而是 C/C++ 主导、嵌入 Python 的分布式 MMO 服务器引擎——嵌入式解释器已完成 [Python 2.7 → 3.13 迁移](/zh/upgrade-plan/migration-status)。学习它的价值不在“照搬旧代码”，而在理解一个成熟商业 MMO 引擎如何在当时的平台约束下处理网络、实体、空间、负载、脚本和运维。

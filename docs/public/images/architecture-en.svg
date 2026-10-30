@@ -1,0 +1,112 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="1130" viewBox="0 0 1280 1130" role="img" aria-labelledby="title desc" xml:lang="en">
+<title id="title">BigWorld · Distributed MMO Engine Architecture</title>
+<desc id="desc">The BigWorld server is a distributed multi-process runtime split by runtime authority domain rather than business domain. The client enters through the LoginApp ingress; LoginApp performs challenge/authentication and assigns the target BaseApp. BaseApp owns player sessions, Base entities and client communication; CellApp owns space simulation, AOI, ghosts and in-Cell logic; DBApp isolates blocking database work behind background tasks. BaseAppMgr/CellAppMgr/DBAppMgr form the control plane and registry for registration, discovery, load info, scaling admission and recovery coordination. Reviver monitors critical components via ping/death and asks machined to start replacement processes. machined provides process registration, interface discovery, birth/death listeners and startup components. Runtime infrastructure: Mercury reliable UDP, main Reactor event loop, embedded Python 3.13, and the EntityDef contract. Dashed lines are control/monitoring relations, solid lines are business data.</desc>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10Z" fill="context-stroke"/></marker></defs>
+<style>text{font-family:Arial,'Noto Sans CJK SC','Microsoft YaHei',sans-serif;fill:#172b4d}.title{font-size:30px;font-weight:700}.name{font-size:22px;font-weight:700}.body{font-size:17px;fill:#435570}.small{font-size:15px;fill:#52647b}.label{font-size:15px;fill:#435570;paint-order:stroke;stroke:#f8fafc;stroke-width:5px;stroke-linejoin:round}.edge{fill:none;stroke-linejoin:round}.control{stroke-dasharray:7 5}</style>
+<rect width="1280" height="1130" rx="20" fill="#f8fafc"/>
+<text x="40" y="48" class="title" text-anchor="start">BigWorld · Distributed MMO Engine Architecture</text>
+<text x="40" y="80" class="body" text-anchor="start">Multi-process runtime · split by authority domain (Base / Cell / DB) · control plane &amp; recovery · Mercury network · embedded Python 3.13</text>
+
+<path d="M640 200 V240" fill="none" stroke="#f8fafc" stroke-width="9"/>
+<path id="client-login" data-from="client" data-to="login-app" d="M640 200 V240" class="edge" style="stroke:#475569;stroke-width:2" marker-end="url(#arrow)"/>
+<path d="M440 170 H200 V390" fill="none" stroke="#f8fafc" stroke-width="9"/>
+<path id="client-base" data-from="client" data-to="base-app" d="M440 170 H200 V390" class="edge" style="stroke:#2563eb;stroke-width:2" marker-end="url(#arrow)" marker-start="url(#arrow)"/>
+<path d="M440 300 H310 V390" fill="none" stroke="#f8fafc" stroke-width="9"/>
+<path id="login-base" data-from="login-app" data-to="base-app" d="M440 300 H310 V390" class="edge" style="stroke:#475569;stroke-width:2" marker-end="url(#arrow)"/>
+<path d="M430 475 H465" fill="none" stroke="#f8fafc" stroke-width="9"/>
+<path id="base-cell" data-from="base-app" data-to="cell-app" d="M430 475 H465" class="edge" style="stroke:#7c3aed;stroke-width:2" marker-end="url(#arrow)" marker-start="url(#arrow)"/>
+<path d="M815 475 H850" fill="none" stroke="#f8fafc" stroke-width="9"/>
+<path id="cell-db" data-from="cell-app" data-to="db-app" d="M815 475 H850" class="edge" style="stroke:#7c3aed;stroke-width:2" marker-end="url(#arrow)" marker-start="url(#arrow)"/>
+<path d="M170 560 V600" fill="none" stroke="#f8fafc" stroke-width="9"/>
+<path id="base-bam" data-from="base-app" data-to="base-app-mgr" d="M170 560 V600" class="edge control" style="stroke:#64748b;stroke-width:2" marker-end="url(#arrow)"/>
+<path d="M640 560 V600" fill="none" stroke="#f8fafc" stroke-width="9"/>
+<path id="cell-cam" data-from="cell-app" data-to="cell-app-mgr" d="M640 560 V600" class="edge control" style="stroke:#64748b;stroke-width:2" marker-end="url(#arrow)"/>
+<path d="M1025 560 V600" fill="none" stroke="#f8fafc" stroke-width="9"/>
+<path id="db-dbm" data-from="db-app" data-to="db-app-mgr" d="M1025 560 V600" class="edge control" style="stroke:#64748b;stroke-width:2" marker-end="url(#arrow)"/>
+<path d="M430 665 H465" fill="none" stroke="#f8fafc" stroke-width="9"/>
+<path id="bam-cam" data-from="base-app-mgr" data-to="cell-app-mgr" d="M430 665 H465" class="edge control" style="stroke:#64748b;stroke-width:2" marker-end="url(#arrow)" marker-start="url(#arrow)"/>
+<path d="M200 770 V730" fill="none" stroke="#f8fafc" stroke-width="9"/>
+<path id="reviver-bam" data-from="reviver" data-to="base-app-mgr" d="M200 770 V730" class="edge control" style="stroke:#c2410c;stroke-width:2" marker-end="url(#arrow)" marker-start="url(#arrow)"/>
+<path d="M320 770 V730" fill="none" stroke="#f8fafc" stroke-width="9"/>
+<path id="reviver-cam" data-from="reviver" data-to="cell-app-mgr" d="M320 770 V730" class="edge control" style="stroke:#c2410c;stroke-width:2" marker-end="url(#arrow)" marker-start="url(#arrow)"/>
+<path d="M430 820 H465" fill="none" stroke="#f8fafc" stroke-width="9"/>
+<path id="reviver-machined" data-from="reviver" data-to="machined" d="M430 820 H465" class="edge" style="stroke:#475569;stroke-width:2" marker-end="url(#arrow)"/>
+
+<g id="client" data-node="client"><rect x="440" y="110" width="400" height="90" rx="14" fill="#fff7ed" stroke="#fdba74" stroke-width="1.5"/>
+<text x="460" y="144" class="name" text-anchor="start">Game client</text>
+<text x="460" y="175" class="body" text-anchor="start">login · session · player input/state</text>
+</g>
+<g id="login-app" data-node="login-app"><rect x="440" y="240" width="400" height="110" rx="14" fill="#eef2ff" stroke="#a5b4fc" stroke-width="1.5"/>
+<text x="460" y="274" class="name" text-anchor="start">LoginApp</text>
+<text x="460" y="305" class="body" text-anchor="start">external login entry · challenge/auth</text>
+<text x="460" y="332" class="body" text-anchor="start">assigns next connection target (BaseApp)</text>
+</g>
+<g id="base-app" data-node="base-app"><rect x="80" y="390" width="350" height="170" rx="14" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5"/>
+<text x="100" y="424" class="name" text-anchor="start">BaseApp</text>
+<text x="100" y="455" class="body" text-anchor="start">player sessions · Base entities</text>
+<text x="100" y="482" class="body" text-anchor="start">cross-Cell coordination · client comm</text>
+<text x="100" y="509" class="body" text-anchor="start">Proxy takeover · login handshake</text>
+<text x="100" y="536" class="body" text-anchor="start">coordinates Base/Cell persistence (via DBApp)</text>
+</g>
+<g id="cell-app" data-node="cell-app"><rect x="465" y="390" width="350" height="170" rx="14" fill="#eef8f5" stroke="#86c9b3" stroke-width="1.5"/>
+<text x="485" y="424" class="name" text-anchor="start">CellApp</text>
+<text x="485" y="455" class="body" text-anchor="start">space simulation · entity position</text>
+<text x="485" y="482" class="body" text-anchor="start">AOI / Witness · Ghost</text>
+<text x="485" y="509" class="body" text-anchor="start">in-Cell logic · partition boundaries</text>
+<text x="485" y="536" class="body" text-anchor="start">real / ghost · Offload migration</text>
+</g>
+<g id="db-app" data-node="db-app"><rect x="850" y="390" width="350" height="170" rx="14" fill="#edf5ff" stroke="#93b9e3" stroke-width="1.5"/>
+<text x="870" y="424" class="name" text-anchor="start">DBApp</text>
+<text x="870" y="455" class="body" text-anchor="start">encapsulates database tasks</text>
+<text x="870" y="482" class="body" text-anchor="start">isolates blocking DB work in background tasks</text>
+<text x="870" y="509" class="body" text-anchor="start">entity persistence · account/entity queries</text>
+<text x="870" y="536" class="body" text-anchor="start">IDatabase abstraction</text>
+</g>
+
+<g id="base-app-mgr" data-node="base-app-mgr"><rect x="80" y="600" width="350" height="130" rx="14" fill="#faf5ff" stroke="#d8b4fe" stroke-width="1.5"/>
+<text x="100" y="634" class="name" text-anchor="start">BaseAppMgr</text>
+<text x="100" y="665" class="body" text-anchor="start">admits BaseApps · global control</text>
+<text x="100" y="692" class="body" text-anchor="start">registration/discovery · scaling driver</text>
+</g>
+<g id="cell-app-mgr" data-node="cell-app-mgr"><rect x="465" y="600" width="350" height="130" rx="14" fill="#faf5ff" stroke="#d8b4fe" stroke-width="1.5"/>
+<text x="485" y="634" class="name" text-anchor="start">CellAppMgr</text>
+<text x="485" y="665" class="body" text-anchor="start">load balancing · spatial BSP boundaries</text>
+<text x="485" y="692" class="body" text-anchor="start">entity ownership · recovery coordination</text>
+</g>
+<g id="db-app-mgr" data-node="db-app-mgr"><rect x="850" y="600" width="350" height="130" rx="14" fill="#faf5ff" stroke="#d8b4fe" stroke-width="1.5"/>
+<text x="870" y="634" class="name" text-anchor="start">DBAppMgr</text>
+<text x="870" y="665" class="body" text-anchor="start">registration · discovery · load info</text>
+<text x="870" y="692" class="body" text-anchor="start">scaling admission</text>
+</g>
+
+<g id="reviver" data-node="reviver"><rect x="80" y="770" width="350" height="100" rx="14" fill="#fdf2f8" stroke="#f9a8d4" stroke-width="1.5"/>
+<text x="100" y="804" class="name" text-anchor="start">Reviver</text>
+<text x="100" y="835" class="body" text-anchor="start">process-level recovery · ping / birth / death</text>
+</g>
+<g id="machined" data-node="machined"><rect x="465" y="770" width="735" height="100" rx="14" fill="#fefce8" stroke="#fde047" stroke-width="1.5"/>
+<text x="485" y="804" class="name" text-anchor="start">machined</text>
+<text x="485" y="835" class="body" text-anchor="start">process registration · interface discovery · birth/death listeners · startup components (legacy control-plane base)</text>
+</g>
+
+<g id="runtime-infra" data-node="runtime-infra"><rect x="80" y="910" width="1120" height="120" rx="14" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5"/>
+<text x="100" y="944" class="name" text-anchor="start">Runtime infrastructure (shared across processes)</text>
+<text x="100" y="975" class="body" text-anchor="start">Mercury reliable UDP: Channel · Bundle · RPC · ACK/retransmit/windows/piggyback/indexed channel · version semantics</text>
+<text x="100" y="1002" class="body" text-anchor="start">Event loop: main Reactor · Timer · FrequentTask · single main thread + background tasks committing back</text>
+<text x="100" y="1029" class="body" text-anchor="start">Embedded Python 3.13 (migrated from 2.7) · EntityDef contract (entities.xml / .def / components / digest · shared by serialization/persistence/migration)</text>
+</g>
+
+<text x="660" y="228" class="label" text-anchor="middle">login entry</text>
+<text x="250" y="230" class="label" text-anchor="middle" style="fill:#2563eb">session Proxy</text>
+<text x="390" y="330" class="label" text-anchor="middle">assign target →</text>
+<text x="450" y="500" class="label" text-anchor="middle">entities/cross-Cell</text>
+<text x="835" y="500" class="label" text-anchor="middle">persistence</text>
+<text x="120" y="585" class="label" text-anchor="middle">register →</text>
+<text x="655" y="585" class="label" text-anchor="middle">register →</text>
+<text x="1040" y="585" class="label" text-anchor="middle">register →</text>
+<text x="448" y="690" class="label" text-anchor="middle">discover/coordinate</text>
+<text x="230" y="742" class="label" text-anchor="middle" style="fill:#c2410c">ping/death</text>
+<text x="448" y="845" class="label" text-anchor="middle">start replacement →</text>
+<text x="40" y="1065" class="small" text-anchor="start">Dashed: control / monitoring relations (registration, discovery, recovery) · Solid: business data · crossings without a dot are not connections</text>
+<text x="40" y="1090" class="small" text-anchor="start">Topology source: docs/architecture/process-topology.md (registration chain source entry baseappmgr.cpp:389) · diagram is the intended contract, grounded in source facts</text>
+<text x="40" y="1115" class="small" text-anchor="start">Managers discover/coordinate each other: BAM ↔ CAM · DBM ↔ BAM · DBM ↔ CAM (some crossing links omitted)</text>
+</svg>

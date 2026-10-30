@@ -1,0 +1,112 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="1130" viewBox="0 0 1280 1130" role="img" aria-labelledby="title desc" xml:lang="zh-CN">
+<title id="title">BigWorld · 分布式 MMO 引擎架构</title>
+<desc id="desc">BigWorld 服务端是分布式多进程运行时，按运行时权威域而非业务域切分。客户端经 LoginApp 登录入口，LoginApp 完成挑战/认证并分配目标 BaseApp；BaseApp 拥有玩家会话、Base 实体与客户端通信，CellApp 拥有空间模拟、AOI、ghost 与 Cell 内逻辑，DBApp 以后台任务隔离阻塞数据库操作。BaseAppMgr/CellAppMgr/DBAppMgr 组成控制面与注册表，负责注册、发现、负载信息、扩容接纳与恢复协调。Reviver 通过 ping/death 监控关键组件并要求 machined 启动替换进程。machined 提供进程注册、接口发现、birth/death 监听与启动组件。运行时基础设施：Mercury 可靠 UDP 网络层、主 Reactor 事件循环、嵌入 Python 3.13 脚本与 EntityDef 契约。虚线为控制/监控关系，实线为业务数据。</desc>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10Z" fill="context-stroke"/></marker></defs>
+<style>text{font-family:Arial,'Noto Sans CJK SC','Microsoft YaHei',sans-serif;fill:#172b4d}.title{font-size:30px;font-weight:700}.name{font-size:22px;font-weight:700}.body{font-size:17px;fill:#435570}.small{font-size:15px;fill:#52647b}.label{font-size:15px;fill:#435570;paint-order:stroke;stroke:#f8fafc;stroke-width:5px;stroke-linejoin:round}.edge{fill:none;stroke-linejoin:round}.control{stroke-dasharray:7 5}</style>
+<rect width="1280" height="1130" rx="20" fill="#f8fafc"/>
+<text x="40" y="48" class="title" text-anchor="start">BigWorld · 分布式 MMO 引擎架构</text>
+<text x="40" y="80" class="body" text-anchor="start">多进程运行时 · 按权威域切分（Base / Cell / DB）· 控制面与恢复 · Mercury 网络 · 嵌入 Python 3.13</text>
+
+<path d="M640 200 V240" fill="none" stroke="#f8fafc" stroke-width="9"/>
+<path id="client-login" data-from="client" data-to="login-app" d="M640 200 V240" class="edge" style="stroke:#475569;stroke-width:2" marker-end="url(#arrow)"/>
+<path d="M440 170 H200 V390" fill="none" stroke="#f8fafc" stroke-width="9"/>
+<path id="client-base" data-from="client" data-to="base-app" d="M440 170 H200 V390" class="edge" style="stroke:#2563eb;stroke-width:2" marker-end="url(#arrow)" marker-start="url(#arrow)"/>
+<path d="M440 300 H310 V390" fill="none" stroke="#f8fafc" stroke-width="9"/>
+<path id="login-base" data-from="login-app" data-to="base-app" d="M440 300 H310 V390" class="edge" style="stroke:#475569;stroke-width:2" marker-end="url(#arrow)"/>
+<path d="M430 475 H465" fill="none" stroke="#f8fafc" stroke-width="9"/>
+<path id="base-cell" data-from="base-app" data-to="cell-app" d="M430 475 H465" class="edge" style="stroke:#7c3aed;stroke-width:2" marker-end="url(#arrow)" marker-start="url(#arrow)"/>
+<path d="M815 475 H850" fill="none" stroke="#f8fafc" stroke-width="9"/>
+<path id="cell-db" data-from="cell-app" data-to="db-app" d="M815 475 H850" class="edge" style="stroke:#7c3aed;stroke-width:2" marker-end="url(#arrow)" marker-start="url(#arrow)"/>
+<path d="M170 560 V600" fill="none" stroke="#f8fafc" stroke-width="9"/>
+<path id="base-bam" data-from="base-app" data-to="base-app-mgr" d="M170 560 V600" class="edge control" style="stroke:#64748b;stroke-width:2" marker-end="url(#arrow)"/>
+<path d="M640 560 V600" fill="none" stroke="#f8fafc" stroke-width="9"/>
+<path id="cell-cam" data-from="cell-app" data-to="cell-app-mgr" d="M640 560 V600" class="edge control" style="stroke:#64748b;stroke-width:2" marker-end="url(#arrow)"/>
+<path d="M1025 560 V600" fill="none" stroke="#f8fafc" stroke-width="9"/>
+<path id="db-dbm" data-from="db-app" data-to="db-app-mgr" d="M1025 560 V600" class="edge control" style="stroke:#64748b;stroke-width:2" marker-end="url(#arrow)"/>
+<path d="M430 665 H465" fill="none" stroke="#f8fafc" stroke-width="9"/>
+<path id="bam-cam" data-from="base-app-mgr" data-to="cell-app-mgr" d="M430 665 H465" class="edge control" style="stroke:#64748b;stroke-width:2" marker-end="url(#arrow)" marker-start="url(#arrow)"/>
+<path d="M200 770 V730" fill="none" stroke="#f8fafc" stroke-width="9"/>
+<path id="reviver-bam" data-from="reviver" data-to="base-app-mgr" d="M200 770 V730" class="edge control" style="stroke:#c2410c;stroke-width:2" marker-end="url(#arrow)" marker-start="url(#arrow)"/>
+<path d="M320 770 V730" fill="none" stroke="#f8fafc" stroke-width="9"/>
+<path id="reviver-cam" data-from="reviver" data-to="cell-app-mgr" d="M320 770 V730" class="edge control" style="stroke:#c2410c;stroke-width:2" marker-end="url(#arrow)" marker-start="url(#arrow)"/>
+<path d="M430 820 H465" fill="none" stroke="#f8fafc" stroke-width="9"/>
+<path id="reviver-machined" data-from="reviver" data-to="machined" d="M430 820 H465" class="edge" style="stroke:#475569;stroke-width:2" marker-end="url(#arrow)"/>
+
+<g id="client" data-node="client"><rect x="440" y="110" width="400" height="90" rx="14" fill="#fff7ed" stroke="#fdba74" stroke-width="1.5"/>
+<text x="460" y="144" class="name" text-anchor="start">游戏客户端</text>
+<text x="460" y="175" class="body" text-anchor="start">登录 · 会话 · 玩家输入/状态</text>
+</g>
+<g id="login-app" data-node="login-app"><rect x="440" y="240" width="400" height="110" rx="14" fill="#eef2ff" stroke="#a5b4fc" stroke-width="1.5"/>
+<text x="460" y="274" class="name" text-anchor="start">LoginApp</text>
+<text x="460" y="305" class="body" text-anchor="start">外部登录入口 · 挑战/认证</text>
+<text x="460" y="332" class="body" text-anchor="start">分配下一连接目标（BaseApp）</text>
+</g>
+<g id="base-app" data-node="base-app"><rect x="80" y="390" width="350" height="170" rx="14" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5"/>
+<text x="100" y="424" class="name" text-anchor="start">BaseApp</text>
+<text x="100" y="455" class="body" text-anchor="start">玩家会话 · Base 实体</text>
+<text x="100" y="482" class="body" text-anchor="start">跨 Cell 协调 · 客户端通信</text>
+<text x="100" y="509" class="body" text-anchor="start">Proxy 接管 · 登录二次握手</text>
+<text x="100" y="536" class="body" text-anchor="start">协调 Base/Cell 持久化（经 DBApp）</text>
+</g>
+<g id="cell-app" data-node="cell-app"><rect x="465" y="390" width="350" height="170" rx="14" fill="#eef8f5" stroke="#86c9b3" stroke-width="1.5"/>
+<text x="485" y="424" class="name" text-anchor="start">CellApp</text>
+<text x="485" y="455" class="body" text-anchor="start">空间模拟 · 实体位置</text>
+<text x="485" y="482" class="body" text-anchor="start">AOI / Witness · Ghost</text>
+<text x="485" y="509" class="body" text-anchor="start">Cell 内逻辑 · 分区边界</text>
+<text x="485" y="536" class="body" text-anchor="start">real / ghost · 迁移 Offload</text>
+</g>
+<g id="db-app" data-node="db-app"><rect x="850" y="390" width="350" height="170" rx="14" fill="#edf5ff" stroke="#93b9e3" stroke-width="1.5"/>
+<text x="870" y="424" class="name" text-anchor="start">DBApp</text>
+<text x="870" y="455" class="body" text-anchor="start">数据库任务封装</text>
+<text x="870" y="482" class="body" text-anchor="start">后台任务隔离阻塞 DB 工作</text>
+<text x="870" y="509" class="body" text-anchor="start">实体持久化 · 账户/实体查询</text>
+<text x="870" y="536" class="body" text-anchor="start">IDatabase 抽象</text>
+</g>
+
+<g id="base-app-mgr" data-node="base-app-mgr"><rect x="80" y="600" width="350" height="130" rx="14" fill="#faf5ff" stroke="#d8b4fe" stroke-width="1.5"/>
+<text x="100" y="634" class="name" text-anchor="start">BaseAppMgr</text>
+<text x="100" y="665" class="body" text-anchor="start">接纳 BaseApp · 全局控制</text>
+<text x="100" y="692" class="body" text-anchor="start">注册/发现 · 动态扩展驱动</text>
+</g>
+<g id="cell-app-mgr" data-node="cell-app-mgr"><rect x="465" y="600" width="350" height="130" rx="14" fill="#faf5ff" stroke="#d8b4fe" stroke-width="1.5"/>
+<text x="485" y="634" class="name" text-anchor="start">CellAppMgr</text>
+<text x="485" y="665" class="body" text-anchor="start">负载均衡 · 空间 BSP 边界</text>
+<text x="485" y="692" class="body" text-anchor="start">实体归属 · 恢复协调</text>
+</g>
+<g id="db-app-mgr" data-node="db-app-mgr"><rect x="850" y="600" width="350" height="130" rx="14" fill="#faf5ff" stroke="#d8b4fe" stroke-width="1.5"/>
+<text x="870" y="634" class="name" text-anchor="start">DBAppMgr</text>
+<text x="870" y="665" class="body" text-anchor="start">注册 · 发现 · 负载信息</text>
+<text x="870" y="692" class="body" text-anchor="start">扩容接纳</text>
+</g>
+
+<g id="reviver" data-node="reviver"><rect x="80" y="770" width="350" height="100" rx="14" fill="#fdf2f8" stroke="#f9a8d4" stroke-width="1.5"/>
+<text x="100" y="804" class="name" text-anchor="start">Reviver</text>
+<text x="100" y="835" class="body" text-anchor="start">进程级恢复 · ping / birth / death</text>
+</g>
+<g id="machined" data-node="machined"><rect x="465" y="770" width="735" height="100" rx="14" fill="#fefce8" stroke="#fde047" stroke-width="1.5"/>
+<text x="485" y="804" class="name" text-anchor="start">machined</text>
+<text x="485" y="835" class="body" text-anchor="start">进程注册 · 接口发现 · birth/death 监听 · 启动组件（旧式控制面基础）</text>
+</g>
+
+<g id="runtime-infra" data-node="runtime-infra"><rect x="80" y="910" width="1120" height="120" rx="14" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5"/>
+<text x="100" y="944" class="name" text-anchor="start">运行时基础设施（跨进程共享）</text>
+<text x="100" y="975" class="body" text-anchor="start">Mercury 可靠 UDP：Channel · Bundle · RPC · ACK/重发/窗口/piggyback/indexed channel · 版本语义</text>
+<text x="100" y="1002" class="body" text-anchor="start">事件循环：主 Reactor · Timer · FrequentTask · 单主线程 + 后台任务回主线程提交</text>
+<text x="100" y="1029" class="body" text-anchor="start">嵌入 Python 3.13（自 2.7 迁移）· EntityDef 契约（entities.xml / .def / 组件 / digest · 序列化/持久化/迁移共用）</text>
+</g>
+
+<text x="660" y="228" class="label" text-anchor="middle">登录入口</text>
+<text x="250" y="230" class="label" text-anchor="middle" style="fill:#2563eb">会话代理 Proxy</text>
+<text x="390" y="330" class="label" text-anchor="middle">分配目标 →</text>
+<text x="450" y="500" class="label" text-anchor="middle">实体/跨 Cell</text>
+<text x="835" y="500" class="label" text-anchor="middle">持久化</text>
+<text x="120" y="585" class="label" text-anchor="middle">注册 →</text>
+<text x="655" y="585" class="label" text-anchor="middle">注册 →</text>
+<text x="1040" y="585" class="label" text-anchor="middle">注册 →</text>
+<text x="448" y="690" class="label" text-anchor="middle">发现/协调</text>
+<text x="230" y="742" class="label" text-anchor="middle" style="fill:#c2410c">ping/death</text>
+<text x="448" y="845" class="label" text-anchor="middle">启动替换 →</text>
+<text x="40" y="1065" class="small" text-anchor="start">虚线：控制 / 监控关系（注册、发现、恢复）· 实线：业务数据 · 无圆点的交叉不表示连通</text>
+<text x="40" y="1090" class="small" text-anchor="start">拓扑来源：docs/architecture/process-topology.md（注册链源码入口 baseappmgr.cpp:389）· 图示为目标契约，以源码事实为准</text>
+<text x="40" y="1115" class="small" text-anchor="start">Manager 间互相发现/协调：BAM ↔ CAM · DBM ↔ BAM · DBM ↔ CAM（图示省略部分交叉连线）</text>
+</svg>
