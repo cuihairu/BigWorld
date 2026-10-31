@@ -58,6 +58,17 @@ jobs:
             echo "stale=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Free runner disk space
+        if: steps.freshness.outputs.stale != 'true'
+        # packaging died with "gzip: stdout: No space left on device" on the
+        # 14 GB ubuntu-24.04 runner: full C++ tree + vcpkg + deb/rpm staging
+        # exceeds it. Drop preinstalled toolchains we never use (~25 GB).
+        run: |
+          sudo rm -rf /usr/local/lib/android /opt/ghc /usr/share/dotnet \
+            /opt/hostedtoolcache/CodeQL /usr/local/share/boost \
+            /usr/local/.ghcup /opt/microsoft-powershell
+          df -h /
+
       - name: Install system dependencies
         if: steps.freshness.outputs.stale != 'true'
         run: |
