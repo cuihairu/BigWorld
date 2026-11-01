@@ -1,4 +1,4 @@
-<p align="center"><img src="logo.svg" alt="BigWorld logo" width="64" /> <a href="https://cuihairu.github.io/BigWorld/"><img src="https://img.shields.io/badge/docs-docs-blue" alt="docs"></a></p>
+<p align="center"><a href="https://cuihairu.github.io/BigWorld//"><img src="https://img.shields.io/badge/docs-docs-blue" alt="docs"></a> <a href="https://cuihairu.github.io/BigWorld/"><img src="https://img.shields.io/badge/docs-docs-blue" alt="docs"></a></p>
 
 <p align="center">
   English | <a href="README.zh.md">简体中文</a>
