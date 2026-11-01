@@ -1,5 +1,6 @@
 # Third-Party Dependency Upgrade List
 
+> **English** | [中文](third-party-deps.md)
 
 <div class="arch-hero">
 

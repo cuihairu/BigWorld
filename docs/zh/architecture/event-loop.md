@@ -1,5 +1,6 @@
 # 主循环、Tick 与事件分发
 
+](/> [English)) | **中文**
 
 <div class="arch-hero">
 

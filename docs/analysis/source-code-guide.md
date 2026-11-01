@@ -1,5 +1,6 @@
 # Source Code Guide
 
+> **English** | [中文](source-code-guide.md)
 
 <div class="arch-hero">
 

@@ -1,5 +1,6 @@
 # 研究方法与证据分级
 
+](/> [English)) | **中文**
 
 <div class="arch-hero">
 

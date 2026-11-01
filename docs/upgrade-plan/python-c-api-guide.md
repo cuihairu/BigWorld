@@ -1,5 +1,6 @@
 # Python C API Migration Guide
 
+> **English** | [中文](python-c-api-guide.md)
 
 <div class="arch-hero">
 

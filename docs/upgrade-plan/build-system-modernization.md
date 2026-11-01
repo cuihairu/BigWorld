@@ -1,5 +1,6 @@
 # Build System Modernization
 
+> **English** | [中文](build-system-modernization.md)
 
 <div class="arch-hero">
 

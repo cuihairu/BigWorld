@@ -1,5 +1,6 @@
 # 测试体系与可控时间
 
+](/> [English)) | **中文**
 
 <div class="arch-hero">
 

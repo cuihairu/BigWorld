@@ -1,5 +1,6 @@
 # Complete Topic Outline
 
+> **English** | [中文](outline.md)
 
 <div class="arch-hero">
 

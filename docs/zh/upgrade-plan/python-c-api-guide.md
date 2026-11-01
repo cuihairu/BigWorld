@@ -1,5 +1,6 @@
 # Python C API 迁移指南
 
+](/> [English)) | **中文**
 
 <div class="arch-hero">
 

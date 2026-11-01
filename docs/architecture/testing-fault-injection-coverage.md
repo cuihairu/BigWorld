@@ -1,5 +1,6 @@
 # Testing System, Fault Injection, and Coverage Boundaries
 
+> [Chinese](testing-fault-injection-coverage.md) | **English**
 
 <div class="arch-hero">
 

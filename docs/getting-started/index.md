@@ -1,6 +1,7 @@
 ---
 layout: doc
 ---
+> **English** | [中文](index.md)
 
 # Getting Started
 

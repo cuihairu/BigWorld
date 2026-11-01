@@ -1,5 +1,6 @@
 # 源码导读
 
+](/> [English)) | **中文**
 
 <div class="arch-hero">
 

@@ -1,5 +1,6 @@
 # Memory, Object Lifecycle, and Resource Management
 
+> [中文](/zh/)
 
 <div class="arch-hero">
 

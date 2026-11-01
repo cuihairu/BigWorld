@@ -1,5 +1,6 @@
 # Research Method and Evidence Grading
 
+> **English** | [中文](research-method.md)
 
 <div class="arch-hero">
 

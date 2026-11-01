@@ -65,7 +65,7 @@
 
 .bw-brand-mark {
   display: flex;
-  justify-content: center;
+  justify-content: flex-start;
   margin: 6px 0 18px;
 }
 

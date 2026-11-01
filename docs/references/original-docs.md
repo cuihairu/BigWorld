@@ -1,5 +1,6 @@
 # Original PDF Documents
 
+> **English** | [中文](original-docs.md)
 
 The following files are the repository's original reference material and are
 best read alongside this analysis site:

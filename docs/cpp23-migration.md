@@ -1,5 +1,6 @@
 # BigWorld C++ Standard Upgrade Analysis (Target: C++23)
 
+> **English** | [中文](cpp23-migration.md)
 > Task: evaluate and carry out the upgrade of BigWorld's C++ standard to C++23.
 > Status: **analysis complete; for the landing phase see "Final landing and execution results" at the end of this document.**
 > Constraint: shares the dev branch with the Python 3.13 port; the two efforts are committed separately.

@@ -1,5 +1,6 @@
 # Entity Migration and Offload
 
+> [中文](/zh/)
 
 <div class="arch-hero">
 

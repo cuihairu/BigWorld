@@ -1,5 +1,6 @@
 # MMO Architecture Boundary Comparison
 
+> **English** | [中文](modern-mmo-comparison.md)
 
 <div class="arch-hero">
 

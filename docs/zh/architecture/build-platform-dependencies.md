@@ -1,5 +1,6 @@
 # 构建、平台与依赖治理
 
+](/> [English)) | **中文**
 
 <div class="arch-hero">
 

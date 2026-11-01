@@ -11,15 +11,21 @@ name: CI
 
 on:
   push:
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - '.gitignore'
+      - '*.svg'
+      - '.editorconfig'
   pull_request:
     paths-ignore:
-      - "**.md"
-      - "docs/**"
-      - "LICENSE"
-      - ".gitignore"
-      - "*.svg"
-      - ".editorconfig"
-
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - '.gitignore'
+      - '*.svg'
+      - '.editorconfig'
 permissions:
   contents: read
 
@@ -30,7 +36,7 @@ concurrency:
 jobs:
   cmake-samples:
     name: ${{ matrix.sample }} cmake sample (linux)
-    runs-on: ubuntu-24.04
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
     timeout-minutes: 120
     strategy:
       fail-fast: false
@@ -41,7 +47,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@v7.0.1
 
       - name: Read manifest baseline pin
         id: baseline
@@ -69,7 +75,7 @@ jobs:
           "$HOME/vcpkg/bootstrap-vcpkg.sh" -disableMetrics
 
       - name: Restore vcpkg binary cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6.1.0
         with:
           path: ${{ github.workspace }}/vcpkg-bcache
           key: vcpkg-bcache-${{ runner.os }}-${{ steps.baseline.outputs.baseline }}-${{ hashFiles('programming/bigworld/vcpkg.json') }}
@@ -112,7 +118,7 @@ jobs:
 
       - name: Upload logs on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: ci-logs-${{ github.run_id }}-${{ matrix.sample }}
           path: |

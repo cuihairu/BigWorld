@@ -1,5 +1,6 @@
 # machined 控制面与进程发现
 
+](/> [English)) | **中文**
 
 <div class="arch-hero">
 

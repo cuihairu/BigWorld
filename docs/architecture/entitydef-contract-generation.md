@@ -1,5 +1,6 @@
 # EntityDef Contract and Protocol Generation
 
+> **English** | [中文](entitydef-contract-generation.md)
 
 <div class="arch-hero">
 

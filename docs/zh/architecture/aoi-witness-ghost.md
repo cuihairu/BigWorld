@@ -1,5 +1,6 @@
 # AOI、Witness 与 Ghost
 
+](/> [English)) | **中文**
 
 <div class="arch-hero">
 

@@ -12,10 +12,7 @@ const rootSidebarSets = {
     { text: "Risks", link: "/analysis/risks" },
     { text: "Source-code guide", link: "/analysis/source-code-guide" }
   ],
-  references: [
-    { text: "Original PDF documents", link: "/references/original-docs" },
-    { text: "Docs-code consistency audit", link: "/doc-consistency-audit" }
-  ]
+  references: [{ text: "Original PDF documents", link: "/references/original-docs" }]
 }
 
 const zhSidebarSets = {
@@ -32,10 +29,7 @@ const zhSidebarSets = {
     { text: "源码风险边界", link: "/zh/analysis/risks" },
     { text: "源码导读", link: "/zh/analysis/source-code-guide" }
   ],
-  references: [
-    { text: "原始 PDF 文档", link: "/zh/references/original-docs" },
-    { text: "文档-代码一致性审计", link: "/zh/doc-consistency-audit" }
-  ]
+  references: [{ text: "原始 PDF 文档", link: "/zh/references/original-docs" }]
 }
 
 const architectureGroups = [
@@ -196,11 +190,7 @@ export default {
   base: "/BigWorld/",
   cleanUrls: false,
   lastUpdated: true,
-  // VitePress does not apply `base` to head entries; the project-site base is
-  // pinned below so the favicon resolves on GitHub Pages (/BigWorld/).
-  head: [
-    ["link", { rel: "icon", type: "image/svg+xml", href: "/BigWorld/logo.svg" }]
-  ],
+  head: [["link", { rel: "icon", type: "image/png", href: "/BigWorld/logo.png" }]],
   ignoreDeadLinks: false,
   locales: {
     root: {
@@ -209,7 +199,7 @@ export default {
       title: "BigWorld Engine Architecture Research",
       description: "BigWorld architecture notes for MMO server learning and source-evidence analysis.",
       themeConfig: {
-        logo: "/logo.svg",
+        logo: "/logo.png",
         siteTitle: "BigWorld Architecture Research",
         search: { provider: "local" },
         nav: [
@@ -240,7 +230,7 @@ export default {
       title: "BigWorld 引擎架构研究",
       description: "面向 MMO 游戏服务器架构学习和源码证据链分析的 BigWorld 文档站",
       themeConfig: {
-        logo: "/logo.svg",
+        logo: "/logo.png",
         siteTitle: "BigWorld 架构研究",
         search: { provider: "local" },
         nav: [

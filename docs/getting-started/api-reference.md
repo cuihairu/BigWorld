@@ -1,5 +1,6 @@
 # Core API Reference
 
+> **English** | [中文](api-reference.md)
 
 <div class="arch-hero">
 

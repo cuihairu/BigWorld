@@ -1,5 +1,6 @@
 # 安全、限流与加密
 
+](/> [English)) | **中文**
 
 <div class="arch-hero">
 

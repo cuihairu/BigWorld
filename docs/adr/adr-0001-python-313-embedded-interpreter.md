@@ -1,5 +1,6 @@
 # ADR-0001: Embedded Interpreter Python 2.7 → 3.13
 
+> **English** | [中文](adr-0001-python-313-embedded-interpreter.md)
 
 - **Status**: Accepted (landed in batches from 2026-09-26; bumped to 3.13.16 on 2026-10-12)
 - **Scope**: `programming/bigworld/third_party/python` (vendored CPython),

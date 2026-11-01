@@ -1,5 +1,6 @@
 # AOI, Witness and Ghost
 
+> **English** | [中文](aoi-witness-ghost.md)
 
 <div class="arch-hero">
 

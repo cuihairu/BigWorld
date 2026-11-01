@@ -1,5 +1,6 @@
 # Source Risk Boundaries
 
+> **English** | [中文](risks.md)
 
 ## Risk is not a single-point problem
 

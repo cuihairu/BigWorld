@@ -1,5 +1,6 @@
 # Script Hot Reload and Migration
 
+> **English** | [中文](hot-reload-script-migration.md)
 
 <div class="arch-hero">
 

@@ -1,5 +1,6 @@
 # 热重载生产化设计
 
+](/> [English)) | **中文**
 
 <div class="arch-hero">
 

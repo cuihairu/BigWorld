@@ -1,5 +1,6 @@
 # Entity Lifecycle State Machine
 
+> **English** | [中文](entity-lifecycle-state-machine.md)
 
 <div class="arch-hero">
 

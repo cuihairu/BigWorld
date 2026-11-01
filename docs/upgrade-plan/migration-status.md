@@ -1,5 +1,6 @@
 # Migration and Coverage Status
 
+> **English** | [中文](migration-status.md)
 
 <div class="arch-hero">
 

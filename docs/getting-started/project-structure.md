@@ -1,5 +1,6 @@
 # Project Structure
 
+> **English** | [中文](project-structure.md)
 
 <div class="arch-hero">
 

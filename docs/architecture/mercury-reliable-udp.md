@@ -1,5 +1,6 @@
 # Mercury Protocol and Reliable UDP
 
+> [中文](/zh/)
 
 <div class="arch-hero">
 

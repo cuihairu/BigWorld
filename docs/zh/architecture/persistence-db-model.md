@@ -1,5 +1,6 @@
 # 持久化与 DB 线程模型
 
+](/> [English)) | **中文**
 
 <div class="arch-hero">
 

@@ -1,5 +1,6 @@
 # Security, Rate Limiting, and Encryption
 
+> [Chinese](security-rate-limit.md) | **English**
 
 <div class="arch-hero">
 

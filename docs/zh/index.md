@@ -4,7 +4,7 @@ layout: home
 hero:
   name: "BigWorld 引擎架构研究"
   image:
-    src: /logo.svg
+    src: /logo.png
     alt: BigWorld
   text: "从源码证据链学习 MMO 服务器设计"
   tagline: "重点分析线程、网络、Tick、通信、序列化、热更新、扩缩容与故障恢复，并给出源码证据、取舍和验证边界。"
@@ -29,7 +29,6 @@ features:
 ---
 
 ![BigWorld 分布式 MMO 引擎架构](/images/architecture-zh.svg)
-
 <div class="arch-hero">
 
 **研究主线**：BigWorld 不是普通 Python 项目，而是 C/C++ 主导、嵌入 Python 的分布式 MMO 服务器引擎——嵌入式解释器已完成 [Python 2.7 → 3.13 迁移](/zh/upgrade-plan/migration-status)。学习它的价值不在“照搬旧代码”，而在理解一个成熟商业 MMO 引擎如何在当时的平台约束下处理网络、实体、空间、负载、脚本和运维。

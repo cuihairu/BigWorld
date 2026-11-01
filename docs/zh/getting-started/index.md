@@ -2,6 +2,7 @@
 layout: doc
 ---
 
+](/> [English)) | **中文**
 
 # 快速开始
 

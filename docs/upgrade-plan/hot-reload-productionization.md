@@ -1,5 +1,6 @@
 # Hot-Reload Productionization Design
 
+> **English** | [中文](hot-reload-productionization.md)
 
 <div class="arch-hero">
 

@@ -1,5 +1,6 @@
 # Directories and Modules
 
+> **English** | [中文](modules.md)
 
 ## Reading principle
 

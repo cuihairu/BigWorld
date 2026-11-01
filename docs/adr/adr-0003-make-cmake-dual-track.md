@@ -1,5 +1,6 @@
 # ADR-0003: Dual Track — make Main Chain plus Per-Component CMake Samples
 
+> **English** | [中文](adr-0003-make-cmake-dual-track.md)
 
 - **Status**: Accepted (cstdmf sample landed 2026-10-12; resmgr + network + CI matrix on 2026-10-14)
 - **Scope**: `programming/bigworld/build/make/`, `cmake/samples/`,

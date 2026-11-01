@@ -1,5 +1,6 @@
 # 线程架构与后台任务
 
+](/> [English)) | **中文**
 
 <div class="arch-hero">
 

@@ -1,6 +1,6 @@
 # Cell Partitioning and Load Balancing
 
-
+> [中文](/zh/)
 
 <div class="arch-hero">
 

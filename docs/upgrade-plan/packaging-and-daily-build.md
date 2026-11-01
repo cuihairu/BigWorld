@@ -1,5 +1,6 @@
 # Packaging and Daily-Build Analysis
 
+> **English** | [中文](packaging-and-daily-build.md)
 
 <div class="arch-hero">
 

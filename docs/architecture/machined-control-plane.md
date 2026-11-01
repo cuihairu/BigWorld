@@ -1,5 +1,6 @@
 # machined Control Plane and Process Discovery
 
+> **English** | [中文](machined-control-plane.md)
 
 <div class="arch-hero">
 

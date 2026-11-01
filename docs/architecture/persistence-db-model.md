@@ -1,6 +1,6 @@
 # Persistence and the DB Thread Model
 
-
+> [中文](/zh/)
 
 <div class="arch-hero">
 

@@ -1,5 +1,6 @@
 # 测试体系、故障注入与覆盖边界
 
+](/> [English)) | **中文**
 
 <div class="arch-hero">
 

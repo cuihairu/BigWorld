@@ -1,5 +1,6 @@
 # Building from Source
 
+> **English** | [中文](build-from-source.md)
 
 <div class="arch-hero">
 

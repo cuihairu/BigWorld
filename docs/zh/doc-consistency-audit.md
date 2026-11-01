@@ -1,5 +1,6 @@
 # 文档-代码一致性审计
 
+](/> [English)) | **中文**
 
 审计日期：2026-10-13。审计范围：README.md、docs/** 全部页面、VitePress 站点配置、GitHub 公开门面（description/homepageUrl/topics）。
 

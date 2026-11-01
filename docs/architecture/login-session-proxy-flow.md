@@ -1,5 +1,6 @@
 # Login, Session and Proxy Attach
 
+> **English** | [中文](login-session-proxy-flow.md)
 
 <div class="arch-hero">
 

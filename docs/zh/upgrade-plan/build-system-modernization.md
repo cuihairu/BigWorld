@@ -1,5 +1,6 @@
 # 构建系统现代化
 
+](/> [English)) | **中文**
 
 <div class="arch-hero">
 

@@ -1,5 +1,6 @@
 # 进程拓扑与职责切分
 
+](/> [English)) | **中文**
 
 <div class="arch-hero">
 

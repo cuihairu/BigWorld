@@ -1,5 +1,6 @@
 # MMO 架构边界对比
 
+](/> [English)) | **中文**
 
 <div class="arch-hero">
 

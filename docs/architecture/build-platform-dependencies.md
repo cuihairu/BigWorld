@@ -1,5 +1,6 @@
 # Build, Platform, and Dependency Governance
 
+> **English** | [中文](build-platform-dependencies.md)
 
 <div class="arch-hero">
 

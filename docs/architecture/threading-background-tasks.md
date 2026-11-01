@@ -1,5 +1,6 @@
 # Thread Architecture and Background Tasks
 
+> **English** | [中文](threading-background-tasks.md)
 
 <div class="arch-hero">
 

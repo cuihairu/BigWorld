@@ -1,5 +1,6 @@
 # Entity Model: Base / Cell / Client
 
+> **English** | [中文](entity-model.md)
 
 <div class="arch-hero">
 

@@ -1,5 +1,6 @@
 # ADR Index
 
+> **English** | [中文](index.md)
 
 Architecture Decision Records: one page per major decision, recording only
 **context / decision / trade-offs / consequences** — no process narrative.

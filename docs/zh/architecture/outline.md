@@ -1,5 +1,6 @@
 # 完整专题大纲
 
+](/> [English)) | **中文**
 
 <div class="arch-hero">
 

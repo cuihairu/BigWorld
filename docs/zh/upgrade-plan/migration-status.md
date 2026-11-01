@@ -1,5 +1,6 @@
 # 迁移与覆盖率现状
 
+](/> [English)) | **中文**
 
 <div class="arch-hero">
 

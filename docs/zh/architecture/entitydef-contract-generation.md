@@ -1,5 +1,6 @@
 # EntityDef 契约与协议生成
 
+](/> [English)) | **中文**
 
 <div class="arch-hero">
 

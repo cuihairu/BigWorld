@@ -1,5 +1,6 @@
 # 从源码构建
 
+](/> [English)) | **中文**
 
 <div class="arch-hero">
 

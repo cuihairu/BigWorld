@@ -1,5 +1,6 @@
 # Python 3.12 Roadmap
 
+> **English** | [中文](python-upgrade-plan.md)
 
 ::: tip Status update (2026-09-28)
 This roadmap was written before the migration started and is kept as a

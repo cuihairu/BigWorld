@@ -1,5 +1,6 @@
 # Migrating BigWorld's Third-Party Dependencies to vcpkg
 
+> **English** | [中文](vcpkg-migration.md)
 > Task: replace the libraries under `programming/bigworld/third_party` that vcpkg can
 > supply with vcpkg manifest entries, and move the make and CMake chains onto the
 > vcpkg toolchain/artifacts.

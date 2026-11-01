@@ -1,5 +1,6 @@
 # Network I/O Model
 
+> [Chinese](network-io-model.md) | **English**
 
 <div class="arch-hero">
 

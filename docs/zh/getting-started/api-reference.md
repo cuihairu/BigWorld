@@ -1,5 +1,6 @@
 # 核心 API 参考
 
+](/> [English)) | **中文**
 
 <div class="arch-hero">
 

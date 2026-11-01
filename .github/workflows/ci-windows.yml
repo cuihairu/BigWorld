@@ -99,8 +99,8 @@ permissions:
 
 jobs:
   msvc-compile:
-    name: ${{ matrix.module }} (MSVC x64)
-    runs-on: windows-latest
+    name: ${{ matrix.library }} (MSVC x64)
+    runs-on: ${{ vars.CI_RUNNER || 'windows-latest' }}
     timeout-minutes: 60
     # Gate legs run on push/pull_request only: a manual dispatch is a
     # probe-only run, so its job set never shares a concurrency group with a
@@ -113,15 +113,15 @@ jobs:
     # cancel-in-progress false, so a manual build is never killed mid-flight
     # and a second dispatch queues behind it instead.
     concurrency:
-      group: ci-windows-msvc-${{ github.ref }}-${{ matrix.module }}
+      group: ci-windows-msvc-${{ github.ref }}-${{ matrix.library }}
       cancel-in-progress: true
     strategy:
       fail-fast: false
       matrix:
-        module: [math, cstdmf]
+        library: [math, cstdmf]
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@v7.0.1
 
       - name: Show toolchain
         shell: pwsh
@@ -139,7 +139,7 @@ jobs:
           }
 
       - name: Fetch legacy D3DX SDK (math only)
-        if: ${{ matrix.module == 'math' }}
+        if: ${{ matrix.library == 'math' }}
         shell: pwsh
         run: |
           # lib/math's Windows vector types are D3DX typedefs (xp_math.hpp)
@@ -166,7 +166,7 @@ jobs:
           "DXSDK_DIR=$dir" | Out-File -FilePath $env:GITHUB_ENV -Append
           Get-ChildItem "$root/Include/d3dx9*.h" | Select-Object -ExpandProperty Name
 
-      - name: Configure (${{ matrix.module }})
+      - name: Configure (${{ matrix.library }})
         shell: pwsh
         env:
           CMAKE_POLICY_VERSION_MINIMUM: "3.5"
@@ -176,8 +176,8 @@ jobs:
           # ("Invalid character escape '\a'"); forward slashes are accepted
           # everywhere on Windows.
           $repo = ((Resolve-Path programming/bigworld).Path -replace '\\','/')
-          cmake -S "$repo/lib/${{ matrix.module }}" `
-                -B "build/win_${{ matrix.module }}" `
+          cmake -S "$repo/lib/${{ matrix.library }}" `
+                -B "build/win_${{ matrix.library }}" `
                 -Wno-dev `
                 -G "Visual Studio 18 2026" -A x64 `
                 -DCMAKE_PROJECT_INCLUDE="$repo/build/cmake/BWMacros.cmake" `
@@ -189,7 +189,7 @@ jobs:
                 '-DCMAKE_CXX_FLAGS=/DWIN32 /D_WINDOWS /DPCH_SUPPORT=1 /W3 /Zi /MP /Gy /w34302 /d2Zi+ /WX-' 2>&1 | Tee-Object -FilePath cmake-configure.log
 
       - name: Configure cstdmf unit test (MSVC x64)
-        if: ${{ matrix.module == 'cstdmf' }}
+        if: ${{ matrix.library == 'cstdmf' }}
         shell: pwsh
         env:
           CMAKE_POLICY_VERSION_MINIMUM: "3.5"
@@ -201,15 +201,15 @@ jobs:
                 -G "Visual Studio 18 2026" -A x64 `
                 -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" 2>&1 | Tee-Object -FilePath cmake-configure-test.log
 
-      - name: Build (${{ matrix.module }})
+      - name: Build (${{ matrix.library }})
         shell: pwsh
         run: |
-          cmake --build "build/win_${{ matrix.module }}" --config Release `
-                --target ${{ matrix.module }} --parallel 2>&1 | `
+          cmake --build "build/win_${{ matrix.library }}" --config Release `
+                --target ${{ matrix.library }} --parallel 2>&1 | `
                 Tee-Object -FilePath cmake-build.log
 
       - name: Build cstdmf unit test (MSVC x64)
-        if: ${{ matrix.module == 'cstdmf' }}
+        if: ${{ matrix.library == 'cstdmf' }}
         shell: pwsh
         run: |
           cmake --build "build/win_cstdmf_test" --config Release `
@@ -223,7 +223,7 @@ jobs:
       # Linux profile never executes; chasing it needs a Windows session.
       # The lane stays a compile gate - the Build steps above are blocking.
       - name: Test cstdmf unit test (MSVC x64)
-        if: ${{ matrix.module == 'cstdmf' }}
+        if: ${{ matrix.library == 'cstdmf' }}
         shell: pwsh
         continue-on-error: true
         run: |
@@ -241,9 +241,9 @@ jobs:
 
       - name: Upload logs on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.2
         with:
-          name: ci-windows-logs-${{ github.run_id }}-${{ matrix.module }}
+          name: ci-windows-logs-${{ github.run_id }}-${{ matrix.library }}
           path: |
             cmake-configure.log
             cmake-configure-test.log
@@ -264,7 +264,7 @@ jobs:
   # log and the artifact.
   root-configure-probe:
     name: root configure (R3 probe)
-    runs-on: windows-latest
+    runs-on: ${{ vars.CI_RUNNER || 'windows-latest' }}
     # 90, up from 30: configuring with the vcpkg toolchain installs the
     # manifest (vcpkg.json) on a cold binary cache, and the static-md
     # openssl/curl builds alone can exceed half an hour on a 2-core runner.
@@ -277,7 +277,7 @@ jobs:
       cancel-in-progress: true
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@v7.0.1
 
       - name: Configure root superproject (server target)
         shell: pwsh
@@ -308,7 +308,7 @@ jobs:
 
       - name: Upload probe log
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: ci-windows-root-probe-${{ github.run_id }}
           path: cmake-configure-root.log
@@ -336,7 +336,7 @@ jobs:
   # window; artifacts are not releases).
   root-build-probe:
     name: root build (R3 probe, manual)
-    runs-on: windows-latest
+    runs-on: ${{ vars.CI_RUNNER || 'windows-latest' }}
     if: github.event_name == 'workflow_dispatch'
     timeout-minutes: 120
     continue-on-error: true
@@ -345,7 +345,7 @@ jobs:
       cancel-in-progress: false
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@v7.0.1
 
       - name: Fetch legacy D3DX SDK
         shell: pwsh
@@ -470,7 +470,7 @@ jobs:
 
       - name: Upload server products
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: ci-windows-root-products-${{ github.run_id }}
           path: |
@@ -571,7 +571,7 @@ jobs:
 
       - name: Upload build logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: ci-windows-root-build-${{ github.run_id }}
           path: |

@@ -1,5 +1,6 @@
 # 脚本热更新与迁移
 
+](/> [English)) | **中文**
 
 <div class="arch-hero">
 

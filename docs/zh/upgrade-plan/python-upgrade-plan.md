@@ -1,5 +1,6 @@
 # Python 3.12 路线图
 
+](/> [English)) | **中文**
 
 ::: tip 状态更新（2026-09-28）
 本路线图写于迁移启动前，保留作为决策记录。实际迁移已在此后完成并合入 dev 分支：嵌入式解释器从 Python 2.7 切换到 **Python 3.13**（版本随依赖链从规划期的 3.12 上调）。逐批过程与验收见 [Python 3.13 迁移全量台账](/zh/python-313-migration)，当前状态一览见 [迁移与覆盖率现状](/zh/upgrade-plan/migration-status)。

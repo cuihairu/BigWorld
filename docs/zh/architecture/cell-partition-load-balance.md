@@ -1,5 +1,6 @@
 # Cell 分区与负载均衡
 
+](/> [English)) | **中文**
 
 <div class="arch-hero">
 

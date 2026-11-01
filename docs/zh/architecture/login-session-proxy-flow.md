@@ -1,5 +1,6 @@
 # 登录、会话与 Proxy 接管
 
+](/> [English)) | **中文**
 
 <div class="arch-hero">
 

@@ -1,5 +1,6 @@
 # 实体生命周期状态机
 
+](/> [English)) | **中文**
 
 <div class="arch-hero">
 

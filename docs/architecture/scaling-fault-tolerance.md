@@ -1,5 +1,6 @@
 # Dynamic Scaling and Fault Tolerance
 
+> [中文](/zh/)
 
 <div class="arch-hero">
 

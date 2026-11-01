@@ -1,5 +1,6 @@
 # Main Loop, Ticks and Event Dispatch
 
+> **English** | [中文](event-loop.md)
 
 <div class="arch-hero">
 

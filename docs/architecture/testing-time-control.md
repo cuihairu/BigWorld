@@ -1,5 +1,6 @@
 # Testing System and Controlled Time
 
+> **English** | [中文](testing-time-control.md)
 
 <div class="arch-hero">
 
