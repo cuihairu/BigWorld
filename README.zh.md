@@ -1,6 +1,4 @@
-<p align="center">
-  <img src="logo.svg" alt="BigWorld logo" width="64" />
-</p>
+<p align="center"><img src="logo.svg" alt="BigWorld logo" width="64" /> <a href="https://cuihairu.github.io/BigWorld/zh/"><img src="https://img.shields.io/badge/docs-文档-blue" alt="docs"></a></p>
 
 <p align="center">
   <a href="README.md">English</a> | 简体中文
