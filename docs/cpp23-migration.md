@@ -1,6 +1,5 @@
 # BigWorld C++ Standard Upgrade Analysis (Target: C++23)
 
-> **English** | [中文](cpp23-migration.md)
 > Task: evaluate and carry out the upgrade of BigWorld's C++ standard to C++23.
 > Status: **analysis complete; for the landing phase see "Final landing and execution results" at the end of this document.**
 > Constraint: shares the dev branch with the Python 3.13 port; the two efforts are committed separately.
@@ -68,7 +67,7 @@ Scope: `lib/ server/ tools/ client/ guimanager/ examples/` (excluding `third_par
 | `std::raw_storage_iterator` | 0 | — |
 | `std::is_pod` | 0 | — |
 | `[=]` implicit capture of this | **0** | deprecated in C++20, removed in C++23; zero hits repo-wide |
-| `std::iterator` inheritance | 2 (`lib/entitydef/data_type.hpp:326`, `lib/cstdmf/circular_queue.hpp:85`) | deprecated in C++17, still usable in C++20; worth fixing in passing |
+| `std::iterator` inheritance | 2 (`lib/entitydef/data_type.hpp:328`, `lib/cstdmf/circular_queue.hpp:86`) | deprecated in C++17, still usable in C++20; worth fixing in passing |
 
 ### 20→23 (no new removals)
 
@@ -120,7 +119,7 @@ Execution followed "fix first, then switch" strictly: every deprecated/removed f
 | `unique_ptr(NULL)` construction ambiguity, 76 sites | under C++23, `NULL` (integer 0) is ambiguous between the `pointer` and `nullptr_t` constructors | changed all to `nullptr` (equally correct for raw pointers) |
 | `watcher.hpp` string-to-value does not support pointer types | gcc15 libstdc++ removed `operator>>(istream, void*&)` in the C++23 tier | added a `watcherStringToValue( const char *, VALUE_TYPE *& )` overload returning false |
 | `server/tools/message_logger/user_log.cpp` returns NULL into `BW::string` | P2166R1 removed the `string(nullptr_t)` constructor (previously UB) | changed to `return BW::string();` |
-| pyscript/typeobject designated+positional initializer mixing | since C++20 a single initializer list may not mix designated and positional members; CPython 3.13's `PyVarObject_HEAD_INIT` expands positionally | added `lib/pyscript/pytypeobject_head.hpp` (`BW_PYTYPEOBJECT_HEAD_INIT`, a double-level `.ob_base` expansion of the 3.13 object header; depends only on Python.h so out-of-repo bare CPython code can reuse it); all 688 type objects in pyobject_plus.hpp converted to designated |
+| pyscript/typeobject designated+positional initializer mixing | since C++20 a single initializer list may not mix designated and positional members; CPython 3.13's `PyVarObject_HEAD_INIT` expands positionally | added `lib/pyscript/pytypeobject_head.hpp` (`BW_PYTYPEOBJECT_HEAD_INIT`, a double-level `.ob_base` expansion of the 3.13 object header; depends only on Python.h so out-of-repo bare CPython code can reuse it); all type objects in pyobject_plus.hpp converted to the designated macro |
 | `server/tools/message_logger` four bare CPython type objects | same as above | after verification, kept fully positional initialization (the 3.13 slot order is already correct, and fully positional is legal in C++23); no macro introduced |
 | `bw_profile`, `message_reader` pick up the system Python headers | upstream leftover `useSystemPython := 1`, which on a modern host resolves to any `/usr/include/pythonX.Y` (the local 3.14 public headers lack `_Py_IMMORTAL_REFCNT`) | both changed to `useSystemPython := 0`, aligning them with all other components on the in-repo 3.13 headers and `bwpython3.13` |
 | `examples/cellapp_extension` Py2 API leftovers | `PyString_*` does not exist in Python 3 headers (during the Python task this target was never actually compiled or executed, so stale .o files masked the problem) | `PyString_FromStringAndSize` → `PyBytes_FromStringAndSize` (identical binary-stream semantics) |
@@ -128,7 +127,7 @@ Execution followed "fix first, then switch" strictly: every deprecated/removed f
 | 5 sites of non-const member `operator==/!=` ambiguity | C++20 rewritten/reversed candidates make a non-const comparison member ambiguous when both operands are non-const (gcc hints "try making the operator a const member function") | appended a trailing `const` qualifier (semantics unchanged): log_on_params.hpp, cstdmf/event.hpp, cstdmf/dogwatch.hpp/.cpp (the iterator's `==`/`!=`), romp/lens_effect.hpp |
 | `third_party/CppUnitLite2` indentation warnings | gcc15 `-Werror=misleading-indentation` | wrapped the single-statement `if` in ExceptionHandler.cpp in braces (minimal third-party change) |
 
-Additionally: the concurrent-rebuild trampling in `third_party_openssl.mak` (`ar: file truncated`) was root-caused — after `.INTERMEDIATE` had earlier been removed, the recipe never physically created the stamp file, so the plain rule's target was always missing and make re-ran every time; `touch $@` was appended to the end of the recipe. This fix is unrelated to the standard tier but was discovered during this verification pass, so it ships with this task.
+Additionally: the concurrent-rebuild trampling in `third_party_openssl.mak` (`ar: file truncated`) was root-caused — after `.INTERMEDIATE` had earlier been removed, the recipe never physically created the stamp file, so the plain rule's target was always missing and make re-ran every time; `touch $@` was appended to the end of the recipe. This fix is unrelated to the standard tier but was discovered during this verification pass, so it ships with this task. Note: the vendored openssl source build (and this recipe fix) was since retired by the vcpkg migration; `build/make/third_party_openssl.mak` is now a vcpkg-consumer stub.
 
 ### 6.3 Tier switch and verification
 

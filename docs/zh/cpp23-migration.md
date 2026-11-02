@@ -1,6 +1,5 @@
 # BigWorld C++ 标准升级分析（目标：C++23）
 
-](/> [English)) | **中文**
 > 任务：评估并把 BigWorld 的 C++ 标准升级到 C++23。
 > 状态：**分析已完成；落地阶段见文末"最终落点与执行结果"**。
 > 约束：与 Python 3.13 移植同在 dev 分支，两件事分开提交。
@@ -67,7 +66,7 @@
 | `std::raw_storage_iterator` | 0 | — |
 | `std::is_pod` | 0 | — |
 | `[=]` 隐式捕获 this | **0** | C++20 起弃用、C++23 移除；全仓无命中 |
-| `std::iterator` 继承 | 2（`lib/entitydef/data_type.hpp:326`、`lib/cstdmf/circular_queue.hpp:85`） | C++17 弃用、C++20 仍可用；建议顺手改 |
+| `std::iterator` 继承 | 2（`lib/entitydef/data_type.hpp:328`、`lib/cstdmf/circular_queue.hpp:86`） | C++17 弃用、C++20 仍可用；建议顺手改 |
 
 ### 20 [23（无新增删除]
 
@@ -119,7 +118,7 @@
 | `unique_ptr(NULL)` 构造歧义 76 处 | C++23 下 `NULL`（整型 0）在 `pointer` 与 `nullptr_t` 构造器间二义 | 全部改 `nullptr`（对原生指针同样正确） |
 | `watcher.hpp` 字符串转值不支持指针类型 | gcc15 libstdc++ C++23 档删除 `operator>>(istream, void*&)` | 新增 `watcherStringToValue( const char *, VALUE_TYPE *& )` 重载返回 false |
 | `server/tools/message_logger/user_log.cpp` `return NULL` 给 `BW::string` | P2166R1 删除 `string(nullptr_t)` 构造（原为 UB） | 改 `return BW::string();` |
-| pyscript/typeobject 指定初始化混编 | C++20 起一个初始化列表禁止 designated/positional 混用；CPython 3.13 `PyVarObject_HEAD_INIT` 是位置展开 | 新增 `lib/pyscript/pytypeobject_head.hpp`（`BW_PYTYPEOBJECT_HEAD_INIT`，双层 `.ob_base` 展开 3.13 对象头；仅依赖 Python.h 供仓外裸 CPython 代码复用）；pyobject_plus.hpp 的 688 行类型对象全部 designated 化 |
+| pyscript/typeobject 指定初始化混编 | C++20 起一个初始化列表禁止 designated/positional 混用；CPython 3.13 `PyVarObject_HEAD_INIT` 是位置展开 | 新增 `lib/pyscript/pytypeobject_head.hpp`（`BW_PYTYPEOBJECT_HEAD_INIT`，双层 `.ob_base` 展开 3.13 对象头；仅依赖 Python.h 供仓外裸 CPython 代码复用）；pyobject_plus.hpp 的类型对象全部改用该 designated 宏 |
 | `server/tools/message_logger` 四个裸 CPython 类型对象 | 同上 | 核查后保持全位置初始化（3.13 槽位顺序已正确，全位置在 C++23 合法），不引入宏 |
 | `bw_profile`、`message_reader` 拾取系统 Python 头 | 上游遗留 `useSystemPython := 1`，现代主机解析到任意 `/usr/include/pythonX.Y`（本机 3.14 公共头无 `_Py_IMMORTAL_REFCNT`） | 两处改 `useSystemPython := 0`，与其余组件统一走仓内 3.13 头与 `bwpython3.13` |
 | `examples/cellapp_extension` Py2 API 残留 | `PyString_*` 在 Python 3 头不存在（Python 任务期该目标从未被编译执行到，陈旧 .o 掩盖了问题） | `PyString_FromStringAndSize` → `PyBytes_FromStringAndSize`（二进制流语义一致） |
@@ -127,7 +126,7 @@
 | 非 const 成员 `operator==/!=` 二义 5 处 | C++20 重写/反转候选（rewritten candidates）使非 const 比较成员在双非 const 操作数下二义（gcc 提示 "try making the operator a const member function"） | 补尾 `const` 限定（语义等价）：log_on_params.hpp、cstdmf/event.hpp、cstdmf/dogwatch.hpp/.cpp（iterator 的 `==`/`!=`）、romp/lens_effect.hpp |
 | `third_party/CppUnitLite2` 缩进告警 | gcc15 `-Werror=misleading-indentation` | `ExceptionHandler.cpp` 的单句 `if` 加花括号（第三方最小改动） |
 
-另：`third_party_openssl.mak` 的并发重建踩踏（`ar: file truncated`）根治——此前删除 `.INTERMEDIATE` 后配方从不物理创建 stamp 文件，普通规则目标缺失导致每次 make 重跑；配方末尾补 `touch $@`。此修复与标准档无关但由本轮验证发现，随本任务提交。
+另：`third_party_openssl.mak` 的并发重建踩踏（`ar: file truncated`）根治——此前删除 `.INTERMEDIATE` 后配方从不物理创建 stamp 文件，普通规则目标缺失导致每次 make 重跑；配方末尾补 `touch $@`。此修复与标准档无关但由本轮验证发现，随本任务提交。注：该 vendored openssl 源码构建（及此配方修复）已被 vcpkg 迁移淘汰，`build/make/third_party_openssl.mak` 现为 vcpkg 消费桩。
 
 ### 6.3 切档与验证
 
