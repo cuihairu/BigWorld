@@ -5500,7 +5500,7 @@ void Entity::runMethodHelper( BinaryIStream & data, int methodID,
 		pMethodDescription =
 			pEntityType_->description().cell().internalMethod( methodID );
 
-		if (pMethodDescription->isExposed())
+		if (pMethodDescription != NULL && pMethodDescription->isExposed())
 		{
 			data >> sourceID;
 		}
