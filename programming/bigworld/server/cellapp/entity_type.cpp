@@ -106,11 +106,11 @@ EntityType::EntityType( const EntityDescription& entityDescription,
 	// Check if the __init__ method accepts 2 or more methods.
 	int argCount = 0;
 	const char * argCountPath[] =
-		{ "__init__", "im_func", "func_code", "co_argcount", NULL };
+		{ "__init__", "__code__", "co_argcount", NULL };
 	Script::getNestedValue( (PyObject *)pType, argCountPath, argCount );
 
 	const char * flagsPath[] =
-		{ "__init__", "im_func", "func_code", "co_flags", NULL };
+		{ "__init__", "__code__", "co_flags", NULL };
 	int flags = 0;
 	Script::getNestedValue( (PyObject *)pType, flagsPath, flags );
 
