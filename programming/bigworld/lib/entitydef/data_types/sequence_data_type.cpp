@@ -118,35 +118,46 @@ public:
 			varSize_ = size;
 		}
 
-		result = result && sequenceDataType.startSequence( sink, varSize_ );
-
 		// Work out whether there's possibly enough data on the stream to
-		// create a sequence of this size
-		const int elementSize = sequenceDataType.getElemType().streamSize();
+		// create a sequence of this size.  This must be checked before the
+		// destination sequence is allocated: varSize_ is read from the stream
+		// and a corrupt or hostile count must not be able to force
+		// startSequence() to allocate a large container (memory exhaustion).
+		if (result)
+		{
+			const int elementSize = sequenceDataType.getElemType().streamSize();
+			const int remaining = stream.remainingLength();
 
-		if (elementSize < 0)
-		{
-			if (stream.remainingLength() < static_cast< int >( varSize_ ))
+			if (elementSize < 0)
 			{
-				ERROR_MSG( "SequenceStartStreamElement::fromSourceToStream: "
-					"Invalid size on stream: %" PRIzu " "
-					"(%d bytes remaining)\n",
-					varSize_, stream.remainingLength() );
-				result = false;
+				// Variable-sized elements: at least one byte per element.
+				if (remaining < static_cast< int >( varSize_ ))
+				{
+					ERROR_MSG( "SequenceStartStreamElement::fromSourceToStream: "
+						"Invalid size on stream: %" PRIzu " "
+						"(%d bytes remaining)\n",
+						varSize_, remaining );
+					result = false;
+				}
+			}
+			else if (elementSize > 0)
+			{
+				// Fixed-size elements: compare byte counts without overflow.
+				// remaining < varSize_ * elementSize  <=>  remaining / elementSize < varSize_
+				if (remaining < 0 ||
+					(static_cast< size_t >( remaining ) /
+						static_cast< size_t >( elementSize )) < varSize_)
+				{
+					ERROR_MSG( "SequenceStartStreamElement::fromSourceToStream: "
+						"Expected bytes on stream: %" PRIzu " "
+						"(%d bytes remaining)\n",
+						varSize_ * elementSize, remaining );
+					result = false;
+				}
 			}
 		}
-		else
-		{
-			if (stream.remainingLength() <
-				static_cast< int >( varSize_ * elementSize ))
-			{
-				ERROR_MSG( "SequenceStartStreamElement::fromSourceToStream: "
-					"Expected bytes on stream: %" PRIzu " "
-					"(%d bytes remaining)\n",
-					varSize_ * elementSize, stream.remainingLength() );
-				result = false;
-			}
-		}
+
+		result = result && sequenceDataType.startSequence( sink, varSize_ );
 
 		return result;
 	}
