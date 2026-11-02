@@ -1,5 +1,9 @@
 <p align="center">
-  <img src="logo.svg" alt="BigWorld logo" width="64" /> <a href="https://cuihairu.github.io/BigWorld/zh//"><img src="https://img.shields.io/badge/%E6%96%87%E6%A1%A3-blue" alt="docs"></a>
+  <img src="logo.svg" alt="BigWorld logo" width="64" />
+</p>
+
+<p align="center">
+  <a href="https://cuihairu.github.io/BigWorld/zh/"><img src="https://img.shields.io/badge/%E6%96%87%E6%A1%A3-blue" alt="docs"></a>
 </p>
 
 <p align="center">
