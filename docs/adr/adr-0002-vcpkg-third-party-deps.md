@@ -1,8 +1,6 @@
 # ADR-0002: Third-Party Dependencies Move from Vendored Source Trees to a vcpkg Manifest
 
-> **English** | [中文](adr-0002-vcpkg-third-party-deps.md)
-
-- **Status**: Accepted (landed 2026-10-12; switch in `2bdfc5aa`, baseline pinned in `1180ece6`)
+- **Status**: Accepted (landed 2026-10-12; switch in `41fafefc`, baseline pinned in `1180ece6`)
 - **Scope**: `programming/bigworld/third_party/`, `third_party_*.mak`,
   `build/cmake/FindBW*.cmake`, CI/daily-build workflows
 

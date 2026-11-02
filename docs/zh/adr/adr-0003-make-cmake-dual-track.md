@@ -1,8 +1,6 @@
 # ADR-0003：make 主链 + 按组件 CMake 样板双轨并存
 
-](/> [English)) | **中文**
-
-- **状态**：已接受（2026-10-12 cstdmf 样板落地，2026-10-14 resmgr + network + CI matrix）
+- **状态**：已接受（2026-10-12 cstdmf 样板落地，2026-10-14 resmgr + network + entitydef + CI matrix）
 - **范围**：`programming/bigworld/build/make/`、`cmake/samples/`、
   `scripts/build-*-cmake.sh`、`.github/workflows/ci.yml`、
   `lib/*/CMakeLists.txt`（Windows 超级工程）
@@ -44,9 +42,10 @@
   现代化；新组件接入模板可复制（cstdmf → resmgr → network 已验证）。
 - **代价/风险**：`Makefile.rules` 改源清单必须同步样板清单（样板头部已
   注明"keep in sync"）；两套构建语义长期并存，需 CI matrix 兜漂移；
-  每样板 ~300 行显式清单是刻意为之的"翻译透明性"，不是债。
-- **后续**：connection/entitydef 样板按同一模式叠加
-  （connection 无 unit_test 需先建测试面、entitydef 依赖 8 库，单独评估）；
+  每样板显式清单（cstdmf ~300 行、resmgr ~300 行、network 486、entitydef 653）
+  是刻意为之的"翻译透明性"，不是债。
+- **后续**：connection 样板按同一模式叠加（connection 无 unit_test 需先建
+  测试面）；entitydef 样板已落地并加入 CI matrix，故仅剩 connection。
   R3 时 Windows 超级工程与 Linux 样板合流或分工再立 ADR。
 
 证据：[vcpkg-migration §3](/zh/vcpkg-migration)、

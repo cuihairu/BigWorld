@@ -1,7 +1,5 @@
 # Python 3.12 Roadmap
 
-> **English** | [中文](python-upgrade-plan.md)
-
 ::: tip Status update (2026-09-28)
 This roadmap was written before the migration started and is kept as a
 decision record. The actual migration has since been completed and merged
@@ -133,8 +131,10 @@ Python 3.12; handle them with "replace first":
 
 - `oursql`
   Prefer replacing with a modern MySQL driver rather than continuing to patch.
-- `SQLAlchemy 0.6.6`
-  If it must be kept, assess the API-change cost; more realistically, isolate the old calls and upgrade to a modern version.
+- `SQLAlchemy` (was 0.6.6 at writing; since upgraded to 1.4.54, see
+  `site-packages/sqlalchemy/__init__.py:134`)
+  Superseded by the migration ledger — the "assess the API-change cost"
+  step below was executed as part of the 3.13 migration.
 - `Pympler`, `pika`
   Upgrade or remove depending on the actual usage surface.
 

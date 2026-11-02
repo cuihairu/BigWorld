@@ -1,7 +1,5 @@
 # Python C API Migration Guide
 
-> **English** | [中文](python-c-api-guide.md)
-
 <div class="arch-hero">
 
 > **Status (2026-10-13 audit)**: the migration is complete (the embedded

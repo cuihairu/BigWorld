@@ -1,7 +1,5 @@
 # 构建系统现代化
 
-](/> [English)) | **中文**
-
 <div class="arch-hero">
 
 BigWorld 的构建系统混合了 Make、CMake 和平台脚本，版本老旧。本文档规划构建系统的现代化路径。
@@ -134,7 +132,7 @@ add_compile_options(-fstack-protector-strong -D_FORTIFY_SOURCE=2)
 
 ### GitHub Actions（已落地，2026-10-12）
 
-实际生效的是两条构建 workflow（另有 `deploy-docs.yml` 文档发布）：
+实际生效的是三条构建 workflow（`ci.yml`、`ci-windows.yml`、`daily-build.yml`，另有 `deploy-docs.yml` 文档发布）：
 
 - `.github/workflows/ci.yml` —— **push/PR 门禁**：vcpkg manifest 钉版
   baseline 克隆 + binary cache（键=baseline+manifest 哈希）→ 配置/构建
@@ -143,7 +141,8 @@ add_compile_options(-fstack-protector-strong -D_FORTIFY_SOURCE=2)
   步骤具名，失败时上传一个含 configure/build/ctest 三日志的 artifact，
   失败可按步骤定位。
 - `.github/workflows/daily-build.yml` —— **每日构建**：48 小时新鲜度判定 →
-  全量 make + 21 模块单测门禁 → tar.gz/deb/rpm 三格式打包，artifact 交付。
+  全量 make + 21 模块单测门禁 → tar.gz/deb/rpm 三格式打包，
+  另含 Windows server 产物一腿（2026-10-18），artifact 交付。
   详见[打包与每日构建](/zh/upgrade-plan/packaging-and-daily-build)。
 
 本地等价命令：CMake 样板各一条命令（`scripts/build-cstdmf-cmake.sh` /

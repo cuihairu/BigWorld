@@ -1,7 +1,5 @@
 # Migration and Coverage Status
 
-> **English** | [中文](migration-status.md)
-
 <div class="arch-hero">
 
 This page is the **single status dashboard** for the Python 3.13 migration
@@ -43,7 +41,7 @@ answers "what is the state right now".
 | cstdmf | **54%** | Infrastructure (debug, memory, streams, the watcher family; batch 22 class-by-class judgment 51% → 54%) |
 | entitydef | 43% | Type contracts; heavy loader-machine dependency |
 | terrain | 34% | Terrain (includes a gcovr record anomaly; see ledger batch 18) |
-| connection | 24% | Server connection surface; `server_connection.cpp` (990 lines, 0%) stays registered untestable and anchors the floor |
+| connection | 24% | Server connection surface; `server_connection.cpp` (2971 lines, 0%) stays registered untestable and anchors the floor |
 | moo | 13% | Client rendering support; server unit tests never touch it |
 | physics2 | **76%** | Client physics; batch 20 closed `quad_tree.ipp` via missed-list activation (61% → 76%) |
 | server | 13% | Server skeleton; needs full app assembly |
@@ -200,13 +198,13 @@ cellapp_test 12→27; full 21-module gate green).
 The complete arm-by-arm judgments are in the ledger batches; here is the
 conclusion summary for large 0%-coverage files:
 
-- `connection/server_connection.cpp` (990 lines) — **stays untestable**: the real login pipeline + TCPChannel state machine (batch 14/16 standard).
-- `connection/message_handlers.hpp` (538 lines) — **structural dead code**: a template handler table instantiated by server apps, never instantiated by unit tests.
-- `moo/image.ipp` (589 lines) — restricted: client image composition surface.
-- `chunk/chunk_space.cpp` (506 lines) — restricted: needs ChunkSpace + a chunk loader machine.
-- `connection/replay_controller.cpp` (495 lines) — restricted: the recording/replay file pipeline (wire format tested in batch 12).
+- `connection/server_connection.cpp` (2971 lines) — **stays untestable**: the real login pipeline + TCPChannel state machine (batch 14/16 standard).
+- `connection/message_handlers.hpp` (352 lines) — **structural dead code**: a template handler table instantiated by server apps, never instantiated by unit tests.
+- `moo/image.ipp` (2003 lines) — restricted: client image composition surface.
+- `chunk/chunk_space.cpp` (1476 lines) — restricted: needs ChunkSpace + a chunk loader machine.
+- `connection/replay_controller.cpp` (1452 lines) — restricted: the recording/replay file pipeline (wire format tested in batch 12).
 - `network/logger_endpoint.cpp` / `logger_message_forwarder.cpp` / `watcher_nub.cpp` — stay registered restricted (real message-logging pipeline, UDP bound to the standard machined port, batch 17).
-- `terrain/terrain2/terrain_height_map2.cpp` (755 lines) — gcovr loses the file-name column for this record (empty-name entry); not judged arm by arm.
+- `terrain/terrain2/terrain_height_map2.cpp` (2156 lines) — gcovr loses the file-name column for this record (empty-name entry); not judged arm by arm.
 - The `physics2/quad_tree.ipp` dead-function family — **structural dead code** (batch 20, three-way evidence): `QuadTree::del` (calculateQTRange called without origin_), `QuadTree::testPoint` (calls a nonexistent `QuadTree…` — never instantiated; instantiating it is immediately a compile error. On the production side, chunk's `pChunkTree_` is a HullTree and uses ObstacleTree only via addToRoot.
 
 Closed (removed from the register): the `entitydef/entity_description.cpp`
@@ -218,7 +216,7 @@ gating and counting, clientServerFullIndex/legacyExposedIndex order
 sensitivity; the residual 195 lines are parseProperties coverage/override
 arms, LoDLevels/Volatile/Implements/Components parsing, the stream-write
 side, and the supersede migration surface, see ledger §7.31;
-`moo/image.ipp`'s 589 lines stay restricted — under the el7 mixed server
+`moo/image.ipp`'s 2003 lines stay restricted — under the el7 mixed server
 build lib/moo compiles only node.o/png.o and image.ipp has no
 instantiation); `network/machine_guard.cpp` (28% → **87%** precise
 standard 668/764, closed by batch 30 direct driving; new

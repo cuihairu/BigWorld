@@ -1,7 +1,5 @@
 # ADR-0001：嵌入式解释器 Python 2.7 → 3.13
 
-](/> [English)) | **中文**
-
 - **状态**：已接受（2026-09-26 起分批落地，2026-10-12 升至 3.13.16）
 - **范围**：`programming/bigworld/third_party/python`（vendored CPython）、
   `lib/pyscript`、构建链 `third_party_python.mak`、运行期资源树
@@ -47,8 +45,9 @@ Debian→el7 回退使 `lib-dynload` 目录名一致（否则全部 C 扩展导�
   [ADR-0002](adr-0002-vcpkg-third-party-deps)）；21 模块单测门禁在 3.13 上
   全绿；现代 Py3 生态可选。
 - **代价/风险**：
-  - R2——资源树里的 Py2 生态包（twisted 11 / sqlalchemy 0.6 / zope 2.11 等）
-    不可用，需逐包升级后再启用安装规则（暂缓，不在编译关键路径）；
+  - R2——资源树里的 Py2 生态包现已升级（twisted 24.7.0 / sqlalchemy 1.4.54 /
+    zope.interface ≥5.0，见 `site-packages/*`），原“需逐包升级”风险已解除；
+    余下暂缓项不在编译关键路径；
   - R3——Windows（PCbuild/VS）侧未迁移，工具链断裂面在 Windows 构建。
 - **后续**：3.13.x 安全补丁跟随（3.13.15→3.13.16 先例）；R2/R3 单独立项。
 

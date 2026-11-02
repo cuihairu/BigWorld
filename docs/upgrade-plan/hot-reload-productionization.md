@@ -1,7 +1,5 @@
 # Hot-Reload Productionization Design
 
-> **English** | [中文](hot-reload-productionization.md)
-
 <div class="arch-hero">
 
 `BigWorld.reloadScript` is currently a development-time tool (the source
@@ -21,12 +19,12 @@ The facts below are evidenced against the dev-branch source of 2026-10-15.
 
 | Step | Code location | Behavior |
 |------|----------|------|
-| Entry | `server/cellapp/cellapp.cpp:2974` | `BigWorld.reloadScript(fullReload=True)`; takes effect only in this cellapp; cross-component behavior is the caller's responsibility |
+| Entry | `server/cellapp/cellapp.cpp:2377` | `BigWorld.reloadScript(fullReload=True)`; takes effect only in this cellapp; cross-component behavior is the caller's responsibility |
 | 1. New interpreter | `cellapp.cpp:2329-2330` | `Script::createInterpreter` + `swapInterpreter` — reload proceeds in the new interpreter while the old one stays alive on the call stack |
 | 2. Load | `cellapp.cpp:2332-2340` | fullReload → `EntityType::init(true)` re-parses entity defs into `s_newTypes_` and prints the MD5 digest; otherwise `EntityType::reloadScript()` only re-imports classes; then `UserDataObjectType::load` |
 | 3. Swap back | `cellapp.cpp:2350-2351` | Swap back to the old interpreter and destroy the new one (the new module table has already been copied into `s_pNewModules_`) |
 | 4. Migrate | `cellapp.cpp:2353-2362` | `EntityType::migrate` (module window) → `UserDataObjectType::migrate` → `ServerEntityMailBox::migrateMailBoxes` → per-entity `Entity::migrate()` (wrapped in `MF_VERIFY`) |
-| 5. Finalize | `cellapp.cpp:2364` | `EntityType::cleanupAfterReload(isFullReload)` executes in the same tick as migration |
+| 5. Finalize | `cellapp.cpp:2473` | `EntityType::cleanupAfterReload(isFullReload)` executes in the same tick as migration |
 | Failure path | `cellapp.cpp:2368-2385` | Swap back to the old interpreter; for non-full reload, `EntityType::reloadScript(true)` retries the old scripts (relies on sys.modules being untouched); cleanup; destroy the new interpreter; return false |
 
 ### Key semantic bodies
@@ -35,7 +33,7 @@ The facts below are evidenced against the dev-branch source of 2026-10-15.
   has been extracted to `EntityType::swapInModules` (`entity_type.ipp`),
   assertable in cellapp unit tests since 2026-10-15.
 - **Entity class swap**: `Entity::migrate`
-  (`server/cellapp/entity.cpp:4245`) — type-id guard (missing type or id
+  (`server/cellapp/entity.cpp:4258`) — type-id guard (missing type or id
   mismatch → judged obsolete, return false) → swap `pEntityType_` and hang
   the old type via `EntityType::old()` → `PyObject_SetAttrString(__class__)`
   (failure → restore `pEntityType_`, return false) → call the script-side
@@ -48,13 +46,13 @@ The facts below are evidenced against the dev-branch source of 2026-10-15.
 
 | # | Mode | Evidence | Consequence |
 |---|------|------|------|
-| F1 | In release, entity-migration failure is silently swallowed | `MF_VERIFY` expands to `(exp)` under `_RELEASE` (`cstdmf/debug.hpp:428`); the return value at `cellapp.cpp:2361` is consumed by nobody | The entity stays on its old class while `sys.modules`/`s_curTypes_` are already the new version — a half-migrated state; a dev build instead aborts mid-reload |
-| F2 | An `onMigrate` script exception does not count as failure | At `entity.cpp:4297` `Script::call(..., okIfFnNull=true)` only prints the exception; `migrate()` still returns true | Script-level half-migration with no failure count |
-| F3 | The dual-version window has zero length | `cleanupAfterReload(isFullReload)` is called in the same tick as migration (`cellapp.cpp:2364`) and immediately breaks the link with `old(NULL)` | The `supersede` mechanism is effectively valid only inside the migration loop; in-flight old-signature calls at the boundary have no grace period |
-| F4 | No cross-process consistency | `cellapp.cpp:2944-2946` documents explicitly that "the user is responsible for calling on all server components"; the digest is computed (`entity_type.cpp:280-287`) but only printed, never compared or propagated | When cellapp has migrated but baseapp/dbmgr still use old defs, cross-process type-id drift |
+| F1 | In release, entity-migration failure is silently swallowed | `MF_VERIFY` expands to `(exp)` under `_RELEASE` (`cstdmf/debug.hpp:447`); the return value at `cellapp.cpp:2481` is consumed by nobody | The entity stays on its old class while `sys.modules`/`s_curTypes_` are already the new version — a half-migrated state; a dev build instead aborts mid-reload |
+| F2 | An `onMigrate` script exception does not count as failure | At `entity.cpp:4321` `Script::call(..., okIfFnNull=true)` only prints the exception; `migrate()` still returns true | Script-level half-migration with no failure count |
+| F3 | The dual-version window has zero length | `cleanupAfterReload(isFullReload)` is called in the same tick as migration (`cellapp.cpp:2473`) and immediately breaks the link with `old(NULL)` | The `supersede` mechanism is effectively valid only inside the migration loop; in-flight old-signature calls at the boundary have no grace period |
+| F4 | No cross-process consistency | `cellapp.cpp:3049-3050` documents explicitly that "the user is responsible for making sure that reloadScript is called on all server components"; the digest is computed (`entity_type.cpp:289-295`) but only printed, never compared or propagated | When cellapp has migrated but baseapp/dbmgr still use old defs, cross-process type-id drift |
 | F5 | Custom data-type instances are not migrated | `cellapp.cpp:2951-2960` requires the user to manually repoint `__class__` per instance | Depends on the caller's scripts being correct; no engine-side guarantee |
-| F6 | The batch-migration-complete hook is dead code | `Entity::migratedAll` (declared `entity.hpp:284`, defined `entity.cpp:4308`) and `Base::migratedAll` (`base.cpp:2837`) had no caller anywhere in the tree | `onMigratedAll` never fires. **Closed 2026-10-27 (batch 52)**: both migrate loops now call `migratedAll()` after the batch (`cellapp.cpp` `MIGRATED_ALL` plan action; `baseapp/script_bigworld.cpp`), and the ordering is pinned by the `ReloadScript` plan tests |
-| F7 | After rollback the old description is still superseded | At `entity.cpp:4267` `pNewType->old(pOldType)` runs before the `__class__` attempt (`entity.cpp:4275`); at `entity_type.cpp:168-185` the first call unconditionally `supersede(CELL)`s the old description (all cell methods are renamed with an `old_` prefix and the name map is rebuilt); on `__class__` failure `entity.cpp:4287` rolls back `pEntityType_ = pOldType`, but nothing in the tree un-supersedes (batch 33 measured: `find("cellTick")`→NULL, `find("old_cellTick")` reachable, `internalMethod`/`exposedMethod` index dispatch unaffected, digest drifts with the renames) | A "successfully" rolled-back entity loses all by-name mailbox method lookups (`mailbox.cpp:122/240` `findMethod` returns NULL → script-side error), while exposed dispatch by msgID still works — a half-broken entity; the rollback design in §4 must also un-supersede (or compensate with window-period re-resolution), and the schema digest must be captured before supersede |
+| F6 | The batch-migration-complete hook is dead code | `Entity::migratedAll` (declared `entity.hpp:299`, defined `entity.cpp:4347`) and `Base::migratedAll` (`base.cpp:2837`) had no caller anywhere in the tree | `onMigratedAll` never fires. **Closed 2026-10-27 (batch 52)**: both migrate loops now call `migratedAll()` after the batch (`cellapp.cpp` `MIGRATED_ALL` plan action; `baseapp/script_bigworld.cpp`), and the ordering is pinned by the `ReloadScript` plan tests |
+| F7 | After rollback the old description is still superseded | At `entity.cpp:4283` `pNewType->old(pOldType)` runs before the `__class__` attempt (`entity.cpp:4300`); at `entity_type.cpp:191` the first call unconditionally `supersede(CELL)`s the old description (all cell methods are renamed with an `old_` prefix and the name map is rebuilt); on `__class__` failure `entity.cpp:4308` rolls back `pEntityType_ = pOldType`, but nothing in the tree un-supersedes (batch 33 measured: `find("cellTick")`→NULL, `find("old_cellTick")` reachable, `internalMethod`/`exposedMethod` index dispatch unaffected, digest drifts with the renames) | A "successfully" rolled-back entity loses all by-name mailbox method lookups (`mailbox.cpp:116/201` `findMethod` returns NULL → script-side error), while exposed dispatch by msgID still works — a half-broken entity; the rollback design in §4 must also un-supersede (or compensate with window-period re-resolution), and the schema digest must be captured before supersede |
 
 ## Design
 
@@ -146,7 +144,7 @@ In two phases:
   asserts no `MIGRATE_*` appears, and the success tail asserts the scratch
   interpreter is destroyed before migrate with cleanup last (7 cases,
   cellapp_test). The same extraction truthfully reports **F8** — on full
-  reload failure `EntityType::init(true)` (`entity_type.cpp:262`) has already
+  reload failure `EntityType::init(true)` (`entity_type.cpp:266`) has already
   called `DataType::clearStaticsForReload()` to clear `s_singletonMap_`, and
   the failure path does not rebuild it; `planReload` flags this with the
   `dataTypesWiped` field. Migration-time half-migration and F8 share the P2

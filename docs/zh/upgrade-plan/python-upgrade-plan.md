@@ -1,7 +1,5 @@
 # Python 3.12 路线图
 
-](/> [English)) | **中文**
-
 ::: tip 状态更新（2026-09-28）
 本路线图写于迁移启动前，保留作为决策记录。实际迁移已在此后完成并合入 dev 分支：嵌入式解释器从 Python 2.7 切换到 **Python 3.13**（版本随依赖链从规划期的 3.12 上调）。逐批过程与验收见 [Python 3.13 迁移全量台账](/zh/python-313-migration)，当前状态一览见 [迁移与覆盖率现状](/zh/upgrade-plan/migration-status)。
 2026-10-13 审计补记：最终**未建**统一兼容包装层，采用逐点直接替换（见 [python-c-api-guide 状态注](/zh/upgrade-plan/python-c-api-guide)）。
@@ -119,8 +117,9 @@
 
 - `oursql`
   优先考虑替换为现代 MySQL 驱动，而不是继续修补。
-- `SQLAlchemy 0.6.6`
-  若必须保留，需评估 API 改造成本；更现实的是隔离旧调用并升级到现代版本。
+- `SQLAlchemy`（写作时为 0.6.6；现已升级到 1.4.54，见
+  `site-packages/sqlalchemy/__init__.py:134`）
+  已被迁移台账取代——下述“评估 API 改造成本”作为 3.13 迁移一部分执行完毕。
 - `Pympler`、`pika`
   视实际使用面决定升级或移除。
 

@@ -1,6 +1,5 @@
 # Migrating BigWorld's Third-Party Dependencies to vcpkg
 
-> **English** | [中文](vcpkg-migration.md)
 > Task: replace the libraries under `programming/bigworld/third_party` that vcpkg can
 > supply with vcpkg manifest entries, and move the make and CMake chains onto the
 > vcpkg toolchain/artifacts.
@@ -51,7 +50,7 @@
   for the CPython `_bz2` extension).
 - New custom triplet `build/vcpkg-triplets/x64-linux-bw.cmake`: static libraries,
   Release only (`VCPKG_BUILD_TYPE release`). That directory is deliberately
-  **not** under `build/vcpkg/` — `.gitignore:41` excludes
+  **not** under `build/vcpkg/` — `.gitignore:42` excludes
   `programming/bigworld/build/vcpkg/`, while a triplet is a build input that
   belongs in the repository; putting it there would leave a fresh clone both
   without it and unable to use it as a make prerequisite (the
@@ -131,7 +130,7 @@ brotli/idn2 etc. are optional features, not enabled.
   python-313-migration.md R3, a later batch).
 - The Windows client/tools configurations (`BWConfiguration_*.cmake`) still
   reference the `third_party/zip` and `third_party/png` source projects (sqlite
-  goes through `lib/sqlite`, see `BWConfiguration_server.cmake:71`); to be
+  goes through `lib/sqlite`, see `BWConfiguration_server.cmake:92`); to be
   handled together with R3.
 
 ### 3.1 Linux CMake sample (cstdmf, coexisting with the make chain)
@@ -215,7 +214,7 @@ and entitydef depends on 8 libraries; both need separate handling).
 lists and adds three blocks: `connection` (26 TUs — first included on the CMake
 track; it has **no** unit_test and was previously covered only indirectly
 through network's link surface), `network` (78 TUs), and `network_test`
-(49 TUs). Compile flags/macros verbatim from the measured `make -n -B
+(52 TUs). Compile flags/macros verbatim from the measured `make -n -B
 bw-run-test-network` command line; one local command
 `scripts/build-network-cmake.sh`.
 
@@ -311,7 +310,7 @@ that the archive exists and that `bwhooks.o` is inside).
 8 new libraries: `physics2` (7 TUs), `moo` (2 TUs, `usePNG=1`), `terrain`
 (18 TUs), `scene` (14 TUs, `pch.cpp` is in the make list so it stays), `chunk`
 (34 TUs, `usePython=1`), `script` (4 TUs), `pyscript` (18 TUs), `entitydef`
-(55 TUs), plus `entitydef_test` (15 TUs). One local command:
+(55 TUs), plus `entitydef_test` (17 TUs). One local command:
 `scripts/build-entitydef-cmake.sh`.
 
 The export surface shared by the four samples (not decoration on Linux:
@@ -353,7 +352,6 @@ failures); the make-side full gate was re-run at the same time: 21 modules /
 1355 cases / 0 failures. The CI matrix grew to
 `[cstdmf, resmgr, network, entitydef]`. At this point the CMake track covers
 the four bottom-up chains cstdmf/resmgr/network/entitydef.
-
 
 ## 4. Engine source adaptations
 
@@ -553,7 +551,6 @@ versions but rendering features outright unusable came to light:
     Py3 syntax, `L` dropped, and the expected bytes regenerated per
     `pickle.dumps(obj, protocol=2)` (the generator was reverse-validated
     against the engine using the then-passing `PYTHON_2`/`PYTHON_3`).
-
 
 ## 5. Verification
 

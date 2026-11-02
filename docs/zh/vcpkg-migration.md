@@ -1,6 +1,5 @@
 # BigWorld 第三方依赖切换到 vcpkg
 
-](/> [English)) | **中文**
 > 任务：把 `programming/bigworld/third_party` 中可由 vcpkg 提供的库改为通过
 > vcpkg manifest 引入；Make 链与 CMake 链改用 vcpkg toolchain/产物。
 ](/> 分支：dev。与 [python-313-migration)) 衔接
@@ -45,7 +44,7 @@
   `_bz2` 扩展）。
 - 新增自定义 triplet `build/vcpkg-triplets/x64-linux-bw.cmake`：
   静态库、仅 Release（`VCPKG_BUILD_TYPE release`）。
-  该目录**刻意不放在** `build/vcpkg/` 下——`.gitignore:41` 排除了
+  该目录**刻意不放在** `build/vcpkg/` 下——`.gitignore:42` 排除了
   `programming/bigworld/build/vcpkg/`，而 triplet 是要入库的构建输入，
   放在那里会让全新 clone 既拿不到它、也无法把它作为 make 前置依赖
   （`--overlay-triplets` 目录同样失效）。
@@ -110,7 +109,7 @@ vcpkg 静态库的传递依赖在 BW 链接行内闭合：curl→ssl/crypto+zlib
   路径（Windows 迁移 = python-313-migration.md R3，后续批次）。
 - Windows 客户端/工具配置（`BWConfiguration_*.cmake`）仍引用
   `third_party/zip`、`third_party/png` 源码工程（sqlite 走 `lib/sqlite`，
-  见 `BWConfiguration_server.cmake:71`），与 R3 一并处理。
+  见 `BWConfiguration_server.cmake:92`），与 R3 一并处理。
 
 ### 3.1 Linux CMake 样板（cstdmf，与 make 双轨并存）
 
@@ -180,7 +179,7 @@ make 链接行一致。本地一条命令 `scripts/build-resmgr-cmake.sh`。
 `CppUnitLite2` + `unit_test_lib` + `cstdmf` + `math` + `resmgr` 源码清单，
 再叠加三块：`connection`（26 TU——CMake 轨首次纳入；它**无** unit_test，
 此前只能靠 network 的链接面间接覆盖）、`network`（78 TU）、
-`network_test`（49 TU）。编译选项/宏逐字取自 `make -n -B bw-run-test-network`
+`network_test`（52 TU）。编译选项/宏逐字取自 `make -n -B bw-run-test-network`
 实测命令行；本地一条命令 `scripts/build-network-cmake.sh`。
 
 与 3.1/3.2 的三处差异（均以 make 实测为准，不是"顺手统一"）：
@@ -259,7 +258,7 @@ make 链本来就在跑的 configure+make，而不是手抄约 250 个 `.c`：
 （7 TU）、`moo`（2 TU，`usePNG=1`）、`terrain`（18 TU）、`scene`（14 TU，
 `pch.cpp` 在 make 清单内故保留）、`chunk`（34 TU，`usePython=1`）、`script`
 （4 TU）、`pyscript`（18 TU）、`entitydef`（55 TU），以及 `entitydef_test`
-（15 TU）。本地一条命令：`scripts/build-entitydef-cmake.sh`。
+（17 TU）。本地一条命令：`scripts/build-entitydef-cmake.sh`。
 
 四样板共有的导出面（Linux 上不是装饰：`bwentity_api.hpp` 按这些宏在
 `template class` 与 `extern template class` 之间分叉，取错会得到重复实例化
@@ -293,7 +292,6 @@ build / ctest 全通过，`entitydef_test` **318 用例全绿**，与 make 侧�
 21 模块 / 1355 用例 / 0 失败。CI matrix 扩展为
 `[cstdmf, resmgr, network, entitydef]`。至此 CMake 轨已覆盖
 cstdmf/resmgr/network/entitydef 四条自下而上的链。
-
 
 ## 4. 引擎源码适配
 
@@ -456,7 +454,6 @@ cstdmf/resmgr/network/entitydef 四条自下而上的链。
     `X` = BINUNICODE、`J` = BININT，长度与内容都变（8 处失败）。修复：改成 Py3
     语法、去掉 `L`、按 `pickle.dumps(obj, protocol=2)` 重新生成期望字节
     （已用当前通过的 `PYTHON_2`/`PYTHON_3` 反向校验过生成器与引擎一致）。
-
 
 ## 5. 验证
 

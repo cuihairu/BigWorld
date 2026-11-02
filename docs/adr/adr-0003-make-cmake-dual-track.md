@@ -1,8 +1,6 @@
 # ADR-0003: Dual Track — make Main Chain plus Per-Component CMake Samples
 
-> **English** | [中文](adr-0003-make-cmake-dual-track.md)
-
-- **Status**: Accepted (cstdmf sample landed 2026-10-12; resmgr + network + CI matrix on 2026-10-14)
+- **Status**: Accepted (cstdmf sample landed 2026-10-12; resmgr + network + entitydef + CI matrix on 2026-10-14)
 - **Scope**: `programming/bigworld/build/make/`, `cmake/samples/`,
   `scripts/build-*-cmake.sh`, `.github/workflows/ci.yml`,
   `lib/*/CMakeLists.txt` (the Windows superproject)
@@ -53,13 +51,14 @@ a separate bottom-up dual track of per-component samples lives at
 - **Costs/risks**: source-list changes in `Makefile.rules` must be mirrored
   in the sample lists (sample headers already carry a "keep in sync" note);
   two build semantics coexist long-term and need the CI matrix to catch
-  drift; each sample's ~300-line explicit list is deliberate "translation
-  transparency", not debt.
-- **Follow-ups**: connection/entitydef samples stack on in the same pattern
-  (connection has no unit_test and needs a test surface first; entitydef
-  depends on 8 libraries and is assessed separately); at R3 time a new ADR
-  decides whether the Windows superproject and Linux samples merge or
-  divide responsibilities.
+  drift; each sample's explicit list (cstdmf ~300 lines, resmgr ~300 lines,
+  network 486, entitydef 653) is deliberate "translation transparency",
+  not debt.
+- **Follow-ups**: the connection sample stacks on in the same pattern
+  (connection has no unit_test and needs a test surface first); the
+  entitydef sample has already landed and joined the CI matrix, so only
+  connection remains. At R3 time a new ADR decides whether the Windows
+  superproject and Linux samples merge or divide responsibilities.
 
 Evidence: [vcpkg-migration §3](/vcpkg-migration),
 [build system modernization](/upgrade-plan/build-system-modernization).

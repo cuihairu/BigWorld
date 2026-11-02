@@ -1,7 +1,5 @@
 # Packaging and Daily-Build Analysis
 
-> **English** | [中文](packaging-and-daily-build.md)
-
 <div class="arch-hero">
 
 Three questions: is packaging RPM-only? Can Windows be supported? How should a
@@ -29,9 +27,11 @@ hard problems:
   through the vcpkg / Python 3.13 migration.
 
 The key fact is: **a full make build already does most of packaging** — the
-install rules lay artifacts out into `game/bin/server/el7/` (about 1.4 GB:
+install rules lay artifacts out into `game/bin/server/el7/` (about 3.8 GB:
 examples / server / tools / unit_tests / third_party) and `game/res/`
-(about 90 MB). The packaging layer only needs "putting it into a format":
+(about 122 MB) — measured on the current tree, since the 3.13/tests build
+has outgrown the original estimate. The packaging layer only needs
+"putting it into a format":
 
 <div class="decision-table">
 
@@ -57,7 +57,7 @@ from the `version` field of `vcpkg.json`).
 |------|--------|------|------|
 | WSL2 (immediate) | ✅ usable today | During the 3.13 migration `platform_info.py` already maps Debian-family hosts without `/etc/redhat-release` to the el7 toolchain configuration; WSL2 is Ubuntu user space, and the full vcpkg dependency list (openssl/curl/jsoncpp/zlib/libpng/sqlite3/bzip2) is available | Run the complete build + 21-module unit tests directly on a Windows dev machine, same standard as CI |
 | MSVC smoke (medium term) | ⚠️ needs engineering | The CMake chain and `build/*.bat` are the historical Windows project-generation surface (client / tools); the existing `.vcproj` files are VS2003-era formats; vcpkg itself is cross-platform and in place, what is missing is project-file modernization | First get the platform-independent libraries (cstdmf / math) through the MSVC compile gate, then expand outward |
-| Native Windows server (long term) | ⚠️ large project | Platform mak files have no win32 configuration; `event_poller` already abstracts select/poll/epoll (Windows select has a ready landing point), but I/O, paths, signals and other platform surfaces are broad | Keep it out of the daily-build scope |
+| Native Windows server (long term) | ⚠️ large project | Platform mak files have no win32 configuration; `event_poller` already abstracts select/poll/epoll (Windows select has a ready landing point), but I/O, paths, signals and other platform surfaces are broad | In the daily build now (Windows server-products lane, 2026-10-18) |
 
 </div>
 
@@ -89,10 +89,12 @@ The three package files are produced in one pass by
 
 Local one-line equivalent: `bash scripts/package-daily.sh <out-dir>` (requires
 a completed full make first; the script takes the version baseline from the
-`version` field of `vcpkg.json`). **The exe gap**: native Windows build is not
-migrated (R3, see the layered table above), so the daily build currently has
-no exe artifact; this is registered as a blocker in the workflow and on this
-page, not an omission.
+`version` field of `vcpkg.json`). **The exe gap is closed**: the daily build
+now also produces a Windows server artifact — the root superproject's Hybrid
+server executables are built and delivered as
+`bigworld-daily-<version>-windows-x64` (zip + `products-manifest.txt`) by the
+`windows-products` lane added 2026-10-18 (`daily-build.yml:166-305`); no
+Windows blocker remains in the workflow.
 
 ### Validation standard (full chain opened on dev branch 2026-09-28)
 

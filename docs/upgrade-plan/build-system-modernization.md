@@ -1,7 +1,5 @@
 # Build System Modernization
 
-> **English** | [中文](build-system-modernization.md)
-
 <div class="arch-hero">
 
 BigWorld's build system mixes Make, CMake, and platform scripts, all at old
@@ -138,8 +136,9 @@ add_compile_options(-fstack-protector-strong -D_FORTIFY_SOURCE=2)
 
 ### GitHub Actions (landed 2026-10-12)
 
-What actually takes effect is two build workflows (plus the
-`deploy-docs.yml` documentation deployment):
+What actually takes effect is three build workflows (`ci.yml`,
+`ci-windows.yml`, `daily-build.yml`), plus the `deploy-docs.yml`
+documentation deployment:
 
 - `.github/workflows/ci.yml` — the **push/PR gate**: clone of the vcpkg
   manifest's pinned baseline + binary cache (key = baseline + manifest
@@ -150,7 +149,8 @@ What actually takes effect is two build workflows (plus the
   uploaded, so failures can be located by step.
 - `.github/workflows/daily-build.yml` — the **daily build**: 48-hour
   freshness check → full make + the 21-module unit-test gate →
-  tar.gz/deb/rpm packaging in three formats, delivered as artifacts. See
+  tar.gz/deb/rpm packaging in three formats, plus a Windows
+  server-products lane (2026-10-18), delivered as artifacts. See
   [packaging and daily build](/upgrade-plan/packaging-and-daily-build).
 
 Local equivalents: one command per CMake sample

@@ -1,7 +1,5 @@
 # Third-Party Dependency Upgrade List
 
-> **English** | [中文](third-party-deps.md)
-
 <div class="arch-hero">
 
 BigWorld embeds a large number of third-party libraries, generally at old
@@ -28,10 +26,10 @@ the MongoDB legacy driver remain vendored.
 | Dependency | Current version | Python 3 compatible | Recommendation |
 |------|----------|---------------|------|
 | Python | 2.7.x → **3.13** | ✅ | Migration complete (see the [migration ledger](/python-313-migration)) |
-| SQLAlchemy | 0.6.6 | ❌ | Upgrade to 2.0+ |
+| SQLAlchemy | 1.4.54 | ✅ | In place; optional 2.0+ upgrade later |
 | oursql | 0.9.2 | ❌ | Replace with mysqlclient |
-| Pympler | 0.3.0 | ❌ | Upgrade to 1.0+ |
-| pika | 0.9.13 | ❌ | Upgrade to 1.0+ |
+| Pympler | 1.0 | ✅ | In place |
+| pika | 1.3.2 | ✅ | In place |
 
 ### C/C++ dependencies
 

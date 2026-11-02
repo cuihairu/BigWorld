@@ -1,7 +1,5 @@
 # 打包与每日构建分析
 
-](/> [English)) | **中文**
-
 <div class="arch-hero">
 
 回答三个问题：打包是不是只有 RPM？Windows 能不能支持？每日构建怎么做？结论先行——**打包不欠构建只欠格式**（make 全量构建已产出完整安装树），**Windows 今天可用 WSL2、原生支持是分层工程**，**每日构建已落地为 GitHub Actions 工作流**（构建 + 21 模块单测门禁 + tar/deb/rpm 三格式产物）。
@@ -15,7 +13,7 @@
 - CentOS 7 已于 2024-06 EOL，其 gcc 4.8 无法承载现代化后的 C++23 构建口径；
 - `makeRPM.py` 指向的是历史 `src/server` 布局，与本仓 `game/` 安装树已不一致，未随 vcpkg / Python 3.13 迁移验证。
 
-关键事实是：**make 全量构建本身就完成了打包的大部分工作**——安装规则把产物铺进 `game/bin/server/el7/`（约 1.4 GB：examples / server / tools / unit_tests / third_party）和 `game/res/`（约 90 MB）。打包层只差“装进格式”：
+关键事实是：**make 全量构建本身就完成了打包的大部分工作**——安装规则把产物铺进 `game/bin/server/el7/`（约 3.8 GB：examples / server / tools / unit_tests / third_party）和 `game/res/`（约 122 MB）——当前树实测，3.13/测试构建已超过原估算。打包层只差“装进格式”：
 
 <div class="decision-table">
 
@@ -39,7 +37,7 @@
 |------|--------|------|------|
 | WSL2（立即） | ✅ 今天可用 | `platform_info.py` 在 3.13 迁移期已把无 `/etc/redhat-release` 的 Debian 系主机映射为 el7 工具链配置；WSL2 即 Ubuntu 用户态，vcpkg 依赖清单（openssl/curl/jsoncpp/zlib/libpng/sqlite3/bzip2）全部可用 | Windows 开发机上直接走完整构建 + 21 模块单测，与 CI 同口径 |
 | MSVC 冒烟（中期） | ⚠️ 需工程投入 | CMake 链与 `build/*.bat` 是历史 Windows 工程生成面（client / tools）；现存 `.vcproj` 是 VS2003 时代格式；vcpkg 本身跨平台已就位，缺的是工程文件现代化 | 先让平台无关库（cstdmf / math）过 MSVC 编译门禁，再逐步外扩 |
-| 服务端原生 Windows（远期） | ⚠️ 大工程 | platform mak 无 win32 配置；`event_poller` 已抽象 select/poll/epoll（Windows select 有现成落点），但 I/O、路径、信号等平台层面广 | 不纳入每日构建范围 |
+| 服务端原生 Windows（远期） | ⚠️ 大工程 | platform mak 无 win32 配置；`event_poller` 已抽象 select/poll/epoll（Windows select 有现成落点），但 I/O、路径、信号等平台层面广 | 已纳入每日构建（Windows server 产物一腿，2026-10-18） |
 
 </div>
 
@@ -69,11 +67,11 @@
 - rpm：`bigworld-14.4.1-1.daily20261012.<sha>.x86_64.rpm`
 
 本地一条等价命令：`bash scripts/package-daily.sh <out-dir>`（要求先完成全量
-make；脚本从 `vcpkg.json` 的 `version` 取版本基线）。**exe 缺口**：Windows
-原生构建未迁移（R3，见上文分层表），每日构建暂无 exe 产物，已在 workflow
-与本页登记为卡点，非遗漏。
-
-
+make；脚本从 `vcpkg.json` 的 `version` 取版本基线）。**exe 缺口已闭合**：每日
+构建现同时产出 Windows server 产物——根超级工程的 Hybrid server 可执行文件
+构建并以 `bigworld-daily-<version>-windows-x64`（zip + `products-manifest.txt`）
+交付，来自 2026-10-18 新增的 `windows-products` 一腿（`daily-build.yml:166-305`）；
+workflow 中不再有 Windows 卡点。
 
 ### 验证口径（2026-09-28 dev 分支全链打通）
 

@@ -1,7 +1,5 @@
 # ADR-0001: Embedded Interpreter Python 2.7 → 3.13
 
-> **English** | [中文](adr-0001-python-313-embedded-interpreter.md)
-
 - **Status**: Accepted (landed in batches from 2026-09-26; bumped to 3.13.16 on 2026-10-12)
 - **Scope**: `programming/bigworld/third_party/python` (vendored CPython),
   `lib/pyscript`, the build chain `third_party_python.mak`, the runtime resource tree
@@ -56,10 +54,10 @@ import fails).
   [ADR-0002](adr-0002-vcpkg-third-party-deps.md)); the 21-module
   unit-test gate is fully green on 3.13; the modern Py3 ecosystem is available.
 - **Costs/risks**:
-  - R2 — the Py2 ecosystem packages in the resource tree (twisted 11 /
-    sqlalchemy 0.6 / zope 2.11 etc.) do not work; each must be upgraded
-    before its install rule is re-enabled (deferred; not on the compile
-    critical path);
+  - R2 — the Py2 ecosystem packages in the resource tree have since been
+    upgraded (twisted 24.7.0 / sqlalchemy 1.4.54 / zope.interface ≥5.0; see
+    `site-packages/*`), so the original "each must be upgraded" risk is
+    resolved; the deferred residue is not on the compile critical path;
   - R3 — the Windows (PCbuild/VS) side is not migrated; the toolchain break
     is in the Windows build.
 - **Follow-ups**: track 3.13.x security patches (precedent: 3.13.15→3.13.16);

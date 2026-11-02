@@ -1,7 +1,5 @@
 # 热重载生产化设计
 
-](/> [English)) | **中文**
-
 <div class="arch-hero">
 
 `BigWorld.reloadScript` 当前定位为开发期工具（源码注释原话 "never in a production environment"）。本文档基于对 reload 链路的逐行审计，给出将其生产化所需的五件套设计：版本化 schema、双版本兼容窗口、dry-run、失败回滚、跨进程一致性屏障，以及分期落地路径与测试承载。
@@ -16,31 +14,31 @@
 
 | 步骤 | 代码位置 | 行为 |
 |------|----------|------|
-| 入口 | `server/cellapp/cellapp.cpp:2974` | `BigWorld.reloadScript(fullReload=True)`，仅在本 cellapp 生效；跨组件由调用方自行保证 |
+| 入口 | `server/cellapp/cellapp.cpp:2377` | `BigWorld.reloadScript(fullReload=True)`，仅在本 cellapp 生效；跨组件由调用方自行保证 |
 | 1. 新解释器 | `cellapp.cpp:2329-2330` | `Script::createInterpreter` + `swapInterpreter`——重载在新解释器里进行，旧解释器仍在调用栈上存活 |
 | 2. 加载 | `cellapp.cpp:2332-2340` | fullReload → `EntityType::init(true)` 重新解析 entity defs 进 `s_newTypes_` 并打印 MD5 digest；否则 `EntityType::reloadScript()` 只重导入类；随后 `UserDataObjectType::load` |
 | 3. 换回 | `cellapp.cpp:2350-2351` | 换回旧解释器并销毁新解释器（新模块表已先拷贝进 `s_pNewModules_`） |
 | 4. 迁移 | `cellapp.cpp:2353-2362` | `EntityType::migrate`（模块换窗）→ `UserDataObjectType::migrate` → `ServerEntityMailBox::migrateMailBoxes` → 逐实体 `Entity::migrate()`（`MF_VERIFY` 包裹） |
-| 5. 收尾 | `cellapp.cpp:2364` | `EntityType::cleanupAfterReload(isFullReload)` 与迁移同一 tick 执行 |
+| 5. 收尾 | `cellapp.cpp:2473` | `EntityType::cleanupAfterReload(isFullReload)` 与迁移同一 tick 执行 |
 | 失败路径 | `cellapp.cpp:2368-2385` | 换回旧解释器；非 full reload 时 `EntityType::reloadScript(true)` 重试旧脚本（依赖 sys.modules 未被动过）；cleanup；销毁新解释器；返回 false |
 
 ### 关键语义体
 
 - **模块换窗**：`EntityType::migrate` 的 `isFullReload=false` 分支已提取为 `EntityType::swapInModules`（`entity_type.ipp`），2026-10-15 起在 cellapp 单测可断言。
-- **实体换类**：`Entity::migrate`（`server/cellapp/entity.cpp:4245`）——type-id 守卫（类型缺失或 id 不匹配 → 判 obsolete 返回 false）→ 换 `pEntityType_` 并经 `EntityType::old()` 挂旧类型 → `PyObject_SetAttrString(__class__)`（失败 → 恢复 `pEntityType_` 返回 false）→ 调脚本侧 `onMigrate`。
+- **实体换类**：`Entity::migrate`（`server/cellapp/entity.cpp:4258`）——type-id 守卫（类型缺失或 id 不匹配 → 判 obsolete 返回 false）→ 换 `pEntityType_` 并经 `EntityType::old()` 挂旧类型 → `PyObject_SetAttrString(__class__)`（失败 → 恢复 `pEntityType_` 返回 false）→ 调脚本侧 `onMigrate`。
 - **双版本钩子**：`EntityType::old()` + `MethodDescription::supersede(CELL)` 使旧方法签名在窗口内继续可解析。
 
 ## 失败模式清单
 
 | # | 模式 | 证据 | 后果 |
 |---|------|------|------|
-| F1 | release 下实体迁移失败被静默吞掉 | `MF_VERIFY` 在 `_RELEASE` 展开为 `(exp)`（`cstdmf/debug.hpp:428`），`cellapp.cpp:2361` 的返回值无人消费 | 该实体留在旧类，而 `sys.modules`/`s_curTypes_` 已是新版本——半迁移态；dev 构建则直接 abort 在 reload 中途 |
-| F2 | `onMigrate` 脚本异常不算失败 | `entity.cpp:4297` `Script::call(..., okIfFnNull=true)` 仅打印异常，`migrate()` 仍返回 true | 脚本级半迁移，且无失败计数 |
-| F3 | 双版本窗口长度为零 | `cleanupAfterReload(isFullReload)` 在迁移同一 tick 调用（`cellapp.cpp:2364`），立刻 `old(NULL)` 断链 | `supersede` 机制实际只在迁移循环内有效，边界上的在途旧签名调用没有缓冲期 |
-| F4 | 无跨进程一致性 | `cellapp.cpp:2944-2946` 文档明示"用户负责在所有 server 组件上调用"；digest 已计算（`entity_type.cpp:280-287`）但只打印、不比对、不传播 | cellapp 已迁移而 baseapp/dbmgr 仍旧 defs 时，跨进程 type-id 漂移 |
+| F1 | release 下实体迁移失败被静默吞掉 | `MF_VERIFY` 在 `_RELEASE` 展开为 `(exp)`（`cstdmf/debug.hpp:447`），`cellapp.cpp:2481` 的返回值无人消费 | 该实体留在旧类，而 `sys.modules`/`s_curTypes_` 已是新版本——半迁移态；dev 构建则直接 abort 在 reload 中途 |
+| F2 | `onMigrate` 脚本异常不算失败 | `entity.cpp:4321` `Script::call(..., okIfFnNull=true)` 仅打印异常，`migrate()` 仍返回 true | 脚本级半迁移，且无失败计数 |
+| F3 | 双版本窗口长度为零 | `cleanupAfterReload(isFullReload)` 在迁移同一 tick 调用（`cellapp.cpp:2473`），立刻 `old(NULL)` 断链 | `supersede` 机制实际只在迁移循环内有效，边界上的在途旧签名调用没有缓冲期 |
+| F4 | 无跨进程一致性 | `cellapp.cpp:3049-3050` 文档明示"用户负责确保 reloadScript 在所有 server 组件上调用"；digest 已计算（`entity_type.cpp:289-295`）但只打印、不比对、不传播 | cellapp 已迁移而 baseapp/dbmgr 仍旧 defs 时，跨进程 type-id 漂移 |
 | F5 | 自定义数据类型实例不迁移 | `cellapp.cpp:2951-2960` 文档要求用户手工逐实例重指 `__class__` | 依赖调用方脚本正确性，无引擎侧保障 |
-| F6 | 批量迁移完成钩子是死代码 | `Entity::migratedAll`（`entity.hpp:284` 声明、`entity.cpp:4308` 定义）与 `Base::migratedAll`（`base.cpp:2837`）全仓无调用方 | `onMigratedAll` 永不触发。**2026-10-27 批次 52 闭合**：两个 migrate 循环现于批量后调 `migratedAll()`（`cellapp.cpp` `MIGRATED_ALL` plan 动作；`baseapp/script_bigworld.cpp`），顺序由 `ReloadScript` plan 测试钉住 |
-| F7 | 回滚后旧描述仍处于 superseded 态 | `entity.cpp:4267` `pNewType->old(pOldType)` 先于 `__class__` 尝试（`entity.cpp:4275`）执行；`entity_type.cpp:168-185` 首次调用即无条件对旧描述 `supersede(CELL)`（全部 cell 方法改名 `old_` 前缀、清名重建 map）；`entity.cpp:4287` `__class__` 失败回滚 `pEntityType_ = pOldType`，而全仓无 un-supersede（批次 33 实测：`find("cellTick")`→NULL、`find("old_cellTick")` 可达、`internalMethod`/`exposedMethod` 下标派发不受影响、digest 随改名漂移） | 回滚"成功"的实体按名字的 mailbox 方法查找全断（`mailbox.cpp:122/240` `findMethod` 返回 NULL→脚本侧报错），按 msgID 的暴露派发仍活——半残实体；第 4 节回滚设计必须连 un-supersede（或以窗口期重解析补偿），且 schema digest 必须在 supersede 前采集 |
+| F6 | 批量迁移完成钩子是死代码 | `Entity::migratedAll`（`entity.hpp:299` 声明、`entity.cpp:4347` 定义）与 `Base::migratedAll`（`base.cpp:2837`）全仓无调用方 | `onMigratedAll` 永不触发。**2026-10-27 批次 52 闭合**：两个 migrate 循环现于批量后调 `migratedAll()`（`cellapp.cpp` `MIGRATED_ALL` plan 动作；`baseapp/script_bigworld.cpp`），顺序由 `ReloadScript` plan 测试钉住 |
+| F7 | 回滚后旧描述仍处于 superseded 态 | `entity.cpp:4283` `pNewType->old(pOldType)` 先于 `__class__` 尝试（`entity.cpp:4300`）执行；`entity_type.cpp:191` 首次调用即无条件对旧描述 `supersede(CELL)`（全部 cell 方法改名 `old_` 前缀、清名重建 map）；`entity.cpp:4308` `__class__` 失败回滚 `pEntityType_ = pOldType`，而全仓无 un-supersede（批次 33 实测：`find("cellTick")`→NULL、`find("old_cellTick")` 可达、`internalMethod`/`exposedMethod` 下标派发不受影响、digest 随改名漂移） | 回滚"成功"的实体按名字的 mailbox 方法查找全断（`mailbox.cpp:116/201` `findMethod` 返回 NULL→脚本侧报错），按 msgID 的暴露派发仍活——半残实体；第 4 节回滚设计必须连 un-supersede（或以窗口期重解析补偿），且 schema digest 必须在 supersede 前采集 |
 
 ## 设计
 
@@ -88,7 +86,7 @@
 ## 验收映射（对应 todo L34）
 
 - 「迁移路径测试覆盖 `Entity::migrate` 语义保持」→ P2，承载缺口：`Entity::migrate` 需要 Entity 实例 + 脚本类型，现 cellapp/unit_test 只编入低耦合 TU（C 档"server 侧 reload 迁移语义测试承载"同源）。
-- 「失败无半迁移状态」→ 加载期失败今天已天然无半迁移（失败路径不触发 migrate）；迁移期半迁移由 P2 的收集-决策+回滚关闭。**批次 36（2026-10-15）起该性质有测试承载**：`ReloadScript::planReload`（`reload_script_plan.hpp`）把 `CellApp::reloadScript` 的动作序列做成数据，失败尾断言不含任何 `MIGRATE_*`，成功尾断言 scratch 解释器先销毁再 migrate、cleanup 最后（7 用例，cellapp_test）。同一提取如实上报 **F8**——全量重载失败时 `EntityType::init(true)`（`entity_type.cpp:262`）已调 `DataType::clearStaticsForReload()` 清空 `s_singletonMap_` 而失败路径不重建，`planReload` 以 `dataTypesWiped` 字段标出；迁移期半迁移与 F8 同属 P2 承载缺口。
+- 「失败无半迁移状态」→ 加载期失败今天已天然无半迁移（失败路径不触发 migrate）；迁移期半迁移由 P2 的收集-决策+回滚关闭。**批次 36（2026-10-15）起该性质有测试承载**：`ReloadScript::planReload`（`reload_script_plan.hpp`）把 `CellApp::reloadScript` 的动作序列做成数据，失败尾断言不含任何 `MIGRATE_*`，成功尾断言 scratch 解释器先销毁再 migrate、cleanup 最后（7 用例，cellapp_test）。同一提取如实上报 **F8**——全量重载失败时 `EntityType::init(true)`（`entity_type.cpp:266`）已调 `DataType::clearStaticsForReload()` 清空 `s_singletonMap_` 而失败路径不重建，`planReload` 以 `dataTypesWiped` 字段标出；迁移期半迁移与 F8 同属 P2 承载缺口。
 - **批次 51（2026-10-27）起 P2 决策核有了测试承载**：`EntityMigration::classify`（`entity_migration_plan.hpp`）命名 `Entity::migrate` 的三种失败——GUARD_OBSOLETE 什么都不动、CLASS_SWAP_REJECTED 恢复 `pEntityType_`、SCRIPT_EXCEPTION 仍报成功——也正是新增 `Entity::migrate(FailureClass*)` 重载上报的内容；`EntityMigration::advance` 承载收集-决策策略（STOP_ON_FAILURE / CONTINUE_ON_FAILURE，停止是粘性的，只有先前迁移过才需要回滚）。同一提取如实记录为何 migrate 循环仍在 `MF_VERIFY` 而非停下回滚：四个逆步骤原语均已可表达（批次 53 更正批次 51 的两处误记）：旧类型链经公开 setter `old(NULL)` 可清（`EntityType::old` 的早退仅在 `pOldSelf_` 与参数都非空时触发，故传 NULL 必清），supersede 改名确有逆——`EntityDescription::unsupersede` 每次调用恰剥一个 `old_` 前缀，与 `supersede()` 每次叠一个一一配对，entitydef_test 钉住。故 `rollbackInverseComplete()` 为 true。批次 53 的台账还把归属（类型级步骤由谁执行）记作剩余阻塞；批次 54 更正了该过度声明：决策可判定且已建模为 `planRollback`（见下），`rollbackAttributionComplete()` 为 true。令循环仍未接线的是执行承载，不是缺失的决策。
 - **批次 53（2026-10-29）起 supersede 改名有了逆**：`EntityDescription::unsupersede(component)` / `EntityMethodDescriptions::unsupersede()` 每次调用恰剥一个 `old_` 前缀并重建名字映射，与 `supersede()`（每次叠一个前缀，`EntityDescription_supersedeTwiceStacksPrefixes` 钉住）逐次配对。entitydef_test 三用例钉住：一叠一剥恢复原名到同一对象且 exposed 分发名复原（base/client 列表未动）、双重 supersede 需双重 unsupersede、对从未 supersede 的描述 unsupersede 不改动（剥前缀只在真实前缀上触发，故计数错误的剥不可能发明改名）。这是 F7 回滚所需的 REVERT_SUPERSEDE_RENAME 机制；剥的归属由批次 54 的 `planRollback` 解决（见下）。
 - **批次 54（2026-10-29）起回滚归属决策已建模**：`EntityMigration::planRollback`（`entity_migration_plan.hpp`）对单个被触及实体决定执行哪些回滚步——实体级恢复仅当该实体完整迁移过（被拒的类交换已自行恢复 `pEntityType_`；onMigrate 钩子抛异常仍报成功但已完整迁移），对级 strip 与断链仅由 rollback 顺序上该改名对的首个被触及实体执行，故无实体需要"拥有"它未造成的改名。`touchedEntity` 钉住回滚集边界：守卫拒绝的实体从未到达 `old()` 调用，既不触及实体也不触及类型对。这同时更正了批次 53 把归属记作阻塞的过度声明；真正令 migrate 循环仍 `MF_VERIFY` 的边界是执行承载——循环及其回滚要调用真实 Entity 方法，cellapp/unit_test 不可达（C 档缺口）。
