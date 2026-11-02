@@ -1,7 +1,5 @@
 # BigWorld Embedded Python 2.7.3 → 3.13.16 Migration Ledger
 
-> **English** | [中文](python-313-migration.md)
-
 > **No English translation of this document exists yet.** The complete ledger is
 > maintained in Chinese in [python-313-migration.md](python-313-migration.md)
 > (997 lines). This page exists only so the language switcher has a working
