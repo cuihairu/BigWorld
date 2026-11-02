@@ -428,13 +428,23 @@ int DataDownload::addToBundle( Mercury::Bundle & bundle, int & remaining )
 	{
 		// Make sure there's enough room. Magic +1 is for string length
 		// prefix on the stream
+		Py_ssize_t descLen = 0;
+		const char * pDesc = PyUnicode_AsUTF8AndSize( pDesc_.get(),
+			&descLen );
+		if (pDesc == NULL)
+		{
+			// Lone-surrogate description cannot be encoded to UTF-8.
+			ERROR_MSG( "DataDownload::addToBundle: "
+				"description cannot be encoded to UTF-8\n" );
+			return 0;
+		}
+
 		const uint32 size = ClientInterface::resourceHeader.headerSize() +
-			sizeof( uint16 ) + 1 + PyUnicode_GET_LENGTH( pDesc_.get() );
+			sizeof( uint16 ) + 1 + descLen;
 
 		bundle.startMessage( ClientInterface::resourceHeader );
 		bundle << id_;
-		bundle.appendString( PyUnicode_AsUTF8( pDesc_.get() ),
-			PyUnicode_GET_LENGTH( pDesc_.get() ) );
+		bundle.appendString( pDesc, descLen );
 
 		// Throw away the description to avoid sending this header again
 		pDesc_ = NULL;
@@ -523,6 +533,7 @@ protected:
 	virtual bool done() const { return this->available() == 0; }
 
 	PyObjectPtr pData_;
+	Py_ssize_t utf8Size_;
 	MemoryIStream stream_;
 };
 
@@ -534,7 +545,9 @@ StringDataDownload::StringDataDownload(
 	PyObjectPtr pData, PyObjectPtr pDesc, uint16 id, DataDownloads &dls ) :
 	DataDownload( pDesc, id, dls ),
 	pData_( pData ),
-	stream_( PyUnicode_AsUTF8( pData.get() ), PyUnicode_GET_LENGTH( pData.get() ) )
+	utf8Size_( 0 ),
+	stream_( PyUnicode_AsUTF8AndSize( pData.get(), &utf8Size_ ),
+		( int )utf8Size_ )
 {}
 
 

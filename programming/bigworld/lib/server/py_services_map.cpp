@@ -29,8 +29,15 @@ PyObject * s_subscript( PyObject * self, PyObject * index )
 		return NULL;
 	}
 
-	serviceName.assign( PyUnicode_AsUTF8( index ),
-		PyUnicode_GET_LENGTH( index ) );
+	Py_ssize_t serviceNameLen = 0;
+	const char * pServiceName = PyUnicode_AsUTF8AndSize( index,
+		&serviceNameLen );
+	if (pServiceName == NULL)
+	{
+		return NULL;
+	}
+
+	serviceName.assign( pServiceName, serviceNameLen );
 
 	EntityMailBoxRef mailBoxRef;
 	if (!pPyServicesMap->map().chooseFragment( serviceName, mailBoxRef ))

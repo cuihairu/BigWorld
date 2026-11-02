@@ -119,8 +119,21 @@ PyObject * PyOutputStream::py_write( PyObject * args )
 				PyTuple_GET_ITEM( args, 0 ) ),
 			ScriptObject::FROM_NEW_REFERENCE );
 
-		pOwner_->handleWrite( BW::string( PyUnicode_AsUTF8( repr.get() ),
-			PyUnicode_GET_LENGTH( repr.get() ) ), isStderr_ );
+		if (repr.get() == NULL)
+		{
+			return NULL;
+		}
+
+		Py_ssize_t reprLen = 0;
+		const char * pRepr = PyUnicode_AsUTF8AndSize( repr.get(),
+			&reprLen );
+		if (pRepr == NULL)
+		{
+			return NULL;	// propagate the exception
+		}
+
+		pOwner_->handleWrite( BW::string( pRepr, reprLen ),
+			isStderr_ );
 
 		Py_RETURN_NONE;
 	}
