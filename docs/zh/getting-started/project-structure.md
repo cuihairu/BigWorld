@@ -1,7 +1,5 @@
 # 项目结构
 
-](/> [English)) | **中文**
-
 <div class="arch-hero">
 
 BigWorld 是一个大型 C/C++ MMO 引擎，本文档说明项目的目录布局和职责划分。
@@ -167,7 +165,7 @@ docs/
 ├── getting-started/      # 快速开始
 ├── architecture/         # 架构研究 (28 章)
 ├── analysis/             # 项目分析
-├── upgrade-plan/         # 迁移与升级专题 (6 篇)
+├── upgrade-plan/         # 迁移与升级专题 (7 篇)
 ├── references/           # 参考资料
 ├── pdf/                  # 原始 PDF（服务端白皮书/构建指南/安装指南，3 份）
 ├── python-313-migration.md  # Python 3.13 迁移全量台账

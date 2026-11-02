@@ -1,7 +1,5 @@
 # Project Structure
 
-> **English** | [中文](project-structure.md)
-
 <div class="arch-hero">
 
 BigWorld is a large C/C++ MMO engine. This document describes the project's
@@ -170,7 +168,7 @@ docs/
 ├── getting-started/      # Getting started
 ├── architecture/         # Architecture research (28 chapters)
 ├── analysis/             # Project analysis
-├── upgrade-plan/         # Migration and upgrade topics (6 documents)
+├── upgrade-plan/         # Migration and upgrade topics (7 documents)
 ├── references/           # Reference material
 ├── pdf/                  # Original PDFs (server whitepaper / build guide / installation guide, 3 files)
 ├── python-313-migration.md  # Full Python 3.13 migration ledger

@@ -1,7 +1,5 @@
 # 核心 API 参考
 
-](/> [English)) | **中文**
-
 <div class="arch-hero">
 
 BigWorld 核心库的 API 参考，覆盖网络、实体定义、脚本绑定、实体、数据库五大子系统。
@@ -140,7 +138,7 @@ class MyHandler : public Mercury::InputMessageHandler {
 
 MyHandler handler;
 Mercury::InterfaceElement myElement( "MyMessage", MSG_MY_MESSAGE,
-                                    Mercury::VARIABLE_LENGTH, 0,
+                                    Mercury::VARIABLE_LENGTH_MESSAGE, 0,
                                     &handler );
 
 // 发送消息
@@ -168,29 +166,29 @@ public:
                 const BW::string & componentName, ... );           // :134
 
     // 客户端类型名 / 组件可见性
-    const BW::string & clientName() const;                          // :194
-    bool canBeOnCell() const;                                      // :202
-    bool canBeOnBase() const;                                      // :203
-    bool canBeOnClient() const;                                    // :204
-    bool isClientType() const;                                      // :211
+    const BW::string & clientName() const;                          // :195
+    bool canBeOnCell() const;                                      // :203
+    bool canBeOnBase() const;                                      // :204
+    bool canBeOnClient() const;                                    // :205
+    bool isClientType() const;                                      // :212
 
     // 属性遍历（客户端-服务端共有属性）
-    unsigned int clientServerPropertyCount() const;                 // :225
+    unsigned int clientServerPropertyCount() const;                 // :226
     const DataDescription * clientServerProperty(
-        unsigned int n ) const;                                     // :227
+        unsigned int n ) const;                                     // :228
     // 按名查找属性（继承自 BaseUserDataObjectDescription）
     DataDescription * findProperty(
         const BW::string & name ) const;   // base_user_data_object_description.hpp:55
 
     // 事件/变更属性计数与临时属性判定
-    unsigned int numEventStampedProperties() const;                 // :236
-    unsigned int numLatestChangeOnlyMembers() const;                // :238
-    bool isTempProperty( const BW::string & name ) const;           // :240
+    unsigned int numEventStampedProperties() const;                 // :237
+    unsigned int numLatestChangeOnlyMembers() const;                // :239
+    bool isTempProperty( const BW::string & name ) const;           // :241
 
     // 服务/持久化标志
-    bool isService() const;                                         // :251
-    bool isPersistent() const;                                      // :252
-    bool forceExplicitDBID() const;                                 // :253
+    bool isService() const;                                         // :252
+    bool isPersistent() const;                                      // :253
+    bool forceExplicitDBID() const;                                 // :254
 
     // 访问者遍历（参数为属性描述）
     virtual bool visit( const DataDescription & propDesc ) = 0;     // :57
@@ -280,12 +278,12 @@ public:
     PyObject * get() const;                          // :271 等
 
     // 是否为 None
-    bool isNone() const;                             // :448
+    bool isNone() const;                             // :446
 
     // 读属性（模板，需传入错误处理器）
     template <class ERROR_HANDLER>
     ScriptObject getAttribute( const char * key,
-        const ERROR_HANDLER & errorHandler ) const;  // :286
+        const ERROR_HANDLER & errorHandler ) const;  // :284
 
     // 写属性（模板，需传入错误处理器）
     template <class ERROR_HANDLER>
@@ -315,15 +313,17 @@ class ScriptArgs : public ScriptObject { ... };      // :756
 
 #### `ScriptDict`
 
-字典对象（`lib/script/py_script_dict.ipp`，类声明 `lib/script/oc_script_object.hpp:109`）。
+字典对象（`lib/script/py_script_dict.ipp`，类声明 `lib/script/py_script_object.hpp:958`）。
 
 ```cpp
 class ScriptDict : public ScriptObject {
 public:
     static ScriptDict create( int capacity = 0 );     // :7
 
+    template <class ERROR_HANDLER>
     bool setItem( const char * key,
-                  const ScriptObject & item );        // :23
+                  const ScriptObject & item,
+                  const ERROR_HANDLER & errorHandler ) const;   // :982-984
     bool setItem( const ScriptObject & key,
                   const ScriptObject & item );        // :41
 
@@ -339,7 +339,7 @@ public:
 列表对象（`lib/script/py_script_list.ipp`）。
 
 ```cpp
-class ScriptList : public ScriptObject {
+class ScriptList : public ScriptSequence {
 public:
     bool append( const ScriptObject & object ) const;        // :19
     ScriptObject getItem( size_type pos ) const;             // :32
@@ -430,12 +430,12 @@ public:
         ... ) = 0;                                // :221
 
     // 删实体
-    virtual void delEntity( ... ) = 0;            // :231
+    virtual void delEntity( ... ) = 0;            // :255
 };
 ```
 
 > 注意：三个方法均为 `void` 返回 + 完成回调
-> （`IEntityGetHandler` / `IEntityPutHandler` / `IEntityDelHandler`），
+> （`IGetEntityHandler` / `IPutEntityHandler` / `IDelEntityHandler`），
 > 历史文档所写的同步返回 `Entity*` 签名与源码不符。
 
 ## 参考资料

@@ -1,7 +1,5 @@
 # Overall Picture
 
-> **English** | [中文](overview.md)
-
 ## One-sentence verdict
 
 Open-source BigWorld is a large MMO engine source repository built from a

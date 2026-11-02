@@ -1,7 +1,5 @@
 # 从源码构建
 
-](/> [English)) | **中文**
-
 <div class="arch-hero">
 
 本文按当前仓库中的 Makefile、CMakeLists 和 Dockerfile 说明 BigWorld 的构建入口。重点是明确真实源码边界，而不是把旧工程改写成现代通用构建流程。
@@ -121,7 +119,7 @@ docker run --rm -it \
 make -s -j"$(nproc)" -rR -C programming
 ```
 
-顶层 Makefile 的 Known issues 注释明确提示：初次 third_party 构建可能不适合并行构建（`build/make/Makefile:13`："initial third party library builds may not like parallel jobs"）。Dockerfile 另有注释指出构建可能因 Python 构建系统输出混淆而提前停止、需要重跑（`build/docker/Dockerfile:48`）。这是构建链现实，不应在文档中隐藏。
+顶层 Makefile 的 Known issues 注释明确提示：初次 third_party 构建可能不适合并行构建（`build/make/Makefile:14`："initial third party library builds may not like parallel jobs"）。Dockerfile 另有注释指出构建可能因 Python 构建系统输出混淆而提前停止、需要重跑（`build/docker/Dockerfile:48`）。这是构建链现实，不应在文档中隐藏。
 
 ## CMake 工程边界
 

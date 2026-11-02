@@ -1,7 +1,5 @@
 # Build and Runtime System
 
-> **English** | [中文](build-and-runtime.md)
-
 ## Build entries
 
 BigWorld keeps Make, vcpkg, CMake, batch scripts, and container scripts at
@@ -178,7 +176,7 @@ The full-gate entry is the make target (requires `VCPKG_ROOT`):
 env VCPKG_ROOT=<vcpkg> make -C programming bw-run-all-unit-tests
 ```
 
-The current baseline is **21 modules and 1113 cases**; binaries sit under
+The current baseline is **21 modules and 1521 cases** (measured after batch 52, 2026-10-27); binaries sit under
 `game/bin/server/el7/unit_tests/` and are run by full path from each
 module's source `unit_test/` directory; the daily-build workflow executes
 the same standard in a clean environment.

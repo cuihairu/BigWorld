@@ -1,7 +1,5 @@
 # Source Code Guide
 
-> **English** | [中文](source-code-guide.md)
-
 <div class="arch-hero">
 
 This chapter gives a reading map for the BigWorld source. Rather than just

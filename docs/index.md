@@ -25,8 +25,6 @@ features:
     details: Understand the engine architecture first, then judge which parts are core source constraints and which are merely peripheral dependencies or toolchain issues.
 ---
 
-> **English** | [中文](index.md)
-
 ![BigWorld distributed MMO engine architecture](/images/architecture-en.svg)
 
 <div class="arch-hero">

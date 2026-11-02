@@ -2,8 +2,6 @@
 layout: doc
 ---
 
-](/> [English)) | **中文**
-
 # 快速开始
 
 <div class="arch-hero">

@@ -1,7 +1,5 @@
 # Directories and Modules
 
-> **English** | [中文](modules.md)
-
 ## Reading principle
 
 BigWorld's directory structure cannot be understood from "library name
@@ -24,7 +22,7 @@ modules that most influence the server architecture are:
 | `db_storage` | DB backend abstraction interface | `idatabase.hpp` |
 | `db_storage_mysql` | MySQL backend, table mappings, background tasks | `mysql_database.cpp`, `mappings/property_mapping.cpp`, `tasks/put_entity_task.hpp` |
 | `db_storage_xml` | XML DB backend implementation | `xml_database.cpp` |
-| `script`, `pyscript`, `entitydef_script` | Script objects, embedded interpreter bridge, EntityDef script wrappers | `script_object.hpp`, `py_script_object.hpp`, `py_component.cpp` |
+| `script`, `pyscript`, `entitydef_script` | Script objects, embedded interpreter bridge, EntityDef script wrappers | `script_object.hpp`, `py_script_object.hpp`, `entitydef_script/py_component.cpp` |
 
 Rendering, scene, and tool shared libraries also live under `lib` — for
 example `moo`, `chunk`, `scene`, `terrain`, `asset_pipeline`, `ual`. They

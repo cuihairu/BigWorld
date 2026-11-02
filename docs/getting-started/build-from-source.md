@@ -1,7 +1,5 @@
 # Building from Source
 
-> **English** | [中文](build-from-source.md)
-
 <div class="arch-hero">
 
 This document explains the BigWorld build entries based on the Makefiles,
@@ -135,7 +133,7 @@ make -s -j"$(nproc)" -rR -C programming
 
 The top-level Makefile's Known issues comment explicitly warns that the
 initial third_party build may not tolerate parallel jobs
-(`build/make/Makefile:13`: "initial third party library builds may not like
+(`build/make/Makefile:14`: "initial third party library builds may not like
 parallel jobs"). Another Dockerfile comment notes the build can stop early,
 confused by Python build-system output, and need a rerun
 (`build/docker/Dockerfile:48`). This is a reality of the build chain and

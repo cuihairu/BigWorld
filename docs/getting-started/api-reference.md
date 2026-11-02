@@ -1,7 +1,5 @@
 # Core API Reference
 
-> **English** | [中文](api-reference.md)
-
 <div class="arch-hero">
 
 API reference for the BigWorld core libraries, covering five subsystems:
@@ -149,7 +147,7 @@ class MyHandler : public Mercury::InputMessageHandler {
 
 MyHandler handler;
 Mercury::InterfaceElement myElement( "MyMessage", MSG_MY_MESSAGE,
-                                    Mercury::VARIABLE_LENGTH, 0,
+                                    Mercury::VARIABLE_LENGTH_MESSAGE, 0,
                                     &handler );
 
 // Send a message
@@ -179,29 +177,29 @@ public:
                 const BW::string & componentName, ... );           // :134
 
     // Client type name / component visibility
-    const BW::string & clientName() const;                          // :194
-    bool canBeOnCell() const;                                      // :202
-    bool canBeOnBase() const;                                      // :203
-    bool canBeOnClient() const;                                    // :204
-    bool isClientType() const;                                      // :211
+    const BW::string & clientName() const;                          // :195
+    bool canBeOnCell() const;                                      // :203
+    bool canBeOnBase() const;                                      // :204
+    bool canBeOnClient() const;                                    // :205
+    bool isClientType() const;                                      // :212
 
     // Property iteration (client-server shared properties)
-    unsigned int clientServerPropertyCount() const;                 // :225
+    unsigned int clientServerPropertyCount() const;                 // :226
     const DataDescription * clientServerProperty(
-        unsigned int n ) const;                                     // :227
+        unsigned int n ) const;                                     // :228
     // Find a property by name (inherited from BaseUserDataObjectDescription)
     DataDescription * findProperty(
         const BW::string & name ) const;   // base_user_data_object_description.hpp:55
 
     // Event/latest-change property counts and temp-property test
-    unsigned int numEventStampedProperties() const;                 // :236
-    unsigned int numLatestChangeOnlyMembers() const;                // :238
-    bool isTempProperty( const BW::string & name ) const;           // :240
+    unsigned int numEventStampedProperties() const;                 // :237
+    unsigned int numLatestChangeOnlyMembers() const;                // :239
+    bool isTempProperty( const BW::string & name ) const;           // :241
 
     // Service/persistence flags
-    bool isService() const;                                         // :251
-    bool isPersistent() const;                                      // :252
-    bool forceExplicitDBID() const;                                 // :253
+    bool isService() const;                                         // :252
+    bool isPersistent() const;                                      // :253
+    bool forceExplicitDBID() const;                                 // :254
 
     // Visitor iteration (argument is a property description)
     virtual bool visit( const DataDescription & propDesc ) = 0;     // :57
@@ -296,12 +294,12 @@ public:
     PyObject * get() const;                          // :271 etc.
 
     // Whether it is None
-    bool isNone() const;                             // :448
+    bool isNone() const;                             // :446
 
     // Read an attribute (template; an error handler must be supplied)
     template <class ERROR_HANDLER>
     ScriptObject getAttribute( const char * key,
-        const ERROR_HANDLER & errorHandler ) const;  // :286
+        const ERROR_HANDLER & errorHandler ) const;  // :284
 
     // Write an attribute (template)
     template <class ERROR_HANDLER>
@@ -333,15 +331,17 @@ class ScriptArgs : public ScriptObject { ... };      // :756
 #### `ScriptDict`
 
 A dictionary object (`lib/script/py_script_dict.ipp`; class declaration in
-`lib/script/oc_script_object.hpp:109`).
+`lib/script/py_script_object.hpp:958`).
 
 ```cpp
 class ScriptDict : public ScriptObject {
 public:
     static ScriptDict create( int capacity = 0 );     // :7
 
+    template <class ERROR_HANDLER>
     bool setItem( const char * key,
-                  const ScriptObject & item );        // :23
+                  const ScriptObject & item,
+                  const ERROR_HANDLER & errorHandler ) const;   // :982-984
     bool setItem( const ScriptObject & key,
                   const ScriptObject & item );        // :41
 
@@ -357,7 +357,7 @@ public:
 A list object (`lib/script/py_script_list.ipp`).
 
 ```cpp
-class ScriptList : public ScriptObject {
+class ScriptList : public ScriptSequence {
 public:
     bool append( const ScriptObject & object ) const;        // :19
     ScriptObject getItem( size_type pos ) const;             // :32
@@ -451,12 +451,12 @@ public:
         ... ) = 0;                                // :221
 
     // Delete an entity
-    virtual void delEntity( ... ) = 0;            // :231
+    virtual void delEntity( ... ) = 0;            // :255
 };
 ```
 
 > Note: all three methods return `void` and take completion callbacks
-> (`IEntityGetHandler` / `IEntityPutHandler` / `IEntityDelHandler`); the
+> (`IGetEntityHandler` / `IPutEntityHandler` / `IDelEntityHandler`); the
 > synchronously-returning `Entity*` signatures in historical documents do
 > not match the source.
 
