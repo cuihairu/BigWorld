@@ -1,123 +1,168 @@
-# 文档-代码一致性审计
+# 文档-源码一致性审计
 
-](/> [English)) | **中文**
+审计日期：2026-11-02。审计范围：README.md / README.zh.md、`docs/**` 全部页面（英 docs/ 根 + 中 docs/zh/）、VitePress 站点配置。
 
-审计日期：2026-10-13。审计范围：README.md、docs/** 全部页面、VitePress 站点配置、GitHub 公开门面（description/homepageUrl/topics）。
+**本报告替换 2026-10-13 版**（旧版 76 项，其中 P0/P1 已由后续工作闭环）。
 
-**三类分桶**：A = 文档超前于码（文档主张源码不存在的东西，危险）；B = 码超前于文档（源码有、文档未提）；C = 描述不符（名称/签名/默认值/路径/行为不一致）。
+审计规范：《文档与源码一致性审计规范》（`~/workspaces/standards/文档与源码一致性审计规范.md`）六步口径：枚举文档面 → 抽主张 → 逐条 file:line 取证（否定性结论先确认搜索路径存在）→ 三类分桶 → 以源码为准改文档 → 落表闭环。
 
-**六步口径**：枚举文档面 → 提取主张 → 逐条 file:line 取证（断言「没有实现」前先确认搜索路径存在）→ 分类 → 以码为准修复（不改代码）→ 落表闭环。
+**三类分桶**：A = 文档超前于码（文档主张源码不存在的东西，危险）；B = 码超前于文档（源码有、文档未提）；C = 描述不符（名称/签名/默认值/路径/行为/行号不一致）。
 
 ## 总览
 
 | 桶 | 数量 |
 |---|---|
-| A 文档超前于码 | 9 |
+| A 文档超前于码 | 2 |
 | B 码超前于文档 | 5 |
-| C 描述不符 | 62 |
-| 合计 | 76 |
+| C 描述不符 | 71 |
+| 合计 | 78 |
 
-严重度：P0 = 3（虚构 API，会直接导致集成失败）；P1 = 32（路径/签名/状态错误，误导实现）；P2 = 41（行号漂移、措辞、计数）。
+严重度：P0 = 0；P1 = 22（路径/签名/状态/计数错误，误导实现）；P2 = 55（行号漂移、措辞、计数）；LOW = 1。
 
-## P0 清单
+**修复状态**：78 项已全部按源码修复到工作区（en+zh 双侧），下表「修法」为落地内容。
 
-| ID | 页 | 主张 | 源码证据 | 类别 | 修法 |
-|---|---|---|---|---|---|
-| API-1 | docs/getting-started/api-reference.md（全页） | 整页 API 签名与源码不符或虚构 | 见 API-2..8 逐条 | A | 已按源码逐条重写全页（2026-10-13） |
-| API-3 | 同上 | `NetworkInterface::addHandler(MessageID, MessageHandler*)`、`Bundle::writeInt32/writeString/writeBlob/finish` 存在 | lib/ 全树 grep 无这些符号；注册机制为 InterfaceElement 构造绑定 InputMessageHandler（network/interface_element.hpp:90-92）；写入走 BinaryOStream 流式接口 | A | 已重写（2026-10-13） |
-| API-4 | 同上 | `EntityDescription::numProperties/findProperty/getDescription("Avatar")/createEntity()` 存在 | entitydef/entity_description.hpp 全无；真实为 clientServerPropertyCount/clientServerProperty/findProperty（继承自 base_user_data_object_description.hpp:55） | A | 已重写（2026-10-13） |
+> 说明：architecture 批次内部汇总曾记 B=3/C=45，逐条标记实为 B=2/C=48（第 41、44 项为 B，其余为 C），以逐条标记为准。
 
-## P1 清单
+## 分桶清单
 
-| ID | 页 | 主张 | 源码证据(file:line) | 类别 | 修法 |
-|---|---|---|---|---|---|
-| API-2 | api-reference.md | `NetworkInterface(dispatcher, addr)` | network_interface.hpp:65-67：第二参数为 NetworkInterfaceType，非地址 | C | 已修 |
-| API-5 | api-reference.md | `DataType::defaultValue()` 返回 PyObject* | data_type.hpp:87：实为 `getDefaultValue(DataSink&)` 纯虚 | C | 已修 |
-| API-6 | api-reference.md | `ScriptObject::getAttr/setAttr` | py_script_object.hpp:286/:398：实为 getAttribute/setAttribute 模板（需错误处理器） | C | 已修 |
-| API-7 | api-reference.md | `IDatabase::getEntity/putEntity/delEntity` 同步返回 Entity* | idatabase.hpp:109/:221/:231：均为 void + 完成回调 | C | 已修 |
-| API-8 | api-reference.md | `Entity : public ScriptObject`、`Proxy : public Entity`、`getPlayerData()` | client/entity.hpp:97（:BWEntity）、server/baseapp/proxy.hpp:74（:Base）、无 getPlayerData | C | 已修 |
-| FAC-1 | GitHub About | description 为 `"BigWorld "`（尾随空格、无角色描述） | `gh repo view` 实测 | C | 已修为角色陈述（含 C++23/Python 3.13.16/vcpkg） |
-| RD-1 | README.md:22 | 「1220 个用例全绿」 | 2026-10-13 门禁实测 1302（21 模块） | C | 已改为 1302 |
-| RD-2 | README.md:22 | 「补强批次 1–23 完成」 | 台账已到批次 27 | C | 已改为 1–27 |
-| RD-3 | README.md:25/:27 | 同一段迁移介绍重复两遍 | 肉眼可见 | C | 已去重 |
-| RD-4 | README.md:20（隐含）/ todo.md | 「架构研究文档集 27 篇」 | docs/architecture/ 实为 28 章 | C | todo.md 已改 28 |
-| BF-1 | build-from-source.md:68 | `make everything` 有规则 | build/make/*.mak 无 everything 规则（仅 Makefile:5 注释） | C | 已标注「无对应规则」 |
-| UP-1 | upgrade-plan/python-c-api-guide.md | 迁移需创建 `bw_python_compat.hpp` 兼容层 | find programming 无此文件；迁移已完成、无兼容层、直接替换 | A | 已加状态横幅 |
-| UP-2 | upgrade-plan/build-system-modernization.md | 「GCC 4.8.x 当前 / 推荐 11+」「目标 C++17/20」 | platform_el7.mak:6 已 c++23；ci.yml:47-51 gcc-14 | B | 已更新基线表并链接 cpp23-migration |
-| UP-3 | vcpkg-migration.md:110/:20 | Windows 配置引用 `third_party/sqlite` | build/cmake/ 无 third_party/sqlite；sqlite 走 lib/sqlite（BWConfiguration_server.cmake:71） | C | 已删 sqlite |
-| UP-4 | upgrade-plan/third-party-deps.md | 「其余行仍为迁移启动前盘点」+ OpenSSL 1.0.x EOL 待升 | vcpkg.json:5-17；实测 OpenSSL 3.6.4/curl 8.22.0/sqlite3 3.53.4 | C | 已更新状态与版本表 |
-| UP-5 | build-system-modernization.md:17/:148 | Docker 路径 `build/docker/Dockerfile` | 仓库根无 build/；实为 programming/bigworld/build/docker/Dockerfile | C | 已补全路径 |
-| AR-1 | architecture/network-io-model.md:54-75 | `EPoller::registerFileDescriptor` + EPOLL_CTL_ADD 全假代码 | event_poller.cpp:1059 实为 EPoller::doRegister（含 MOD/ADD/DEL） | C | 已按 doRegister 重写代码块 |
-| AR-2 | architecture/memory-lifecycle.md:155 | SmartPointer 在 smartpointer.hpp:117 | 实为 :610 | C | 已改 |
-| AR-8 | architecture/serialization-entitydef.md:59-102 | `addBlob` 返回 int、带伪造内联实现；`transfer/writeStringLength` 签名 | binary_stream.hpp:40-48：addBlob 为 void 纯声明、writeStringLength 内部即 writePackedInt(int) | C | 已按源码重写 |
-| AR-9 | architecture/serialization-entitydef.md:183 | MemoryOStream 两个基类、默认 size=0、成员 buffer_/size_/ | memory_stream.hpp:27-29 三基类（+SafeAllocatable）、:31 默认 64、:62-67 pBegin_/pCurr_/pEnd_/pRead_ | C | 已重写 |
-| AR-10 | architecture/testing-time-control.md:74-92 | `addTimerCommon` 签名与函数体全假 | event_dispatcher.cpp:264-281：TimerHandle 返回、TimeStamp::fromSeconds | C | 已按源码重写 |
-| AR-11 | architecture/serialization-entitydef.md:398 | `EntityDescription::createFromStream()` | 全仓无此函数；真实为 readStreamToDict（entity_description.cpp:1567，读流分支 :1584）+ DataDescription::createFromStream（data_description.hpp:101） | C | 已改 |
-| AN-1 | analysis/modules.md:21/:54 | `py_entitydef.cpp` 存在；`server/dbappmgr/dbappmgr_interface.hpp` 路径 | py_entitydef 全树无；接口在 lib/db/dbappmgr_interface.hpp | A | 已改 py_component.cpp + lib/db 路径 |
-| AN-2 | analysis/source-code-guide.md:227 | `PrimitiveMapping`/`FixedDictMapping` 存在 | lib/db_storage_mysql/mappings/ 无；真实为 `NumMapping<T>`/StringMapping/ClassMapping/BlobMapping/StringLikeMapping/UserTypeMapping | A | 已改为真实类名 |
-| AN-3 | analysis/source-code-guide.md:132 | 阅读链起点 `scripts/entities.xml` | programming/bigworld/scripts/ 不存在；实为 examples/client_integration/python/simple/res/scripts/entities.xml | C | 已改 |
-| AN-4 | analysis/source-code-guide.md:160 | `MethodDescription::createFromStream()` | method_description.hpp:114/:118 实为 createArgsFromStream | C | 已改 |
-| AN-6 | analysis/overview.md:71 | third_party 一级目录 24 个 | 实测 22 个目录（23 条目含 Makefile.rules） | C | 已改 22 |
-| PS-1 | getting-started/project-structure.md:16 | 顶层有 `.spec-workflow/` | 仓库根无此目录 | A | 已删 |
-| PS-2 | project-structure.md:161 | `docs/` 下有 `migration/` | 无 docs/migration；迁移文档在 docs 根与 upgrade-plan/ | A | 已改为 upgrade-plan/ + 根级 3 篇 |
-| PS-3 | references/original-docs.md:5-7 | 3 个 PDF 链接可在线读取 | docs/pdf/ 存在但构建产物无 pdf/（VitePress 只拷贝 public/） | A | 已拷贝到 docs/public/pdf/ |
-| PS-9 | TESTING.md:36 | 排除登记注释在 `cstdmf Makefile.rules` | 实为 lib/cstdmf/unit_test/Makefile.rules:55-59 | C | 已改路径 |
-| PS-10 | TESTING.md:36 | `test_blend_transform` 在 `scene/unit_test` | 实为 lib/math/unit_test/test_blend_transform.cpp | C | 已改 |
+### A. 文档超前于码（2）
 
-## P2 清单（行号漂移/措辞/计数）
+| ID | 页 | 主张 | 源码证据 (file:line) | 桶 | 严重度 | 修法 |
+|---|---|---|---|---|---|---|
+| F8 | `docs/architecture/mercury-reliable-udp.md` | `void UDPChannel::send( Bundle * pBundle )` @ `udp_channel.cpp:1513` | no `UDPChannel::send(Bundle*)` exists anywhere in `lib/network/`; line 1513 is `void UDPChannel::writeFlags( Packet * p )` | **A** | **P1** | the whole "Send Flow" block is fabricated (real send path: `sendIfIdle()` @ :798, `sendUnacked()` @ :1187) |
+| F49 | `docs/architecture/testing-fault-injection-coverage.md` | `MultiProcessRunner` for process groups. No such symbol in `programming/`; the real orchestrator is `MultiProcTestCase` (`lib/unit_test_lib/multi_proc_test_case.{hpp,cpp}`, fork :54, waitpid :121) | — | **A** | **P2** | 已按源码改文档 |
 
-| ID | 页 | 主张 | 源码证据(file:line) | 类别 | 修法 |
-|---|---|---|---|---|---|
-| AR-3 | hot-reload-script-migration.md:29 | Script::swapInterpreter 在 script.cpp:644 | 实为 :798 | C | 已改 |
-| AR-4 | hot-reload-script-migration.md:28 | Script::createInterpreter 在 script.cpp:593 | 实为 :747 | C | 已改 |
-| AR-5 | memory-lifecycle.md:26 | ConstSmartPointer 在 smartpointer.hpp:307 | 实为 :343 | C | 已改 |
-| AR-6 | memory-lifecycle.md:24 | ReferenceCount 在 :31、SafeReferenceCount 在 :157 | 实为 :50、:176 | C | 已改 |
-| AR-7 | communication-rpc.md:234/:300 | PyEntityMailBox 在 mailbox_base.hpp:35 | 实为 :55 | C | 已改 |
-| AR-12 | threading-background-tasks.md:29 | Script::initThread 在 script.cpp:661 | 实为 :815 | C | 已改 |
-| AR-13 | threading-background-tasks.md:161 | Script::init 在 script.cpp:334 | 实为 :411 | C | 已改 |
-| AR-14 | threading-background-tasks.md:161 | releaseLock/acquireLock 在 script.cpp:748 | 实为 :935/:918 | C | 已改 |
-| AR-15 | observability-watcher-profiler-logs.md:79 | WatcherNub::attachTo 在 watcher_nub.cpp:212 | 实为 :256 | C | 已改 |
-| AR-16 | observability:327 | DebugFilter::handleMessage 在 debug_filter.cpp:138 | 实为 :189 | C | 已改 |
-| AR-17 | observability:328 | addMessageCallback 在 logger_message_forwarder.cpp:165 | 实为 :254 | C | 已改 |
-| AR-18 | observability:329 | FindLoggerHandler 在 :96 | 实为 :163 | C | 已改 |
-| AR-19 | observability:363 | LoggerMessageHeader 定义在 .cpp:67 | 实为 logger_message_forwarder.hpp:114 | C | 已改 |
-| AR-20 | observability:364 | LoggerComponentMessage 在 .cpp:84 | 实为 logger_message_forwarder.hpp:131 | C | 已改 |
-| AR-21 | observability:336 | 过滤项在 logger.cpp:42 | 实为 :164-178 | C | 已改 |
-| AR-22 | observability:337 | 自曝 watcher 在 logger.cpp:141 | 实为 :164 | C | 已改 |
-| AR-23 | observability:344 | LogStorage::addLogMessage 在 log_storage.cpp:43 | 实为 :71 | C | 已改 |
-| AR-24 | observability:365 | LogStorage::resolveUID 在 :107 | 实为 :159 | C | 已改 |
-| AR-25 | observability:350 | LogStorageMongoDB::addLogMessage 在 mongodb/log_storage.cpp:220 | 实为 :268 | C | 已改 |
-| AR-26 | serialization-entitydef.md:104-136 | error() 虚函数、readPackedInt 非 inline、operator>> 为成员 | binary_stream.hpp:78/:90/:309 等：error() 非虚、readPackedInt 为 inline、operator>> 为自由函数 | C | 已改 |
-| UP-6 | build-system-modernization.md:131 | 「两条 workflow」 | 实为 3 条（含 deploy-docs.yml） | C | 已改 |
-| UP-7 | build-system-modernization.md:136 | 「每个步骤带失败日志 artifact」 | 仅一个聚合 artifact（ci.yml:90-100） | C | 已改 |
-| UP-8 | third-party-deps.md:49 | P0「Python 2.7 → 3.12」 | 已完成 3.13.16（patchlevel.h） | C | 已改 |
-| UP-9 | third-party-deps.md:94 | mysqlclient 建议配 mysql.connector 示例 | 两包 API 不同 | C | 已加注释二选一 |
-| UP-10 | third-party-deps.md:131 | 兼容性矩阵列头 Python 3.12 | 实为 3.13 | C | 已改 |
-| UP-11 | packaging-and-daily-build.md:86 | test_py_traceback 硬编码 /tmp/opencode | 现为 /tmp/pyscript_py_traceback_fifo.py | C | 已补当前路径 |
-| UP-12 | vcpkg-migration.md:46 | .gitignore:37 排除 vcpkg | 实为 :41 | C | 已改 |
-| UP-13 | vcpkg-migration.md:42 | 依赖清单漏 bzip2 | vcpkg.json:16 有 bzip2 | C | 已补 |
-| UP-14 | vcpkg-migration.md:124 | 编译选项枚举漏 -Wextra | cmake/samples/cstdmf/CMakeLists.txt:60 有 -Wextra | C | 已补 |
-| UP-15 | cpp23-migration.md:13 | platform_el7.mak:4 = c++11 标为「当前生效」 | 实为 :6 c++23（§6.3 已勾选） | C | 已标切档前快照 |
-| UP-16 | cpp23-migration.md:30 | ~/.local/bin/g++ 损坏符号链接 | 该路径不存在 | C | 已标注机器特定现象 |
-| UP-17 | python-upgrade-plan.md | 阶段 1 计划建兼容包装层 | 实际未建、逐点替换 | C | 横幅已补记 |
-| PS-4 | project-structure.md:17 | 顶层 logo.png | 实为 logo.svg | C | 已改 |
-| PS-5 | project-structure.md:119 | third_party 24 个 | 实为 22 | C | 已改 |
-| PS-6 | project-structure.md:128 | jsoncpp 为 vendored | vcpkg 提供（third_party_json.mak:6） | C | 已改 |
-| BF-2 | build-from-source.md:122 | Docker 注释归属并行构建警告 | 实为 build/make/Makefile:13；Dockerfile:48 是另一句 | C | 已拆双来源 |
-| TD-1 | todo.md | 批次 24–27 验收叙述挂「只有设计」段 | 已完成（各批 hash 可查） | B | 已移入 A 段一行证据 |
-| TD-2 | todo.md | 「README 仍写 1113 用例」条目本身过期 | 该条目写于更早批次 | C | 已更新 |
-| PS-7 | project-structure.md | docs/ 树遗漏 upgrade-plan/ 与 pdf/ | 升级计划 6 篇在 upgrade-plan/ | B | 已补入树 |
-| PS-8 | project-structure.md | 顶层树遗漏 game/、scripts/、TESTING.md、todo.md | 均存在 | B | 已补入树 |
-| PS-11 | .vitepress/config.mjs | cpp23-migration.md 无站点入口 | 全 docs 无引用 | B | 已加 sidebar 条目 |
+### B. 码超前于文档（5）
 
-## 修复原则执行记录
+| ID | 页 | 主张 | 源码证据 (file:line) | 桶 | 严重度 | 修法 |
+|---|---|---|---|---|---|---|
+| F41 | `docs/architecture/testing-time-control.md` | Central claim "no unified virtual-clock injection layer" is **contradicted** by the injectable `EventDispatcher::ClockFn` (`event_dispatcher.hpp:59`), `explicit EventDispatcher(const ClockFn&)` :68, `clock()` :65, plus `ManualClock`/`advanceMs()` (`lib/network/unit_test/manual_clock.hpp:27`) used by `test_virtual_clock.cpp` | — | **B** | **P1** | 已按源码改文档 |
+| F44 | `docs/architecture/testing-time-control.md` | unit tests "cannot instantly advance a five-second timeout". Contradicted by `ManualClock::advanceMs()` firing timers between dispatcher pumps | — | **B** | **P1** | 已按源码改文档 |
+| F65 | `docs/upgrade-plan/third-party-deps.md` | Python package table lists "SQLAlchemy 0.6.6 ❌ / Pympler 0.3.0 ❌ / pika 0.9.13 ❌" as current versions | tree actually ships `sqlalchemy-1.4.54.tar.gz`, `Pympler-1.0.tar.gz`, `pika-1.3.2.tar.gz` in `programming/bigworld/third_party/python_modules/`, installed by `build/make/third_party_python_modules.mak:172` (Pympler-1.0) and `:191` (pika-1.3.2) — all Python-3-compatible | **B** | **P1** | update "Current version" to 1.4.54 / 1.0 / 1.3.2 (drop the ❌); only `oursql 0.9.2` genuinely remains vendored/Py2-only |
+| F67 | `docs/vcpkg-migration.md §3.3` | "`network_test` (49 TUs)" | `cmake/samples/network/CMakeLists.txt` network_test target has 52 entries (source comment at :394 also says 52); +`test_virtual_clock.cpp`, `test_event_stall.cpp`, `test_piggybacks_longer_than_normal.cpp` | **B** | **P2** | 49 → 52 |
+| F68 | `docs/vcpkg-migration.md §3.5` | "`entitydef_test` (15 TUs)" | `cmake/samples/entitydef/CMakeLists.txt` entitydef_test has 17 entries; +`test_entity_description.cpp`, `test_fantasydemo_assets.cpp` (added after the doc's 2026-10-14 date) | **B** | **P2** | 15 → 17 |
 
-- 全部修复以码为准，未改任何源码（仅 docs/、TESTING.md、README.md、docs/.vitepress/config.mjs、docs/public/pdf/ 拷贝、GitHub About description）。
-- 无「为迁就文档改代码」项。
-- 本仓已有 VitePress 文档站，未新建。
-- 修复后 `npm run docs:build` 构建通过（产物含 3 份 PDF 与 cpp23-migration 入口）。
+### C. 描述不符（71）
 
-## 后续建议（非本轮修复）
+| ID | 页 | 主张 | 源码证据 (file:line) | 桶 | 严重度 | 修法 |
+|---|---|---|---|---|---|---|
+| F1 | `docs/architecture/entity-model.md` | `bool Entity::callBaseMethod( int methodIndex, BinaryIStream & data, bool isForGhost )` at `entity.cpp:5255` | `void Entity::callBaseMethod( BinaryIStream & data )` at `server/cellapp/entity.cpp:5294` | **C** | **P1** | `void Entity::callBaseMethod(BinaryIStream &)` @ :5294; the whole block is a paraphrase, not source |
+| F2 | `docs/architecture/entity-model.md` | `bool Base::callCellMethod( int methodIndex, BinaryIStream & data )` at `base.cpp:1391` | `void Base::callCellMethod( const Mercury::Address &, const Mercury::UnpackedMessageHeader &, BinaryIStream & )` @ `server/baseapp/base.cpp:1391` | **C** | **P1** | line is right, signature wrong |
+| F3 | `docs/architecture/entity-model.md` | `void Entity::writeClientUpdateDataToBundle( Mercury::Bundle &, bool isFullUpdate )` @ `entity.cpp:2475` | `bool ...( Mercury::Bundle &, const Vector3 & basePos, EntityCache &, ... )` @ `server/cellapp/entity.cpp:2485` | **C** | **P2** | return type + params + line drift |
+| F4 | `docs/architecture/entity-model.md` | `void Base::restoreTo( const Address &, const UnpackedMessageHeader &, BinaryIStream & )` @ `base.cpp:3810` | `bool Base::restoreTo( SpaceID, const Address & )` @ `server/baseapp/base.cpp:3819` | **C** | **P1** | 已按源码改文档 |
+| F5 | `docs/architecture/entity-model.md` | Comment "entity.hpp:138"; actual `class Entity : public PyObjectPlus` @ `server/cellapp/entity.hpp:139`. (drift) | — | **C** | **P2** | 已按源码改文档 |
+| F6 | `docs/architecture/aoi-witness-ghost.md` | `void AoITrigger::triggerEnter( RangeListNode * pOther )` / `triggerLeave(...)` @ `witness.cpp:3586` | `void AoITrigger::triggerEnter( Entity & entity )` / `triggerLeave( Entity & )` @ `server/cellapp/witness.cpp:3586/3602` | **C** | **P1** | param is `Entity&`, not `RangeListNode*`; body uses `pWitness_->addToAoI(Entity*)`, not a cast |
+| F7 | `docs/architecture/aoi-witness-ghost.md` | "Source entry: entity_ghost_maintainer.cpp:46"; actual `EntityGhostMaintainer::check()` @ :56. (drift; symbol verified) | — | **C** | **P2** | 已按源码改文档 |
+| F9 | `docs/architecture/mercury-reliable-udp.md` | `enum ReliableType { ... }` @ `bundle.hpp:27` | `enum ReliableTypeEnum { RELIABLE_NO=0, RELIABLE_DRIVER=1, RELIABLE_PASSENGER=2, RELIABLE_CRITICAL=3 }` @ `lib/network/bundle.hpp:34` wrapped by `class ReliableType` @ :46 | **C** | **P2** | `ReliableType` is a class, not an enum |
+| F10 | `docs/architecture/mercury-reliable-udp.md` | "send window state" block claims members `windowSize_` (int), `largeOutSeqAt_` (SeqNum), `unackedPackets_` (UnackedPackets), `roundTripTime_` (int), `maxWindowSize_`, `resendTimeout_`, `lastSendTime_` | `lib/network/udp_channel.hpp`: `uint32 windowSize_` (:383), `SeqNumAllocator largeOutSeqAt_` (:389), `CircularArray<UnackedPacket*> unackedPackets_` (:415), `uint64 roundTripTime_` (:403); `maxWindowSize_`, `resendTimeout_`, `lastSendTime_` do **not** exist anywhere in `lib/network/` | **C** | **P1** | 已按源码改文档 |
+| F11 | `docs/architecture/mercury-reliable-udp.md` | `addToReceiveWindow( SeqNum seq, Packet * pPacket, bool isReliable )` and result constants `ADD_TO_RECEIVE_WINDOW_RESULT_OUT_OF_WINDOW`/`_CORRUPT` | @ `udp_channel.cpp:1208`: `( Packet * p, const Address & srcAddr, PacketReceiverStats & stats )`; enum `AddToReceiveWindowResult` = `PACKET_IS_NEXT_IN_WINDOW / _BUFFERED_IN_WINDOW / _DUPLICATE / _OUT_OF_WINDOW / _CORRUPT` (`udp_channel.hpp:161-168`) | **C** | **P2** | 已按源码改文档 |
+| F12 | `docs/architecture/memory-lifecycle.md` | `class ReferenceCount` @ `smartpointer.hpp:31` with member `refCount_` | `class ReferenceCount` @ `lib/cstdmf/smartpointer.hpp:50`, member is `count_` | **C** | **P2** | 已按源码改文档 |
+| F13 | `docs/architecture/memory-lifecycle.md` | `class SafeReferenceCount` @ `smartpointer.hpp:157` using `AtomicInt::add( refCount_, 1 )` / member `refCount_` | @ `smartpointer.hpp:176`: uses `BW_ATOMIC32_INC_AND_FETCH`/`BW_ATOMIC32_DEC_AND_FETCH` on `bw_atomic32_t count_`; `decRef()` calls `destroy()` (correct). No `AtomicInt::add` | **C** | **P2** | 已按源码改文档 |
+| F14 | `docs/architecture/memory-lifecycle.md` | Channel lifecycle names members `channelMap_` and `condemnedChannels_`. Neither symbol exists in `lib/network/` (dir confirmed) | `NetworkInterface::pChannelMap_` (`network_interface.hpp:308`) and per-channel `isCondemned_` (`udp_channel.hpp:473`) | **C** | **P2** | 已按源码改文档 |
+| F15 | `docs/architecture/serialization-entitydef.md` | Depicts `BinaryOStream & operator<<( bool/int8/... )` as **member** functions of `BinaryOStream` | `operator<<` are **free functions** `BinaryOStream & operator<<( BinaryOStream & b, ... )` @ `lib/cstdmf/binary_stream.hpp:191+` | **C** | **P2** | 已按源码改文档 |
+| F16 | `docs/architecture/serialization-entitydef.md` | "Source entry: entity_description.cpp:1567", `readTaggedClientStreamToDict` at :1622 | `EntityDescription::readStreamToDict` @ :1586, `readTaggedClientStreamToDict` @ :1641 | **C** | **P2** | (drift; symbols verified) |
+| F17 | `docs/architecture/modern-mmo-comparison.md` | "See message_logger.hpp." No such file exists; the MessageLogger tool lives at `server/tools/message_logger/logger.hpp` (real classes `Logger`, `LoggerMessageForwarder`, `LoggerEndpoint`) | — | **C** | **P2** | 已按源码改文档 |
+| F18 | `docs/architecture/modern-mmo-comparison.md` | "`PacketReceiver::maxSocketProcessingTime` ... See packet_receiver.cpp:83." Symbol is declared @ `packet_receiver.hpp:58`; `packet_receiver.cpp:83` is `PacketReceiver::~PacketReceiver()`. (pointer drift) | — | **C** | **P2** | 已按源码改文档 |
+| F19 | `docs/architecture/event-loop.md` | `int processOnce( bool shouldIdle = true )` | `lib/network/event_dispatcher.hpp:74`: `int processOnce( bool shouldIdle = false )` | **C** | **P1** | bare `processOnce()` does not idle |
+| F20 | `docs/architecture/event-loop.md` | `int processContinuously()` / `int processUntilBreak()` | both return `void` (`event_dispatcher.hpp:73,75`) | **C** | **P2** | 已按源码改文档 |
+| F21 | `docs/architecture/event-loop.md` | `int addTimer( int microseconds, ... )` | `TimerHandle addTimer( int64 microseconds, TimerHandler*, void* arg = NULL, const char* name = "UnnamedTimer" )` (`event_dispatcher.hpp:94-99`) | **C** | **P2** | 已按源码改文档 |
+| F22 | `docs/architecture/event-loop.md` | `void delFrequentTask( FrequentTask * )` | `bool cancelFrequentTask( FrequentTask * )` (`event_dispatcher.hpp:101`); `delFrequentTask` = 0 hits | **C** | **P2** | 已按源码改文档 |
+| F23 | `docs/architecture/event-loop.md` | members `uint64 lastProcessTime_;` / `int numFrequentTaskCalls_;`. Neither exists (`event_dispatcher.hpp:205-256`) | — | **C** | **P2** | 已按源码改文档 |
+| F24 | `docs/architecture/event-loop.md` | `addTimerCommon( int, TimerHandler*, void*, const char*, bool isRepeating )` @ `event_dispatcher.cpp:264` | `TimerHandle addTimerCommon( int64, TimerHandler*, void*, bool recurrent, const char* name )` @ :290 — `recurrent` precedes `name` | **C** | **P2** | 已按源码改文档 |
+| F25 | `docs/architecture/event-loop.md` | GameTick started in `BaseApp::onManagerRebirth()` @ `baseapp.cpp:2016` via `mainDispatcher_.addTimer(...)` | started by `BaseApp::startGameTickTimer()` @ `server/baseapp/baseapp.cpp:2034-2041` (member `gameTimer_`, `baseapp.hpp:420`) | **C** | **P1** | 已按源码改文档 |
+| F26 | `docs/architecture/process-topology.md` | `bool BaseAppMgr::init( bool isReload )` @ `baseappmgr.cpp:389` | `bool BaseAppMgr::init( int argc, char * argv[] )` @ `server/baseappmgr/baseappmgr.cpp:362` | **C** | **P2** | 已按源码改文档 |
+| F27 | `docs/architecture/process-topology.md` | `bool CellAppMgr::init( bool isReload )` @ `cellappmgr.cpp:238` | `bool CellAppMgr::init( int argc, char * argv[] )` @ `server/cellappmgr/cellappmgr.cpp:165` | **C** | **P2** | 已按源码改文档 |
+| F28 | `docs/architecture/process-topology.md` | `registerBirthListener(&BaseAppMgr::onBaseAppBirth)` / `registerDeathListener(&BaseAppMgr::onBaseAppDeath)`. `onBaseAppBirth` = 0 hits; actual registration uses `Mercury::MachineDaemon::registerBirthListener/registerDeathListener` with `BaseAppMgrInterface::handleBaseAppDeath/handleCellAppMgrBirth/handleBaseAppMgrBirth` (`baseappmgr.cpp:389-438`) | — | **C** | **P2** | 已按源码改文档 |
+| F29 | `docs/architecture/process-topology.md` | `registerBirthListener(&CellAppMgr::onCellAppBirth)`. `onCellAppBirth` = 0 hits; actual `Mercury::MachineDaemon::registerBirthListener(..., CellAppMgrInterface::handleCellAppMgrBirth, ...)` (`cellappmgr.cpp:284-287`) | — | **C** | **P2** | 已按源码改文档 |
+| F30 | `docs/architecture/login-session-proxy-flow.md` | `bool LoginApp::login( const Address &, const UnpackedMessageHeader &, BinaryIStream & )` @ `loginapp.cpp:700` | `void LoginApp::login( const Address & source, UnpackedMessageHeader & header, BinaryIStream & )` @ `server/loginapp/loginapp.cpp:705` | **C** | **P1** | 已按源码改文档 |
+| F31 | `docs/architecture/login-session-proxy-flow.md` | The 13-step "defence line" names `allowLogin()`, `bannedIPs_.contains()`, `pendingAttempts_.contains()`, `rateLimit_.isLimited()`, `overloadCache_.isOverloaded()`, `hasChallenge()`, `params.isEncrypted()`, etc. — **none of these members exist** in `server/loginapp/` | checks: `Config::allowLogin()` :721, `ipAddressBanMap_` :751, `loginRequests_.count(source)` :837, `Config::rateLimitEnabled()`+`numAllowedLoginsLeft_` :845, `isDBReady()` :862, `systemOverloaded_` :875, `processForLoginChallenge()` :896, `Config::allowUnencryptedLogins()` + `encryptionKey().empty()` :989 | **C** | **P1** | 已按源码改文档 |
+| F32 | `docs/architecture/login-session-proxy-flow.md` | `BaseAppMgr::allocateBaseApp()` (`Source entry: baseappmgr.cpp:947`). No such symbol (0 hits); selection is in `BaseAppMgr::createEntity()` @ `baseappmgr.cpp:933-994` | — | **C** | **P2** | 已按源码改文档 |
+| F33 | `docs/architecture/login-session-proxy-flow.md` | "Source entry: baseapp.cpp:2985"; actual `BaseApp::baseAppLogin` @ :3008. (drift) | — | **C** | **P2** | 已按源码改文档 |
+| F34 | `docs/architecture/scaling-fault-tolerance.md` | `addApp` block claims `bool CellAppMgr::addApp(...)` with `isRecovery_`, `Config::timeoutPeriod()`, `new CellApp(...); cellApps_.add(...)`, `sendSharedData/sendGlobalData` | @ `cellappmgr.cpp:1255`: returns `void`, uses `isRecovering()` :1307, `Config::cellAppTimeout()` :1340 (no `timeoutPeriod` option), `cellApps_.add(addr, viewerPort, initData.id)` :1345, `bundle.startReply(...)<<initData` :1350 | **C** | **P1** | 已按源码改文档 |
+| F35 | `docs/architecture/scaling-fault-tolerance.md` | `init` block claims `bool CellAppMgr::init( bool isReload )` with timers `LOAD_BALANCE_TIMER/META_LOAD_BALANCE_TIMER/OVERLOAD_CHECK_TIMER`, `Config::overloadCheckPeriod()`, `pTimeKeeper_` created in `init()` | @ `cellappmgr.cpp:165`: `init( int argc, char * argv[] )`, timers `TIMEOUT_LOAD_BALANCE` :202 / `TIMEOUT_META_LOAD_BALANCE` :209 / `TIMEOUT_OVERLOAD_CHECK` :214 (period hardcoded 1000000); `pTimeKeeper_` created in `startTimer()` @ :1791 | **C** | **P1** | 已按源码改文档 |
+| F36 | `docs/architecture/scaling-fault-tolerance.md` | `sendSharedData()` / `sendGlobalData()` methods. Neither exists in `server/cellappmgr/`; shared data streamed inline in `addApp()` :1354+ | — | **C** | **P2** | 已按源码改文档 |
+| F37 | `docs/architecture/scaling-fault-tolerance.md` | "Source entry: cellappmgr.cpp:1806" for `handleCellAppDeath`; actual @ :1816. (drift) | — | **C** | **P2** | 已按源码改文档 |
+| F38 | `docs/architecture/scaling-fault-tolerance.md` | "Source entry: baseapp.cpp:1942" for `BaseApp::handleCellAppDeath`; actual @ `baseapp.cpp:1960`. (drift) | — | **C** | **P2** | 已按源码改文档 |
+| F39 | `docs/architecture/scaling-fault-tolerance.md` | "source is at base.cpp:3810"; actual `Base::restoreTo` @ `base.cpp:3819`. (drift) | — | **C** | **P2** | 已按源码改文档 |
+| F40 | `docs/architecture/threading-background-tasks.md` | `EntityApp::onTickProcessingComplete()` handles main-thread background-task callbacks | @ `lib/server/entity_app.cpp:146`: only `ServerApp::onTickProcessingComplete()` + `callTimers()`; foreground consumption is `bgTaskManager_.tick()` @ `cellapp.cpp:1001` / `baseapp.cpp:1488` → `TaskManager::tick()` → `doMainThreadTask()` (`bgtask_manager.cpp:762`) | **C** | **P2** | 已按源码改文档 |
+| F42 | `docs/architecture/testing-time-control.md` | `addTimerCommon()` registers with `timestamp() + interval` | `event_dispatcher.cpp:305`: `pTimeQueue_->add( clock_() + interval, ... )` | **C** | **P1** | 已按源码改文档 |
+| F43 | `docs/architecture/testing-time-control.md` | `processTimers()` calls `timestamp()` | `event_dispatcher.cpp:369`: `pTimeQueue_->process( clock_() )` | **C** | **P1** | 已按源码改文档 |
+| F45 | `docs/architecture/testing-time-control.md` | pointers `event_dispatcher.cpp:264`/`:340`; actual `addTimerCommon` @ :290, `processTimers` @ :366. (drift) | — | **C** | **P2** | 已按源码改文档 |
+| F46 | `docs/architecture/network-backpressure-fault-injection.md` | `void PacketReceiver::handleInputNotification()` @ `packet_receiver.cpp:83` with `processSocket()`, `lastSourceAddr_`, `numPacketsProcessed_`, `receiveQueueSize()` | `int PacketReceiver::handleInputNotification( int fd )` @ `packet_receiver.cpp:94` (loop via `shouldProcess`/`expectingPacket`, local `numPacketsProcessed`, `networkInterface_.socket().receiveQueueSize()`) | **C** | **P1** | 已按源码改文档 |
+| F47 | `docs/architecture/network-backpressure-fault-injection.md` | `Config::maxInternalSocketProcessingTime()` / `Config::gameUpdateHertz()` | `bw_message_forwarder.cpp:47-50`: `BWConfig::get<float>("maxInternalSocketProcessingTime", true)` / `BWConfig::get<int>("gameUpdateHertz", true)`. No such `Config::` accessors | **C** | **P2** | 已按源码改文档 |
+| F48 | `docs/architecture/network-backpressure-fault-injection.md` | watcher `maxSocketProcessingTime()` | watcher child is `maxSocketProcessingTimeStamps` (`packet_receiver.cpp:1392`) | **C** | **P2** | 已按源码改文档 |
+| F50 | `docs/architecture/research-method.md` | thread state managed with `PyEval_InitThreads()`. No such symbol (removed in Python 3.13; only a comment at `lib/pyscript/script.cpp:606`); actual is `PyEval_SaveThread`/`PyEval_RestoreThread` (`script.cpp:841,877,914,941,953`) | — | **C** | **P2** | 已按源码改文档 |
+| F51 | `docs/architecture/research-method.md` | line drifts: `baseapp.cpp:2020`→`:2038`; `bundle.hpp:27`→`:36-39`; `entity.hpp:89`→`:95`; `event_dispatcher.cpp:428`→`:477`. (symbols verified) | — | **C** | **P2** | 已按源码改文档 |
+| F52 | `docs/architecture/hot-reload-script-migration.md` | line drifts: `cellapp.cpp:2322`→`:2377`; `script_bigworld.cpp:1509`→`:1483`; `entity.cpp:4245`→`:4258`; `script_bigworld.cpp:1525`→`:1540`. Also :124/:219 `PyObject_SetAttrString(... "__class__" ...)` is actually via wrapper `Entity::swapScriptClass()` (`entity.cpp:4291` → `entity.ipp:368`). (symbols verified) | — | **C** | **P2** | 已按源码改文档 |
+| F53 | `docs/getting-started/api-reference.md` | Usage example uses `Mercury::VARIABLE_LENGTH` (api-reference.md:150) | Constant is `VARIABLE_LENGTH_MESSAGE`; bare `VARIABLE_LENGTH` absent in `lib/network/` — `programming/bigworld/lib/network/interface_element.hpp:46` | **C** | **P1** | Rename to `VARIABLE_LENGTH_MESSAGE` |
+| F54 | `docs/getting-started/api-reference.md` | `class ScriptList : public ScriptObject` (api-reference.md:358) | Actual base is `ScriptSequence` — `lib/script/py_script_object.hpp:1094` | **C** | **P2** | Change to `ScriptSequence` |
+| F55 | `docs/getting-started/api-reference.md` | ScriptDict "class declaration in `oc_script_object.hpp:109`" (api-reference.md:334) | `oc_script_object.hpp:109` is a separate older ScriptDict (`setItemString/getItemString`, `size()`); the documented template `setItem/getItem` live in the class at `py_script_object.hpp:958` (ipp included at :1875) | **C** | **P2** | Point at `py_script_object.hpp:958` |
+| F56 | `docs/getting-started/api-reference.md` | `ScriptDict::setItem( const char*, const ScriptObject& )` (api-reference.md:341) | Real: `template<class ERROR_HANDLER> bool setItem(const char*, const ScriptObject&, const ERROR_HANDLER&) const` — `py_script_object.hpp:982-984` (def `py_script_dict.ipp:23`) | **C** | **P2** | Add `ERROR_HANDLER` template param |
+| F57 | `docs/getting-started/api-reference.md` | IDatabase callbacks named `IEntityGetHandler/IEntityPutHandler/IEntityDelHandler` (api-reference.md:456-458) | Actual names: `IGetEntityHandler` / `IPutEntityHandler` / `IDelEntityHandler` — `lib/db_storage/idatabase.hpp:87,193,233` | **C** | **P2** | Rename (word order) |
+| F58 | `docs/getting-started/api-reference.md` | `virtual void delEntity(...) = 0; // :231` (api-reference.md:452) | Actual at `idatabase.hpp:255` (`:231` is the `IDelEntityHandler` comment) | **C** | **P2** | `// :255` |
+| F59 | `docs/getting-started/api-reference.md` | EntityDescription accessor lines all `:194..:253` (api-reference.md:180-202) | All uniformly **+1**: `clientName` 195, `canBeOnCell` 203, `canBeOnBase` 204, `canBeOnClient` 205, `isClientType` 212, `clientServerPropertyCount` 226, `clientServerProperty` 228, `numEventStampedProperties` 237, `numLatestChangeOnlyMembers` 239, `isTempProperty` 241, `isService` 252, `isPersistent` 253, `forceExplicitDBID` 254 — `lib/entitydef/entity_description.hpp`. (`parse` :134 and `visit` :57 are correct.) | **C** | **P2** | Shift all +1 |
+| F60 | `docs/getting-started/api-reference.md` | `ScriptObject::getAttribute // :286`, `isNone // :448` (api-reference.md:301,297) | Actual `getAttribute` 284, `isNone` 446 — `lib/script/py_script_object.hpp:284,446` (−2 drift) | **C** | **P2** | `// :284`, `// :446` |
+| F61 | `docs/getting-started/project-structure.md` | `upgrade-plan/` = "6 documents" (project-structure.md:171) | 7 `.md` files: build-system-modernization, hot-reload-productionization, migration-status, packaging-and-daily-build, python-c-api-guide, python-upgrade-plan, third-party-deps | **C** | **P2** | "7 documents" |
+| F62 | `docs/getting-started/build-from-source.md` | `build/make/Makefile:13` = "initial third party library builds may not like parallel jobs" (build-from-source.md:136) | Comment is at line **14**; line 13 is `# Known issues:` — `programming/bigworld/build/make/Makefile:14` | **C** | **P2** | `:14` |
+| F63 | `docs/analysis/modules.md` | `py_component.cpp` in "script, pyscript, entitydef_script" source entries (modules.md:25) | No `lib/script/py_component.cpp`; the file is `lib/entitydef_script/py_component.cpp` (also `py_component.hpp`). Defensible since the row spans entitydef_script, but a reader searching `lib/script/` misses it | **C** | **P2** | Note the `entitydef_script/` prefix |
+| F64 | `docs/adr/adr-0002-vcpkg-third-party-deps.md` | "switch in `2bdfc5aa`, baseline pinned in `1180ece6`" | vcpkg switch was actually commit `41fafefc` ("build(vcpkg): 第三方库切换 vcpkg 并完成迁移收尾，单测 21 模块全绿" — the commit that creates `programming/bigworld/vcpkg.json` and `build/make/third_party_vcpkg.mak`, verified via `git log --diff-filter=A`); `2bdfc5aa` is "build: upgrade vendored python to 3.13.16" (touches only `third_party/python/` + 2 docs, no vcpkg files) | **C** | **P1** | change "switch in `2bdfc5aa`" → `41fafefc` (the baseline-pin commit `1180ece6` is correct) |
+| F66 | `docs/upgrade-plan/migration-status.md` | Unreachable/restricted table line counts: `server_connection.cpp` (990), `message_handlers.hpp` (538), `image.ipp` (589), `chunk_space.cpp` (506), `replay_controller.cpp` (495), `terrain_height_map2.cpp` (755) | actual `wc -l`: 2971, 352, 2003, 1476, 1452, 2156 respectively. `message_handlers.hpp`'s stated 538 exceeds its physical 352, so the table cannot be physical line counts (the .cpp values ≈ 1/3 of physical, consistent with gcovr executable-line counts, but the page presents them uniformly as file sizes) | **C** | **P1** | re-measure and either use physical line counts or state the metric explicitly |
+| F69 | `docs/vcpkg-migration.md §2` | "`.gitignore:41` excludes `programming/bigworld/build/vcpkg/`" | repo-root `.gitignore:42` | **C** | **P2** | 41 → 42 |
+| F70 | `docs/upgrade-plan/hot-reload-productionization.md` | line-number claims (cellapp.cpp:2974/2329-2385/2364/2944-2946, entity.cpp:4245/4267/4275/4287/4297/4308, entity.hpp:284, entity_type.cpp:168-185/262/280-287, cstdmf/debug.hpp:428) | symbols verified present but lines drifted: `CellApp::reloadScript` at `server/cellapp/cellapp.cpp:2377` (not 2974); `Entity::migrate(FailureClass*)` at `entity.cpp:4258` (not 4245); `Entity::migratedAll` at `entity.cpp:4347` / `entity.hpp:299` (not 4308/284); `supersede(CELL)` at `entity_type.cpp:191` (not 168-185); `MF_VERIFY(exp)` at `lib/cstdmf/debug.hpp:447` (not 428) | **C** | **P2** | re-line-number each reference |
+| F71 | `docs/vcpkg-migration.md §3` | "`BWConfiguration_server.cmake:71`" for sqlite | actual `build/cmake/BWConfiguration_server.cmake:92` (`sqlite lib/sqlite`); the `third_party/zip`/`third_party/png` refs at :154/:160 confirm the "keep for R3" claim | **C** | **LOW** | 71 → 92 |
+| F72 | `docs/cpp23-migration.md` | `std::iterator` inheritance refs `data_type.hpp:326`, `circular_queue.hpp:85` | actual `programming/bigworld/lib/entitydef/data_type.hpp:328`, `lib/cstdmf/circular_queue.hpp:86` (std::iterator removed in C++20) | **C** | **P2** | line refs :328 / :86 |
+| F73 | `docs/cpp23-migration.md` | `all 688 type objects in pyobject_plus.hpp converted to designated` | pyobject_plus.hpp type objects converted via BW_PYTYPEOBJECT_HEAD_INIT (lib/pyscript/pytypeobject_head.hpp); the exact count is a snapshot, not a live invariant | **C** | **P2** | reword to 'all type objects converted via the designated macro' |
+| F74 | `docs/cpp23-migration.md` | `third_party_openssl.mak` recipe ends with `touch $@` fixing concurrent-rebuild trampling | third_party_openssl.mak is now a vcpkg-consumer stub (openssl comes from vcpkg manifest); the make-based vendored rebuild path is superseded | **C** | **P2** | note the fix is superseded by vcpkg |
+| F75 | `docs/analysis/build-and-runtime.md` | `21 modules and 1113 cases` baseline | actual gate 2026-10-27 after batch 52: 21 modules / 1521 cases green | **C** | **P2** | 1113 -> 1521 (batch 52) |
+| F76 | `README.md` | test target `bw-run-unit_test_<module>` | actual target `bw-run-test-<name>` (build/make/common_footer_config.mak:485; TESTING.md:515) | **C** | **P1** | rename to `bw-run-test-<module>` |
+| F77 | `README.md` | `1505 cases all green (2026-10-15, batch 36)` | actual gate 2026-10-27 after batch 52: 1521 cases green | **C** | **P2** | 1505 -> 1521, batch 36 -> batch 52, date 2026-10-27 |
+| F78 | `README.md` | coverage reinforcement `batches 1-32 complete` | actual reinforcement batches 1-34 complete | **C** | **P2** | 1-32 -> 1-34 |
 
-- architecture/* 剩余 17 章未逐条抽查（本轮覆盖 10 章 122 条引证）；腐坏根因集中于 Python 3.13 移植（ee940e96/871a6589/41fafefc）导致的行号漂移，建议后续批次按章滚动复审。
-- api-reference.md 已重写为「按源码核对」口径；后续新增 API 章节时保持 file:line 标注习惯。
+## P1 清单（22）
+
+| ID | 页 | 主张 | 源码证据 (file:line) | 桶 | 严重度 | 修法 |
+|---|---|---|---|---|---|---|
+| F1 | `docs/architecture/entity-model.md` | `bool Entity::callBaseMethod( int methodIndex, BinaryIStream & data, bool isForGhost )` at `entity.cpp:5255` | `void Entity::callBaseMethod( BinaryIStream & data )` at `server/cellapp/entity.cpp:5294` | **C** | **P1** | `void Entity::callBaseMethod(BinaryIStream &)` @ :5294; the whole block is a paraphrase, not source |
+| F2 | `docs/architecture/entity-model.md` | `bool Base::callCellMethod( int methodIndex, BinaryIStream & data )` at `base.cpp:1391` | `void Base::callCellMethod( const Mercury::Address &, const Mercury::UnpackedMessageHeader &, BinaryIStream & )` @ `server/baseapp/base.cpp:1391` | **C** | **P1** | line is right, signature wrong |
+| F4 | `docs/architecture/entity-model.md` | `void Base::restoreTo( const Address &, const UnpackedMessageHeader &, BinaryIStream & )` @ `base.cpp:3810` | `bool Base::restoreTo( SpaceID, const Address & )` @ `server/baseapp/base.cpp:3819` | **C** | **P1** | 已按源码改文档 |
+| F6 | `docs/architecture/aoi-witness-ghost.md` | `void AoITrigger::triggerEnter( RangeListNode * pOther )` / `triggerLeave(...)` @ `witness.cpp:3586` | `void AoITrigger::triggerEnter( Entity & entity )` / `triggerLeave( Entity & )` @ `server/cellapp/witness.cpp:3586/3602` | **C** | **P1** | param is `Entity&`, not `RangeListNode*`; body uses `pWitness_->addToAoI(Entity*)`, not a cast |
+| F8 | `docs/architecture/mercury-reliable-udp.md` | `void UDPChannel::send( Bundle * pBundle )` @ `udp_channel.cpp:1513` | no `UDPChannel::send(Bundle*)` exists anywhere in `lib/network/`; line 1513 is `void UDPChannel::writeFlags( Packet * p )` | **A** | **P1** | the whole "Send Flow" block is fabricated (real send path: `sendIfIdle()` @ :798, `sendUnacked()` @ :1187) |
+| F10 | `docs/architecture/mercury-reliable-udp.md` | "send window state" block claims members `windowSize_` (int), `largeOutSeqAt_` (SeqNum), `unackedPackets_` (UnackedPackets), `roundTripTime_` (int), `maxWindowSize_`, `resendTimeout_`, `lastSendTime_` | `lib/network/udp_channel.hpp`: `uint32 windowSize_` (:383), `SeqNumAllocator largeOutSeqAt_` (:389), `CircularArray<UnackedPacket*> unackedPackets_` (:415), `uint64 roundTripTime_` (:403); `maxWindowSize_`, `resendTimeout_`, `lastSendTime_` do **not** exist anywhere in `lib/network/` | **C** | **P1** | 已按源码改文档 |
+| F19 | `docs/architecture/event-loop.md` | `int processOnce( bool shouldIdle = true )` | `lib/network/event_dispatcher.hpp:74`: `int processOnce( bool shouldIdle = false )` | **C** | **P1** | bare `processOnce()` does not idle |
+| F25 | `docs/architecture/event-loop.md` | GameTick started in `BaseApp::onManagerRebirth()` @ `baseapp.cpp:2016` via `mainDispatcher_.addTimer(...)` | started by `BaseApp::startGameTickTimer()` @ `server/baseapp/baseapp.cpp:2034-2041` (member `gameTimer_`, `baseapp.hpp:420`) | **C** | **P1** | 已按源码改文档 |
+| F30 | `docs/architecture/login-session-proxy-flow.md` | `bool LoginApp::login( const Address &, const UnpackedMessageHeader &, BinaryIStream & )` @ `loginapp.cpp:700` | `void LoginApp::login( const Address & source, UnpackedMessageHeader & header, BinaryIStream & )` @ `server/loginapp/loginapp.cpp:705` | **C** | **P1** | 已按源码改文档 |
+| F31 | `docs/architecture/login-session-proxy-flow.md` | The 13-step "defence line" names `allowLogin()`, `bannedIPs_.contains()`, `pendingAttempts_.contains()`, `rateLimit_.isLimited()`, `overloadCache_.isOverloaded()`, `hasChallenge()`, `params.isEncrypted()`, etc. — **none of these members exist** in `server/loginapp/` | checks: `Config::allowLogin()` :721, `ipAddressBanMap_` :751, `loginRequests_.count(source)` :837, `Config::rateLimitEnabled()`+`numAllowedLoginsLeft_` :845, `isDBReady()` :862, `systemOverloaded_` :875, `processForLoginChallenge()` :896, `Config::allowUnencryptedLogins()` + `encryptionKey().empty()` :989 | **C** | **P1** | 已按源码改文档 |
+| F34 | `docs/architecture/scaling-fault-tolerance.md` | `addApp` block claims `bool CellAppMgr::addApp(...)` with `isRecovery_`, `Config::timeoutPeriod()`, `new CellApp(...); cellApps_.add(...)`, `sendSharedData/sendGlobalData` | @ `cellappmgr.cpp:1255`: returns `void`, uses `isRecovering()` :1307, `Config::cellAppTimeout()` :1340 (no `timeoutPeriod` option), `cellApps_.add(addr, viewerPort, initData.id)` :1345, `bundle.startReply(...)<<initData` :1350 | **C** | **P1** | 已按源码改文档 |
+| F35 | `docs/architecture/scaling-fault-tolerance.md` | `init` block claims `bool CellAppMgr::init( bool isReload )` with timers `LOAD_BALANCE_TIMER/META_LOAD_BALANCE_TIMER/OVERLOAD_CHECK_TIMER`, `Config::overloadCheckPeriod()`, `pTimeKeeper_` created in `init()` | @ `cellappmgr.cpp:165`: `init( int argc, char * argv[] )`, timers `TIMEOUT_LOAD_BALANCE` :202 / `TIMEOUT_META_LOAD_BALANCE` :209 / `TIMEOUT_OVERLOAD_CHECK` :214 (period hardcoded 1000000); `pTimeKeeper_` created in `startTimer()` @ :1791 | **C** | **P1** | 已按源码改文档 |
+| F41 | `docs/architecture/testing-time-control.md` | Central claim "no unified virtual-clock injection layer" is **contradicted** by the injectable `EventDispatcher::ClockFn` (`event_dispatcher.hpp:59`), `explicit EventDispatcher(const ClockFn&)` :68, `clock()` :65, plus `ManualClock`/`advanceMs()` (`lib/network/unit_test/manual_clock.hpp:27`) used by `test_virtual_clock.cpp` | — | **B** | **P1** | 已按源码改文档 |
+| F42 | `docs/architecture/testing-time-control.md` | `addTimerCommon()` registers with `timestamp() + interval` | `event_dispatcher.cpp:305`: `pTimeQueue_->add( clock_() + interval, ... )` | **C** | **P1** | 已按源码改文档 |
+| F43 | `docs/architecture/testing-time-control.md` | `processTimers()` calls `timestamp()` | `event_dispatcher.cpp:369`: `pTimeQueue_->process( clock_() )` | **C** | **P1** | 已按源码改文档 |
+| F44 | `docs/architecture/testing-time-control.md` | unit tests "cannot instantly advance a five-second timeout". Contradicted by `ManualClock::advanceMs()` firing timers between dispatcher pumps | — | **B** | **P1** | 已按源码改文档 |
+| F46 | `docs/architecture/network-backpressure-fault-injection.md` | `void PacketReceiver::handleInputNotification()` @ `packet_receiver.cpp:83` with `processSocket()`, `lastSourceAddr_`, `numPacketsProcessed_`, `receiveQueueSize()` | `int PacketReceiver::handleInputNotification( int fd )` @ `packet_receiver.cpp:94` (loop via `shouldProcess`/`expectingPacket`, local `numPacketsProcessed`, `networkInterface_.socket().receiveQueueSize()`) | **C** | **P1** | 已按源码改文档 |
+| F53 | `docs/getting-started/api-reference.md` | Usage example uses `Mercury::VARIABLE_LENGTH` (api-reference.md:150) | Constant is `VARIABLE_LENGTH_MESSAGE`; bare `VARIABLE_LENGTH` absent in `lib/network/` — `programming/bigworld/lib/network/interface_element.hpp:46` | **C** | **P1** | Rename to `VARIABLE_LENGTH_MESSAGE` |
+| F64 | `docs/adr/adr-0002-vcpkg-third-party-deps.md` | "switch in `2bdfc5aa`, baseline pinned in `1180ece6`" | vcpkg switch was actually commit `41fafefc` ("build(vcpkg): 第三方库切换 vcpkg 并完成迁移收尾，单测 21 模块全绿" — the commit that creates `programming/bigworld/vcpkg.json` and `build/make/third_party_vcpkg.mak`, verified via `git log --diff-filter=A`); `2bdfc5aa` is "build: upgrade vendored python to 3.13.16" (touches only `third_party/python/` + 2 docs, no vcpkg files) | **C** | **P1** | change "switch in `2bdfc5aa`" → `41fafefc` (the baseline-pin commit `1180ece6` is correct) |
+| F65 | `docs/upgrade-plan/third-party-deps.md` | Python package table lists "SQLAlchemy 0.6.6 ❌ / Pympler 0.3.0 ❌ / pika 0.9.13 ❌" as current versions | tree actually ships `sqlalchemy-1.4.54.tar.gz`, `Pympler-1.0.tar.gz`, `pika-1.3.2.tar.gz` in `programming/bigworld/third_party/python_modules/`, installed by `build/make/third_party_python_modules.mak:172` (Pympler-1.0) and `:191` (pika-1.3.2) — all Python-3-compatible | **B** | **P1** | update "Current version" to 1.4.54 / 1.0 / 1.3.2 (drop the ❌); only `oursql 0.9.2` genuinely remains vendored/Py2-only |
+| F66 | `docs/upgrade-plan/migration-status.md` | Unreachable/restricted table line counts: `server_connection.cpp` (990), `message_handlers.hpp` (538), `image.ipp` (589), `chunk_space.cpp` (506), `replay_controller.cpp` (495), `terrain_height_map2.cpp` (755) | actual `wc -l`: 2971, 352, 2003, 1476, 1452, 2156 respectively. `message_handlers.hpp`'s stated 538 exceeds its physical 352, so the table cannot be physical line counts (the .cpp values ≈ 1/3 of physical, consistent with gcovr executable-line counts, but the page presents them uniformly as file sizes) | **C** | **P1** | re-measure and either use physical line counts or state the metric explicitly |
+| F76 | `README.md` | test target `bw-run-unit_test_<module>` | actual target `bw-run-test-<name>` (build/make/common_footer_config.mak:485; TESTING.md:515) | **C** | **P1** | rename to `bw-run-test-<module>` |
+
+## 四段式总账
+
+| 段 | 内容 |
+|---|---|
+| 桶计数 | A=2 / B=5 / C=71（合计 78） |
+| 严重度 | P0=0 / P1=22 / P2=55 / LOW=1 |
+| 修复 | 78 项工作区已修复（en+zh），按批提交 |
+| 文档站 | VitePress 已建（docs/.vitepress/config.mjs，root=en、zh 挂 /zh/），落库前本地构建跑绿 |
+
+## 批次划分
+
+| 批次 | 文档面 | 数量 | 提交 |
+|---|---|---|---|
+| 1 | docs/architecture/（28 篇） | 52 | docs: fix architecture doc-vs-source findings |
+| 2 | getting-started / analysis / index | 12 | docs: fix getting-started and analysis findings |
+| 3 | upgrade-plan / adr / vcpkg-migration | 8 | docs: fix upgrade-plan and adr findings |
+| 4 | cpp23-migration | 3 | docs: fix cpp23-migration line refs |
+| 5 | README / README.zh | 3 | docs: fix readme test target and gate counts |
+| 6 | 审计报告 doc-consistency-audit（en+zh） | 本报告 | docs: add 2026-11-02 doc consistency audit |
+| 7 | todo.md | 建账 | docs: tidy todo ledger |
+| 合计 | | 78 | |
