@@ -98,7 +98,16 @@ PyObject * PySTLSequence::pySeq_concat( PyObject * pOther )
 
 	int szA = holder_.size();
 	Py_ssize_t szB = PySequence_Size( pOther );
+	if (szB < 0)
+	{
+		return NULL;	// PySequence_Size has already set the exception
+	}
+
 	PyObject * pList = PyList_New( szA + szB );
+	if (pList == NULL)
+	{
+		return NULL;	// e.g. out of memory
+	}
 
 	for (int i = 0; i < szA; i++)
 		PyList_SET_ITEM( pList, i, holder_[i] );
@@ -253,6 +262,10 @@ PyObject * PySTLSequence::pySeq_inplace_concat( PyObject * pOther )
 	// get the sizes
 	int szA = holder_.size();
 	Py_ssize_t szB = PySequence_Size( pOther );
+	if (szB < 0)
+	{
+		return NULL;	// PySequence_Size has already set the exception
+	}
 
 	// and concatenate away
 	//  (this should work even if pOther uses the same holder as we do)
@@ -436,6 +449,10 @@ int Script::setData( PyObject * pObject, PySTLSequenceHolderBase & holder,
 
 	// get the sequence size
 	Py_ssize_t sz = PySequence_Size( pObject );
+	if (sz < 0)
+	{
+		return -1;	// PySequence_Size has already set the exception
+	}
 
 	// remove everything from us
 	holder.erase( 0, holder.size() );
