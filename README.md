@@ -27,7 +27,7 @@ For more details refer to [BigWorld Technology Server Whitepaper](<docs/pdf/BigW
 ## Project status
 
  - **Stack**: C++23 server (Linux) / embedded **Python 3.13.16** (migrated from 2.7) / [vcpkg](https://vcpkg.io) third-party dependency management
- - **Quality gate**: 21 module test suites, 1505 cases all green (measured 2026-10-15, after batch 36: fantasydemo placeholder assets + hot-reload action sequence + entity message routing decision table); gcovr instrumented coverage baseline (reinforcement batches 1–32 complete)
+ - **Quality gate**: 21 module test suites, 1521 cases all green (measured 2026-10-27, after batch 52); gcovr instrumented coverage baseline (reinforcement batches 1–34 complete)
  - **State**: the dev branch daily build and full test run stay green
 
 The full Python 2.7 → 3.13 migration, per-batch acceptance and the pitfall log: [migration ledger](docs/python-313-migration.md). Current migration state and per-module coverage baselines: [migration & coverage status](docs/upgrade-plan/migration-status.md). Plan and backlog ledger: [todo.md](todo.md) (maintained by patrol sweeps, with a three-tier inventory of implemented / design-only / not started).
@@ -85,8 +85,9 @@ doc change should not trigger a full build.
 
 1. **Doc changes** (`*.md`, `docs/**`, images): no build. The main CI
    workflow's `paths-ignore` already skips those paths.
-2. **Code changes**: run only the affected subset, never the full suite.
-   - `ctest --test-dir build -R '<affected tests>'`
-3. **Full suite** (`ctest --test-dir programming/bigworld/build/cmake-cstdmf`):
+2. **Code changes**: run only the affected module's suite, never the full
+   suite.
+   - `cd programming && env VCPKG_ROOT=/path/to/vcpkg make -s -rR bw-run-test-<module>` (e.g. `bw-run-test-cstdmf`, defined in `build/make/common_footer_config.mak:485`)
+3. **Full suite** (`cd programming && env VCPKG_ROOT=/path/to/vcpkg make -s -rR bw-run-all-unit-tests`):
    only for CMakeLists.txt / cmake/**, `.github/**`, Docker/Compose config
    changes, or pre-release.
