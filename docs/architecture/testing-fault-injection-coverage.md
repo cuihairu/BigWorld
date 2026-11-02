@@ -93,8 +93,8 @@ cluster regression.
 ## Multi-process Infrastructure
 
 `MultiProcTestCase` centralizes parent and child orchestration. It starts
-workers with `fork()`, waits with `waitpid()`, records child exit status, and
-uses `MultiProcessRunner` for process groups.
+workers with `fork()` (multi_proc_test_case.cpp:54), waits with `waitpid()`
+(:121), and records child exit status.
 
 However, availability of the infrastructure is not proof of multi-process
 coverage. Many tests create in-process peers instead.

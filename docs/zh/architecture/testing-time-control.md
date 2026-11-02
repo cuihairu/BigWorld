@@ -1,7 +1,5 @@
 # 测试体系与可控时间
 
-](/> [English)) | **中文**
-
 <div class="arch-hero">
 
 BigWorld 有单元测试、网络协议测试和多进程测试辅助，但它的时间系统主要依赖真实 `timestamp()` 与 `EventDispatcher` Timer。对学习引擎架构来说，这正是一个重要边界：很多 MMO 关键行为难以完全确定性重放。
@@ -10,14 +8,14 @@ BigWorld 有单元测试、网络协议测试和多进程测试辅助，但它�
 
 ## 先给结论
 
-BigWorld 的测试体系不是空白，尤其网络层有不少针对可靠 UDP、分片、乱序、flood、WebSocket、channel version 的测试。但从源码证据看，它没有统一的虚拟时钟注入层。
+BigWorld 的测试体系不是空白，尤其网络层有不少针对可靠 UDP、分片、乱序、flood、WebSocket、channel version 的测试。源码证据也显示存在一个可注入的虚拟时钟层：`EventDispatcher::ClockFn`（见 event_dispatcher.hpp）配合 `ManualClock`（见 lib/network/unit_test/manual_clock.hpp）。
 
 关键事实：
 
 - 单元测试入口使用 `BWUnitTest::runTest()`，见 unit_test.hpp。
 - 多进程测试辅助 `MultiProcTestCase` 能 fork 多个子进程，见 multi_proc_test_case.hpp。
-- `EventDispatcher::addTimerCommon()` 用 `timestamp() + interval` 注册 timer，见 event_dispatcher.cpp。
-- `EventDispatcher::processTimers()` 用真实 `timestamp()` 驱动，见 event_dispatcher.cpp。
+- `EventDispatcher::addTimerCommon()` 用 `clock_() + interval` 注册 timer，见 event_dispatcher.cpp。
+- `EventDispatcher::processTimers()` 由 dispatcher 的时钟 `clock_()` 驱动，见 event_dispatcher.cpp。
 - Linux `timestamp()` 可走 `RDTSC`、`gettimeofday` 或 `clock_gettime`，见 timestamp.hpp。
 - BaseApp 的 `GameTick` 通过 dispatcher timer 启动，见 baseapp.cpp。
 - CellAppMgr 的 `GameTick` 通过 dispatcher timer 启动，并创建 `TimeKeeper`，见 cellappmgr.cpp。
@@ -69,12 +67,12 @@ BigWorld 的测试体系不是空白，尤其网络层有不少针对可靠 UDP�
 
 ## Timer 的真实时间依赖
 
-**概述：** BigWorld 的 Timer 系统依赖真实时间，不是虚拟时钟。这是测试和确定性重放的主要障碍。
+**概述：** BigWorld 的 Timer 系统默认走真实时间 `timestamp()`，但 `EventDispatcher` 接受可注入的 `ClockFn`，`ManualClock` 测试辅助可以推进虚拟时钟，让 Timer 无需 sleep 也能触发。真实时间仍是默认，因此全系统确定性重放依然受限。
 
-**源码入口：** event_dispatcher.cpp:264
+**源码入口：** event_dispatcher.cpp:290
 
 ```cpp
-// event_dispatcher.cpp:264 - Timer 添加
+// event_dispatcher.cpp:290 - Timer 添加
 TimerHandle EventDispatcher::addTimerCommon( int64 microseconds,
     TimerHandler * handler, void * arg, bool recurrent,
     const char * name )
@@ -88,8 +86,8 @@ TimerHandle EventDispatcher::addTimerCommon( int64 microseconds,
     uint64 interval = TimeStamp::fromSeconds(
             ((double)microseconds) / 1000000.0 );
 
-    // 2. 计算到期时间（timestamp() 为真实时间）并插入时间队列
-    TimerHandle handle = pTimeQueue_->add( timestamp() + interval,
+    // 2. 用 dispatcher 时钟计算到期时间并插入时间队列
+    TimerHandle handle = pTimeQueue_->add( clock_() + interval,
             recurrent ? interval : 0,
             handler, arg, name );
 
@@ -97,11 +95,11 @@ TimerHandle EventDispatcher::addTimerCommon( int64 microseconds,
 }
 ```
 
-`processTimers()` 直接调用 `timestamp()` 驱动：
+`processTimers()` 直接调用 dispatcher 时钟 `clock_()` 驱动：
 
 ```cpp
-// event_dispatcher.cpp:340 - Timer 处理
-pTimeQueue_->process( timestamp() );
+// event_dispatcher.cpp:366 - Timer 处理
+pTimeQueue_->process( clock_() );
 ```
 
 **流程图：**
@@ -111,18 +109,18 @@ sequenceDiagram
     participant App as 应用层
     participant Dispatcher as EventDispatcher
     participant TimeQueue as TimeQueue64
-    participant System as 系统时间
+    participant Clock as 时钟源（clock_()）
 
     App->>Dispatcher: addTimer(100ms)
-    Dispatcher->>System: timestamp()
-    System->>Dispatcher: 返回当前时间
+    Dispatcher->>Clock: clock_()
+    Clock->>Dispatcher: 返回当前时间
     Dispatcher->>TimeQueue: add(now + 100ms)
     
-    Note over System: 等待 100ms...
+    Note over Clock: 等待 100ms...
     
     App->>Dispatcher: processTimers()
-    Dispatcher->>System: timestamp()
-    System->>Dispatcher: 返回当前时间
+    Dispatcher->>Clock: clock_()
+    Clock->>Dispatcher: 返回当前时间
     Dispatcher->>TimeQueue: process(now)
     TimeQueue->>TimeQueue: 检查到期 Timer
     TimeQueue->>App: handleTimeout()
@@ -130,11 +128,11 @@ sequenceDiagram
 
 **详细讲解：**
 
-1. **真实时间依赖**：Timer 使用 `timestamp()` 驱动，不是虚拟时钟。这意味着测试必须等待真实时间流逝，无法加速或减速时间。
+1. **注入虚拟时钟**：Timer 由 dispatcher 的 `clock_()` 时钟源驱动，默认是真实时间，但可以通过 `ClockFn` 构造换成 `ManualClock`。测试可以用 `ManualClock::advanceMs()` 推进时间，而不必 sleep。
 
-2. **测试障碍**：Timer、重发、超时、load balancing、Reviver ping 都依赖真实时间。测试这些行为需要等待真实时间，速度慢，且无法确定性重放。
+2. **测试障碍**：dispatcher 时钟之外，很多 Timer、重发、超时、load balancing、Reviver ping 仍用全局真实 `timestamp()`。测试这些行为需要等待真实时间，速度慢，且无法确定性重放。
 
-3. **为什么不用虚拟时钟**：游戏服务器需要真实时间行为，虚拟时钟会增加复杂度。当时没有统一的虚拟时钟注入层。
+3. **为什么注入面窄**：游戏服务器默认需要真实时间行为；虚拟时钟会增加复杂度，所以可注入的 `ClockFn` 只覆盖 dispatcher Timer，其它子系统仍用全局 `timestamp()`。
 
 ## timestamp 的平台问题
 
@@ -170,19 +168,19 @@ CellAppMgr 会向所有 CellApp 发送当前 game time，见 cellapps.cpp。
 - `timestamp()`：真实时间，用于 timer、性能统计、超时、重发。
 - `GameTime`：游戏逻辑 Tick，用于实体、AOI、备份、回放、同步。
 
-## 可控时间缺口
+## 可注入时钟
 
-从当前源码证据看，核心 timer 没有统一 `IClock` 或 `TimeProvider` 注入接口。`timestamp()` 是全局 inline 函数，散布在网络、任务、负载、重发、Reviver、统计和 Tick 中。
+源码证据显示核心 timer 存在一个可注入的虚拟时钟层：`EventDispatcher::ClockFn`（`std::function< uint64() >`）配合 `ManualClock`（见 lib/network/unit_test/manual_clock.hpp），由 test_virtual_clock.cpp 使用。不过注入面很窄：它只覆盖 dispatcher Timer，全局 inline 函数 `timestamp()` 仍散布在网络、任务、负载、重发、Reviver、统计和 Tick 中。
 
 这导致：
 
-- 单元测试难以瞬间推进 5 秒超时。
-- 可靠 UDP 重发测试容易依赖 sleep 或真实 dispatcher 循环。
+- `ManualClock::advanceMs()` 可以瞬间推进 5 秒超时。
+- 可靠 UDP 重发测试在直接使用 `timestamp()` 的地方仍可能依赖 sleep 或真实 dispatcher 循环。
 - Reviver missed ping 测试耗时且可能 flaky。
 - 负载均衡和 overload 检测很难做确定性边界测试。
 - Python timer、Entity timer 和 GameTick 的交错顺序难以完全重放。
 
-这不是说引擎无法测试，而是说“可调节时间”不是一等架构抽象。
+这不是说引擎无法测试，而是说“可调节时间”是窄的、dispatcher 级的抽象，而非全局一等抽象。
 
 ## 故障注入现状
 
@@ -209,7 +207,7 @@ CellAppMgr 会向所有 CellApp 发送当前 game time，见 cellapps.cpp。
 
 ## 源码取舍
 
-源码没有统一虚拟时钟，直接带来几个工程边界：
+注入面窄加上剩余的真实时间依赖，直接带来几个工程边界：
 
 - `timestamp()` inline 全局函数性能优先，抽象层会增加调用成本和侵入。
 - 多进程、网络、Python、数据库混合后，完整 deterministic simulation 成本很高。

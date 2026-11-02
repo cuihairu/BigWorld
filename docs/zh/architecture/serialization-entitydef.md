@@ -78,19 +78,13 @@ public:
     // 写入字符串长度（:48，内部即 writePackedInt）
     void writeStringLength( int len )	{ this->writePackedInt( len ); }
 
-    // 添加基本类型
-    BinaryOStream & operator<<( bool value );
-    BinaryOStream & operator<<( int8 value );
-    BinaryOStream & operator<<( uint8 value );
-    BinaryOStream & operator<<( int16 value );
-    BinaryOStream & operator<<( uint16 value );
-    BinaryOStream & operator<<( int32 value );
-    BinaryOStream & operator<<( uint32 value );
-    BinaryOStream & operator<<( int64 value );
-    BinaryOStream & operator<<( uint64 value );
-    BinaryOStream & operator<<( float value );
-    BinaryOStream & operator<<( double value );
 };
+
+// 添加基本类型。这些是自由函数（binary_stream.hpp:191+），不是成员函数：
+// 它们把流作为第一个参数传入。
+inline BinaryOStream & operator<<( BinaryOStream & b, const BW::string & str );
+inline BinaryOStream & operator<<( BinaryOStream & b, char * str );
+inline BinaryOStream & operator<<( BinaryOStream & b, const char * str );
 ```
 
 ```cpp
@@ -375,7 +369,7 @@ BigWorld 的序列化承担的职责比普通网络消息编码更宽：
 
 Entity 属性序列化到客户端的完整调用链：
 
-源码入口：entity.cpp:2475
+源码入口：entity.cpp:2485
 
 <div class="flow-strip">
   <span class="flow-node">Entity::writeClientUpdateDataToBundle()</span>
@@ -395,7 +389,7 @@ Entity 属性序列化到客户端的完整调用链：
 
 客户端属性反序列化的完整调用链：
 
-源码入口：entity_description.cpp:1567（另见 `readTaggedClientStreamToDict` :1622）
+源码入口：entity_description.cpp:1586（另见 `readTaggedClientStreamToDict` :1641）
 
 <div class="flow-strip">
   <span class="flow-node">EntityDescription::readStreamToDict()</span>

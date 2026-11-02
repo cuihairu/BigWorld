@@ -1,7 +1,5 @@
 # Process Topology and Responsibility Split
 
-> **English** | [中文](process-topology.md)
-
 <div class="arch-hero">
 
 The BigWorld server is not a single-process game server. It is a multi-process
@@ -89,11 +87,11 @@ flowchart LR
 and connects with the Manager components. This underpins discovery and load
 balancing.
 
-**Source entry**: baseappmgr.cpp:389
+**Source entry**: baseappmgr.cpp:362
 
 ```cpp
-// baseappmgr.cpp:389 - BaseAppMgr registration
-bool BaseAppMgr::init( bool isReload )
+// baseappmgr.cpp:362 - BaseAppMgr registration
+bool BaseAppMgr::init( int argc, char * argv[] )
 {
     // 1. Register the Mercury interface
     if (!this->BaseAppMgrInterface::registerWithInterface())
@@ -110,10 +108,15 @@ bool BaseAppMgr::init( bool isReload )
     }
 
     // 3. Listen for birth/death of other components
-    this->BaseAppMgrInterface::registerBirthListener( 
-        &BaseAppMgr::onBaseAppBirth );
-    this->BaseAppMgrInterface::registerDeathListener(
-        &BaseAppMgr::onBaseAppDeath );
+    Mercury::MachineDaemon::registerBirthListener(
+        interface_.address(),
+        BaseAppMgrInterface::handleCellAppMgrBirth, "CellAppMgrInterface" );
+    Mercury::MachineDaemon::registerBirthListener(
+        interface_.address(),
+        BaseAppMgrInterface::handleBaseAppMgrBirth, "BaseAppMgrInterface" );
+    Mercury::MachineDaemon::registerDeathListener(
+        interface_.address(),
+        BaseAppMgrInterface::handleBaseAppDeath, "BaseAppIntInterface" );
     
     return true;
 }
@@ -147,11 +150,11 @@ Detailed interpretation:
 
 ### BaseAppMgr startup flow
 
-**Source entry**: baseappmgr.cpp:389
+**Source entry**: baseappmgr.cpp:362
 
 ```cpp
-// baseappmgr.cpp:389 - BaseAppMgr startup
-bool BaseAppMgr::init( bool isReload )
+// baseappmgr.cpp:362 - BaseAppMgr startup
+bool BaseAppMgr::init( int argc, char * argv[] )
 {
     // ... other initialization ...
 
@@ -167,13 +170,15 @@ bool BaseAppMgr::init( bool isReload )
         return false;
     }
 
-    // Listen for BaseApp birth
-    this->BaseAppMgrInterface::registerBirthListener(
-        &BaseAppMgr::onBaseAppBirth );
-
     // Listen for CellAppMgr birth
-    this->CellAppMgrInterface::registerBirthListener(
-        &BaseAppMgr::onCellAppMgrBirth );
+    Mercury::MachineDaemon::registerBirthListener(
+        interface_.address(),
+        BaseAppMgrInterface::handleCellAppMgrBirth, "CellAppMgrInterface" );
+
+    // Listen for BaseAppMgr birth
+    Mercury::MachineDaemon::registerBirthListener(
+        interface_.address(),
+        BaseAppMgrInterface::handleBaseAppMgrBirth, "BaseAppMgrInterface" );
 
     return true;
 }
@@ -187,11 +192,11 @@ Key details:
 
 ### CellAppMgr startup flow
 
-**Source entry**: cellappmgr.cpp:238
+**Source entry**: cellappmgr.cpp:165
 
 ```cpp
-// cellappmgr.cpp:238 - CellAppMgr startup
-bool CellAppMgr::init( bool isReload )
+// cellappmgr.cpp:165 - CellAppMgr startup
+bool CellAppMgr::init( int argc, char * argv[] )
 {
     // ... other initialization ...
 
@@ -208,8 +213,9 @@ bool CellAppMgr::init( bool isReload )
     }
 
     // Listen for CellApp birth
-    this->CellAppMgrInterface::registerBirthListener(
-        &CellAppMgr::onCellAppBirth );
+    Mercury::MachineDaemon::registerBirthListener(
+        interface_.address(),
+        CellAppMgrInterface::handleCellAppMgrBirth, "CellAppMgrInterface" );
 
     return true;
 }

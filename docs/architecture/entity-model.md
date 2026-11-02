@@ -1,7 +1,5 @@
 # Entity Model: Base / Cell / Client
 
-> **English** | [中文](entity-model.md)
-
 <div class="arch-hero">
 
 A BigWorld entity is not a single-object model, but is split into three
@@ -143,7 +141,7 @@ See entity.hpp.
 ### The Core Entity Data Structure
 
 ```cpp
-// entity.hpp:138 - Entity class definition
+// entity.hpp:139 - Entity class definition
 class Entity : public PyObjectPlus
 {
 public:
@@ -288,27 +286,32 @@ call may cross a process boundary.
 Base to write the database, or asking Base to create a new Cell), it serialises
 the call as a Mercury message through `callBaseMethod()` and sends it to BaseApp.
 
-**Source entry:** entity.cpp:5255
+**Source entry:** entity.cpp:5294
 
 ```cpp
-// entity.cpp:5255 - Cell Entity calls a Base method
-bool Entity::callBaseMethod( int methodIndex, BinaryIStream & data,
-    bool isForGhost )
+// entity.cpp:5294 - Cell Entity calls a Base method
+void Entity::callBaseMethod( BinaryIStream & data )
 {
-    // 1. Look up the method definition
-    const MethodDescription * pMethod = 
-        pType_->description().base().internalMethod( methodIndex );
+    // 1. Read the method index from the stream
+    uint16 methodIndex;
+    data >> methodIndex;
     
-    // 2. Create the Base Entity mailbox
-    BaseEntityMailBox mailbox( pType_, id_, baseAddr_ );
-    
-    // 3. Get the output stream and write the method call
-    Mercury::Bundle & bundle = mailbox.startMessage( 
-        BaseAppIntInterface::callBaseMethod );
-    bundle << methodIndex;
-    bundle.transfer( data, data.remainingLength() );
-    
-    return true;
+    // 2. Create the Base Entity mailbox (if the Base is known)
+    if (baseAddr_.ip != 0)
+    {
+        PyEntityMailBox * pBaseEntityMailBox =
+            new BaseEntityMailBox( pEntityType_, baseAddr_, id_ );
+        
+        // 3. Look up the method definition
+        const MethodDescription * pDescription =
+            pEntityType_->description().base().internalMethod( methodIndex );
+        
+        // 4. Get the output stream and write the method call
+        BinaryOStream * pBOS = pBaseEntityMailBox->getStream(
+            *pDescription );
+        pBOS->transfer( data, data.remainingLength() );
+        pBaseEntityMailBox->sendStream();
+    }
 }
 ```
 
@@ -361,23 +364,22 @@ move an entity, or to create a child entity), it serialises the call through
 
 ```cpp
 // base.cpp:1391 - Base calls a Cell method
-bool Base::callCellMethod( int methodIndex, BinaryIStream & data )
+void Base::callCellMethod( const Mercury::Address & srcAddr,
+    const Mercury::UnpackedMessageHeader & header,
+    BinaryIStream & data )
 {
     // 1. Check whether the Cell mailbox exists
     if (!pCellEntityMailBox_)
     {
         ERROR_MSG( "Base::callCellMethod: No cell mailbox\n" );
-        return false;
+        return;
     }
     
     // 2. Send through the Cell mailbox
     Mercury::Bundle & bundle = pCellEntityMailBox_->startMessage(
         CellAppIntInterface::callCellMethod );
     bundle << id_;
-    bundle << methodIndex;
     bundle.transfer( data, data.remainingLength() );
-    
-    return true;
 }
 ```
 
@@ -426,12 +428,14 @@ sequenceDiagram
 This is not a real-time full sync: after Witness and AOI filtering, only visible
 and changed properties are sent.
 
-**Source entry:** entity.cpp:2475
+**Source entry:** entity.cpp:2485
 
 ```cpp
-// entity.cpp:2475 - Cell Entity writes client update data
-void Entity::writeClientUpdateDataToBundle( Mercury::Bundle & bundle,
-    bool isFullUpdate )
+// entity.cpp:2485 - Cell Entity writes client update data
+bool Entity::writeClientUpdateDataToBundle( Mercury::Bundle & bundle,
+    const Vector3 & basePos,
+    EntityCache & cache,
+    float lodPriority ) const
 {
     // 1. Write vehicle changes (if any)
     this->writeVehicleChangeToBundle( bundle );
@@ -452,6 +456,8 @@ void Entity::writeClientUpdateDataToBundle( Mercury::Bundle & bundle,
     {
         this->writeVolatileDetailedDataToBundle( bundle );
     }
+    
+    return true;
 }
 ```
 
@@ -506,28 +512,25 @@ BaseAppMgr, which notifies all BaseApps. Each BaseApp checks whether one of its
 entities has its Cell on the dead CellApp and, if so, restores it onto a new
 CellApp from backup data.
 
-**Source entry:** base.cpp:3810
+**Source entry:** base.cpp:3819
 
 ```cpp
-// base.cpp:3810 - Base restores the Cell Entity
-void Base::restoreTo( const Mercury::Address & addr,
-    const Mercury::UnpackedMessageHeader & header,
-    BinaryIStream & data )
+// base.cpp:3819 - Base restores the Cell Entity
+bool Base::restoreTo( SpaceID spaceID, const Mercury::Address & cellAppAddr )
 {
-    // 1. Read the backup data
-    this->readBackupData( data );
-    
-    // 2. Check whether there is a Cell Entity
+    // 1. Check whether there is a Cell Entity
     if (!this->hasCellEntity())
     {
-        return;
+        return false;
     }
     
-    // 3. Create the new Cell Entity
-    this->createCellEntityOn( addr );
+    // 2. Create the new Cell Entity
+    this->createCellEntityOn( cellAppAddr );
     
-    // 4. Update the Cell address
-    this->setCurrentCell( spaceID_, addr );
+    // 3. Update the Cell address
+    this->setCurrentCell( spaceID, cellAppAddr );
+    
+    return true;
 }
 ```
 

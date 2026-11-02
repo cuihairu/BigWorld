@@ -1,7 +1,5 @@
 # Script Hot Reload and Migration
 
-> **English** | [中文](hot-reload-script-migration.md)
-
 <div class="arch-hero">
 
 BigWorld's `reloadScript` is not a modern, safe production hot-update system. It
@@ -123,7 +121,7 @@ The core logic of `Entity::migrate()` is:
 1. Look up the new `EntityType` by the old type name.
 2. Check that old and new type IDs agree.
 3. Update `pEntityType_`.
-4. Call `PyObject_SetAttrString(this, "__class__", newPyType)`.
+4. Call `Entity::swapScriptClass( this, newPyType )` to set `__class__`: entity.ipp:364.
 5. Invoke script `onMigrate(self)`.
 
 Source: entity.cpp.
@@ -167,7 +165,7 @@ not production zero-downtime upgrades.
 
 ### CellApp hot reload
 
-Source entry: cellapp.cpp:2322
+Source entry: cellapp.cpp:2377
 
 <div class="flow-strip">
   <span class="flow-node">CellApp::reloadScript()</span>
@@ -187,7 +185,7 @@ Source entry: cellapp.cpp:2322
 
 ### BaseApp hot reload
 
-Source entry: script_bigworld.cpp:1509
+Source entry: script_bigworld.cpp:1483
 
 <div class="flow-strip">
   <span class="flow-node">BigWorld.reloadScript()</span>
@@ -207,7 +205,7 @@ Source entry: script_bigworld.cpp:1509
 
 ### Entity migration
 
-Source entry: entity.cpp:4245
+Source entry: entity.cpp:4258
 
 <div class="flow-strip">
   <span class="flow-node">Entity::migrate()</span>
@@ -218,14 +216,14 @@ Source entry: entity.cpp:4245
   <span class="flow-arrow">-></span>
   <span class="flow-node">update pEntityType_</span>
   <span class="flow-arrow">-></span>
-  <span class="flow-node">PyObject_SetAttrString("__class__")</span>
+  <span class="flow-node">Entity::swapScriptClass()</span>
   <span class="flow-arrow">-></span>
   <span class="flow-node">invoke onMigrate()</span>
 </div>
 
 ### Failure recovery
 
-Source entry: script_bigworld.cpp:1525
+Source entry: script_bigworld.cpp:1540
 
 <div class="flow-strip">
   <span class="flow-node">migration failure</span>

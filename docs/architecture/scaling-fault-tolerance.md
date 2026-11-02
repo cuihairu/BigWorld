@@ -63,37 +63,47 @@ mostly in the state layer.
 CellAppMgr checks the preconditions (BaseApp known, DBApp known); if they hold,
 it allocates an ID, synchronises data and admits the new CellApp.
 
-**Source entry:** cellappmgr.cpp:1245
+**Source entry:** cellappmgr.cpp:1255
 
 ```cpp
-// cellappmgr.cpp:1245 - CellAppMgr admits a new CellApp
-bool CellAppMgr::addApp( const Mercury::Address & addr,
+// cellappmgr.cpp:1255 - CellAppMgr admits a new CellApp
+void CellAppMgr::addApp( const Mercury::Address & srcAddr,
     const Mercury::UnpackedMessageHeader & header,
     BinaryIStream & data )
 {
+    Mercury::Address addr;
+    uint16 viewerPort;
+    data >> addr >> viewerPort;
+
     // 1. Check the preconditions
-    if (baseAppAddr_.isNone())
+    if (baseAppAddr_ == Mercury::Address::NONE)
     {
-        ERROR_MSG( "CellAppMgr::addApp: No BaseApp known yet\n" );
-        return false;
+        PROC_IP_INFO_MSG( "CellAppMgr::addApp: "
+            "Not adding CellApp at %s because we don't have a BaseApp yet\n",
+            srcAddr.c_str() );
+        return;
     }
     
-    if (dbAlphaAddr_.isNone())
+    if (dbAppAlpha_.addr() == Mercury::Address::NONE)
     {
-        ERROR_MSG( "CellAppMgr::addApp: No DBApp Alpha known yet\n" );
-        return false;
+        PROC_IP_INFO_MSG( "CellAppMgr::addApp: "
+            "Not adding CellApp at %s because we don't have a DBApp yet\n",
+            srcAddr.c_str() );
+        return;
     }
     
     if (!allowNewCellApps_)
     {
-        ERROR_MSG( "CellAppMgr::addApp: New cell apps not allowed\n" );
-        return false;
+        PROC_IP_WARNING_MSG( "CellAppMgr::addApp: "
+            "Denying %s since in middle of update\n", addr.c_str() );
+        return;
     }
     
-    if (isRecovery_)
+    if (this->isRecovering())
     {
-        ERROR_MSG( "CellAppMgr::addApp: Currently in recovery\n" );
-        return false;
+        PROC_IP_WARNING_MSG( "CellAppMgr::addApp: "
+            "Denying %s since in middle recovery.\n", addr.c_str() );
+        return;
     }
     
     // 2. Allocate an ID and initialise the data
@@ -101,25 +111,24 @@ bool CellAppMgr::addApp( const Mercury::Address & addr,
     initData.id = ++lastCellAppID_;
     initData.time = this->time();
     initData.baseAppAddr = baseAppAddr_;
-    initData.dbAlphaAddr = dbAlphaAddr_;
-    initData.isReady = true;
-    initData.timeoutPeriod = Config::timeoutPeriod();
+    initData.dbAppAlphaAddr = dbAppAlpha_.addr();
+    initData.isReady = hasStarted_;
+    initData.timeoutPeriod = Config::cellAppTimeout();
     
     // 3. Add it to the CellApp collection
-    CellApp * pApp = new CellApp( addr, initData.id );
-    cellApps_.add( pApp );
+    CellApp * pApp = cellApps_.add( addr, viewerPort, initData.id );
     
     // 4. Put it in the pending list
     pendingApps_.push_back( pApp );
     
     // 5. Reply with the initialisation data
-    header.reply( initData );
+    Mercury::Bundle & bundle = pApp->bundle();
+    bundle.startReply( header.replyID );
+    bundle << initData;
     
-    // 6. Send down the shared data
-    this->sendSharedData( addr );
-    this->sendGlobalData( addr );
-    
-    return true;
+    // 6. Stream the shared data down inline (there is no
+    //    sendSharedData()/sendGlobalData()): sharedCellAppData_ (:1355),
+    //    sharedGlobalData_ (:1368)
 }
 ```
 
@@ -142,8 +151,8 @@ sequenceDiagram
         CellAppMgr->>CellAppMgr: cellApps_.add()
         CellAppMgr->>CellAppMgr: pendingApps_.push_back()
         CellAppMgr->>CellApp: reply CellAppInitData
-        CellAppMgr->>CellApp: sendSharedData()
-        CellAppMgr->>CellApp: sendGlobalData()
+        CellAppMgr->>CellApp: stream shared data
+        CellAppMgr->>CellApp: stream global data
     end
 </MermaidDiagram>
 
@@ -156,7 +165,7 @@ sequenceDiagram
      be persisted
    - `allowNewCellApps_`: a runtime switch that can forbid new CellApps from
      joining
-   - `isRecovery_`: no new CellApps while recovery is in progress, to avoid
+   - `isRecovering()`: no new CellApps while recovery is in progress, to avoid
      state conflicts
 
 2. **ID allocation**: `lastCellAppID_` increments monotonically, so every
@@ -172,34 +181,40 @@ sequenceDiagram
 4. **pending list**: a new CellApp goes into `pendingApps_` first and only
    takes part in load balancing for real once it is ready.
 
-5. **Shared data distribution**: `sendSharedData()` and `sendGlobalData()`
-   synchronise global configuration so that all CellApps hold a consistent
-   configuration.
+5. **Shared data distribution**: the shared cell/global data is streamed
+   inline within the `addApp()` reply bundle (`sharedCellAppData_`,
+   `sharedGlobalData_`), synchronising global configuration so that all
+   CellApps hold a consistent configuration.
 
 ### CellAppMgr Initialisation
 
-**Source entry:** cellappmgr.cpp:190
+**Source entry:** cellappmgr.cpp:165
 
 ```cpp
-// cellappmgr.cpp:190 - CellAppMgr initialisation
-bool CellAppMgr::init( bool isReload )
+// cellappmgr.cpp:165 - CellAppMgr initialisation
+bool CellAppMgr::init( int argc, char * argv[] )
 {
     // ... other initialisation ...
     
-    // Register the load balance timer
-    mainDispatcher_.addTimer( Config::loadBalancePeriod() * 1000000,
-        this, (void*)LOAD_BALANCE_TIMER, "LoadBalance" );
+    // Register the load balance timer (:200)
+    loadBalanceTimer_ = this->mainDispatcher().addTimer(
+        int( Config::loadBalancePeriod() * 1000000.0 ),
+        this, (void*)TIMEOUT_LOAD_BALANCE, "LoadBalance" );
     
-    // Register the meta load balance timer
-    mainDispatcher_.addTimer( Config::metaLoadBalancePeriod() * 1000000,
-        this, (void*)META_LOAD_BALANCE_TIMER, "MetaLoadBalance" );
+    // Register the meta load balance timer (:206)
+    if (Config::metaLoadBalancePeriod() > 0.0)
+    {
+        metaLoadBalanceTimer_ = this->mainDispatcher().addTimer(
+            int( Config::metaLoadBalancePeriod() * 1000000.0 ),
+            this, (void*)TIMEOUT_META_LOAD_BALANCE, "MetaLoadBalance" );
+    }
     
-    // Register the overload check timer
-    mainDispatcher_.addTimer( Config::overloadCheckPeriod() * 1000000,
-        this, (void*)OVERLOAD_CHECK_TIMER, "OverloadCheck" );
+    // Register the overload check timer (:214), period hardcoded 1000000
+    overloadCheckTimer_ = this->mainDispatcher().addTimer(
+        1000000, this, (void*)TIMEOUT_OVERLOAD_CHECK, "OverloadCheck" );
     
-    // Create the TimeKeeper
-    pTimeKeeper_ = new TimeKeeper( this, this->time() );
+    // The TimeKeeper is created later, in startTimer() (:1791)
+    //   pTimeKeeper_ = new TimeKeeper( interface_, gameTimer_, time_, ... );
     
     return true;
 }
@@ -339,7 +354,7 @@ following call chain:
 CellAppMgr detects the CellApp death through a Channel disconnect and calls
 handleCellAppDeath():
 
-Source entry: cellappmgr.cpp:1806
+Source entry: cellappmgr.cpp:1816
 
 Call chain:
 
@@ -398,7 +413,7 @@ Call chain:
 After receiving the notification, BaseApp iterates over all Base Entities and
 calls restoreTo() to restore the Cell Entity:
 
-Source entry: baseapp.cpp:1942
+Source entry: baseapp.cpp:1960
 
 Call chain:
 
@@ -446,7 +461,7 @@ Recovery can fail in these scenarios:
 - The entity is in an offload intermediate state
 - Protocol versions are incompatible
 
-The source is at base.cpp:3810.
+The source is at base.cpp:3819.
 
 ## Recovery Boundaries
 

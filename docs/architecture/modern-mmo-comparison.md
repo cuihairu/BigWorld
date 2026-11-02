@@ -1,7 +1,5 @@
 # MMO Architecture Boundary Comparison
 
-> **English** | [中文](modern-mmo-comparison.md)
-
 <div class="arch-hero">
 
 This chapter does not impose an external architecture template on BigWorld.
@@ -35,8 +33,8 @@ server model:
 
 - There are few UDP sockets; `UDPChannel` is the logical connection. See udp_channel.hpp:57.
 - `EventPoller` only dispatches readiness; handlers still execute synchronously on the main reactor. See event_poller.cpp:1115.
-- `PacketReceiver::maxSocketProcessingTime` protects the budget for each socket-processing pass. See packet_receiver.cpp:83.
-- Reliability is expressed jointly by Channel, Bundle, ACK, retransmission, and piggybacking. See bundle.hpp:27.
+- `PacketReceiver::maxSocketProcessingTime` protects the budget for each socket-processing pass. See packet_receiver.hpp:58.
+- Reliability is expressed jointly by Channel, Bundle, ACK, retransmission, and piggybacking. See bundle.hpp:34.
 - Channel version participates in entity migration and component recovery, so packet send/receive alone is insufficient. See udp_channel.hpp:383.
 
 Therefore, the network I/O backend is only one boundary. Real correctness also
@@ -64,7 +62,7 @@ Base/Cell/Client is not simple object layering; it is a split of authority:
 
 - Base stores long-term identity, Proxy, DBID, the Cell mailbox, and persistence-coordination authority. See base.hpp:58.
 - Cell stores spatial authority, real/ghost state, AOI, physics, position, and offload state. See entity.hpp:89.
-- Client receives only the entity projection filtered by Witness. See entity.cpp:2475.
+- Client receives only the entity projection filtered by Witness. See entity.cpp:2485.
 - Database stores only the EntityDef persistent view and engine runtime metadata. See idatabase.hpp.
 
 This explains why debugging one entity problem often requires joining logs
@@ -107,7 +105,7 @@ BigWorld observability is more than logging:
 - ForwardingWatcher forwards watcher commands to a set of processes. See watcher_nub.cpp.
 - Profiler and DogWatch record in-process time consumption. See profiler.hpp.
 - EntityProfiler participates in entity-load analysis. See entity_profiler.hpp.
-- Message Logger is a separate centralized logging path with MLDB/MongoDB backends and reconnection boundaries. See message_logger.hpp.
+- Message Logger is a separate centralized logging path with MLDB/MongoDB backends and reconnection boundaries. See server/tools/message_logger/logger.hpp.
 
 The most important boundary is that Watcher can both observe and control, so
 it must be analyzed as a management-plane attack surface. Message Logger

@@ -114,16 +114,22 @@ reliability types and allows reliable and unreliable messages to be mixed in the
 same Bundle. This is the key to MMO state synchronisation: a position update may
 be dropped, but entity creation must be reliable.
 
-**Source entry:** bundle.hpp:27
+**Source entry:** bundle.hpp:34
 
 ```cpp
-// bundle.hpp:27 - reliability type definitions
-enum ReliableType
+// bundle.hpp:34 - reliability type definitions
+enum ReliableTypeEnum
 {
-    RELIABLE_NO,        // unreliable message
-    RELIABLE_DRIVER,    // driving reliable packet
-    RELIABLE_PASSENGER, // piggyback reliable message
-    RELIABLE_CRITICAL   // critical reliable message
+    RELIABLE_NO = 0,        // unreliable message
+    RELIABLE_DRIVER = 1,    // driving reliable packet
+    RELIABLE_PASSENGER = 2, // piggyback reliable message
+    RELIABLE_CRITICAL = 3   // critical reliable message
+};
+
+// bundle.hpp:46 - wrapped by a small class for type safety
+class ReliableType
+{
+    // ...
 };
 ```
 
@@ -199,22 +205,17 @@ model. It is a window mechanism similar to TCP's, optimised for a game protocol.
 **Source entry:** udp_channel.hpp:383
 
 ```cpp
-// udp_channel.hpp:383 - send window state
+// udp_channel.hpp - send window state
 class UDPChannel
 {
 private:
     // send window state
-    SeqNum smallOutSeqAt_;      // next sequence number to send (without overflow)
-    SeqNum largeOutSeqAt_;      // next sequence number to send (with overflow)
-    SeqNum oldestUnackedSeq_;   // oldest unacknowledged packet
-    UnackedPackets unackedPackets_;  // set of unacknowledged packets
-    int windowSize_;            // current window size
-    int maxWindowSize_;         // maximum window size
-
-    // resend related
-    int roundTripTime_;         // RTT estimate
-    int resendTimeout_;         // resend timeout
-    int lastSendTime_;          // last send time
+    uint32 windowSize_;                 // current window size (udp_channel.hpp:383)
+    SeqNum smallOutSeqAt_;              // next sequence number to send (without overflow, :386)
+    SeqNumAllocator largeOutSeqAt_;     // next sequence number to send (with overflow, :389)
+    SeqNum oldestUnackedSeq_;           // oldest unacknowledged packet (:393)
+    uint64 roundTripTime_;              // RTT estimate (udp_channel.hpp:403)
+    CircularArray< UnackedPacket * > unackedPackets_; // set of unacknowledged packets (:415)
 };
 ```
 
@@ -257,55 +258,46 @@ stateDiagram-v2
    reliable messages.
 
 3. **Window size**: `windowSize_` adjusts dynamically with network conditions and
-   ACK speed. `maxWindowSize_` is the ceiling.
+   ACK speed.
 
-4. **Resend mechanism**: if a packet has not been acknowledged within
-   `resendTimeout_`, resend is triggered. The resend timeout is based on the RTT
-   estimate.
+4. **Resend mechanism**: if a packet has not been acknowledged within the resend
+   timeout, resend is triggered. The resend timeout is based on the RTT estimate.
 
 5. **RTT estimation**: `roundTripTime_` is estimated from ACK time differences,
    and is used to adjust the resend timeout and the window size.
 
 ### Send Flow
 
-**Source entry:** udp_channel.cpp:1513
+**Source entry:** udp_channel.cpp:798
 
 ```cpp
-// udp_channel.cpp:1513 - send a Bundle
-void UDPChannel::send( Bundle * pBundle )
+// udp_channel.cpp:798 - send everything that is pending if the channel is idle
+void UDPChannel::sendIfIdle()
 {
-    UDPBundle * pUDPBundle = static_cast<UDPBundle *>(pBundle);
+    // 1. If the channel is busy, defer sending until the next tick
+    // 2. Otherwise drain the outgoing queue: for each pending packet, allocate a
+    //    sequence number, record it in the set of unacknowledged packets, write
+    //    the packet header/footer and send it.
+}
 
-    // 1. Check whether the window has room
-    if (this->windowSize() >= this->maxWindowSize())
-    {
-        // window full, wait for ACK
-        return;
-    }
-
-    // 2. Allocate a sequence number
-    SeqNum seq = largeOutSeqAt_++;
-
-    // 3. Record it in the set of unacknowledged packets
-    unackedPackets_.add( seq, pUDPBundle );
-
-    // 4. Write the packet header
-    this->writeFlags( pUDPBundle );
-    this->writeFooter( pUDPBundle );
-
-    // 5. Send
-    pUDPBundle->send();
+// udp_channel.cpp:1187 - resend a single unacknowledged packet
+void UDPChannel::sendUnacked( UnackedPacket & unacked )
+{
+    // 1. Look up the packet by sequence number
+    // 2. If it is still pending (not yet acknowledged), re-write its header and
+    //    resend it on the wire.
 }
 ```
 
 **Key details:**
 
-- When the window is full, new messages queue and wait; they are not dropped
+- The real send path is `sendIfIdle()` (udp_channel.cpp:798), which drains the
+  outgoing queue when the channel is idle; there is no `send( Bundle * )`.
+- Unacknowledged packets are resent by `sendUnacked( UnackedPacket & )`
+  (udp_channel.cpp:1187).
 - Sequence numbers increase monotonically, so the receiver can detect
-  out-of-order and duplicate packets
-- The set of unacknowledged packets supports fast lookup and resend
-- The packet header carries ACK information, used to acknowledge packets sent
-  earlier
+  out-of-order and duplicate packets.
+- The set of unacknowledged packets supports fast lookup and resend.
 
 ## Receive Window
 
@@ -316,56 +308,46 @@ is allowed, but delivery ends up in order.
 **Source entry:** udp_channel.cpp:1208
 
 ```cpp
-// udp_channel.cpp:1208 - add to the receive window
+// udp_channel.cpp:1208 - add a received packet to the receive window
 UDPChannel::AddToReceiveWindowResult UDPChannel::addToReceiveWindow(
-    SeqNum seq, Packet * pPacket, bool isReliable )
+    Packet * p, const Address & srcAddr, PacketReceiverStats & stats )
 {
-    // 1. Check that the sequence number is in the valid range
+    // 1. Check the source address
+    if (!this->checkSourceAddress( srcAddr ))
+    {
+        return PACKET_IS_CORRUPT;
+    }
+
+    // 2. Check that the packet's sequence number is in the valid range
+    SeqNum seq = p->seq();
     if (seq >= inSeqAt_ + windowSize_ || seq < oldestUnackedSeq_)
     {
-        return ADD_TO_RECEIVE_WINDOW_RESULT_OUT_OF_WINDOW;
+        return PACKET_IS_OUT_OF_WINDOW;
     }
 
-    // 2. Check the source address
-    if (!this->checkSourceAddress( pPacket ))
-    {
-        return ADD_TO_RECEIVE_WINDOW_RESULT_CORRUPT;
-    }
-
-    // 3. For non-piggyback packets, enqueue an ACK
-    if (!pPacket->isPiggyback())
-    {
-        acksToSend_.push_back( seq );
-    }
-
-    // 4. Check whether this is the next expected packet
+    // 3. Check whether this is the next expected packet
     if (seq == inSeqAt_)
     {
-        // advance the receive window
+        // advance the receive window and chain buffered out-of-order packets
         inSeqAt_++;
-
-        // check whether buffered out-of-order packets can be chained
-        while (bufferedReceives_.contains( inSeqAt_ ))
-        {
-            pPacket = bufferedReceives_.get( inSeqAt_ );
-            this->processPacket( pPacket );
-            inSeqAt_++;
-        }
-
-        return ADD_TO_RECEIVE_WINDOW_RESULT_NEXT;
+        return PACKET_IS_NEXT_IN_WINDOW;
     }
 
-    // 5. Check whether this is a duplicate packet
+    // 4. Check whether this is a duplicate packet
     if (seq < inSeqAt_)
     {
-        return ADD_TO_RECEIVE_WINDOW_RESULT_DUPLICATE;
+        return PACKET_IS_DUPLICATE;
     }
 
-    // 6. Out-of-order packet, buffer it in the receive window
-    bufferedReceives_.add( seq, pPacket );
-    return ADD_TO_RECEIVE_WINDOW_RESULT_BUFFERED;
+    // 5. Out-of-order packet, buffer it in the receive window
+    bufferedReceives_.add( seq, p );
+    return PACKET_IS_BUFFERED_IN_WINDOW;
 }
 ```
+
+The result type is the `AddToReceiveWindowResult` enum (udp_channel.hpp:161-168),
+whose values are `PACKET_IS_NEXT_IN_WINDOW`, `PACKET_IS_BUFFERED_IN_WINDOW`,
+`PACKET_IS_DUPLICATE`, `PACKET_IS_OUT_OF_WINDOW` and `PACKET_IS_CORRUPT`.
 
 **Flowchart:**
 

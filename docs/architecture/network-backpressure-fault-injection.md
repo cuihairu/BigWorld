@@ -1,7 +1,5 @@
 # Network Backpressure and Fault Injection
 
-> **English** | [中文](network-backpressure-fault-injection.md)
-
 <div class="arch-hero">
 
 BigWorld's network layer is not merely epoll plus UDP. Server stability depends
@@ -25,7 +23,7 @@ The network layer already has several mechanisms that protect the main loop:
 Key source code:
 
 - Receive budget: packet_receiver.cpp.
-- `maxSocketProcessingTime()` watcher: packet_receiver.cpp.
+- `maxSocketProcessingTimeStamps` watcher: packet_receiver.cpp.
 - `BWMessageForwarder` processing-budget configuration: bw_message_forwarder.cpp.
 - Artificial loss/latency: packet_sender.cpp.
 - Full-send-queue wait: packet_sender.cpp.
@@ -34,47 +32,54 @@ Key source code:
 
 ## Receive-Side Backpressure
 
-**Summary**: `PacketReceiver::handleInputNotification()` repeatedly calls
+**Summary**: `PacketReceiver::handleInputNotification( int fd )` repeatedly calls
 `processSocket()` after a readable-socket notification, but only within a time
 budget. This is not kernel backpressure; it protects main-thread fairness and
 prevents one UDP burst from starving timers, frequent tasks, scripts, and other
 messages.
 
-**Source entry**: packet_receiver.cpp:83
+**Source entry**: packet_receiver.cpp:94
 
 ```cpp
-// packet_receiver.cpp:83 - receive budget
-void PacketReceiver::handleInputNotification()
+// packet_receiver.cpp:94 - receive budget
+int PacketReceiver::handleInputNotification( int fd )
 {
-    // 1. Record the start time
-    uint64 startTime = timestamp();
+    uint64 processingStartStamps = timestamp();
 
-    // 2. Drain packets from the socket
-    while (true)
+    int numPacketsProcessed = 0;
+
+    bool expectingPacket = true; // only true for first call to processSocket()
+    bool shouldProcess = true;
+
+    while (shouldProcess)
     {
-        // 3. Process one packet
-        if (!this->processSocket())
-        {
-            break;
-        }
+        Address sourceAddress;
+        shouldProcess = this->processSocket( sourceAddress, expectingPacket );
+        expectingPacket = false;
 
-        // 4. Measure elapsed time
-        uint64 elapsed = timestamp() - startTime;
+        uint64 processingElapsedStamps =
+            timestamp() - processingStartStamps;
 
-        // 5. Stop when over budget
-        if (elapsed > maxSocketProcessingTimeStamps_)
+        ++numPacketsProcessed;
+
+        if (shouldProcess &&
+                (maxSocketProcessingTimeStamps_ != 0) &&
+                (processingElapsedStamps > maxSocketProcessingTimeStamps_))
         {
             WARNING_MSG( "PacketReceiver::handleInputNotification: "
-                "Spent too long processing socket (%.2fms), "
-                "source=%s, processed=%d packets, "
-                "remaining in queue=%d\n",
-                float(elapsed) / 1000.0f,
-                lastSourceAddr_.ipAsString(),
-                numPacketsProcessed_,
-                receiveQueueSize() );
-            break;
+                    "last received from %s, "
+                    "stopping socket processing after %.03fms "
+                    "(processed %d packets), receive queue at %d bytes",
+                sourceAddress.c_str(),
+                processingElapsedStamps * 1000.f / stampsPerSecondD(),
+                numPacketsProcessed,
+                networkInterface_.socket().receiveQueueSize() );
+
+            shouldProcess = false;
         }
     }
+
+    return 0;
 }
 ```
 
@@ -112,10 +117,10 @@ Detailed interpretation:
 // bw_message_forwarder.cpp:47 - socket-processing budget
 void BWMessageForwarder::init( NetworkInterface & networkInterface )
 {
-    // 1. Read configuration
-    float maxInternalSocketProcessingTime = 
-        Config::maxInternalSocketProcessingTime();
-    float gameUpdateHertz = Config::gameUpdateHertz();
+    // 1. Read configuration via BWConfig
+    float maxInternalSocketProcessingTime =
+        BWConfig::get< float >( "maxInternalSocketProcessingTime", true );
+    int gameUpdateHertz = BWConfig::get< int >( "gameUpdateHertz", true );
 
     // 2. Use the tick-derived default when the configured value is negative
     if (maxInternalSocketProcessingTime < 0)
@@ -124,7 +129,7 @@ void BWMessageForwarder::init( NetworkInterface & networkInterface )
     }
 
     // 3. Install it on the NetworkInterface
-    networkInterface.maxSocketProcessingTime( 
+    networkInterface.maxSocketProcessingTime(
         maxInternalSocketProcessingTime );
 }
 ```

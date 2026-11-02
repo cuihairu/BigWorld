@@ -45,37 +45,47 @@ BigWorld 的动态扩展可以分成三层：
 
 **概述：** 新 CellApp 启动后，需要向 CellAppMgr 注册。CellAppMgr 检查前置条件（BaseApp、DBApp 已知），如果满足，分配 ID、同步数据、接纳新 CellApp。
 
-**源码入口：** cellappmgr.cpp:1245
+**源码入口：** cellappmgr.cpp:1255
 
 ```cpp
-// cellappmgr.cpp:1245 - CellAppMgr 接纳新 CellApp
-bool CellAppMgr::addApp( const Mercury::Address & addr,
+// cellappmgr.cpp:1255 - CellAppMgr 接纳新 CellApp
+void CellAppMgr::addApp( const Mercury::Address & srcAddr,
     const Mercury::UnpackedMessageHeader & header,
     BinaryIStream & data )
 {
+    Mercury::Address addr;
+    uint16 viewerPort;
+    data >> addr >> viewerPort;
+
     // 1. 检查前置条件
-    if (baseAppAddr_.isNone())
+    if (baseAppAddr_ == Mercury::Address::NONE)
     {
-        ERROR_MSG( "CellAppMgr::addApp: No BaseApp known yet\n" );
-        return false;
+        PROC_IP_INFO_MSG( "CellAppMgr::addApp: "
+            "Not adding CellApp at %s because we don't have a BaseApp yet\n",
+            srcAddr.c_str() );
+        return;
     }
     
-    if (dbAlphaAddr_.isNone())
+    if (dbAppAlpha_.addr() == Mercury::Address::NONE)
     {
-        ERROR_MSG( "CellAppMgr::addApp: No DBApp Alpha known yet\n" );
-        return false;
+        PROC_IP_INFO_MSG( "CellAppMgr::addApp: "
+            "Not adding CellApp at %s because we don't have a DBApp yet\n",
+            srcAddr.c_str() );
+        return;
     }
     
     if (!allowNewCellApps_)
     {
-        ERROR_MSG( "CellAppMgr::addApp: New cell apps not allowed\n" );
-        return false;
+        PROC_IP_WARNING_MSG( "CellAppMgr::addApp: "
+            "Denying %s since in middle of update\n", addr.c_str() );
+        return;
     }
     
-    if (isRecovery_)
+    if (this->isRecovering())
     {
-        ERROR_MSG( "CellAppMgr::addApp: Currently in recovery\n" );
-        return false;
+        PROC_IP_WARNING_MSG( "CellAppMgr::addApp: "
+            "Denying %s since in middle recovery.\n", addr.c_str() );
+        return;
     }
     
     // 2. 分配 ID 和初始化数据
@@ -83,25 +93,24 @@ bool CellAppMgr::addApp( const Mercury::Address & addr,
     initData.id = ++lastCellAppID_;
     initData.time = this->time();
     initData.baseAppAddr = baseAppAddr_;
-    initData.dbAlphaAddr = dbAlphaAddr_;
-    initData.isReady = true;
-    initData.timeoutPeriod = Config::timeoutPeriod();
+    initData.dbAppAlphaAddr = dbAppAlpha_.addr();
+    initData.isReady = hasStarted_;
+    initData.timeoutPeriod = Config::cellAppTimeout();
     
     // 3. 添加到 CellApp 集合
-    CellApp * pApp = new CellApp( addr, initData.id );
-    cellApps_.add( pApp );
+    CellApp * pApp = cellApps_.add( addr, viewerPort, initData.id );
     
     // 4. 放入 pending 列表
     pendingApps_.push_back( pApp );
     
     // 5. 回复初始化数据
-    header.reply( initData );
+    Mercury::Bundle & bundle = pApp->bundle();
+    bundle.startReply( header.replyID );
+    bundle << initData;
     
-    // 6. 下发共享数据
-    this->sendSharedData( addr );
-    this->sendGlobalData( addr );
-    
-    return true;
+    // 6. 共享数据在 addApp() 内联下发（不存在
+    //    sendSharedData()/sendGlobalData()）：sharedCellAppData_ (:1355)、
+    //    sharedGlobalData_ (:1368)
 }
 ```
 
@@ -124,8 +133,8 @@ sequenceDiagram
         CellAppMgr->>CellAppMgr: cellApps_.add()
         CellAppMgr->>CellAppMgr: pendingApps_.push_back()
         CellAppMgr->>CellApp: reply CellAppInitData
-        CellAppMgr->>CellApp: sendSharedData()
-        CellAppMgr->>CellApp: sendGlobalData()
+        CellAppMgr->>CellApp: 内联下发共享数据
+        CellAppMgr->>CellApp: 内联下发全局数据
     end
 </MermaidDiagram>
 
@@ -135,7 +144,7 @@ sequenceDiagram
    - `baseAppAddr_.isNone()`：必须知道 BaseApp 地址，否则无法创建 Base Entity
    - `dbAlphaAddr_.isNone()`：必须知道 DBApp Alpha，否则无法持久化
    - `allowNewCellApps_`：运行时开关，可以禁止新 CellApp 加入
-   - `isRecovery_`：正在恢复时不允许新 CellApp，避免状态冲突
+   - `isRecovering()`：正在恢复时不允许新 CellApp，避免状态冲突
 
 2. **ID 分配**：`lastCellAppID_` 单调递增，每个 CellApp 有唯一 ID，用于消息路由和状态管理。
 
@@ -147,32 +156,37 @@ sequenceDiagram
 
 4. **pending 列表**：新 CellApp 先加入 `pendingApps_`，等待 ready 后才真正参与负载均衡。
 
-5. **共享数据下发**：`sendSharedData()` 和 `sendGlobalData()` 同步全局配置，确保所有 CellApp 有一致的配置。
+5. **共享数据下发**：共享 cell/全局数据在 `addApp()` 回复 bundle 内联下发（`sharedCellAppData_`、`sharedGlobalData_`），同步全局配置，确保所有 CellApp 有一致的配置。
 
 ### CellAppMgr 初始化流程
 
-**源码入口：** cellappmgr.cpp:190
+**源码入口：** cellappmgr.cpp:165
 
 ```cpp
-// cellappmgr.cpp:190 - CellAppMgr 初始化
-bool CellAppMgr::init( bool isReload )
+// cellappmgr.cpp:165 - CellAppMgr 初始化
+bool CellAppMgr::init( int argc, char * argv[] )
 {
     // ... 其他初始化 ...
     
-    // 注册负载均衡 timer
-    mainDispatcher_.addTimer( Config::loadBalancePeriod() * 1000000,
-        this, (void*)LOAD_BALANCE_TIMER, "LoadBalance" );
+    // 注册负载均衡 timer (:200)
+    loadBalanceTimer_ = this->mainDispatcher().addTimer(
+        int( Config::loadBalancePeriod() * 1000000.0 ),
+        this, (void*)TIMEOUT_LOAD_BALANCE, "LoadBalance" );
     
-    // 注册 meta 负载均衡 timer
-    mainDispatcher_.addTimer( Config::metaLoadBalancePeriod() * 1000000,
-        this, (void*)META_LOAD_BALANCE_TIMER, "MetaLoadBalance" );
+    // 注册 meta 负载均衡 timer (:206)
+    if (Config::metaLoadBalancePeriod() > 0.0)
+    {
+        metaLoadBalanceTimer_ = this->mainDispatcher().addTimer(
+            int( Config::metaLoadBalancePeriod() * 1000000.0 ),
+            this, (void*)TIMEOUT_META_LOAD_BALANCE, "MetaLoadBalance" );
+    }
     
-    // 注册过载检查 timer
-    mainDispatcher_.addTimer( Config::overloadCheckPeriod() * 1000000,
-        this, (void*)OVERLOAD_CHECK_TIMER, "OverloadCheck" );
+    // 注册过载检查 timer (:214)，周期硬编码 1000000
+    overloadCheckTimer_ = this->mainDispatcher().addTimer(
+        1000000, this, (void*)TIMEOUT_OVERLOAD_CHECK, "OverloadCheck" );
     
-    // 创建 TimeKeeper
-    pTimeKeeper_ = new TimeKeeper( this, this->time() );
+    // TimeKeeper 稍后在 startTimer() (:1791) 中创建
+    //   pTimeKeeper_ = new TimeKeeper( interface_, gameTimer_, time_, ... );
     
     return true;
 }
@@ -287,7 +301,7 @@ flowchart TD
 
 CellAppMgr 通过 Channel 断开检测到 CellApp 死亡，调用 handleCellAppDeath()：
 
-源码入口：cellappmgr.cpp:1806
+源码入口：cellappmgr.cpp:1816
 
 调用链：
 
@@ -343,7 +357,7 @@ CellAppMgr 通过 Channel 断开检测到 CellApp 死亡，调用 handleCellAppD
 
 BaseApp 收到通知后，遍历所有 Base Entity，调用 restoreTo() 恢复 Cell Entity：
 
-源码入口：baseapp.cpp:1942
+源码入口：baseapp.cpp:1960
 
 调用链：
 
@@ -391,7 +405,7 @@ BaseApp 收到通知后，遍历所有 Base Entity，调用 restoreTo() 恢复 C
 - 实体处于 offload 中间态
 - 协议版本不兼容
 
-源码见 base.cpp:3810。
+源码见 base.cpp:3819。
 
 ## 故障恢复边界
 

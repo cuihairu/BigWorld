@@ -1,7 +1,5 @@
 # Research Method and Evidence Grading
 
-> **English** | [中文](research-method.md)
-
 <div class="arch-hero">
 
 This chapter defines the research method. The BigWorld repository lacks a
@@ -92,9 +90,9 @@ directory of “what BaseApp is” and “what CellApp is.”
 | Conclusion | Source evidence | Confidence |
 |------|----------|--------|
 | BigWorld uses level-triggered epoll | `event_poller.cpp:1079`, comment “TODO: Could be good to use EPOLLET” | 100% |
-| GameTick defaults to 10 Hz | `baseapp.cpp:2020`, `1000000/Config::updateHertz()` | 100% |
-| Mercury supports four reliability types | `bundle.hpp:27`, `RELIABLE_NO/DRIVER/PASSENGER/CRITICAL` | 100% |
-| Entities have real and ghost states | `entity.hpp:89`, comment “each entity only has one authoritative real” | 100% |
+| GameTick defaults to 10 Hz | `baseapp.cpp:2038`, `1000000/Config::updateHertz()` | 100% |
+| Mercury supports four reliability types | `bundle.hpp:36`, `RELIABLE_NO/DRIVER/PASSENGER/CRITICAL` | 100% |
+| Entities have real and ghost states | `entity.hpp:95`, comment “each entity only has one authoritative real” | 100% |
 
 **Verification method**: read the source directly and locate the corresponding lines.
 
@@ -107,7 +105,7 @@ directory of “what BaseApp is” and “what CellApp is.”
 | Conclusion | Inference basis | Confidence |
 |------|----------|--------|
 | io_uring was not among the original design options | CentOS 7 kernels do not support it and the code has no reference | 95% |
-| Script execution is bounded by the global interpreter lock | The code manages thread state with `PyEval_InitThreads()`, `PyEval_SaveThread()`, and `PyEval_RestoreThread()` | 95% |
+| Script execution is bounded by the global interpreter lock | The code manages thread state with `PyEval_SaveThread()` and `PyEval_RestoreThread()` | 95% |
 | The commercial release may contain more optimization | The open-source tree lacks `control_cluster.py` and its documentation has drifted | 80% |
 | The design era is approximately 2005–2010 | CentOS 5/6 is used and Python 2.4 compatibility was probed | 90% |
 
@@ -177,7 +175,7 @@ conclusion -> source file -> line -> function -> call chain
 
 **Example**:
 - Conclusion: BigWorld uses a single Reactor main thread
-- Source: `event_dispatcher.cpp:428`, `processOnce()`
+- Source: `event_dispatcher.cpp:477`, `processOnce()`
 - Call chain: FrequentTasks -> Timers -> Stats -> Network
 - Verification: check whether a thread pool or parallel task scheduler exists
 

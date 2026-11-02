@@ -1,7 +1,5 @@
 # 登录、会话与 Proxy 接管
 
-](/> [English)) | **中文**
-
 <div class="arch-hero">
 
 BigWorld 的登录链路不是“验证账号然后直接进游戏”。它是 LoginApp、DBApp、BaseAppMgr、BaseApp、Proxy、客户端二次握手共同完成的会话接管流程。这个流程同时体现了安全、限流、RPC、实体创建、NAT、SessionKey 和 Channel 绑定。
@@ -62,107 +60,112 @@ sequenceDiagram
 
 **概述：** `LoginApp::login()` 在读取业务参数前已经做了多重检查。这不是简单认证函数，而是公网入口防线。每一步检查都有明确的安全或限流目的。
 
-**源码入口：** loginapp.cpp:700
+**源码入口：** loginapp.cpp:705
 
 ```cpp
-// loginapp.cpp:700 - LoginApp 登录检查
-bool LoginApp::login( const Mercury::Address & srcAddr,
-    const Mercury::UnpackedMessageHeader & header,
+// loginapp.cpp:705 - LoginApp 登录检查
+void LoginApp::login( const Mercury::Address & source,
+    Mercury::UnpackedMessageHeader & header,
     BinaryIStream & data )
 {
-    // 1. 检查是否允许登录
-    if (!this->allowLogin())
+    // 1. 重置新时间窗口的限流配额 (:712)
+    if (Config::rateLimitEnabled() && (currTimestamp >
+        lastRateLimitCheckTime_ + Config::rateLimitDurationInStamps()))
     {
-        ERROR_MSG( "LoginApp::login: Login not allowed\n" );
-        return false;
+        numAllowedLoginsLeft_ = Config::loginRateLimit();
     }
-    
-    // 2. 检查 IP 是否被封禁
-    if (bannedIPs_.contains( srcAddr.ip ))
+
+    // 2. 检查是否允许登录 (:721)
+    if (!Config::allowLogin())
     {
-        ERROR_MSG( "LoginApp::login: IP %s is banned\n", 
-            srcAddr.ipAsString() );
-        return false;
+        this->handleFailure( source, pChannel, header.replyID,
+            LogOnStatus::LOGIN_REJECTED_LOGINS_NOT_ALLOWED );
+        return;
     }
-    
-    // 3. 检查源地址是否为空（防 spoofed empty address）
-    if (srcAddr.isNone())
+
+    // 3. 检查源 IP 当前是否被封禁 (:737)
+    if (ipAddressBanMap_.find( source.ip ) != ipAddressBanMap_.end())
     {
-        ERROR_MSG( "LoginApp::login: Empty source address\n" );
-        return false;
+        this->handleFailure( source, pChannel, header.replyID,
+            LogOnStatus::LOGIN_REJECTED_IP_ADDRESS_BAN );
+        return;
     }
-    
-    // 4. 检查协议版本
-    if (!this->isClientAllowed( header ))
+
+    // 4. 防 spoofed empty source address (:778)
+    if (!source.ip)
     {
-        ERROR_MSG( "LoginApp::login: Client version not allowed\n" );
-        return false;
+        return;
     }
-    
-    // 5. 检查是否为重复 pending attempt
-    if (pendingAttempts_.contains( srcAddr ))
+
+    // 5. 检测重复 pending 登录尝试 (:790, :837)
+    bool isReattempt = (loginRequests_.count( source ) != 0);
+    if (this->handleResentPendingAttempt( source, header.replyID ))
     {
-        ERROR_MSG( "LoginApp::login: Duplicate attempt from %s\n",
-            srcAddr.ipAsString() );
-        return false;
+        return;
     }
-    
-    // 6. 检查 rate limit
-    if (rateLimit_.isLimited())
+
+    // 6. 限流：本窗口配额是否耗尽? (:845)
+    if (Config::rateLimitEnabled() && (numAllowedLoginsLeft_ == 0))
     {
-        ERROR_MSG( "LoginApp::login: Rate limited\n" );
-        return false;
+        this->handleFailure( source, pChannel, header.replyID,
+            LogOnStatus::LOGIN_REJECTED_RATE_LIMITED );
+        return;
     }
-    
-    // 7. 检查 DBApp 是否 ready
-    if (!dbApp_.isReady())
+
+    // 7. 检查数据库是否就绪 (:862)
+    if (!this->isDBReady())
     {
-        ERROR_MSG( "LoginApp::login: DBApp not ready\n" );
-        return false;
+        this->handleFailure( source, pChannel, header.replyID,
+            LogOnStatus::LOGIN_REJECTED_DB_NOT_READY );
+        return;
     }
-    
-    // 8. 检查系统是否过载
-    if (overloadCache_.isOverloaded())
+
+    // 8. 检查系统是否过载 (:875)
+    if (systemOverloaded_ != 0)
     {
-        ERROR_MSG( "LoginApp::login: System overloaded\n" );
-        return false;
+        this->handleFailure( source, pChannel, header.replyID,
+            systemOverloaded_ );
+        return;
     }
-    
-    // 9. 检查是否需要 login challenge
-    if (challengeRequired_ && !this->hasChallenge( srcAddr ))
+
+    // 9. 如需则往返 login challenge (:896)
+    if (this->processForLoginChallenge( source, pChannel,
+        header.replyID, data ))
     {
-        // 发送 challenge 请求
-        this->sendChallenge( srcAddr );
-        return true;
+        return;
     }
-    
-    // 10. 读取并解密登录参数
-    LogOnParams params;
-    if (!params.read( data, maxLoginMessageSize() ))
+
+    // 10. 读取并解密登录参数 (:903, :921)
+    LogOnParamsPtr pParams = new LogOnParams();
+    // ... pParams->readFromStream( attempt, pEncoder )，当
+    //     Config::allowUnencryptedLogins() 时去掉 encoder 重试 (:951)
+
+    // 11. 检查用户名/密码长度 (:930)
+    if ((pParams->username().length() > Config::maxUsernameLength()) ||
+        (pParams->password().length() > Config::maxPasswordLength()))
     {
-        ERROR_MSG( "LoginApp::login: Failed to read params\n" );
-        return false;
+        this->handleFailure( source, pChannel, header.replyID,
+            LogOnStatus::LOGIN_MALFORMED_REQUEST );
+        return;
     }
-    
-    // 11. 检查用户名/密码长度
-    if (params.username().length() > maxUsernameLength() ||
-        params.password().length() > maxPasswordLength())
+
+    // 12. 扣减限流配额 (:981)
+    if (Config::rateLimitEnabled())
     {
-        ERROR_MSG( "LoginApp::login: Username/password too long\n" );
-        return false;
+        --numAllowedLoginsLeft_;
     }
-    
-    // 12. 检查加密要求
-    if (!allowUnencryptedLogins_ && !params.isEncrypted())
+
+    // 13. 禁止未加密登录时要求加密密钥 (:989)
+    if (pParams->encryptionKey().empty() && !Config::allowUnencryptedLogins())
     {
-        ERROR_MSG( "LoginApp::login: Unencrypted login not allowed\n" );
-        return false;
+        this->handleFailure( source, pChannel, header.replyID,
+            LogOnStatus::LOGIN_MALFORMED_REQUEST );
+        return;
     }
-    
-    // 13. 向 DBApp 发起登录请求
-    this->sendDBAppLogOn( srcAddr, params );
-    
-    return true;
+
+    // 14. 向 DBApp 发起登录请求 (:1023-:1037)
+    this->dbAppAlpha().bundle().startRequest(
+        DBAppInterface::logOn, new DatabaseReplyHandler( ... ) );
 }
 ```
 
@@ -203,7 +206,7 @@ flowchart TD
 
 1. **allowLogin()**：全局开关，可以禁止所有登录（如维护模式）
 
-2. **IP 封禁**：`bannedIPs_` 存储被封禁的 IP 地址，支持动态添加
+2. **IP 封禁**：`ipAddressBanMap_` 把被封禁 IP 映射到封禁到期时间戳，支持动态添加
 
 3. **源地址检查**：防止 spoofed empty address 攻击
 
@@ -378,12 +381,12 @@ pLoginHandler_->login( extInterface_, srcAddr, header, args );
 
 DBApp 验证并分配 BaseApp 的完整调用链：
 
-源码入口：baseappmgr.cpp:947
+源码入口：baseappmgr.cpp:933-994
 
 <div class="flow-strip">
   <span class="flow-node">DBApp 验证账号</span>
   <span class="flow-arrow">-></span>
-  <span class="flow-node">BaseAppMgr::allocateBaseApp()</span>
+  <span class="flow-node">BaseAppMgr::createEntity()</span>
   <span class="flow-arrow">-></span>
   <span class="flow-node">选择负载最低的 BaseApp</span>
   <span class="flow-arrow">-></span>
@@ -398,7 +401,7 @@ DBApp 验证并分配 BaseApp 的完整调用链：
 
 客户端向 BaseApp 完成二次握手的完整调用链：
 
-源码入口：baseapp.cpp:2985
+源码入口：baseapp.cpp:3008
 
 <div class="flow-strip">
   <span class="flow-node">BaseApp::baseAppLogin()</span>

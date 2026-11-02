@@ -1,7 +1,5 @@
 # MMO 架构边界对比
 
-](/> [English)) | **中文**
-
 <div class="arch-hero">
 
 本章不是给 BigWorld 套外部架构模板，而是把前面源码分析过的边界集中对照：哪些能力属于 BigWorld 的核心 MMO 语义，哪些只是资源层、工具层或外围工程问题。
@@ -27,8 +25,8 @@ BigWorld 的网络模型不是”一玩家一 TCP 连接”的普通服务端模
 
 - UDP socket 数量少，`UDPChannel` 是逻辑连接。源码见 udp_channel.hpp:57。
 - `EventPoller` 只分发 readiness，handler 仍在主 Reactor 同步执行。源码见 event_poller.cpp:1115。
-- `PacketReceiver::maxSocketProcessingTime` 保护单次 socket 处理预算。源码见 packet_receiver.cpp:83。
-- 可靠性由 Channel、Bundle、ACK、重发和 piggyback 共同表达。源码见 bundle.hpp:27。
+- `PacketReceiver::maxSocketProcessingTime` 保护单次 socket 处理预算。源码见 packet_receiver.hpp:58。
+- 可靠性由 Channel、Bundle、ACK、重发和 piggyback 共同表达。源码见 bundle.hpp:34。
 - Channel version 参与实体迁移和组件恢复，不能只看包收发。源码见 udp_channel.hpp:383。
 
 因此网络 I/O 后端只是边界之一。真正的正确性还依赖 Mercury 可靠层、实体消息顺序、request/reply 超时和主线程 handler 预算。
@@ -50,7 +48,7 @@ Base/Cell/Client 不是简单分层对象，而是权威域：
 
 - Base 保存长期身份、Proxy、DBID、Cell mailbox 和持久化协调权。源码见 base.hpp:58。
 - Cell 保存空间权威、real/ghost、AOI、物理、位置和 offload 状态。源码见 entity.hpp:89。
-- Client 只接收 Witness 筛选后的实体投影。源码见 entity.cpp:2475。
+- Client 只接收 Witness 筛选后的实体投影。源码见 entity.cpp:2485。
 - DB 只保存 EntityDef persistent 视图和引擎运行时元数据。源码见 idatabase.hpp。
 
 这解释了为什么调试一个实体问题经常要串 BaseApp、CellApp、DBApp、Proxy、Witness、Mailbox、Channel 和客户端日志。
@@ -86,7 +84,7 @@ BigWorld 的可观测性不是单纯日志：
 - ForwardingWatcher 会把 watcher command 转发到进程集合。源码见 watcher_nub.cpp。
 - Profiler 和 DogWatch 记录进程内耗时。源码见 profiler.hpp。
 - EntityProfiler 参与实体负载分析。源码见 entity_profiler.hpp。
-- Message Logger 是独立集中日志链路，有 MLDB/MongoDB 后端和重连边界。源码见 message_logger.hpp。
+- Message Logger 是独立集中日志链路，有 MLDB/MongoDB 后端和重连边界。源码见 server/tools/message_logger/logger.hpp。
 
 这里最重要的边界是：Watcher 既能观测也能控制，必须按管理面攻击面分析；Message Logger 能集中查询，但不能被当成强可靠审计日志。
 

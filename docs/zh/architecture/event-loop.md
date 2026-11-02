@@ -1,7 +1,5 @@
 # 主循环、Tick 与事件分发
 
-](/> [English)) | **中文**
-
 <div class="arch-hero">
 
 BigWorld 每个主要服务进程不是“每个玩家一个线程”，而是以主 Reactor 线程驱动网络、定时器、统计和频繁任务。理解主循环顺序，是研究线程模型、网络公平性、Tick 抖动和热路径瓶颈的前提。
@@ -35,19 +33,21 @@ public:
     ~EventDispatcher();
 
     // 主循环入口
-    int processOnce( bool shouldIdle = true );
-    int processContinuously();
-    int processUntilBreak();
+    int processOnce( bool shouldIdle = false );
+    void processContinuously();
+    void processUntilBreak();
 
     // Timer 管理
-    int addTimer( int microseconds, TimerHandler * pHandler, 
-                  void * pUser, const char * name );
-    int addOnceOffTimer( int microseconds, TimerHandler * pHandler,
-                         void * pUser, const char * name );
+    TimerHandle addTimer( int64 microseconds, TimerHandler * pHandler,
+                          void * arg = NULL,
+                          const char * name = "UnnamedTimer" );
+    TimerHandle addOnceOffTimer( int64 microseconds, TimerHandler * pHandler,
+                                 void * arg = NULL,
+                                 const char * name = "UnnamedTimer" );
 
     // FrequentTask 管理
     void addFrequentTask( FrequentTask * pTask );
-    void delFrequentTask( FrequentTask * pTask );
+    bool cancelFrequentTask( FrequentTask * pTask );
 
 private:
     // 核心组件
@@ -60,9 +60,7 @@ private:
     bool breakProcessing_;
     
     // 统计
-    uint64 lastProcessTime_;
-    int numTimerCalls_;
-    int numFrequentTaskCalls_;
+    uint32 numTimerCalls_;
 };
 ```
 
@@ -168,13 +166,13 @@ flowchart TD
 
 **概述：** BigWorld 的游戏循环不是固定 sleep，而是通过 Timer 驱动。每个 App 有自己的 GameTick timer，到期后执行游戏逻辑。Timer 使用 `timestamp()` 驱动，不是 wall-clock。
 
-**源码入口：** event_dispatcher.cpp:264
+**源码入口：** event_dispatcher.cpp:290
 
 ```cpp
-// event_dispatcher.cpp:264 - 添加 Timer
-int EventDispatcher::addTimerCommon( int microseconds, 
-    TimerHandler * pHandler, void * pUser, const char * name,
-    bool isRepeating )
+// event_dispatcher.cpp:290 - 添加 Timer
+TimerHandle EventDispatcher::addTimerCommon( int64 microseconds, 
+    TimerHandler * pHandler, void * pUser, bool recurrent,
+    const char * name )
 {
     // 1. 微秒转换为 timestamp interval
     uint64 interval = uint64(microseconds) * 1000;
@@ -183,11 +181,11 @@ int EventDispatcher::addTimerCommon( int microseconds,
     uint64 startTime = timestamp() + interval;
     
     // 3. 插入 TimeQueue64
-    TimeQueue64::iterator iter = pTimeQueue_->add( startTime, 
+    TimerHandle handle = pTimeQueue_->add( startTime, 
         pHandler, pUser, interval );
     
-    // 4. 返回 timer ID
-    return iter->id();
+    // 4. 返回 timer 句柄
+    return handle;
 }
 ```
 
@@ -227,19 +225,19 @@ sequenceDiagram
 
 ### GameTick 启动
 
-**源码入口：** baseapp.cpp:2016
+**源码入口：** baseapp.cpp:2034-2041（成员 `gameTimer_`，baseapp.hpp:420）
 
 ```cpp
-// baseapp.cpp:2016 - BaseApp 启动 GameTick
-void BaseApp::onManagerRebirth( ... )
+// baseapp.cpp:2034 - BaseApp 启动 GameTick
+void BaseApp::startGameTickTimer()
 {
-    // ... 其他初始化 ...
-    
+    MF_ASSERT( !gameTimer_.isSet() );
+
     // 启动 GameTick timer，10Hz (100ms)
-    gameTimerHandle_ = mainDispatcher_.addTimer(
+    gameTimer_ = mainDispatcher_.addTimer(
         1000000 / Config::updateHertz(),  // 1000000 / 10 = 100000us = 100ms
         this,                              // TimerHandler
-        NULL,                              // pUser
+        reinterpret_cast< void * >( TIMEOUT_GAME_TICK ),
         "GameTick"                         // 名称
     );
 }

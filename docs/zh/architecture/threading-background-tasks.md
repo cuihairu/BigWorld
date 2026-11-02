@@ -1,7 +1,5 @@
 # 线程架构与后台任务
 
-](/> [English)) | **中文**
-
 <div class="arch-hero">
 
 BigWorld 服务端不是“每个玩家一个线程”，也不是把实体逻辑拆成全并行 job。源码呈现的是单 Reactor 主线程 + 后台任务池 + 少量专用线程。线程的主要职责是隔离阻塞 I/O、延迟任务和后台准备工作，而不是并发修改实体状态。
@@ -87,9 +85,9 @@ TaskManager::addBackgroundTask()
 
 这说明后台任务不是并发实体逻辑，而是“后台准备 + 主线程提交”的两阶段模型。
 
-## EntityApp 如何消费后台任务
+## 主线程如何消费后台任务
 
-`EntityApp::onTickProcessingComplete()` 会在 tick 收尾阶段处理后台任务的主线程回调，见 entity_app.cpp。
+`bgTaskManager_.tick()`（在 tick 收尾时由 `CellApp` 和 `BaseApp` 调用，cellapp.cpp:1001 / baseapp.cpp:1488）驱动前台消费：它会运行 `TaskManager::tick()`，执行每个待处理任务的 `doMainThreadTask()`（bgtask_manager.cpp:744, :762）。注意 `EntityApp::onTickProcessingComplete()`（entity_app.cpp:146）只调用 `ServerApp::onTickProcessingComplete()` 和 `callTimers()`，并不处理后台任务。
 
 这形成了一个重要节奏：
 
@@ -201,7 +199,7 @@ BigWorld 采用这种线程模型的源码取舍：
 | 后台任务在哪里创建 | `addBackgroundTask(` |
 | 后台任务在哪里回主线程 | `addMainThreadTask(` |
 | foreground task 由谁消费 | `TaskManager::tick()` |
-| 哪些 App 在 tick 中处理任务 | `onTickProcessingComplete`, `fileIOTaskManager_.tick()` |
+| 哪些 App 在 tick 中处理任务 | `bgTaskManager_.tick()`, `fileIOTaskManager_.tick()` |
 | DB 是否走后台任务 | `bgTaskManager_.addBackgroundTask`, `BufferedEntityTasks` |
 | 文件 I/O 是否走专用线程 | `FileIOTaskManager` |
 | 长任务是否支持取消 | `shouldAbortTask()` |

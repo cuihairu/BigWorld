@@ -1,7 +1,5 @@
 # Communication Abstractions and RPC
 
-> **English** | [中文](communication-rpc.md)
-
 <div class="arch-hero">
 
 Mercury's communication layer is not a gRPC-style IDL generation system. It is

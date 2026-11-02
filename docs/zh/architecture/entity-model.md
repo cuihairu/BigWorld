@@ -1,7 +1,5 @@
 # 实体模型：Base / Cell / Client
 
-](/> [English)) | **中文**
-
 <div class="arch-hero">
 
 BigWorld 的实体不是单对象模型，而是拆成 Base、Cell、Client 三个权威域。Base 承载会话、数据库和跨 Cell 协调；Cell 承载空间、位置、AOI、物理和 real/ghost；Client 只接收经过 Witness 和带宽调度过滤后的视图。
@@ -120,7 +118,7 @@ public:
 ### Entity 核心数据结构
 
 ```cpp
-// entity.hpp:138 - Entity 类定义
+// entity.hpp:139 - Entity 类定义
 class Entity : public PyObjectPlus
 {
 public:
@@ -250,27 +248,32 @@ Base 与 Cell 之间的方法调用通过 Mailbox 和 Mercury 消息完成。这
 
 **概述：** Cell Entity 需要调用 Base 方法时（如通知 Base 写数据库、请求 Base 创建新 Cell），通过 `callBaseMethod()` 将调用序列化为 Mercury 消息，发送到 BaseApp。
 
-**源码入口：** entity.cpp:5255
+**源码入口：** entity.cpp:5294
 
 ```cpp
-// entity.cpp:5255 - Cell Entity 调用 Base 方法
-bool Entity::callBaseMethod( int methodIndex, BinaryIStream & data,
-    bool isForGhost )
+// entity.cpp:5294 - Cell Entity 调用 Base 方法
+void Entity::callBaseMethod( BinaryIStream & data )
 {
-    // 1. 查找方法定义
-    const MethodDescription * pMethod = 
-        pType_->description().base().internalMethod( methodIndex );
+    // 1. 从流中读取方法索引
+    uint16 methodIndex;
+    data >> methodIndex;
     
-    // 2. 创建 Base Entity Mailbox
-    BaseEntityMailBox mailbox( pType_, id_, baseAddr_ );
-    
-    // 3. 获取输出流并写入方法调用
-    Mercury::Bundle & bundle = mailbox.startMessage( 
-        BaseAppIntInterface::callBaseMethod );
-    bundle << methodIndex;
-    bundle.transfer( data, data.remainingLength() );
-    
-    return true;
+    // 2. 创建 Base Entity Mailbox（如果 Base 已知）
+    if (baseAddr_.ip != 0)
+    {
+        PyEntityMailBox * pBaseEntityMailBox =
+            new BaseEntityMailBox( pEntityType_, baseAddr_, id_ );
+        
+        // 3. 查找方法定义
+        const MethodDescription * pDescription =
+            pEntityType_->description().base().internalMethod( methodIndex );
+        
+        // 4. 获取输出流并写入方法调用
+        BinaryOStream * pBOS = pBaseEntityMailBox->getStream(
+            *pDescription );
+        pBOS->transfer( data, data.remainingLength() );
+        pBaseEntityMailBox->sendStream();
+    }
 }
 ```
 
@@ -313,23 +316,22 @@ sequenceDiagram
 
 ```cpp
 // base.cpp:1391 - Base 调用 Cell 方法
-bool Base::callCellMethod( int methodIndex, BinaryIStream & data )
+void Base::callCellMethod( const Mercury::Address & srcAddr,
+    const Mercury::UnpackedMessageHeader & header,
+    BinaryIStream & data )
 {
     // 1. 检查 Cell Mailbox 是否存在
     if (!pCellEntityMailBox_)
     {
         ERROR_MSG( "Base::callCellMethod: No cell mailbox\n" );
-        return false;
+        return;
     }
     
     // 2. 通过 Cell Mailbox 发送
     Mercury::Bundle & bundle = pCellEntityMailBox_->startMessage(
         CellAppIntInterface::callCellMethod );
     bundle << id_;
-    bundle << methodIndex;
     bundle.transfer( data, data.remainingLength() );
-    
-    return true;
 }
 ```
 
@@ -369,12 +371,14 @@ sequenceDiagram
 
 **概述：** Cell Entity 的属性变更需要同步到客户端。这不是实时全量同步，而是通过 Witness 和 AOI 过滤后，只发送可见且变更的属性。
 
-**源码入口：** entity.cpp:2475
+**源码入口：** entity.cpp:2485
 
 ```cpp
-// entity.cpp:2475 - Cell Entity 写客户端更新数据
-void Entity::writeClientUpdateDataToBundle( Mercury::Bundle & bundle,
-    bool isFullUpdate )
+// entity.cpp:2485 - Cell Entity 写客户端更新数据
+bool Entity::writeClientUpdateDataToBundle( Mercury::Bundle & bundle,
+    const Vector3 & basePos,
+    EntityCache & cache,
+    float lodPriority ) const
 {
     // 1. 写入车辆变更（如果有）
     this->writeVehicleChangeToBundle( bundle );
@@ -395,6 +399,8 @@ void Entity::writeClientUpdateDataToBundle( Mercury::Bundle & bundle,
     {
         this->writeVolatileDetailedDataToBundle( bundle );
     }
+    
+    return true;
 }
 ```
 
@@ -437,28 +443,25 @@ sequenceDiagram
 
 **概述：** CellApp 崩溃时，CellAppMgr 检测到死亡，通知 BaseAppMgr，BaseAppMgr 再通知所有 BaseApp。每个 BaseApp 检查自己是否有 Entity 的 Cell 在死亡的 CellApp 上，如果有，就从备份数据恢复到新的 CellApp。
 
-**源码入口：** base.cpp:3810
+**源码入口：** base.cpp:3819
 
 ```cpp
-// base.cpp:3810 - Base 恢复 Cell Entity
-void Base::restoreTo( const Mercury::Address & addr,
-    const Mercury::UnpackedMessageHeader & header,
-    BinaryIStream & data )
+// base.cpp:3819 - Base 恢复 Cell Entity
+bool Base::restoreTo( SpaceID spaceID, const Mercury::Address & cellAppAddr )
 {
-    // 1. 读取备份数据
-    this->readBackupData( data );
-    
-    // 2. 检查是否有 Cell Entity
+    // 1. 检查是否有 Cell Entity
     if (!this->hasCellEntity())
     {
-        return;
+        return false;
     }
     
-    // 3. 创建新的 Cell Entity
-    this->createCellEntityOn( addr );
+    // 2. 创建新的 Cell Entity
+    this->createCellEntityOn( cellAppAddr );
     
-    // 4. 更新 Cell 地址
-    this->setCurrentCell( spaceID_, addr );
+    // 3. 更新 Cell 地址
+    this->setCurrentCell( spaceID, cellAppAddr );
+    
+    return true;
 }
 ```
 

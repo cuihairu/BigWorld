@@ -1,7 +1,5 @@
 # Complete Topic Outline
 
-> **English** | [中文](outline.md)
-
 <div class="arch-hero">
 
 This is the complete map for the subsequent `docs/` rewrite. Every topic

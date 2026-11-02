@@ -85,16 +85,22 @@ flowchart TD
 
 **概述：** 可靠性不是简单的 bool 值。BigWorld 定义了四种可靠类型，允许在同一个 Bundle 中混合可靠和不可靠消息。这是 MMO 状态同步的关键：位置更新可以丢弃，但实体创建必须可靠。
 
-**源码入口：** bundle.hpp:27
+**源码入口：** bundle.hpp:34
 
 ```cpp
-// bundle.hpp:27 - 可靠类型定义
-enum ReliableType
+// bundle.hpp:34 - 可靠类型定义
+enum ReliableTypeEnum
 {
-    RELIABLE_NO,        // 不可靠消息
-    RELIABLE_DRIVER,    // 驱动可靠包
-    RELIABLE_PASSENGER, // 搭车可靠消息
-    RELIABLE_CRITICAL   // 关键可靠消息
+    RELIABLE_NO = 0,        // 不可靠消息
+    RELIABLE_DRIVER = 1,    // 驱动可靠包
+    RELIABLE_PASSENGER = 2, // 搭车可靠消息
+    RELIABLE_CRITICAL = 3   // 关键可靠消息
+};
+
+// bundle.hpp:46 - 由一个小类包裹以增强类型安全
+class ReliableType
+{
+    // ...
 };
 ```
 
@@ -157,22 +163,17 @@ sequenceDiagram
 **源码入口：** udp_channel.hpp:383
 
 ```cpp
-// udp_channel.hpp:383 - 发送窗口状态
+// udp_channel.hpp - 发送窗口状态
 class UDPChannel
 {
 private:
     // 发送窗口状态
-    SeqNum smallOutSeqAt_;      // 下一个要发送的序号（不含 overflow）
-    SeqNum largeOutSeqAt_;      // 下一个要发送的序号（含 overflow）
-    SeqNum oldestUnackedSeq_;   // 最早未 ACK 的包
-    UnackedPackets unackedPackets_;  // 未确认包集合
-    int windowSize_;            // 当前窗口大小
-    int maxWindowSize_;         // 最大窗口大小
-    
-    // 重发相关
-    int roundTripTime_;         // RTT 估计
-    int resendTimeout_;         // 重发超时
-    int lastSendTime_;          // 上次发送时间
+    uint32 windowSize_;                 // 当前窗口大小（udp_channel.hpp:383）
+    SeqNum smallOutSeqAt_;              // 下一个要发送的序号（不含 overflow，:386）
+    SeqNumAllocator largeOutSeqAt_;     // 下一个要发送的序号（含 overflow，:389）
+    SeqNum oldestUnackedSeq_;           // 最早未 ACK 的包（:393）
+    uint64 roundTripTime_;              // RTT 估计（udp_channel.hpp:403）
+    CircularArray< UnackedPacket * > unackedPackets_; // 未确认包集合（:415）
 };
 ```
 
@@ -210,50 +211,39 @@ stateDiagram-v2
 
 2. **未确认包集合**：`unackedPackets_` 保存所有已发送但未收到 ACK 的包。每个包记录发送时间、可靠消息列表。
 
-3. **窗口大小**：`windowSize_` 动态调整，根据网络状况和 ACK 速度变化。`maxWindowSize_` 是上限。
+3. **窗口大小**：`windowSize_` 动态调整，根据网络状况和 ACK 速度变化。
 
-4. **重发机制**：如果包在 `resendTimeout_` 内未收到 ACK，触发重发。重发超时基于 RTT 估计。
+4. **重发机制**：如果包在重发超时内未收到 ACK，触发重发。重发超时基于 RTT 估计。
 
 5. **RTT 估计**：`roundTripTime_` 通过 ACK 时间差估算，用于调整重发超时和窗口大小。
 
 ### 发送流程
 
-**源码入口：** udp_channel.cpp:1513
+**源码入口：** udp_channel.cpp:798
 
 ```cpp
-// udp_channel.cpp:1513 - 发送 Bundle
-void UDPChannel::send( Bundle * pBundle )
+// udp_channel.cpp:798 - 通道空闲时发送所有待发数据
+void UDPChannel::sendIfIdle()
 {
-    UDPBundle * pUDPBundle = static_cast<UDPBundle *>(pBundle);
-    
-    // 1. 检查窗口是否有空间
-    if (this->windowSize() >= this->maxWindowSize())
-    {
-        // 窗口满，等待 ACK
-        return;
-    }
-    
-    // 2. 分配序号
-    SeqNum seq = largeOutSeqAt_++;
-    
-    // 3. 记录到未确认包集合
-    unackedPackets_.add( seq, pUDPBundle );
-    
-    // 4. 写入 packet header
-    this->writeFlags( pUDPBundle );
-    this->writeFooter( pUDPBundle );
-    
-    // 5. 发送
-    pUDPBundle->send();
+    // 1. 如果通道忙，推迟到下一 tick 再发送
+    // 2. 否则排空发送队列：为每个待发包分配序号、记录到未确认包集合、
+    //    写入 packet header/footer 并发送。
+}
+
+// udp_channel.cpp:1187 - 重发单个未确认包
+void UDPChannel::sendUnacked( UnackedPacket & unacked )
+{
+    // 1. 按序号查找包
+    // 2. 如果仍未确认，重写 header 并重新发送到网络上。
 }
 ```
 
 **关键细节：**
 
-- 窗口满时，新消息会排队等待，不会丢弃
-- 序号单调递增，用于接收方检测乱序和重复
-- 未确认包集合支持快速查找和重发
-- packet header 包含 ACK 信息，用于确认之前发送的包
+- 真实发送路径是 `sendIfIdle()`（udp_channel.cpp:798），它在通道空闲时排空发送队列；并不存在 `send( Bundle * )`。
+- 未确认包由 `sendUnacked( UnackedPacket & )` 重发（udp_channel.cpp:1187）。
+- 序号单调递增，用于接收方检测乱序和重复。
+- 未确认包集合支持快速查找和重发。
 
 ## 接收窗口
 
@@ -262,56 +252,46 @@ void UDPChannel::send( Bundle * pBundle )
 **源码入口：** udp_channel.cpp:1208
 
 ```cpp
-// udp_channel.cpp:1208 - 添加到接收窗口
+// udp_channel.cpp:1208 - 将收到的包添加到接收窗口
 UDPChannel::AddToReceiveWindowResult UDPChannel::addToReceiveWindow(
-    SeqNum seq, Packet * pPacket, bool isReliable )
+    Packet * p, const Address & srcAddr, PacketReceiverStats & stats )
 {
-    // 1. 校验 sequence number 是否在合法范围
+    // 1. 校验源地址
+    if (!this->checkSourceAddress( srcAddr ))
+    {
+        return PACKET_IS_CORRUPT;
+    }
+    
+    // 2. 校验包的 sequence number 是否在合法范围
+    SeqNum seq = p->seq();
     if (seq >= inSeqAt_ + windowSize_ || seq < oldestUnackedSeq_)
     {
-        return ADD_TO_RECEIVE_WINDOW_RESULT_OUT_OF_WINDOW;
+        return PACKET_IS_OUT_OF_WINDOW;
     }
     
-    // 2. 校验源地址
-    if (!this->checkSourceAddress( pPacket ))
-    {
-        return ADD_TO_RECEIVE_WINDOW_RESULT_CORRUPT;
-    }
-    
-    // 3. 对非 piggyback 包加入 ACK 队列
-    if (!pPacket->isPiggyback())
-    {
-        acksToSend_.push_back( seq );
-    }
-    
-    // 4. 检查是否为预期的下一个包
+    // 3. 检查是否为预期的下一个包
     if (seq == inSeqAt_)
     {
-        // 推进接收窗口
+        // 推进接收窗口并串接缓存的乱序包
         inSeqAt_++;
-        
-        // 检查是否有缓存的乱序包可以串起来
-        while (bufferedReceives_.contains( inSeqAt_ ))
-        {
-            pPacket = bufferedReceives_.get( inSeqAt_ );
-            this->processPacket( pPacket );
-            inSeqAt_++;
-        }
-        
-        return ADD_TO_RECEIVE_WINDOW_RESULT_NEXT;
+        return PACKET_IS_NEXT_IN_WINDOW;
     }
     
-    // 5. 检查是否为重复包
+    // 4. 检查是否为重复包
     if (seq < inSeqAt_)
     {
-        return ADD_TO_RECEIVE_WINDOW_RESULT_DUPLICATE;
+        return PACKET_IS_DUPLICATE;
     }
     
-    // 6. 乱序包，缓存到接收窗口
-    bufferedReceives_.add( seq, pPacket );
-    return ADD_TO_RECEIVE_WINDOW_RESULT_BUFFERED;
+    // 5. 乱序包，缓存到接收窗口
+    bufferedReceives_.add( seq, p );
+    return PACKET_IS_BUFFERED_IN_WINDOW;
 }
 ```
+
+返回类型是 `AddToReceiveWindowResult` 枚举（udp_channel.hpp:161-168），取值有
+`PACKET_IS_NEXT_IN_WINDOW`、`PACKET_IS_BUFFERED_IN_WINDOW`、`PACKET_IS_DUPLICATE`、
+`PACKET_IS_OUT_OF_WINDOW` 和 `PACKET_IS_CORRUPT`。
 
 **流程图：**
 

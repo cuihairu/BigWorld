@@ -1,7 +1,5 @@
 # Login, Session and Proxy Attach
 
-> **English** | [中文](login-session-proxy-flow.md)
-
 <div class="arch-hero">
 
 BigWorld's login chain is not "verify the account and drop into the game". It is
@@ -85,107 +83,112 @@ reading the business parameters. This is not a simple authentication function bu
 the defence line of the public entry point. Every check has a clear security or
 rate-limiting purpose.
 
-**Source entry:** loginapp.cpp:700
+**Source entry:** loginapp.cpp:705
 
 ```cpp
-// loginapp.cpp:700 - LoginApp login checks
-bool LoginApp::login( const Mercury::Address & srcAddr,
-    const Mercury::UnpackedMessageHeader & header,
+// loginapp.cpp:705 - LoginApp login checks
+void LoginApp::login( const Mercury::Address & source,
+    Mercury::UnpackedMessageHeader & header,
     BinaryIStream & data )
 {
-    // 1. Check whether login is allowed
-    if (!this->allowLogin())
+    // 1. Reset the rate-limit quota for a new time window (:712)
+    if (Config::rateLimitEnabled() && (currTimestamp >
+        lastRateLimitCheckTime_ + Config::rateLimitDurationInStamps()))
     {
-        ERROR_MSG( "LoginApp::login: Login not allowed\n" );
-        return false;
+        numAllowedLoginsLeft_ = Config::loginRateLimit();
     }
-    
-    // 2. Check whether the IP is banned
-    if (bannedIPs_.contains( srcAddr.ip ))
+
+    // 2. Check whether login is allowed (:721)
+    if (!Config::allowLogin())
     {
-        ERROR_MSG( "LoginApp::login: IP %s is banned\n", 
-            srcAddr.ipAsString() );
-        return false;
+        this->handleFailure( source, pChannel, header.replyID,
+            LogOnStatus::LOGIN_REJECTED_LOGINS_NOT_ALLOWED );
+        return;
     }
-    
-    // 3. Check for an empty source address (guard against a spoofed empty address)
-    if (srcAddr.isNone())
+
+    // 3. Check whether the source IP is currently banned (:737)
+    if (ipAddressBanMap_.find( source.ip ) != ipAddressBanMap_.end())
     {
-        ERROR_MSG( "LoginApp::login: Empty source address\n" );
-        return false;
+        this->handleFailure( source, pChannel, header.replyID,
+            LogOnStatus::LOGIN_REJECTED_IP_ADDRESS_BAN );
+        return;
     }
-    
-    // 4. Check the protocol version
-    if (!this->isClientAllowed( header ))
+
+    // 4. Guard against a spoofed empty source address (:778)
+    if (!source.ip)
     {
-        ERROR_MSG( "LoginApp::login: Client version not allowed\n" );
-        return false;
+        return;
     }
-    
-    // 5. Check whether this is a duplicate pending attempt
-    if (pendingAttempts_.contains( srcAddr ))
+
+    // 5. Detect a duplicate attempt from a pending login (:790, :837)
+    bool isReattempt = (loginRequests_.count( source ) != 0);
+    if (this->handleResentPendingAttempt( source, header.replyID ))
     {
-        ERROR_MSG( "LoginApp::login: Duplicate attempt from %s\n",
-            srcAddr.ipAsString() );
-        return false;
+        return;
     }
-    
-    // 6. Check the rate limit
-    if (rateLimit_.isLimited())
+
+    // 6. Rate limit: quota exhausted in this window? (:845)
+    if (Config::rateLimitEnabled() && (numAllowedLoginsLeft_ == 0))
     {
-        ERROR_MSG( "LoginApp::login: Rate limited\n" );
-        return false;
+        this->handleFailure( source, pChannel, header.replyID,
+            LogOnStatus::LOGIN_REJECTED_RATE_LIMITED );
+        return;
     }
-    
-    // 7. Check whether DBApp is ready
-    if (!dbApp_.isReady())
+
+    // 7. Check whether the database is ready (:862)
+    if (!this->isDBReady())
     {
-        ERROR_MSG( "LoginApp::login: DBApp not ready\n" );
-        return false;
+        this->handleFailure( source, pChannel, header.replyID,
+            LogOnStatus::LOGIN_REJECTED_DB_NOT_READY );
+        return;
     }
-    
-    // 8. Check whether the system is overloaded
-    if (overloadCache_.isOverloaded())
+
+    // 8. Check whether the system is overloaded (:875)
+    if (systemOverloaded_ != 0)
     {
-        ERROR_MSG( "LoginApp::login: System overloaded\n" );
-        return false;
+        this->handleFailure( source, pChannel, header.replyID,
+            systemOverloaded_ );
+        return;
     }
-    
-    // 9. Check whether a login challenge is needed
-    if (challengeRequired_ && !this->hasChallenge( srcAddr ))
+
+    // 9. Round-trip a login challenge if needed (:896)
+    if (this->processForLoginChallenge( source, pChannel,
+        header.replyID, data ))
     {
-        // Send the challenge request
-        this->sendChallenge( srcAddr );
-        return true;
+        return;
     }
-    
-    // 10. Read and decrypt the login parameters
-    LogOnParams params;
-    if (!params.read( data, maxLoginMessageSize() ))
+
+    // 10. Read and decrypt the login parameters (:903, :921)
+    LogOnParamsPtr pParams = new LogOnParams();
+    // ... pParams->readFromStream( attempt, pEncoder ), retrying without the
+    //     encoder when Config::allowUnencryptedLogins() (:951)
+
+    // 11. Check the username/password length (:930)
+    if ((pParams->username().length() > Config::maxUsernameLength()) ||
+        (pParams->password().length() > Config::maxPasswordLength()))
     {
-        ERROR_MSG( "LoginApp::login: Failed to read params\n" );
-        return false;
+        this->handleFailure( source, pChannel, header.replyID,
+            LogOnStatus::LOGIN_MALFORMED_REQUEST );
+        return;
     }
-    
-    // 11. Check the username/password length
-    if (params.username().length() > maxUsernameLength() ||
-        params.password().length() > maxPasswordLength())
+
+    // 12. Charge the rate-limit quota (:981)
+    if (Config::rateLimitEnabled())
     {
-        ERROR_MSG( "LoginApp::login: Username/password too long\n" );
-        return false;
+        --numAllowedLoginsLeft_;
     }
-    
-    // 12. Check the encryption requirement
-    if (!allowUnencryptedLogins_ && !params.isEncrypted())
+
+    // 13. Require an encryption key when unencrypted logins are disallowed (:989)
+    if (pParams->encryptionKey().empty() && !Config::allowUnencryptedLogins())
     {
-        ERROR_MSG( "LoginApp::login: Unencrypted login not allowed\n" );
-        return false;
+        this->handleFailure( source, pChannel, header.replyID,
+            LogOnStatus::LOGIN_MALFORMED_REQUEST );
+        return;
     }
-    
-    // 13. Start the login request towards DBApp
-    this->sendDBAppLogOn( srcAddr, params );
-    
-    return true;
+
+    // 14. Forward the logon request towards DBApp (:1023-:1037)
+    this->dbAppAlpha().bundle().startRequest(
+        DBAppInterface::logOn, new DatabaseReplyHandler( ... ) );
 }
 ```
 
@@ -226,8 +229,8 @@ flowchart TD
 1. **allowLogin()**: a global switch that can forbid all logins (for example in
    maintenance mode)
 
-2. **IP ban**: `bannedIPs_` stores banned IP addresses and supports dynamic
-   addition
+2. **IP ban**: `ipAddressBanMap_` maps a banned IP address to its ban expiry
+   timestamp, and supports dynamic addition
 
 3. **Source address check**: prevents a spoofed empty address attack
 
@@ -426,12 +429,12 @@ Source entry: loginapp.cpp:693
 
 The full call chain of DBApp validating the account and allocating a BaseApp:
 
-Source entry: baseappmgr.cpp:947
+Source entry: baseappmgr.cpp:933-994
 
 <div class="flow-strip">
   <span class="flow-node">DBApp validates the account</span>
   <span class="flow-arrow">-></span>
-  <span class="flow-node">BaseAppMgr::allocateBaseApp()</span>
+  <span class="flow-node">BaseAppMgr::createEntity()</span>
   <span class="flow-arrow">-></span>
   <span class="flow-node">pick the least loaded BaseApp</span>
   <span class="flow-arrow">-></span>
@@ -446,7 +449,7 @@ Source entry: baseappmgr.cpp:947
 
 The full call chain of the client completing the second handshake with BaseApp:
 
-Source entry: baseapp.cpp:2985
+Source entry: baseapp.cpp:3008
 
 <div class="flow-strip">
   <span class="flow-node">BaseApp::baseAppLogin()</span>

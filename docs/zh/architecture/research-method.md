@@ -1,7 +1,5 @@
 # 研究方法与证据分级
 
-](/> [English)) | **中文**
-
 <div class="arch-hero">
 
 本章先定义研究方法。BigWorld 这个仓库没有完整历史提交记录，也缺少完整游戏工程与资源树，因此文档必须区分“源码明确事实”“基于时代和平台的高置信推断”“无法确认的问题”。这比直接给结论更重要。
@@ -80,9 +78,9 @@
 | 结论 | 源码证据 | 可信度 |
 |------|----------|--------|
 | BigWorld 使用 level-triggered epoll | `event_poller.cpp:1079` 注释 “TODO: Could be good to use EPOLLET” | 100% |
-| GameTick 默认 10Hz | `baseapp.cpp:2020` `1000000/Config::updateHertz()` | 100% |
-| Mercury 支持四种可靠类型 | `bundle.hpp:27` `RELIABLE_NO/DRIVER/PASSENGER/CRITICAL` | 100% |
-| Entity 有 real/ghost 两种状态 | `entity.hpp:89` 注释 “each entity only has one authoritative real” | 100% |
+| GameTick 默认 10Hz | `baseapp.cpp:2038` `1000000/Config::updateHertz()` | 100% |
+| Mercury 支持四种可靠类型 | `bundle.hpp:36` `RELIABLE_NO/DRIVER/PASSENGER/CRITICAL` | 100% |
+| Entity 有 real/ghost 两种状态 | `entity.hpp:95` 注释 “each entity only has one authoritative real” | 100% |
 
 **验证方法**：直接阅读源码，找到对应行号。
 
@@ -95,7 +93,7 @@
 | 结论 | 推断依据 | 可信度 |
 |------|----------|--------|
 | io_uring 不在原始设计选项内 | CentOS 7 内核不支持，代码无相关引用 | 95% |
-| 脚本执行受全局解释器锁边界约束 | 代码使用 `PyEval_InitThreads()`、`PyEval_SaveThread()`、`PyEval_RestoreThread()` 管理 thread state | 95% |
+| 脚本执行受全局解释器锁边界约束 | 代码使用 `PyEval_SaveThread()`、`PyEval_RestoreThread()` 管理 thread state | 95% |
 | 商业版可能有更多优化 | 开源版缺少 `control_cluster.py`，文档有漂移 | 80% |
 | 设计年代约 2005-2010 | 使用 CentOS 5/6，Python 2.4 兼容探测 | 90% |
 
@@ -164,7 +162,7 @@
 
 **示例**：
 - 结论：BigWorld 使用单 Reactor 主线程
-- 源码：`event_dispatcher.cpp:428` `processOnce()` 
+- 源码：`event_dispatcher.cpp:477` `processOnce()` 
 - 调用链：FrequentTasks -> Timers -> Stats -> Network
 - 验证：检查是否有线程池、并行任务调度
 

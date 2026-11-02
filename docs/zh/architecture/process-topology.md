@@ -1,7 +1,5 @@
 # 进程拓扑与职责切分
 
-](/> [English)) | **中文**
-
 <div class="arch-hero">
 
 BigWorld 服务端不是单进程游戏服务器，而是多进程 MMO 运行时。理解它的第一步，是把“玩家会话”“全局实体”“空间模拟”“数据库”“登录入口”“控制面”和“故障恢复”拆开看。
@@ -83,11 +81,11 @@ flowchart LR
 
 **概述：** BigWorld 服务端进程启动后，需要向 machined 注册，并与 Mgr 组件建立连接。这是进程发现和负载均衡的基础。
 
-**源码入口：** baseappmgr.cpp:389
+**源码入口：** baseappmgr.cpp:362
 
 ```cpp
-// baseappmgr.cpp:389 - BaseAppMgr 注册
-bool BaseAppMgr::init( bool isReload )
+// baseappmgr.cpp:362 - BaseAppMgr 注册
+bool BaseAppMgr::init( int argc, char * argv[] )
 {
     // 1. 注册 Mercury 接口
     if (!this->BaseAppMgrInterface::registerWithInterface())
@@ -104,10 +102,15 @@ bool BaseAppMgr::init( bool isReload )
     }
     
     // 3. 监听其他组件 birth/death
-    this->BaseAppMgrInterface::registerBirthListener( 
-        &BaseAppMgr::onBaseAppBirth );
-    this->BaseAppMgrInterface::registerDeathListener(
-        &BaseAppMgr::onBaseAppDeath );
+    Mercury::MachineDaemon::registerBirthListener(
+        interface_.address(),
+        BaseAppMgrInterface::handleCellAppMgrBirth, "CellAppMgrInterface" );
+    Mercury::MachineDaemon::registerBirthListener(
+        interface_.address(),
+        BaseAppMgrInterface::handleBaseAppMgrBirth, "BaseAppMgrInterface" );
+    Mercury::MachineDaemon::registerDeathListener(
+        interface_.address(),
+        BaseAppMgrInterface::handleBaseAppDeath, "BaseAppIntInterface" );
     
     return true;
 }
@@ -143,11 +146,11 @@ sequenceDiagram
 
 ### BaseAppMgr 启动流程
 
-**源码入口：** baseappmgr.cpp:389
+**源码入口：** baseappmgr.cpp:362
 
 ```cpp
-// baseappmgr.cpp:389 - BaseAppMgr 启动
-bool BaseAppMgr::init( bool isReload )
+// baseappmgr.cpp:362 - BaseAppMgr 启动
+bool BaseAppMgr::init( int argc, char * argv[] )
 {
     // ... 其他初始化 ...
     
@@ -163,13 +166,15 @@ bool BaseAppMgr::init( bool isReload )
         return false;
     }
     
-    // 监听 BaseApp birth
-    this->BaseAppMgrInterface::registerBirthListener(
-        &BaseAppMgr::onBaseAppBirth );
-    
     // 监听 CellAppMgr birth
-    this->CellAppMgrInterface::registerBirthListener(
-        &BaseAppMgr::onCellAppMgrBirth );
+    Mercury::MachineDaemon::registerBirthListener(
+        interface_.address(),
+        BaseAppMgrInterface::handleCellAppMgrBirth, "CellAppMgrInterface" );
+    
+    // 监听 BaseAppMgr birth
+    Mercury::MachineDaemon::registerBirthListener(
+        interface_.address(),
+        BaseAppMgrInterface::handleBaseAppMgrBirth, "BaseAppMgrInterface" );
     
     return true;
 }
@@ -183,11 +188,11 @@ bool BaseAppMgr::init( bool isReload )
 
 ### CellAppMgr 启动流程
 
-**源码入口：** cellappmgr.cpp:238
+**源码入口：** cellappmgr.cpp:165
 
 ```cpp
-// cellappmgr.cpp:238 - CellAppMgr 启动
-bool CellAppMgr::init( bool isReload )
+// cellappmgr.cpp:165 - CellAppMgr 启动
+bool CellAppMgr::init( int argc, char * argv[] )
 {
     // ... 其他初始化 ...
     
@@ -204,8 +209,9 @@ bool CellAppMgr::init( bool isReload )
     }
     
     // 监听 CellApp birth
-    this->CellAppMgrInterface::registerBirthListener(
-        &CellAppMgr::onCellAppBirth );
+    Mercury::MachineDaemon::registerBirthListener(
+        interface_.address(),
+        CellAppMgrInterface::handleCellAppMgrBirth, "CellAppMgrInterface" );
     
     return true;
 }

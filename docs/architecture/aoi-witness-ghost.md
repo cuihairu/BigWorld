@@ -1,7 +1,5 @@
 # AOI, Witness and Ghost
 
-> **English** | [中文](aoi-witness-ghost.md)
-
 <div class="arch-hero">
 
 BigWorld's AOI is not a simple "broadcast to everything within a radius". The
@@ -146,34 +144,29 @@ flowchart TD
 
 ```cpp
 // witness.cpp:3586 - AoI trigger
-void AoITrigger::triggerEnter( RangeListNode * pOther )
+void AoITrigger::triggerEnter( Entity & entity )
 {
-    // 1. Get the target entity
-    Entity * pEntity = static_cast<Entity *>(pOther);
-    
-    // 2. Check whether it is already in the AoI
-    if (pWitness_->isInAoI( pEntity ))
+    // 1. Check whether it is already in the AoI
+    if (pWitness_->isInAoI( entity ))
     {
         return;
     }
     
-    // 3. Add to the AoI
-    pWitness_->addToAoI( pEntity );
+    // 2. Add to the AoI
+    pWitness_->addToAoI( entity );
 }
 
-void AoITrigger::triggerLeave( RangeListNode * pOther )
+// witness.cpp:3602 - AoI trigger leave
+void AoITrigger::triggerLeave( Entity & entity )
 {
-    // 1. Get the target entity
-    Entity * pEntity = static_cast<Entity *>(pOther);
-    
-    // 2. Check whether it is in the AoI
-    if (!pWitness_->isInAoI( pEntity ))
+    // 1. Check whether it is in the AoI
+    if (!pWitness_->isInAoI( entity ))
     {
         return;
     }
     
-    // 3. Remove from the AoI
-    pWitness_->removeFromAoI( pEntity );
+    // 2. Remove from the AoI
+    pWitness_->removeFromAoI( entity );
 }
 ```
 
@@ -517,7 +510,7 @@ Source entry: witness.cpp:1088
 
 The call chain for ghost entity creation and maintenance:
 
-Source entry: entity_ghost_maintainer.cpp:46
+Source entry: entity_ghost_maintainer.cpp:56
 
 <div class="flow-strip">
   <span class="flow-node">EntityGhostMaintainer::check()</span>

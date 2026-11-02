@@ -1,7 +1,5 @@
 # 网络背压与故障注入
 
-](/> [English)) | **中文**
-
 <div class="arch-hero">
 
 BigWorld 的网络层不仅是 epoll + UDP。真正影响游戏服务器稳定性的，是接收预算、发送队列满、人工丢包/延迟、Channel overflow、可靠重发、rate limit 和 tick 公平性如何一起工作。这章专门分析背压和故障注入。
@@ -22,7 +20,7 @@ BigWorld 网络层已经有多处“保护主循环”的机制：
 关键源码：
 
 - 接收预算在 packet_receiver.cpp。
-- `maxSocketProcessingTime()` watcher 在 packet_receiver.cpp。
+- `maxSocketProcessingTimeStamps` watcher 在 packet_receiver.cpp。
 - `BWMessageForwarder` 配置 socket 处理预算在 bw_message_forwarder.cpp。
 - 人工丢包/延迟在 packet_sender.cpp。
 - 发送队列满等待在 packet_sender.cpp。
@@ -31,43 +29,50 @@ BigWorld 网络层已经有多处“保护主循环”的机制：
 
 ## 接收侧背压
 
-**概述：** `PacketReceiver::handleInputNotification()` 在收到 socket 可读通知后循环调用 `processSocket()`，但有时间限制。这不是内核级背压，而是主线程公平性保护：防止一次 UDP burst 把 Timer、FrequentTask、脚本和其他消息饿死。
+**概述：** `PacketReceiver::handleInputNotification( int fd )` 在收到 socket 可读通知后循环调用 `processSocket()`，但有时间限制。这不是内核级背压，而是主线程公平性保护：防止一次 UDP burst 把 Timer、FrequentTask、脚本和其他消息饿死。
 
-**源码入口：** packet_receiver.cpp:83
+**源码入口：** packet_receiver.cpp:94
 
 ```cpp
-// packet_receiver.cpp:83 - 接收预算
-void PacketReceiver::handleInputNotification()
+// packet_receiver.cpp:94 - 接收预算
+int PacketReceiver::handleInputNotification( int fd )
 {
-    // 1. 记录开始时间
-    uint64 startTime = timestamp();
-    
-    // 2. 循环处理 socket 中的包
-    while (true)
+    uint64 processingStartStamps = timestamp();
+
+    int numPacketsProcessed = 0;
+
+    bool expectingPacket = true; // only true for first call to processSocket()
+    bool shouldProcess = true;
+
+    while (shouldProcess)
     {
-        // 3. 处理一个包
-        if (!this->processSocket())
-        {
-            break;
-        }
-        
-        // 4. 计算已用时间
-        uint64 elapsed = timestamp() - startTime;
-        
-        // 5. 检查是否超时
-        if (elapsed > maxSocketProcessingTimeStamps_)
+        Address sourceAddress;
+        shouldProcess = this->processSocket( sourceAddress, expectingPacket );
+        expectingPacket = false;
+
+        uint64 processingElapsedStamps =
+            timestamp() - processingStartStamps;
+
+        ++numPacketsProcessed;
+
+        if (shouldProcess &&
+                (maxSocketProcessingTimeStamps_ != 0) &&
+                (processingElapsedStamps > maxSocketProcessingTimeStamps_))
         {
             WARNING_MSG( "PacketReceiver::handleInputNotification: "
-                "Spent too long processing socket (%.2fms), "
-                "source=%s, processed=%d packets, "
-                "remaining in queue=%d\n",
-                float(elapsed) / 1000.0f,
-                lastSourceAddr_.ipAsString(),
-                numPacketsProcessed_,
-                receiveQueueSize() );
-            break;
+                    "last received from %s, "
+                    "stopping socket processing after %.03fms "
+                    "(processed %d packets), receive queue at %d bytes",
+                sourceAddress.c_str(),
+                processingElapsedStamps * 1000.f / stampsPerSecondD(),
+                numPacketsProcessed,
+                networkInterface_.socket().receiveQueueSize() );
+
+            shouldProcess = false;
         }
     }
+
+    return 0;
 }
 ```
 
@@ -111,10 +116,10 @@ flowchart TD
 // bw_message_forwarder.cpp:47 - socket 处理预算配置
 void BWMessageForwarder::init( NetworkInterface & networkInterface )
 {
-    // 1. 读取配置
-    float maxInternalSocketProcessingTime = 
-        Config::maxInternalSocketProcessingTime();
-    float gameUpdateHertz = Config::gameUpdateHertz();
+    // 1. 通过 BWConfig 读取配置
+    float maxInternalSocketProcessingTime =
+        BWConfig::get< float >( "maxInternalSocketProcessingTime", true );
+    int gameUpdateHertz = BWConfig::get< int >( "gameUpdateHertz", true );
     
     // 2. 如果配置值小于 0，使用默认值
     if (maxInternalSocketProcessingTime < 0)

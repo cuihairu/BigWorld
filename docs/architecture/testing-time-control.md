@@ -1,7 +1,5 @@
 # Testing System and Controlled Time
 
-> **English** | [中文](testing-time-control.md)
-
 <div class="arch-hero">
 
 BigWorld has unit tests, network protocol tests, and multi-process test
@@ -16,15 +14,16 @@ complete determinism.
 
 The BigWorld test system is not empty; the network layer in particular covers
 reliable UDP, fragmentation, reordering, floods, WebSocket behavior, and channel
-versioning. Source evidence also shows, however, that there is no unified
-virtual-clock injection layer.
+versioning. Source evidence also shows an injectable virtual-clock layer:
+`EventDispatcher::ClockFn` (event_dispatcher.hpp) with `ManualClock`
+(lib/network/unit_test/manual_clock.hpp).
 
 Key facts:
 
 - Unit-test entry uses `BWUnitTest::runTest()`: unit_test.hpp.
 - `MultiProcTestCase` can fork multiple child processes: multi_proc_test_case.hpp.
-- `EventDispatcher::addTimerCommon()` registers a timer with `timestamp() + interval`: event_dispatcher.cpp.
-- `EventDispatcher::processTimers()` is driven by the real `timestamp()`: event_dispatcher.cpp.
+- `EventDispatcher::addTimerCommon()` registers a timer with `clock_() + interval`: event_dispatcher.cpp.
+- `EventDispatcher::processTimers()` is driven by the dispatcher's clock `clock_()`: event_dispatcher.cpp.
 - On Linux, `timestamp()` may use `RDTSC`, `gettimeofday`, or `clock_gettime`: timestamp.hpp.
 - BaseApp starts `GameTick` through a dispatcher timer: baseapp.cpp.
 - CellAppMgr starts its game-tick timer and creates `TimeKeeper`: cellappmgr.cpp.
@@ -78,13 +77,16 @@ single-process function call:
 
 ## Real-Time Dependency of Timers
 
-**Summary**: BigWorld's timer system depends on real time, not a virtual clock.
-This is the main obstacle to testing and deterministic replay.
+**Summary**: BigWorld's timer system defaults to real time via `timestamp()`,
+but `EventDispatcher` accepts an injectable `ClockFn`, and the `ManualClock`
+test helper advances a virtual clock so timers can fire without sleeping. Real
+time remains the default, so deterministic replay of the whole system is still
+limited.
 
-**Source entry**: event_dispatcher.cpp:264
+**Source entry**: event_dispatcher.cpp:290
 
 ```cpp
-// event_dispatcher.cpp:264 - add a timer
+// event_dispatcher.cpp:290 - add a timer
 TimerHandle EventDispatcher::addTimerCommon( int64 microseconds,
     TimerHandler * handler, void * arg, bool recurrent,
     const char * name )
@@ -98,8 +100,8 @@ TimerHandle EventDispatcher::addTimerCommon( int64 microseconds,
     uint64 interval = TimeStamp::fromSeconds(
             ((double)microseconds) / 1000000.0 );
 
-    // 2. Compute the deadline from real time and insert it into the time queue
-    TimerHandle handle = pTimeQueue_->add( timestamp() + interval,
+    // 2. Compute the deadline from the dispatcher clock and insert it into the queue
+    TimerHandle handle = pTimeQueue_->add( clock_() + interval,
             recurrent ? interval : 0,
             handler, arg, name );
 
@@ -107,11 +109,11 @@ TimerHandle EventDispatcher::addTimerCommon( int64 microseconds,
 }
 ```
 
-`processTimers()` directly calls `timestamp()`:
+`processTimers()` directly calls the dispatcher clock `clock_()`:
 
 ```cpp
-// event_dispatcher.cpp:340 - process timers
-pTimeQueue_->process( timestamp() );
+// event_dispatcher.cpp:366 - process timers
+pTimeQueue_->process( clock_() );
 ```
 
 <MermaidDiagram title="Timer dependency on real time">
@@ -119,18 +121,18 @@ sequenceDiagram
     participant App as Application
     participant Dispatcher as EventDispatcher
     participant TimeQueue as TimeQueue64
-    participant System as System time
+    participant Clock as Clock source (clock_())
 
     App->>Dispatcher: addTimer(100ms)
-    Dispatcher->>System: timestamp()
-    System->>Dispatcher: current time
+    Dispatcher->>Clock: clock_()
+    Clock->>Dispatcher: current time
     Dispatcher->>TimeQueue: add(now + 100ms)
 
-    Note over System: wait 100ms...
+    Note over Clock: wait 100ms...
 
     App->>Dispatcher: processTimers()
-    Dispatcher->>System: timestamp()
-    System->>Dispatcher: current time
+    Dispatcher->>Clock: clock_()
+    Clock->>Dispatcher: current time
     Dispatcher->>TimeQueue: process(now)
     TimeQueue->>TimeQueue: inspect due timers
     TimeQueue->>App: handleTimeout()
@@ -138,11 +140,11 @@ sequenceDiagram
 
 Detailed interpretation:
 
-1. **Real-time dependency**: timers are driven by `timestamp()`, not a virtual clock. Tests must let real time pass; they cannot accelerate or slow it.
+1. **Injecting a virtual clock**: timers are driven by the dispatcher's `clock_()` source, which defaults to real time but can be replaced with a `ManualClock` via the `ClockFn` constructor. Tests can then advance time with `ManualClock::advanceMs()` instead of sleeping.
 
-2. **Testing obstacle**: timers, resends, timeouts, load balancing, and Reviver pings all use real time. Testing them requires actual delays, is slower, and cannot be replayed deterministically.
+2. **Testing obstacle**: many timers, resends, timeouts, load balancing, and Reviver pings still use the global real `timestamp()` outside the dispatcher clock. Testing them requires actual delays, is slower, and cannot be replayed deterministically.
 
-3. **Why no virtual clock**: the game server needed real-time behavior, a virtual clock would have added complexity, and no unified clock-injection layer existed at the time.
+3. **Why the injection is narrow**: the game server needed real-time behavior by default; a virtual clock adds complexity, so the injectable `ClockFn` covers dispatcher timers while other subsystems keep using the global `timestamp()`.
 
 ## Platform Issues in `timestamp`
 
@@ -184,22 +186,25 @@ BigWorld therefore has two time systems:
 - `timestamp()`: real time for timers, performance statistics, timeouts, and resends.
 - `GameTime`: logical game ticks for entities, AOI, backups, replay, and synchronization.
 
-## The Controlled-Time Gap
+## The Injectable Clock
 
-Current source evidence shows no unified `IClock` or `TimeProvider` injection
-interface for core timers. `timestamp()` is a global inline function scattered
-through networking, tasks, load logic, resends, Reviver, statistics, and ticks.
+Source evidence shows an injectable virtual-clock layer for core timers:
+`EventDispatcher::ClockFn` (`std::function< uint64() >`) plus `ManualClock`
+(lib/network/unit_test/manual_clock.hpp), used by test_virtual_clock.cpp. The
+injection point is narrow, though: it covers dispatcher timers, while the
+global inline `timestamp()` remains scattered through networking, tasks, load
+logic, resends, Reviver, statistics, and ticks.
 
 Consequences:
 
-- Unit tests cannot instantly advance a five-second timeout.
-- Reliable-UDP resend tests tend to rely on sleep or a real dispatcher loop.
+- `ManualClock::advanceMs()` can instantly advance a five-second timeout.
+- Reliable-UDP resend tests can still rely on sleep or a real dispatcher loop where `timestamp()` is used directly.
 - Reviver missed-ping tests are slow and potentially flaky.
 - Load balancing and overload detection lack deterministic boundary tests.
 - Python timers, entity timers, and GameTick interleaving cannot be replayed exhaustively.
 
-This does not mean the engine cannot be tested. It means adjustable time is not
-a first-class architectural abstraction.
+This does not mean the engine cannot be tested. Adjustable time is a narrow,
+dispatcher-level abstraction rather than a system-wide one.
 
 ## Current Fault Injection
 
@@ -226,7 +231,7 @@ Modern server-test expectations additionally require systematic fault injection:
 
 ## Source Trade-Offs
 
-The absence of a unified virtual clock creates concrete engineering boundaries:
+The narrow injection point and the remaining real-time dependencies create concrete engineering boundaries:
 
 - The inline global `timestamp()` prioritizes performance; an abstraction adds call cost and invasiveness.
 - Full deterministic simulation is expensive once multiple processes, networking, Python, and databases interact.

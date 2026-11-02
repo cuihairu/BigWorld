@@ -1,7 +1,5 @@
 # Thread Architecture and Background Tasks
 
-> **English** | [中文](threading-background-tasks.md)
-
 <div class="arch-hero">
 
 The BigWorld server does not use one thread per player, nor does it split entity
@@ -96,10 +94,15 @@ The source establishes these boundaries:
 Background work is therefore not concurrent entity logic. It is a two-phase
 model: prepare in the background, publish on the main thread.
 
-## How `EntityApp` Consumes Background Tasks
+## How the Main Thread Consumes Background Tasks
 
-`EntityApp::onTickProcessingComplete()` handles main-thread callbacks from
-background tasks at the end of a tick: entity_app.cpp.
+`bgTaskManager_.tick()` (called at the end of a tick from `CellApp` and
+`BaseApp`, cellapp.cpp:1001 / baseapp.cpp:1488) drives foreground consumption:
+it runs `TaskManager::tick()`, which executes each pending task's
+`doMainThreadTask()` (bgtask_manager.cpp:744, :762). Note that
+`EntityApp::onTickProcessingComplete()` (entity_app.cpp:146) only calls
+`ServerApp::onTickProcessingComplete()` and `callTimers()` — it does not
+service background tasks.
 
 This creates the following rhythm:
 
@@ -231,7 +234,7 @@ When verifying thread-related conclusions, start with:
 | Where are background tasks created? | `addBackgroundTask(` |
 | Where do they return to the main thread? | `addMainThreadTask(` |
 | Who consumes foreground tasks? | `TaskManager::tick()` |
-| Which apps service tasks during a tick? | `onTickProcessingComplete`, `fileIOTaskManager_.tick()` |
+| Which apps service tasks during a tick? | `bgTaskManager_.tick()`, `fileIOTaskManager_.tick()` |
 | Do database paths use background tasks? | `bgTaskManager_.addBackgroundTask`, `BufferedEntityTasks` |
 | Does file I/O use a dedicated thread? | `FileIOTaskManager` |
 | Can long tasks be cancelled? | `shouldAbortTask()` |

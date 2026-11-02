@@ -1,7 +1,5 @@
 # Main Loop, Ticks and Event Dispatch
 
-> **English** | [中文](event-loop.md)
-
 <div class="arch-hero">
 
 BigWorld's main server processes are not "one thread per player": they are driven
@@ -39,19 +37,21 @@ public:
     ~EventDispatcher();
 
     // Main loop entry points
-    int processOnce( bool shouldIdle = true );
-    int processContinuously();
-    int processUntilBreak();
+    int processOnce( bool shouldIdle = false );
+    void processContinuously();
+    void processUntilBreak();
 
     // Timer management
-    int addTimer( int microseconds, TimerHandler * pHandler, 
-                  void * pUser, const char * name );
-    int addOnceOffTimer( int microseconds, TimerHandler * pHandler,
-                         void * pUser, const char * name );
+    TimerHandle addTimer( int64 microseconds, TimerHandler * pHandler,
+                          void * arg = NULL,
+                          const char * name = "UnnamedTimer" );
+    TimerHandle addOnceOffTimer( int64 microseconds, TimerHandler * pHandler,
+                                 void * arg = NULL,
+                                 const char * name = "UnnamedTimer" );
 
     // FrequentTask management
     void addFrequentTask( FrequentTask * pTask );
-    void delFrequentTask( FrequentTask * pTask );
+    bool cancelFrequentTask( FrequentTask * pTask );
 
 private:
     // Core components
@@ -64,9 +64,7 @@ private:
     bool breakProcessing_;
     
     // Statistics
-    uint64 lastProcessTime_;
-    int numTimerCalls_;
-    int numFrequentTaskCalls_;
+    uint32 numTimerCalls_;
 };
 ```
 
@@ -200,13 +198,13 @@ nearest timer expiry".
 Each App has its own GameTick timer, and executes game logic when it expires.
 Timers are driven by `timestamp()`, not wall-clock.
 
-**Source entry:** event_dispatcher.cpp:264
+**Source entry:** event_dispatcher.cpp:290
 
 ```cpp
-// event_dispatcher.cpp:264 - adding a timer
-int EventDispatcher::addTimerCommon( int microseconds, 
-    TimerHandler * pHandler, void * pUser, const char * name,
-    bool isRepeating )
+// event_dispatcher.cpp:290 - adding a timer
+TimerHandle EventDispatcher::addTimerCommon( int64 microseconds, 
+    TimerHandler * pHandler, void * pUser, bool recurrent,
+    const char * name )
 {
     // 1. Convert microseconds into a timestamp interval
     uint64 interval = uint64(microseconds) * 1000;
@@ -215,11 +213,11 @@ int EventDispatcher::addTimerCommon( int microseconds,
     uint64 startTime = timestamp() + interval;
     
     // 3. Insert into the TimeQueue64
-    TimeQueue64::iterator iter = pTimeQueue_->add( startTime, 
+    TimerHandle handle = pTimeQueue_->add( startTime, 
         pHandler, pUser, interval );
     
-    // 4. Return the timer id
-    return iter->id();
+    // 4. Return the timer handle
+    return handle;
 }
 ```
 
@@ -264,19 +262,19 @@ sequenceDiagram
 
 ### GameTick Startup
 
-**Source entry:** baseapp.cpp:2016
+**Source entry:** baseapp.cpp:2034-2041 (member `gameTimer_`, baseapp.hpp:420)
 
 ```cpp
-// baseapp.cpp:2016 - BaseApp starts the GameTick
-void BaseApp::onManagerRebirth( ... )
+// baseapp.cpp:2034 - BaseApp starts the GameTick
+void BaseApp::startGameTickTimer()
 {
-    // ... other initialisation ...
-    
+    MF_ASSERT( !gameTimer_.isSet() );
+
     // Start the GameTick timer, 10Hz (100ms)
-    gameTimerHandle_ = mainDispatcher_.addTimer(
+    gameTimer_ = mainDispatcher_.addTimer(
         1000000 / Config::updateHertz(),  // 1000000 / 10 = 100000us = 100ms
         this,                              // TimerHandler
-        NULL,                              // pUser
+        reinterpret_cast< void * >( TIMEOUT_GAME_TICK ),
         "GameTick"                         // name
     );
 }

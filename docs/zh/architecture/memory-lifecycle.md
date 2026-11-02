@@ -36,69 +36,69 @@ BigWorld 的生命周期管理有明显的工程体系：
 
 **概述：** BigWorld 使用侵入式引用计数：计数存放在被引用对象内部，而不是像 `std::shared_ptr` 那样有外部 control block。这是老派 C++ 游戏引擎的典型做法，优点是低开销，缺点是没有 weak_ptr 语义。
 
-**源码入口：** smartpointer.hpp:31
+**源码入口：** smartpointer.hpp:50
 
 ```cpp
-// smartpointer.hpp:31 - ReferenceCount 定义
+// smartpointer.hpp:50 - ReferenceCount 定义
 class ReferenceCount
 {
 public:
-    ReferenceCount() : refCount_(0) {}
+    ReferenceCount() : count_(0) {}
     
     // 增加引用计数
-    void incRef() const { ++refCount_; }
+    void incRef() const { ++count_; }
     
     // 减少引用计数
     void decRef() const
     {
-        if (--refCount_ == 0)
+        if (--count_ == 0)
         {
             delete this;  // 计数归零时删除自身
         }
     }
     
     // 获取当前计数
-    int refCount() const { return refCount_; }
+    int refCount() const { return count_; }
     
 protected:
     virtual ~ReferenceCount() {}
     
 private:
-    mutable int refCount_;
+    mutable int count_;
 };
 ```
 
 ```cpp
-// smartpointer.hpp:157 - SafeReferenceCount 定义
+// smartpointer.hpp:176 - SafeReferenceCount 定义
 class SafeReferenceCount
 {
 public:
-    SafeReferenceCount() : refCount_(0) {}
+    SafeReferenceCount() : count_(0) {}
     
     // 原子增加引用计数
     void incRef() const
     {
-        AtomicInt::add( refCount_, 1 );
+        BW_ATOMIC32_INC_AND_FETCH( &count_ );
     }
     
     // 原子减少引用计数
     void decRef() const
     {
-        if (AtomicInt::add( refCount_, -1 ) == 1)
+        if (BW_ATOMIC32_DEC_AND_FETCH( &count_ ) == 1)
         {
             this->destroy();  // 计数归零时调用 destroy()
         }
     }
     
     // 获取当前计数
-    int refCount() const { return AtomicInt::get( refCount_ ); }
+    int refCount() const { return count_; }
     
 protected:
     virtual ~SafeReferenceCount() {}
     virtual void destroy() const { delete this; }
     
 private:
-    mutable AtomicInt refCount_;
+    mutable bw_atomic32_t count_;
 };
 ```
 
@@ -111,19 +111,19 @@ sequenceDiagram
     participant Ptr2 as SmartPointer 2
     participant GC as 垃圾回收
 
-    Obj->>Obj: refCount_ = 0
+    Obj->>Obj: count_ = 0
     
     Ptr1->>Obj: incRef()
-    Obj->>Obj: refCount_ = 1
+    Obj->>Obj: count_ = 1
     
     Ptr2->>Obj: incRef()
-    Obj->>Obj: refCount_ = 2
+    Obj->>Obj: count_ = 2
     
     Ptr1->>Obj: decRef()
-    Obj->>Obj: refCount_ = 1
+    Obj->>Obj: count_ = 1
     
     Ptr2->>Obj: decRef()
-    Obj->>Obj: refCount_ = 0
+    Obj->>Obj: count_ = 0
     Obj->>GC: delete this
 </MermaidDiagram>
 
@@ -275,17 +275,17 @@ Channel 对象的完整生命周期调用链：
   <span class="flow-arrow">-></span>
   <span class="flow-node">incRef() 引用计数 +1</span>
   <span class="flow-arrow">-></span>
-  <span class="flow-node">注册到 channelMap_</span>
+  <span class="flow-node">注册到 pChannelMap_（network_interface.hpp:308）</span>
 </div>
 
 <div class="flow-strip">
   <span class="flow-node">Channel 断开</span>
   <span class="flow-arrow">-></span>
-  <span class="flow-node">从 channelMap_ 移除</span>
+  <span class="flow-node">从 pChannelMap_ 移除（network_interface.hpp:308）</span>
   <span class="flow-arrow">-></span>
   <span class="flow-node">decRef() 引用计数 -1</span>
   <span class="flow-arrow">-></span>
-  <span class="flow-node">检查 condemnedChannels_</span>
+  <span class="flow-node">检查 isCondemned_（udp_channel.hpp:473）</span>
   <span class="flow-arrow">-></span>
   <span class="flow-node">延迟销毁</span>
 </div>

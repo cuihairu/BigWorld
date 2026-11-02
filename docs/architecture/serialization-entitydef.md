@@ -103,19 +103,13 @@ public:
     // Write a string length (:48, internally writePackedInt)
     void writeStringLength( int len )	{ this->writePackedInt( len ); }
 
-    // Add primitive types
-    BinaryOStream & operator<<( bool value );
-    BinaryOStream & operator<<( int8 value );
-    BinaryOStream & operator<<( uint8 value );
-    BinaryOStream & operator<<( int16 value );
-    BinaryOStream & operator<<( uint16 value );
-    BinaryOStream & operator<<( int32 value );
-    BinaryOStream & operator<<( uint32 value );
-    BinaryOStream & operator<<( int64 value );
-    BinaryOStream & operator<<( uint64 value );
-    BinaryOStream & operator<<( float value );
-    BinaryOStream & operator<<( double value );
 };
+
+// Add primitive types. These are FREE functions (binary_stream.hpp:191+), not
+// member functions: they take the stream as their first argument.
+inline BinaryOStream & operator<<( BinaryOStream & b, const BW::string & str );
+inline BinaryOStream & operator<<( BinaryOStream & b, char * str );
+inline BinaryOStream & operator<<( BinaryOStream & b, const char * str );
 ```
 
 ```cpp
@@ -459,7 +453,7 @@ The source cost:
 
 The full call chain for serialising Entity properties to the client:
 
-Source entry: entity.cpp:2475
+Source entry: entity.cpp:2485
 
 <div class="flow-strip">
   <span class="flow-node">Entity::writeClientUpdateDataToBundle()</span>
@@ -479,8 +473,8 @@ Source entry: entity.cpp:2475
 
 The full call chain for deserialising properties on the client:
 
-Source entry: entity_description.cpp:1567
-(see also `readTaggedClientStreamToDict` at :1622)
+Source entry: entity_description.cpp:1586
+(see also `readTaggedClientStreamToDict` at :1641)
 
 <div class="flow-strip">
   <span class="flow-node">EntityDescription::readStreamToDict()</span>

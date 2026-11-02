@@ -1,7 +1,5 @@
 # Entity Lifecycle State Machine
 
-> **English** | [中文](entity-lifecycle-state-machine.md)
-
 <div class="arch-hero">
 
 A BigWorld Entity is not an ordinary business object. It may be a Base, a Cell

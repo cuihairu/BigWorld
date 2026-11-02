@@ -1,7 +1,5 @@
 # 脚本热更新与迁移
 
-](/> [English)) | **中文**
-
 <div class="arch-hero">
 
 BigWorld 的 `reloadScript` 不是现代意义上的安全生产热更新，而是一个高风险的运行时迁移机制。它通过新 Python 解释器加载脚本和 EntityDef，再切回旧解释器迁移类型、Mailbox 和现有实体对象。
@@ -109,7 +107,7 @@ flowchart TD
 1. 根据旧类型名获取新 `EntityType`。
 2. 检查新旧 type id 是否一致。
 3. 更新 `pEntityType_`。
-4. `PyObject_SetAttrString(this, "__class__", newPyType)`。
+4. 调用 `Entity::swapScriptClass( this, newPyType )` 设置 `__class__`，见 entity.ipp:364。
 5. 调用脚本 `onMigrate(self)`。
 
 源码见 entity.cpp。
@@ -149,7 +147,7 @@ flowchart TD
 
 CellApp 触发热更新的完整调用链：
 
-源码入口：cellapp.cpp:2322
+源码入口：cellapp.cpp:2377
 
 <div class="flow-strip">
   <span class="flow-node">CellApp::reloadScript()</span>
@@ -171,7 +169,7 @@ CellApp 触发热更新的完整调用链：
 
 BaseApp 触发热更新的完整调用链：
 
-源码入口：script_bigworld.cpp:1509
+源码入口：script_bigworld.cpp:1483
 
 <div class="flow-strip">
   <span class="flow-node">BigWorld.reloadScript()</span>
@@ -193,7 +191,7 @@ BaseApp 触发热更新的完整调用链：
 
 单个 Entity 迁移的完整调用链：
 
-源码入口：entity.cpp:4245
+源码入口：entity.cpp:4258
 
 <div class="flow-strip">
   <span class="flow-node">Entity::migrate()</span>
@@ -204,7 +202,7 @@ BaseApp 触发热更新的完整调用链：
   <span class="flow-arrow">-></span>
   <span class="flow-node">更新 pEntityType_</span>
   <span class="flow-arrow">-></span>
-  <span class="flow-node">PyObject_SetAttrString("__class__")</span>
+  <span class="flow-node">Entity::swapScriptClass()</span>
   <span class="flow-arrow">-></span>
   <span class="flow-node">调用 onMigrate()</span>
 </div>
@@ -213,7 +211,7 @@ BaseApp 触发热更新的完整调用链：
 
 热更新失败时的恢复调用链：
 
-源码入口：script_bigworld.cpp:1525
+源码入口：script_bigworld.cpp:1540
 
 <div class="flow-strip">
   <span class="flow-node">迁移失败</span>

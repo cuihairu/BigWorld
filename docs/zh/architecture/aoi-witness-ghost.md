@@ -1,7 +1,5 @@
 # AOI、Witness 与 Ghost
 
-](/> [English)) | **中文**
-
 <div class="arch-hero">
 
 BigWorld 的 AOI 不是简单的“半径内广播”。Witness 维护客户端视野、带宽预算、实体别名、可靠位置更新和 SpaceData 同步；Ghost 维护跨 Cell 边界副本，为 AOI 和实体迁移提供连续性。
@@ -114,34 +112,29 @@ flowchart TD
 
 ```cpp
 // witness.cpp:3586 - AoI 触发
-void AoITrigger::triggerEnter( RangeListNode * pOther )
+void AoITrigger::triggerEnter( Entity & entity )
 {
-    // 1. 获取目标实体
-    Entity * pEntity = static_cast<Entity *>(pOther);
-    
-    // 2. 检查是否已经在 AoI 中
-    if (pWitness_->isInAoI( pEntity ))
+    // 1. 检查是否已经在 AoI 中
+    if (pWitness_->isInAoI( entity ))
     {
         return;
     }
     
-    // 3. 添加到 AoI
-    pWitness_->addToAoI( pEntity );
+    // 2. 添加到 AoI
+    pWitness_->addToAoI( entity );
 }
 
-void AoITrigger::triggerLeave( RangeListNode * pOther )
+// witness.cpp:3602 - AoI 触发离开
+void AoITrigger::triggerLeave( Entity & entity )
 {
-    // 1. 获取目标实体
-    Entity * pEntity = static_cast<Entity *>(pOther);
-    
-    // 2. 检查是否在 AoI 中
-    if (!pWitness_->isInAoI( pEntity ))
+    // 1. 检查是否在 AoI 中
+    if (!pWitness_->isInAoI( entity ))
     {
         return;
     }
     
-    // 3. 从 AoI 移除
-    pWitness_->removeFromAoI( pEntity );
+    // 2. 从 AoI 移除
+    pWitness_->removeFromAoI( entity );
 }
 ```
 
@@ -403,7 +396,7 @@ Witness 每 Tick 更新并发送实体数据的完整调用链：
 
 Ghost 实体的创建和维护调用链：
 
-源码入口：entity_ghost_maintainer.cpp:46
+源码入口：entity_ghost_maintainer.cpp:56
 
 <div class="flow-strip">
   <span class="flow-node">EntityGhostMaintainer::check()</span>
