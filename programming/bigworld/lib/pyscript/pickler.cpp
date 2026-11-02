@@ -54,6 +54,63 @@ namespace
 // int 		s_refCount			= 0;
 PyObject * 	s_pPickleMethod		= NULL;
 PyObject * 	s_pUnpickleMethod	= NULL;
+
+// A restricted pickle loader. BigWorld unpickles network-derived bytes for
+// PYTHON-typed entity properties, remote method arguments and server error
+// args. Plain pickle.loads() will execute arbitrary Python from a crafted
+// stream (the __reduce__/GLOBAL opcodes), so a client can gain code execution
+// in baseapp/cellapp/dbapp. This loader overrides find_class() with an
+// allowlist of plain-data globals; anything else raises UnpicklingError and
+// the caller falls back to the FailedUnpickle stand-in. The data containers
+// BigWorld legitimately transfers (dict/list/tuple/set/scalars/bytes and the
+// collections reordering types) still round-trip. _codecs.encode is on the
+// list because protocol-2 pickles bytes as REDUCE(_codecs.encode, latin1-str);
+// it is a pure str-to-bytes codec transform, not a code constructor.
+const char * s_restrictedUnpickleCode =
+	"import pickle, io\n"
+	"_bw_allowed_globals = frozenset((\n"
+	"    ('builtins', 'bool'), ('builtins', 'int'), ('builtins', 'float'),\n"
+	"    ('builtins', 'complex'), ('builtins', 'str'), ('builtins', 'bytes'),\n"
+	"    ('builtins', 'bytearray'), ('builtins', 'list'), ('builtins', 'tuple'),\n"
+	"    ('builtins', 'dict'), ('builtins', 'set'), ('builtins', 'frozenset'),\n"
+	"    ('collections', 'OrderedDict'), ('collections', 'defaultdict'),\n"
+	"    ('collections', 'deque'), ('collections', 'Counter'),\n"
+	"    ('_codecs', 'encode'),\n"
+	"))\n"
+	"class _bw_restricted_unpickler(pickle.Unpickler):\n"
+	"    def find_class(self, module, name):\n"
+	"        if (module, name) not in _bw_allowed_globals:\n"
+	"            raise pickle.UnpicklingError(\n"
+	"                'forbidden global %s.%s' % (module, name))\n"
+	"        return super(_bw_restricted_unpickler, self).find_class(module, name)\n"
+	"def _bw_restricted_loads(data):\n"
+	"    return _bw_restricted_unpickler(io.BytesIO(data)).load()\n";
+
+PyObject * createRestrictedUnpickleMethod()
+{
+	PyObject * pGlobals = PyDict_New();
+	if (pGlobals == NULL)
+	{
+		PyErr_PrintEx(0);
+		return NULL;
+	}
+
+	PyObject * pResult = PyRun_String( s_restrictedUnpickleCode,
+		Py_file_input, pGlobals, pGlobals );
+	if (pResult == NULL)
+	{
+		PyErr_PrintEx(0);
+		Py_DECREF( pGlobals );
+		return NULL;
+	}
+	Py_DECREF( pResult );
+
+	PyObject * pFunc = PyDict_GetItemString( pGlobals, "_bw_restricted_loads" );
+	Py_XINCREF( pFunc );
+	Py_DECREF( pGlobals );
+
+	return pFunc;
+}
 }
 
 /**
@@ -81,11 +138,12 @@ bool Pickler::init()
 
 		if (!s_pUnpickleMethod)
 		{
-			s_pUnpickleMethod = PyObject_GetAttrString(pPickleModule, "loads");
+			s_pUnpickleMethod = createRestrictedUnpickleMethod();
 
 			if (!s_pUnpickleMethod)
 			{
-				ERROR_MSG( "Pickler::init: Failed to get loads\n" );
+				ERROR_MSG( "Pickler::init: Failed to create restricted "
+					"unpickle method\n" );
 				PyErr_PrintEx(0);
 			}
 		}

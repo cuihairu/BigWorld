@@ -620,6 +620,41 @@ TEST_F( PyScriptUnitTestHarness, Pickler_failedUnpickleStandIn )
 }
 
 
+// The restricted unpickler blocks arbitrary globals. A hand-built protocol-2
+// stream that references a forbidden callable (here builtins.eval) must NOT
+// execute; the load raises UnpicklingError and falls back to the stand-in.
+// Plain data containers still round-trip.
+TEST_F( PyScriptUnitTestHarness, Pickler_blocksForbiddenGlobal )
+{
+	// Plain data still round-trips under the restricted loader.
+	ScriptObject pData( evalObject( "{ 'k': [ 1, 2, 3 ], 's': 'v' }" ) );
+	CHECK( pData.get() != NULL );
+	ScriptObject pRestored = Pickler::unpickle( Pickler::pickle( pData ) );
+	CHECK( pRestored.get() != NULL );
+	CHECK( pythonEqual( pData.get(), pRestored.get() ) );
+
+	// A stream whose GLOBAL names a forbidden callable must be rejected,
+	// producing the FailedUnpickle stand-in instead of resolving eval.
+	// Hand-built rather than pickle.dumps()-ed so the payload needs no
+	// statements in the harness's expression-only evalObject.
+	const char EVIL[] =
+		"\x80\x02"				// PROTO 2
+		"cbuiltins\neval\n"		// GLOBAL builtins.eval
+		"X\x03\x00\x00\x00"		// BINUNICODE, length 3
+		"1+1"
+		"\x85"					// TUPLE1
+		"R"						// REDUCE
+		".";					// STOP
+	BW::string evil( EVIL, sizeof( EVIL ) - 1 );
+	ScriptObject pRejected = Pickler::unpickle( evil );
+	CHECK( pRejected.get() != NULL );
+	CHECK( strstr( pRejected.get()->ob_type->tp_name, "FailedUnpickle" ) !=
+		NULL );
+
+	CHECK( !PyErr_Occurred() );
+}
+
+
 // Pickling a null ScriptObject is refused with an empty string.
 TEST_F( PyScriptUnitTestHarness, Pickler_pickleNull )
 {
