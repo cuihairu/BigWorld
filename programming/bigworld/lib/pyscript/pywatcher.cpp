@@ -1754,7 +1754,14 @@ bool SimplePythonWatcher::getAsString( const void * base, const char * path,
 			PyObject *pPyString = PyObject_Str( pPyObject );
 			// BIGWORLD_BEGIN(3.13 migration)
 			// Was PyUnicode_Check/PyUnicode_AsUTF8.
-			if (PyUnicode_Check( pPyString ))
+			if (pPyString == NULL)
+			{
+				// __str__ raised; clear the exception and show an empty
+				// value instead of dereferencing NULL.
+				PyErr_Clear();
+				result = "";
+			}
+			else if (PyUnicode_Check( pPyString ))
 			{
 				const char * pCStr = PyUnicode_AsUTF8( pPyString );
 				result = (pCStr != NULL) ? pCStr : "";
@@ -1763,6 +1770,7 @@ bool SimplePythonWatcher::getAsString( const void * base, const char * path,
 			// BIGWORLD_END
 			else
 			{
+				Py_DECREF( pPyString );
 				result = "";
 			}
 			mode = WT_READ_ONLY;
@@ -1856,7 +1864,14 @@ bool SimplePythonWatcher::getAsStream( const void * base, const char * path,
 			PyObject *pPyString = PyObject_Str( pPyObject );
 			// BIGWORLD_BEGIN(3.13 migration)
 			// Was PyUnicode_Check/PyUnicode_AsUTF8.
-			if (PyUnicode_Check( pPyString ))
+			if (pPyString == NULL)
+			{
+				// __str__ raised; clear the exception and show an empty
+				// value instead of dereferencing NULL.
+				PyErr_Clear();
+				watcherValueToStream( pathRequest.getResultStream(), "", mode );
+			}
+			else if (PyUnicode_Check( pPyString ))
 			{
 				const char * pCStr = PyUnicode_AsUTF8( pPyString );
 				watcherValueToStream( pathRequest.getResultStream(),
@@ -1867,6 +1882,7 @@ bool SimplePythonWatcher::getAsStream( const void * base, const char * path,
 			// BIGWORLD_END
 			else
 			{
+				Py_DECREF( pPyString );
 				watcherValueToStream( pathRequest.getResultStream(), "", mode );
 			}
 			pathRequest.setResult( comment_, mode, this, base );
