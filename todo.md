@@ -64,3 +64,12 @@
 
 - [ ] UI-AUDIT · P2 · 界面审核（impeccable 流程）：原生桌面界面此前不在 web 界面审核范围，补审——按 impeccable 审计（层级/排版/对比度 a11y/布局/边界态），报告 + 截图入 docs/review/，坏损当场修。
 - [ ] DOC-GIF · P2 · 文档 · 配置开关效果动态图（每个开关 off→on 对比 + GIF）：枚举本仓全部「开启后有效果」的开关/配置项；自动流水线生成证据（GUI 用应用截图或录屏，CLI 用终端录屏）；文档「配置效果」页逐开关嵌入 off/on 图 + GIF；验收：清单内每个开关都有 off/on + GIF，流水线可重跑，兼作配置效果回归测试。
+
+## 漏洞扫描遗留（2026-11-03 全舰队扫描，源 scratch/vuln-scan-*.md）
+
+- [ ] VULN-BIGWORLD-001 [严重·GHSA-cg2g-xh64-v4q7/GHSA-mrv2-3pqr-j5jr] dompurify 3.4.16→≥3.4.17（monaco-editor 引入）（package-lock.json 仓，终扫 6（严重1+高危5））【BLOCKED·规范禁 npm 改 lock】npm-lock 仓只审计未改动；验收：迁 pnpm（pnpm import）后 pnpm audit --audit-level=high 该包不再命中（或编排者批准 npm 侧修复后 npm audit 清零）；该仓无 test 脚本，audit-only
+- [ ] VULN-BIGWORLD-002 [高危] @vue/server-renderer <3.5.42→≥3.5.42（package-lock.json 仓，终扫 6（严重1+高危5））【BLOCKED·规范禁 npm 改 lock】npm-lock 仓只审计未改动；验收：迁 pnpm（pnpm import）后 pnpm audit --audit-level=high 该包不再命中（或编排者批准 npm 侧修复后 npm audit 清零）；该仓无 test 脚本，audit-only
+- [ ] VULN-BIGWORLD-003 [高危] vue 3.2.13–3.5.41→≥3.5.42（package-lock.json 仓，终扫 6（严重1+高危5））【BLOCKED·规范禁 npm 改 lock】npm-lock 仓只审计未改动；验收：迁 pnpm（pnpm import）后 pnpm audit --audit-level=high 该包不再命中（或编排者批准 npm 侧修复后 npm audit 清零）；该仓无 test 脚本，audit-only
+- [ ] VULN-BIGWORLD-004 [高危·GHSA-28wg-ghj8-5hjv/GHSA-2v37-7h3g-55p8] nanoid 3.3.12→≥3.3.18（舰队安全钉口径 3.3.20）（package-lock.json 仓，终扫 6（严重1+高危5））【BLOCKED·规范禁 npm 改 lock】npm-lock 仓只审计未改动；验收：迁 pnpm（pnpm import）后 pnpm audit --audit-level=high 该包不再命中（或编排者批准 npm 侧修复后 npm audit 清零）；该仓无 test 脚本，audit-only
+- [ ] VULN-BIGWORLD-005 [高危] source-map-js 1.0.0–1.2.1→≥1.2.2（package-lock.json 仓，终扫 6（严重1+高危5））【BLOCKED·规范禁 npm 改 lock】npm-lock 仓只审计未改动；验收：迁 pnpm（pnpm import）后 pnpm audit --audit-level=high 该包不再命中（或编排者批准 npm 侧修复后 npm audit 清零）；该仓无 test 脚本，audit-only
+- [ ] VULN-BIGWORLD-006 [高危] vite ≤6.4.3→≥6.4.4（npm audit fixAvailable=false，需先迁 pnpm/升直接依赖）（package-lock.json 仓，终扫 6（严重1+高危5））【BLOCKED·规范禁 npm 改 lock】npm-lock 仓只审计未改动；验收：迁 pnpm（pnpm import）后 pnpm audit --audit-level=high 该包不再命中（或编排者批准 npm 侧修复后 npm audit 清零）；该仓无 test 脚本，audit-only
