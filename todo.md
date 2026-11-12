@@ -73,3 +73,33 @@
 - [ ] VULN-BIGWORLD-004 [高危·GHSA-28wg-ghj8-5hjv/GHSA-2v37-7h3g-55p8] nanoid 3.3.12→≥3.3.18（舰队安全钉口径 3.3.20）（package-lock.json 仓，终扫 6（严重1+高危5））【BLOCKED·规范禁 npm 改 lock】npm-lock 仓只审计未改动；验收：迁 pnpm（pnpm import）后 pnpm audit --audit-level=high 该包不再命中（或编排者批准 npm 侧修复后 npm audit 清零）；该仓无 test 脚本，audit-only
 - [ ] VULN-BIGWORLD-005 [高危] source-map-js 1.0.0–1.2.1→≥1.2.2（package-lock.json 仓，终扫 6（严重1+高危5））【BLOCKED·规范禁 npm 改 lock】npm-lock 仓只审计未改动；验收：迁 pnpm（pnpm import）后 pnpm audit --audit-level=high 该包不再命中（或编排者批准 npm 侧修复后 npm audit 清零）；该仓无 test 脚本，audit-only
 - [ ] VULN-BIGWORLD-006 [高危] vite ≤6.4.3→≥6.4.4（npm audit fixAvailable=false，需先迁 pnpm/升直接依赖）（package-lock.json 仓，终扫 6（严重1+高危5））【BLOCKED·规范禁 npm 改 lock】npm-lock 仓只审计未改动；验收：迁 pnpm（pnpm import）后 pnpm audit --audit-level=high 该包不再命中（或编排者批准 npm 侧修复后 npm audit 清零）；该仓无 test 脚本，audit-only
+
+## 代码深审遗留（2026-11-01 深审，P1 已全部修完并推送；总账见 docs/review/2026-11-01-code-review.md）
+
+- [ ] CR-P2-01 · 引用计数 · `script.cpp:107,133,192` `PyFrame_GetCode` 强引用从不 DECREF（pushStack/updateStackTop/PythonProfiler::handleStack 每事件漏 1）。**承重**：该泄漏保住交给 StackTracker 的裸指针，裸修会 UAF，须同时改为拷贝 name/filename 字符串。
+- [ ] CR-P2-02 · 引用计数 · `pywatcher.cpp:1202-1233` `PyFunctionWatcher::init` 所有路径泄漏 `pName`/`pType`（PySequence_GetItem 新引用）。
+- [ ] CR-P2-03 · 引用计数 · `script.hpp:508-532` `getNestedValue` 每次 GetAttrString 泄漏、终引用未释放；EntityType 构造 ×2 → 每次热重载每类型 8 引用。
+- [ ] CR-P2-04 · 引用计数 · `py_traceback.cpp:593-594` `PySys_SetObject` INCREF 不 steal，PyCFunction_New 一次性泄漏。
+- [ ] CR-P2-05 · 热重载 · `entity_type.cpp:381` reloadScript 在 importEntityClass 失败时仍 `setPyType(newRef())`，把活着的 pPyType_ 抹成 NULL → newEntity() 恒 NULL。应失败时保留旧类。
+- [ ] CR-P2-06 · 热重载（疑）· `entity_type.ipp:73-100` 持 PyDict_GetItemString 借用的 sys 模块跨 PyDict_Clear，理论可 DECREF 到零；`:98` 注释「steals a reference」措辞错误（SetItemString 是 INCREF，代码正确）。
+- [ ] CR-P2-07 · 热重载（疑）· `entity_type.cpp:420` `s_curTypes_ = s_newTypes_` 无锁改写，getType()/getDescription() 并发读。
+- [ ] CR-P2-08 · 热重载（疑）· `cellapp.cpp:2450-2455` MIGRATE_ENTITIES 遍历 population() 期间 onMigrate 钩子可建/销实体，迭代器失效。
+- [ ] CR-P2-09 · 错误处理（疑）· `buffered_ghost_message_factory.cpp:104-108` MF_ASSERT 在 release 为 no-op，findEntity 返 NULL 时解引用。
+- [ ] CR-P2-10 · 错误处理 · `script.cpp:1547-1551` `setData(PyObject*, bool&)` 的 PyLong_AsLong 溢出错误被忽略，留 OverflowError 挂起。
+- [ ] CR-P2-11 · 错误处理（疑）· `py_logging.cpp:52,68` AsUTF8 结果未判空即传 LogMsg/metaAsJSON；同族 `py_script_object.hpp:1417-1418`、`script.cpp:1555-1556`、`pickler.cpp:149-150`。
+- [ ] CR-P2-12 · 静默失败 · `entity.cpp:5311-5331` callBaseMethod 未知方法序号不报错也不 data.finish()（对比 callClientMethod :5367-5372 有日志）。
+- [ ] CR-P2-13 · 逻辑（疑）· `data_downloads.cpp:557` StringDataDownloadFactory::onCreate 现要求 PyUnicode_Check，Py2.7 下可过的 bytes 二进制负载现 TypeError 拒绝。
+- [ ] CR-P2-14 · 网络越界 · `watcher_nub.cpp:448,464,482,499`（另 646-680）wdm->count 无界循环，astr += strlen(astr)+1 越界读（管理端口，常 localhost-only）。
+- [ ] CR-P2-15 · NULL 解引用 · `data_type.cpp:178-180` retrieve() 在 len > BS_BUFF_MAX_SIZE 且超长时返 NULL → new MemoryIStream(NULL,len) 后 readPackedInt 解引用 *(uint8*)NULL。
+- [ ] CR-P2-16 · 死循环 · `udp_channel.cpp:530-541` initFromStream 循环在 createFromStream 恒返 NULL 时 numToReceive 不递减 → 永不退出，且 bufferedReceives_ 掩蔽回绕。
+- [ ] CR-P2-17 · NULL 解引用 · `fragmented_bundle.cpp:162-173` Packet::createFromStream NULL 未判即 new FragmentedBundle(pPacket.get())。
+- [ ] CR-P2-18 · NULL 解引用 · `network_stats.cpp:149-156` strstr(...)+2 解引用发生在 NULL 守卫之前。
+- [ ] CR-P2-19 · 复制粘贴 · `data_type.cpp:744` const_iterator 拷贝构造 `size_( other.index_ )` 应为 `other.size_`（当前潜伏）。
+- [ ] CR-P2-20 · 计划/逻辑 · `entity_migration_plan.hpp:249` advance() 令 rollbackNeeded = migrated > 0，首个实体失败且 migrated==0 时半迁移态不回滚。
+- [ ] CR-P2-21 · 内存耗尽 · `zip_stream.cpp:135-146` origLen 由对端声明（~2^32）后 new unsigned char[origLen]，无上限。
+- [ ] CR-P2-22 · 内存耗尽 · `udp_bundle_processor.cpp:338,551` new char[dataLength_] 取声明报文长，越界发现前已分配。
+- [ ] CR-P2-23 · 硬编码凭据 · `db_storage_mysql/db_config.cpp:48-49` 编译期兜底 username/password = "bigworld"。
+- [ ] CR-P2-24 · SQL 标识符拼接 · `mysql_database.cpp:568` 实体类型名裸拼进 FROM tbl_ 表名；同族 `table_meta_data.cpp:120` SHOW INDEX FROM tableName。
+- [ ] CR-P2-25 · 整数溢出→分配 · `binary_stream.hpp:353,407` operator>>(BW::vector&) 与 TYPEDEF_STREAMING_VECTOR 无条件 reserve(attacker_max)。
+- [ ] CR-P3-01 · 格式串 · `log_msg.cpp:558` printf(buffer) 用报文文本当格式串——**仅 PLAYSTATION3 分支**，Linux/Windows 不可达。
+- [ ] CR-P3-02 · 覆盖面说明 · `tools/*` C++ 仍含 Py2 专属 PyString_*/PyInt_* 调用，故这些 tool 目标未对 3.13 构建（非缺陷）。
