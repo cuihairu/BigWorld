@@ -38,7 +38,7 @@
 - [x] exe 打包（Windows 产物进入每日构建或独立 workflow，干净环境可复现） — `14ebd63a`→`31ce396c`→`68c2c1f1`→`98fd9b19`
 - [x] 虚拟时钟注入（EventDispatcher/TimeQueue 可注入时钟且默认行为不变） — lib/network/unit_test/test_virtual_clock.cpp 4 用例
 - [x] 观测面现代化（结构化日志字段/trace-correlation id、日志采样与动态级别、watcher 拆只读观测 vs 可写控制） — `33a06559`
-- [ ] 热重载生产化（版本化 schema、双版本兼容窗口、dry-run、失败回滚、跨进程一致性屏障）：迁移路径测试已覆盖 Entity::migrate 语义，失败回滚已建模但引擎接线待执行承载 — `2d65213e`、`66d7cb48`、`e19b07d4`
+- [ ] 热重载生产化（版本化 schema、双版本兼容窗口、dry-run、失败回滚、跨进程一致性屏障）：**失败回滚引擎已接线**（2026-11-12 `966b56c7`）—— `EntityMigration::rollout` collect-decide 全population 收集-决策（`entity_migration_plan.hpp:322`），`CellApp::reloadScript` 的 `MIGRATE_ENTITIES` 改走 rollout（STOP_ON_FAILURE + 逆序回滚 + 按(new,old)对归因），失败时跳过 `MIGRATED_ALL`（`cellapp.cpp:2529-2560`）；`Entity::rollbackMigration` 执行 `pEntityType_`/`__class__` 恢复 + `EntityType::unsupersedeOldDescription()` + `old(NULL)`（`entity.cpp:4368`）；CR-P2-20 修正 touched 计数；`test_migration_rollout.cpp` 8 用例 + `test_entity_migration_plan.cpp` touched 用例（cellapp_test 50 全绿，全套 21 模块绿）；生产 cellapp 二进制编译通过。剩余：版本化 schema / 双版本兼容窗口 / dry-run / 跨进程一致性屏障 — `2d65213e`、`66d7cb48`、`e19b07d4`、`966b56c7`
 - [x] R4 客户端/FantasyDemo 资源 Linux 验证（程序化生成最小占位树 + 生成脚本可重建） — entitydef_test 375→380
 - [ ] io_uring / 批量 UDP 评估（暂缓：用户 2026-10-15 明确暂不开发；保留条目待性能数据触发） — 无
 - [ ] 集群级黑盒回归链（login → 实体创建 → Cell 切换 → BaseApp 崩溃恢复 → DB digest 端到端一键冒烟）：缺集群 bootstrap 编排 + DB 实例 + 端到端断言脚本 — 无
@@ -63,6 +63,7 @@
 ## 待办（P2，2026-11-01 用户令全舰队推广）
 
 - [ ] UI-AUDIT · P2 · 界面审核（impeccable 流程）：原生桌面界面此前不在 web 界面审核范围，补审——按 impeccable 审计（层级/排版/对比度 a11y/布局/边界态），报告 + 截图入 docs/review/，坏损当场修。
+  - 范围修正（2026-11-12 取证）：仓内确有原生桌面界面，共 3 个且全为 **Windows 专属 MFC**：`worldeditor`（`tools/worldeditor/CMakeLists.txt:910` `BW_ADD_TOOL_EXE( … WIN32 )`、`afxwin.h`）、`modeleditor`（`tools/modeleditor/CMakeLists.txt:40`，`GUI/model_editor.cpp` 仅 Win32 壳）、`particle_editor`（`tools/particle_editor/CMakeLists.txt:197`，`afxdhtml.h`/`afxpriv.h`）；三者只在 `BW_CMAKE_TARGET=tools` 生成（`build/cmake/BWConfiguration_tools.cmake:110-112`），本仓 Linux `make el7` 服务器面不构建，server 组件与 server/tools 均为 CLI（`BWConfiguration_server.cmake:174-179`：bwmachined/bots/clear_auto_load/consolidate_dbs/message_logger 等），仓内无 wx/gtk/Qt/tkinter 一方代码（命中项全在 `build/…/common/Lib/test/` 的第三方 Python 标准库测试）。【BLOCKED·需 Windows + VS + MFC 构建/显示环境】验收前提：能在 Windows runner 上起 worldeditor/modeleditor/particle_editor 并截图。
 - [ ] DOC-GIF · P2 · 文档 · 配置开关效果动态图（每个开关 off→on 对比 + GIF）：枚举本仓全部「开启后有效果」的开关/配置项；自动流水线生成证据（GUI 用应用截图或录屏，CLI 用终端录屏）；文档「配置效果」页逐开关嵌入 off/on 图 + GIF；验收：清单内每个开关都有 off/on + GIF，流水线可重跑，兼作配置效果回归测试。
 
 ## 漏洞扫描遗留（2026-11-03 全舰队扫描，源 scratch/vuln-scan-*.md）
@@ -83,7 +84,7 @@
 - [ ] CR-P2-05 · 热重载 · `entity_type.cpp:381` reloadScript 在 importEntityClass 失败时仍 `setPyType(newRef())`，把活着的 pPyType_ 抹成 NULL → newEntity() 恒 NULL。应失败时保留旧类。
 - [ ] CR-P2-06 · 热重载（疑）· `entity_type.ipp:73-100` 持 PyDict_GetItemString 借用的 sys 模块跨 PyDict_Clear，理论可 DECREF 到零；`:98` 注释「steals a reference」措辞错误（SetItemString 是 INCREF，代码正确）。
 - [ ] CR-P2-07 · 热重载（疑）· `entity_type.cpp:420` `s_curTypes_ = s_newTypes_` 无锁改写，getType()/getDescription() 并发读。
-- [ ] CR-P2-08 · 热重载（疑）· `cellapp.cpp:2450-2455` MIGRATE_ENTITIES 遍历 population() 期间 onMigrate 钩子可建/销实体，迭代器失效。
+- [ ] CR-P2-08 · 热重载（疑）· `cellapp.cpp:2529-2560` MIGRATE_ENTITIES 经 `EntityMigration::rollout` 原地遍历 population()（同相邻 MIGRATED_ALL 循环），onMigrate 钩子可建/销实体 → 迭代器失效；回滚半程有 aliveOp 跳过已亡实体（收窄），迁移半程未闭合。
 - [ ] CR-P2-09 · 错误处理（疑）· `buffered_ghost_message_factory.cpp:104-108` MF_ASSERT 在 release 为 no-op，findEntity 返 NULL 时解引用。
 - [ ] CR-P2-10 · 错误处理 · `script.cpp:1547-1551` `setData(PyObject*, bool&)` 的 PyLong_AsLong 溢出错误被忽略，留 OverflowError 挂起。
 - [ ] CR-P2-11 · 错误处理（疑）· `py_logging.cpp:52,68` AsUTF8 结果未判空即传 LogMsg/metaAsJSON；同族 `py_script_object.hpp:1417-1418`、`script.cpp:1555-1556`、`pickler.cpp:149-150`。
@@ -95,7 +96,7 @@
 - [ ] CR-P2-17 · NULL 解引用 · `fragmented_bundle.cpp:162-173` Packet::createFromStream NULL 未判即 new FragmentedBundle(pPacket.get())。
 - [ ] CR-P2-18 · NULL 解引用 · `network_stats.cpp:149-156` strstr(...)+2 解引用发生在 NULL 守卫之前。
 - [ ] CR-P2-19 · 复制粘贴 · `data_type.cpp:744` const_iterator 拷贝构造 `size_( other.index_ )` 应为 `other.size_`（当前潜伏）。
-- [ ] CR-P2-20 · 计划/逻辑 · `entity_migration_plan.hpp:249` advance() 令 rollbackNeeded = migrated > 0，首个实体失败且 migrated==0 时半迁移态不回滚。
+- [x] CR-P2-20 · 计划/逻辑 · `entity_migration_plan.hpp` advance() 曾令 rollbackNeeded = migrated > 0，首个实体失败且 migrated==0 时半迁移态不回滚 — 已改 touched 计数（`EntityMigrationPlan_FirstFailureTouchesRollsBack` + `MigrationRollout_FirstEntityHookFailureRollsItselfBack` 双层钉住）。
 - [ ] CR-P2-21 · 内存耗尽 · `zip_stream.cpp:135-146` origLen 由对端声明（~2^32）后 new unsigned char[origLen]，无上限。
 - [ ] CR-P2-22 · 内存耗尽 · `udp_bundle_processor.cpp:338,551` new char[dataLength_] 取声明报文长，越界发现前已分配。
 - [ ] CR-P2-23 · 硬编码凭据 · `db_storage_mysql/db_config.cpp:48-49` 编译期兜底 username/password = "bigworld"。
