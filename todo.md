@@ -65,6 +65,7 @@
 - [ ] UI-AUDIT · P2 · 界面审核（impeccable 流程）：原生桌面界面此前不在 web 界面审核范围，补审——按 impeccable 审计（层级/排版/对比度 a11y/布局/边界态），报告 + 截图入 docs/review/，坏损当场修。
   - 范围修正（2026-11-12 取证）：仓内确有原生桌面界面，共 3 个且全为 **Windows 专属 MFC**：`worldeditor`（`tools/worldeditor/CMakeLists.txt:910` `BW_ADD_TOOL_EXE( … WIN32 )`、`afxwin.h`）、`modeleditor`（`tools/modeleditor/CMakeLists.txt:40`，`GUI/model_editor.cpp` 仅 Win32 壳）、`particle_editor`（`tools/particle_editor/CMakeLists.txt:197`，`afxdhtml.h`/`afxpriv.h`）；三者只在 `BW_CMAKE_TARGET=tools` 生成（`build/cmake/BWConfiguration_tools.cmake:110-112`），本仓 Linux `make el7` 服务器面不构建，server 组件与 server/tools 均为 CLI（`BWConfiguration_server.cmake:174-179`：bwmachined/bots/clear_auto_load/consolidate_dbs/message_logger 等），仓内无 wx/gtk/Qt/tkinter 一方代码（命中项全在 `build/…/common/Lib/test/` 的第三方 Python 标准库测试）。【BLOCKED·需 Windows + VS + MFC 构建/显示环境】验收前提：能在 Windows runner 上起 worldeditor/modeleditor/particle_editor 并截图。
 - [ ] DOC-GIF · P2 · 文档 · 配置开关效果动态图（每个开关 off→on 对比 + GIF）：枚举本仓全部「开启后有效果」的开关/配置项；自动流水线生成证据（GUI 用应用截图或录屏，CLI 用终端录屏）；文档「配置效果」页逐开关嵌入 off/on 图 + GIF；验收：清单内每个开关都有 off/on + GIF，流水线可重跑，兼作配置效果回归测试。
+  - 进度（2026-11-12，未开工，先记范围）：可枚举面已确认可离线完成——开关定义集中在 `programming/bigworld/game/etc/` 模板（`*.conf.in`）+ `game/etc/.../config.py` + `lib/config/*.hpp` 读取点，可用 grep 出全量清单；但「off/on 证据」的采集要集群或客户端跑起来（server 开关看日志/行为差异，需 `baseappmgr`+`cellappmgr`+`dbapp` 集群；GUI 开关属 :65 同批 Windows-only MFC 工具），**故本项依赖集群 bootstrap（:44/:50）与 Windows runner（:37 R3 三树决）**，当前按批次窗口先登记范围、未产出清单文件，未勾选。
 
 ## 漏洞扫描遗留（2026-11-03 全舰队扫描，源 scratch/vuln-scan-*.md）
 
