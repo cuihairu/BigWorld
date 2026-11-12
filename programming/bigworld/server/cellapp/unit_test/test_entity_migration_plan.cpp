@@ -1,23 +1,20 @@
 // test_entity_migration_plan.cpp
 //
 // The Entity::migrate outcome classes and the collect-decide policy the
-// CellApp::reloadScript migrate loop is to apply to them, as testable data
+// CellApp::reloadScript migrate loop applies to them, as testable data
 // (entity_migration_plan.hpp; failure modes F1 and F2 in docs/upgrade-plan/
-// hot-reload-productionization.md). The loop itself is only reachable inside
-// a live CellApp - it MF_VERIFYs each migrate() at cellapp.cpp:2454 - so the
-// branch policy and the rollback boundary are pinned here:
+// hot-reload-productionization.md). The loop-with-rollback itself is pinned
+// end to end on fake entities in test_migration_rollout.cpp; what is pinned
+// here is the data layer:
 //
 //   * a guard rejection touches nothing, a rejected class swap restores the
 //     type pointer, and a raised onMigrate hook still reports success: the
 //     bool return alone cannot tell the three apart;
 //   * STOP_ON_FAILURE stops the rollout at the first failure and needs a
-//     rollback only when something migrated before it;
-//   * CONTINUE_ON_FAILURE records and keeps migrating;
-//   * the rollback inverse is fully expressible (rollbackInverseComplete())
-//     and the attribution decision is modeled (planRollback), but the loop
-//     and its rollback call Entity methods on live entities, unreachable
-//     here - the C-tier execution-carrier gap - so the loop still aborts
-//     instead of stopping and rolling back.
+//     rollback only when something was touched (the touched counter, not the
+//     migrated counter - a half-migrated first failure is in the rollback
+//     set, CR-P2-20);
+//   * CONTINUE_ON_FAILURE records and keeps migrating.
 
 #include "pch.hpp"
 
@@ -95,8 +92,8 @@ TEST( EntityMigrationPlan_StopOnFailure )
 
 
 /**
- *	A failure before anything migrated still stops the rollout: there is no
- *	partial state, so there is nothing to roll back.
+ *	A guard rejection still stops the rollout: it touched nothing (touched 0),
+ *	so there is nothing to roll back.
  */
 TEST( EntityMigrationPlan_StopWithNothingMigrated )
 {
@@ -108,8 +105,29 @@ TEST( EntityMigrationPlan_StopWithNothingMigrated )
 	CHECK( state.stopped );
 	CHECK( !state.rollbackNeeded );
 	CHECK_EQUAL( 0, state.migrated );
+	CHECK_EQUAL( 0, state.touched );
 	CHECK_EQUAL( 1, state.failed );
 	CHECK_EQUAL( EntityMigration::GUARD_OBSOLETE, state.firstFailure );
+}
+
+
+/**
+ *	A touching failure on the very first entity still leaves the rollback set
+ *	non-empty: the touched counter, not the migrated counter, decides
+ *	rollbackNeeded (CR-P2-20 - the half-migrated first entity is in the set).
+ */
+TEST( EntityMigrationPlan_FirstFailureTouchesRollsBack )
+{
+	EntityMigration::LoopState state =
+		EntityMigration::initState( EntityMigration::STOP_ON_FAILURE );
+
+	CHECK_EQUAL( EntityMigration::STOP_AND_ROLLBACK,
+		EntityMigration::advance( state, EntityMigration::SCRIPT_EXCEPTION ) );
+	CHECK( state.stopped );
+	CHECK( state.rollbackNeeded );
+	CHECK_EQUAL( 0, state.migrated );
+	CHECK_EQUAL( 1, state.touched );
+	CHECK_EQUAL( 1, state.failed );
 }
 
 
@@ -182,8 +200,8 @@ TEST( EntityMigrationPlan_RenamedOldDescription )
  *	always clears), and the supersede rename's inverse is
  *	EntityDescription::unsupersede, one stacked prefix per call. Since batch
  *	54 the attribution decision is modeled too (planRollback), so both
- *	completeness facts hold; what still keeps the loop unwired is the
- *	execution carrier, not a missing decision.
+ *	completeness facts hold; the loop now runs them through
+ *	EntityMigration::rollout (pinned in test_migration_rollout.cpp).
  */
 TEST( EntityMigrationPlan_RollbackDecisionModeled )
 {

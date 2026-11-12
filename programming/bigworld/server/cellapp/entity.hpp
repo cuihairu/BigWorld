@@ -292,9 +292,33 @@ public:
 	 *
 	 *	@param pFailureClass	The observed outcome, one of the
 	 *			EntityMigration::FailureClass values. Must not be NULL.
+	 *	@param pOldTypeOut		Optional. Receives the entity's type before
+	 *			the migration ran, for the rollback record.
+	 *	@param pNewTypeOut		Optional. Receives the replacement type whose
+	 *			old-type link migrate() took (only set when the replacement
+	 *			was a distinct type, the pair owner for old(NULL)); stays
+	 *			default-constructed for a script-only reload.
 	 *	@return True when the entity now runs on the replacement type.
 	 */
-	bool migrate( EntityMigration::FailureClass * pFailureClass );
+	bool migrate( EntityMigration::FailureClass * pFailureClass,
+		EntityTypePtr * pOldTypeOut = NULL,
+		EntityTypePtr * pNewTypeOut = NULL );
+
+	/**
+	 *	This method runs one entity's rollback plan: restoring the C++ type
+	 *	pointer and the script class to the pre-migration type when the plan
+	 *	says the entity fully migrated, undoing the old description's
+	 *	supersede rename and breaking the new type's old-type link once per
+	 *	(new, old) pair (the rollout loop attributes the pair-level steps;
+	 *	this method just runs what the plan says).
+	 *
+	 *	@param pOldType	The entity's type before its migration.
+	 *	@param pNewType	The replacement type migrate() linked; may be NULL
+	 *			for a script-only reload.
+	 *	@param plan		The rollback steps this entity runs.
+	 */
+	void rollbackMigration( EntityTypePtr pOldType, EntityTypePtr pNewType,
+		const EntityMigration::RollbackPlan & plan );
 
 	void migratedAll();
 

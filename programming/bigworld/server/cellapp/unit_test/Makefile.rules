@@ -11,6 +11,7 @@ cxxSource =									\
 	test_entity_message_routing				\
 	test_entity_migration_plan				\
 	test_entity_type_migration				\
+	test_migration_rollout					\
 	test_reload_script_plan					\
 	../buffered_ghost_message				\
 	../buffered_ghost_message_queue			\

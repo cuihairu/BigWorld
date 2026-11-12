@@ -2371,6 +2371,82 @@ void CellApp::adjustLoadForOffload( float entityLoad )
 }
 
 
+namespace
+{
+
+/**
+ *	This extracts the entity from one entity-population element, which is
+ *	the entity id pair: the rollout loop only needs the entity.
+ */
+class GetPopulationEntity
+{
+public:
+	typedef Entity * EntityPtr;
+
+	Entity * operator()( const EntityPopulation::value_type & pair ) const
+	{
+		return pair.second;
+	}
+};
+
+
+/**
+ *	This migrates one entity and hands the type pair it linked to the rollout
+ *	loop: the pair is what the rollback attributes its type-level steps on
+ *	(see EntityMigration::rollout in entity_migration_plan.hpp).
+ */
+class EntityMigrateOp
+{
+public:
+	typedef EntityTypePtr TypePtr;
+
+	EntityMigration::FailureClass operator()( Entity * pEntity,
+		EntityTypePtr & pOldType, EntityTypePtr & pNewType ) const
+	{
+		EntityMigration::FailureClass failureClass = EntityMigration::NONE;
+		pEntity->migrate( &failureClass, &pOldType, &pNewType );
+		return failureClass;
+	}
+};
+
+
+/**
+ *	This reports whether an entity is still alive. A script hook may destroy
+ *	a neighbour entity during the pass, so both the migration loop and the
+ *	rollback loop ask before touching one.
+ */
+class EntityAliveOp
+{
+public:
+	typedef Entity * EntityPtr;
+
+	bool operator()( Entity * pEntity ) const
+	{
+		return pEntity != NULL && !pEntity->isDestroyed();
+	}
+};
+
+
+/**
+ *	This runs one entity's rollback plan, the execution half of the
+ *	rollout loop's collect-decide policy.
+ */
+class EntityRollbackOp
+{
+public:
+	typedef EntityTypePtr TypePtr;
+
+	void operator()( Entity * pEntity, EntityTypePtr pOldType,
+		EntityTypePtr pNewType,
+		const EntityMigration::RollbackPlan & plan ) const
+	{
+		pEntity->rollbackMigration( pOldType, pNewType, plan );
+	}
+};
+
+} // namespace
+
+
 /**
  *	This method reloads the scripts.
  */
@@ -2406,6 +2482,11 @@ bool CellApp::reloadScript( bool isFullReload )
 		udoLoaded };
 	const ReloadScript::ReloadPlan plan =
 		ReloadScript::planReload( planInputs );
+
+	// The migrate pass outcome, read back by the MIGRATED_ALL step (which
+	// only follows MIGRATE_ENTITIES in the success tail of the plan).
+	EntityMigration::LoopState migrateLoopState =
+		EntityMigration::initState( EntityMigration::STOP_ON_FAILURE );
 
 	for (int i = 0; i < plan.count; ++i)
 	{
@@ -2446,26 +2527,48 @@ bool CellApp::reloadScript( bool isFullReload )
 				break;
 
 			case ReloadScript::MIGRATE_ENTITIES:
-				// Migrate entities
-				for (EntityPopulation::const_iterator iter =
-						Entity::population().begin();
-					iter != Entity::population().end(); ++iter)
+			{
+				// Migrate entities with the collect-decide policy: stop at
+				// the first failure and roll the pass back, instead of the
+				// old MF_VERIFY that aborted the process on the first
+				// failure and left everything before it half-migrated.
+				const EntityMigration::LoopState loopState =
+					EntityMigration::rollout( Entity::population(),
+						GetPopulationEntity(),
+						EntityMigration::STOP_ON_FAILURE, EntityMigrateOp(),
+						EntityAliveOp(), EntityRollbackOp() );
+				migrateLoopState = loopState;
+
+				if (loopState.failed > 0)
 				{
-					MF_VERIFY( iter->second->migrate() );
+					ERROR_MSG( "CellApp::reloadScript: migrate pass failed: "
+						"%d migrated, %d failed (first failure class %d), "
+						"%s\n",
+						loopState.migrated, loopState.failed,
+						loopState.firstFailure,
+						loopState.rollbackNeeded ?
+							"rolled back" : "nothing to roll back" );
 				}
 				break;
+			}
 
 			case ReloadScript::MIGRATED_ALL:
 				// The batch is over, tell each entity's script (failure mode
 				// F6: Entity::migratedAll had no caller anywhere in the tree,
 				// so onMigratedAll never fired). The hook is optional, and
-				// like onMigrate its exceptions are only printed - the
-				// collect-decide policy in P2 will count them as failures.
-				for (EntityPopulation::const_iterator iter =
-						Entity::population().begin();
-					iter != Entity::population().end(); ++iter)
+				// like onMigrate its exceptions are only printed. The hook
+				// fires only after a fully successful batch: a stopped batch
+				// was rolled back, so the entities are back on their old
+				// classes and must not see the new batch's hook.
+				if (!migrateLoopState.stopped &&
+					migrateLoopState.failed == 0)
 				{
-					iter->second->migratedAll();
+					for (EntityPopulation::const_iterator iter =
+							Entity::population().begin();
+						iter != Entity::population().end(); ++iter)
+					{
+						iter->second->migratedAll();
+					}
 				}
 				break;
 

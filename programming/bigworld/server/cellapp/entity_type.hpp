@@ -85,6 +85,17 @@ public:
 	EntityTypePtr old() const	{ return pOldSelf_; }
 	void old( EntityTypePtr pOldType );
 
+	/**
+	 *	This method undoes the supersede rename that old() applied to the
+	 *	old description's cell methods - one stacked old_ prefix per call,
+	 *	so it pairs with exactly one old() first-setter. The rollback half
+	 *	of the hot-reload rollout runs it once per (new, old) type pair.
+	 */
+	void unsupersedeOldDescription()
+	{
+		entityDescription_.unsupersede( MethodDescription::CELL );
+	}
+
 	// profiling
 	const EntityTypeProfiler & profiler() const { return profiler_; }
 	EntityTypeProfiler & profiler() { return profiler_; }

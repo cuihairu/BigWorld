@@ -54,11 +54,15 @@ enum Action
 	MIGRATE_ENTITY_TYPES,		///< EntityType::migrate(isFullReload)
 	MIGRATE_USER_DATA_OBJECT_TYPES,
 	MIGRATE_MAIL_BOXES,			///< ServerEntityMailBox::migrateMailBoxes
-	MIGRATE_ENTITIES,			///< per-entity Entity::migrate, MF_VERIFY'd
-	MIGRATED_ALL,				///< per-entity Entity::migratedAll, after the
-								///< migration loop (failure mode F6: the
-								///< onMigratedAll hook was declared but never
-								///< called by anything in the tree)
+	MIGRATE_ENTITIES,			///< per-entity Entity::migrate under the
+								///< collect-decide policy: stop at the
+								///< first failure and roll the pass back
+								///< (EntityMigration::rollout)
+	MIGRATED_ALL,				///< per-entity Entity::migratedAll, after a
+								///< fully successful migration loop (failure
+								///< mode F6: the onMigratedAll hook was
+								///< declared but never called by anything in
+								///< the tree)
 	CLEANUP_AFTER_RELOAD,		///< EntityType::cleanupAfterReload(isFullReload)
 	RECOVER_OLD_SCRIPTS,		///< EntityType::reloadScript(true), failure only
 	ACTION_COUNT

@@ -23,32 +23,40 @@
 //   * SCRIPT_EXCEPTION - the onMigrate hook raised; Script::call's return
 //     value is discarded (F2), so the entity still reports success.
 //
-// The rollback half of the design cannot be run yet, and the reason is
-// recorded here rather than guessed around. All four inverse steps have
-// primitives (rollbackInverseComplete()): the two pointer/class restores
-// are plain assignments, the old-type link is cleared through the public
-// setter old(NULL) (EntityType::old, entity_type.hpp:87 - the early return
-// only fires when both pOldSelf_ and the argument are non-NULL, and
-// cleanupAfterReload already uses old(NULL) to break the link), and the
-// supersede rename's inverse is EntityDescription::unsupersede, which
-// strips exactly one leading old_ prefix per call, pairing with
-// supersede()'s one-per-call stacking (entitydef_test
-// EntityDescription_unsupersede*; batch 53 - batch 51 wrongly recorded the
-// rename as having no inverse and the link as having no setter). The
-// attribution decision - who runs the per-pair type-level steps - is
-// decidable and modeled as planRollback() (batch 54): the strip and the
+// The rollback half of the design ran once it had an execution carrier.
+// All four inverse steps have primitives (rollbackInverseComplete()): the
+// two pointer/class restores are plain assignments, the old-type link is
+// cleared through the public setter old(NULL) (EntityType::old,
+// entity_type.hpp:87 - the early return only fires when both pOldSelf_ and
+// the argument are non-NULL, and cleanupAfterReload already uses old(NULL)
+// to break the link), and the supersede rename's inverse is
+// EntityDescription::unsupersede, which strips exactly one leading old_
+// prefix per call, pairing with supersede()'s one-per-call stacking
+// (entitydef_test EntityDescription_unsupersede*; batch 53 - batch 51
+// wrongly recorded the rename as having no inverse and the link as having
+// no setter). The attribution decision - who runs the per-pair type-level
+// steps - is modeled as planRollback() (batch 54): the strip and the
 // link-clear each run once per (new, old) type pair, on the first touched
 // entity of the pair in rollback order, so no entity has to "own" a rename
 // it did not cause (EntityType::old, entity_type.cpp:178, returns without
-// renaming once pOldSelf_ is already set). What keeps the migrate loop
-// MF_VERIFYing instead of stopping and rolling back is not a missing
-// decision but the execution carrier: the loop and its rollback call
-// Entity methods on live entities, unreachable in cellapp/unit_test (the
-// C-tier "server-side reload migration semantic test carrier" gap), so the
-// wiring is deferred until that carrier or cluster materials exist.
+// renaming once pOldSelf_ is already set).
+//
+// The carrier is rollout() below: the collect-decide pass as a template
+// over the entity population and four operation objects, so the loop logic
+// (stop stickiness, reverse-order rollback, per-pair attribution,
+// destroyed entities skipped) is assertable with fake entities while the
+// real bindings stay three thin functors in CellApp::reloadScript
+// (cellapp.cpp, Entity::migrate / Entity::rollbackMigration). The live
+// map is iterated in place like the adjacent MIGRATED_ALL loop - a script
+// hook that destroys a neighbour mid-pass keeps the pre-existing
+// population-mutation exposure (see the CR-P2-08 ledger line), which the
+// destroyed-entity check narrows for the rollback half but does not
+// close for the migration half.
 
 #ifndef ENTITY_MIGRATION_PLAN_HPP
 #define ENTITY_MIGRATION_PLAN_HPP
+
+#include "cstdmf/bw_vector.hpp"
 
 BW_BEGIN_NAMESPACE
 
@@ -202,8 +210,10 @@ struct LoopState
 	bool stopped;
 	int migrated;
 	int failed;
+	int touched;			///< failures that touched the entity or its
+							///< type pair (guard rejections excluded)
 	FailureClass firstFailure;///< NONE until a failure is observed
-	bool rollbackNeeded;	///< a stopped rollout migrated something first
+	bool rollbackNeeded;	///< a stopped rollout left touched state behind
 };
 
 inline LoopState initState( Policy policy )
@@ -213,6 +223,7 @@ inline LoopState initState( Policy policy )
 	state.stopped = false;
 	state.migrated = 0;
 	state.failed = 0;
+	state.touched = 0;
 	state.firstFailure = NONE;
 	state.rollbackNeeded = false;
 	return state;
@@ -235,6 +246,10 @@ inline Decision advance( LoopState & state, FailureClass failure )
 	}
 
 	++state.failed;
+	if (touchedEntity( failure ))
+	{
+		++state.touched;
+	}
 	if (state.firstFailure == NONE)
 	{
 		state.firstFailure = failure;
@@ -246,8 +261,156 @@ inline Decision advance( LoopState & state, FailureClass failure )
 	}
 
 	state.stopped = true;
-	state.rollbackNeeded = state.migrated > 0;
+	state.rollbackNeeded = state.touched > 0;
 	return STOP_AND_ROLLBACK;
+}
+
+/// One touched entity, recorded by rollout() so a stopped pass can roll the
+/// pass back in reverse migration order. EntityPtrT is the population's
+/// element pointer (Entity *), TypePtrT the type handle both pair sides use
+/// (EntityTypePtr).
+template < typename EntityPtrT, typename TypePtrT >
+struct RolloutRecord
+{
+	EntityPtrT pEntity;
+	TypePtrT pOldType;		///< the entity's type before its migration
+	TypePtrT pNewType;		///< the replacement type migrate() linked,
+							///< or default-constructed for a script-only
+							///< reload (no pair was taken)
+	FailureClass failure;
+};
+
+/// Whether value is already in vec: the per-pair bookkeeping rollout()'s
+/// rollback half keeps (EntityTypePtr compares by pointer).
+template < typename T >
+inline bool vectorContains( const BW::vector< T > & vec, const T & value )
+{
+	for (typename BW::vector< T >::const_iterator it = vec.begin();
+			it != vec.end(); ++it)
+	{
+		if (*it == value)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+/// The collect-decide migrate pass over the entity population, including
+/// the reverse-order rollback of a stopped pass. This is the execution
+/// carrier for the rollback half of the hot-reload productionization
+/// design (section 4).
+///
+/// The four operations separate the loop logic from the Entity layer so
+/// fake entities can drive it in cellapp/unit_test:
+///
+///   * GetOp      - extracts the entity from one container element
+///                  (Entity::population()'s element is the id pair);
+///                  advertises `typedef Entity * EntityPtr;`
+///   * MigrateOp  - migrates one entity, reporting its FailureClass and
+///                  handing back the type pair the migration linked;
+///                  advertises `typedef EntityTypePtr TypePtr;`
+///   * AliveOp    - whether an entity is still alive (a script hook may
+///                  destroy a neighbour mid-pass);
+///   * RollbackOp - runs one entity's RollbackPlan.
+///
+/// Iterating the live container in place mirrors the adjacent MIGRATED_ALL
+/// loop; the same script-hook-mutates-population exposure applies (see the
+/// header comment above). Rollback runs only for a stopped pass, in
+/// reverse migration order, skipping entities that died in between.
+template < typename ContT, typename GetOp, typename MigrateOp,
+	typename AliveOp, typename RollbackOp >
+inline LoopState rollout( const ContT & container, GetOp getOp, Policy policy,
+	MigrateOp migrateOp, AliveOp aliveOp, RollbackOp rollbackOp )
+{
+	// Both operation families advertise their own pointer types, so the call
+	// site needs no explicit template arguments: GetOp::EntityPtr is the
+	// population's element pointer (Entity *), MigrateOp::TypePtr the type
+	// handle (EntityTypePtr).
+	typedef typename GetOp::EntityPtr EntityPtrT;
+	typedef typename MigrateOp::TypePtr TypePtrT;
+	typedef RolloutRecord< EntityPtrT, TypePtrT > Record;
+
+	LoopState state = initState( policy );
+	BW::vector< Record > touched;
+
+	for (typename ContT::const_iterator it = container.begin();
+			it != container.end(); ++it)
+	{
+		EntityPtrT pEntity = getOp( *it );
+
+		if (state.stopped)
+		{
+			// Stop is sticky: the remaining entities stay unmigrated.
+			break;
+		}
+
+		if (!aliveOp( pEntity ))
+		{
+			continue;
+		}
+
+		TypePtrT pOldType = TypePtrT();
+		TypePtrT pNewType = TypePtrT();
+		FailureClass failure = migrateOp( pEntity, pOldType, pNewType );
+
+		if (touchedEntity( failure ))
+		{
+			Record record;
+			record.pEntity = pEntity;
+			record.pOldType = pOldType;
+			record.pNewType = pNewType;
+			record.failure = failure;
+			touched.push_back( record );
+		}
+
+		advance( state, failure );
+	}
+
+	if (state.stopped && !touched.empty())
+	{
+		// Roll the touched entities back in reverse migration order. The
+		// two type-level steps run once per (new, old) pair, on the first
+		// record of that pair in this order (planRollback).
+		BW::vector< TypePtrT > strippedPairs;
+		BW::vector< TypePtrT > clearedPairs;
+
+		for (int i = int( touched.size() ) - 1; i >= 0; --i)
+		{
+			const Record & record = touched[ i ];
+
+			if (!aliveOp( record.pEntity ))
+			{
+				continue;
+			}
+
+			const bool distinctType = record.pNewType != TypePtrT() &&
+				record.pOldType != TypePtrT() &&
+				record.pNewType != record.pOldType;
+			const bool pairRenamed =
+				renamedOldDescription( record.failure, distinctType );
+
+			const RollbackPlan plan = planRollback( record.failure,
+				pairRenamed,
+				vectorContains( strippedPairs, record.pOldType ),
+				vectorContains( clearedPairs, record.pNewType ) );
+
+			rollbackOp( record.pEntity, record.pOldType, record.pNewType,
+				plan );
+
+			if (plan.revertSupersede)
+			{
+				strippedPairs.push_back( record.pOldType );
+			}
+			if (plan.clearOldLink)
+			{
+				clearedPairs.push_back( record.pNewType );
+			}
+		}
+	}
+
+	return state;
 }
 
 } // namespace EntityMigration

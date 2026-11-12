@@ -4255,13 +4255,20 @@ void Entity::reloadScript()
  *	replacement, Python refusing the __class__ swap, or the onMigrate hook
  *	raising - the last of which this method still reports as success.
  */
-bool Entity::migrate( EntityMigration::FailureClass * pFailureClass )
+bool Entity::migrate( EntityMigration::FailureClass * pFailureClass,
+		EntityTypePtr * pOldTypeOut, EntityTypePtr * pNewTypeOut )
 {
 	AUTO_SCOPED_THIS_ENTITY_PROFILE;
 
 	// get the new type and make sure it is the same id
 	EntityTypePtr pOldType = pEntityType_;
 	EntityTypePtr pNewType = EntityType::getType( pOldType->name() );
+
+	if (pOldTypeOut)
+	{
+		*pOldTypeOut = pOldType;
+	}
+
 	if (!pNewType || (pNewType->typeID() != pOldType->typeID()))
 	{
 		WARNING_MSG( "Entity::migrate(%u): "
@@ -4281,6 +4288,13 @@ bool Entity::migrate( EntityMigration::FailureClass * pFailureClass )
 		// set our type, and set the old type for the new one if not yet done
 		pEntityType_ = pNewType;
 		pNewType->old( pOldType );
+
+		// The pair owner for the rollback's old(NULL): set before the swap
+		// attempt, so a rejected swap still reports who took the link.
+		if (pNewTypeOut)
+		{
+			*pNewTypeOut = pNewType;
+		}
 	}
 
 	//TRACE_MSG( "Entity::migrate(%lu): Old PyType %08X New PyType %08X\n",
@@ -4339,6 +4353,49 @@ bool Entity::migrate()
 {
 	EntityMigration::FailureClass failureClass;
 	return this->migrate( &failureClass );
+}
+
+
+/**
+ *	This method runs one entity's rollback plan, undoing what Entity::migrate
+ *	did to this entity (and, once per type pair, to its types): the entity
+ *	portion restores the C++ type pointer and swaps the script class back to
+ *	the pre-migration type's class, and the pair portion undoes the old
+ *	description's supersede rename and breaks the new type's old-type link.
+ *	The rollout loop decides which steps run on which entity; this method
+ *	only carries them out.
+ */
+void Entity::rollbackMigration( EntityTypePtr pOldType,
+		EntityTypePtr pNewType, const EntityMigration::RollbackPlan & plan )
+{
+	if (plan.restoreEntity && pOldType)
+	{
+		pEntityType_ = pOldType;
+
+		if (!Entity::swapScriptClass( this,
+				(PyObject *)pOldType->pPyType() ))
+		{
+			// The old class was the object's original layout, so this swap
+			// should always be accepted; a rejection leaves __class__ on the
+			// new class with the C++ pointer already restored, which is the
+			// same half-state a rejected migrate() swap leaves - reported,
+			// not fatal.
+			ERROR_MSG( "Entity::rollbackMigration(%u): "
+				"restoring __class__ to the old script class failed\n",
+				id_ );
+			PyErr_Print();
+		}
+	}
+
+	if (plan.revertSupersede && pOldType)
+	{
+		pOldType->unsupersedeOldDescription();
+	}
+
+	if (plan.clearOldLink && pNewType)
+	{
+		pNewType->old( NULL );
+	}
 }
 
 /**
