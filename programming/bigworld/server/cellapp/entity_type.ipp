@@ -74,6 +74,15 @@ void EntityType::swapInModules( PyObject * pModules, PyObject * pNewModules )
 {
 	PyObject * pSysModule = PyDict_GetItemString( pModules, "sys" ); // borrowed
 
+	// The clear below drops the reference this dictionary holds on the sys
+	// module, so the borrowed pointer has to be upgraded to an owned one now:
+	// if this dictionary were the last holder, pSysModule would be a dangling
+	// pointer for the rest of the function.
+	if (pSysModule != NULL)
+	{
+		Py_INCREF( pSysModule );
+	}
+
 	PyDict_Clear( pModules );
 	PyDict_Update( pModules, pNewModules );
 
@@ -95,7 +104,9 @@ void EntityType::swapInModules( PyObject * pModules, PyObject * pNewModules )
 	// Restore original sys module since it has remapped stdout/stderr.
 	if (pSysModule)
 	{
-		PyDict_SetItemString( pModules, "sys", pSysModule ); // Steals a reference
+		// PyDict_SetItemString does not steal: it INCREFs the value, so the
+		// reference owned since the INCREF above must be released here.
+		PyDict_SetItemString( pModules, "sys", pSysModule );
 		Py_DECREF( pSysModule );
 	}
 }

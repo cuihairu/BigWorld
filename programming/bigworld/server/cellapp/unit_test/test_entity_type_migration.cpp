@@ -65,6 +65,40 @@ TEST( EntityType_swapInModules )
 
 
 /**
+ *	The sys module is owned across the clear that drops the dictionary's own
+ *	reference: a pointer borrowed from a dictionary must not outlive the
+ *	dictionary's hold on it, even where that hold was its last strong reference.
+ */
+TEST( EntityType_swapInModulesKeepsSysAliveAcrossTheClear )
+{
+	initInterpreter();
+
+	// A module whose only strong reference is the one a modules dictionary
+	// holds, standing in for the sys module about to be cleared away.
+	PyObject * pSys = PyModule_New( "cellappTestLastRefSys" );
+	CHECK( pSys != NULL );
+
+	PyObject * pModules = PyDict_New();
+	CHECK( pModules != NULL );
+	CHECK_EQUAL( 0, PyDict_SetItemString( pModules, "sys", pSys ) );
+
+	Py_DECREF( pSys ); // from here the dictionary is its only holder
+
+	PyObject * pNewModules = PyDict_New();
+	CHECK( pNewModules != NULL );
+
+	EntityType::swapInModules( pModules, pNewModules );
+
+	// The module the dictionary held is still alive and is the one the swap
+	// restores: the borrowed pointer was owned across the clear.
+	CHECK( PyDict_GetItemString( pModules, "sys" ) == pSys );
+
+	Py_DECREF( pNewModules );
+	Py_DECREF( pModules );
+}
+
+
+/**
  *	BigWorld is re-exposed on __main__ from the reloaded module set, so the
  *	scripts still see the package that the reload provided.
  */
