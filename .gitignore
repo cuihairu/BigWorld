@@ -43,3 +43,6 @@ programming/bigworld/build/vcpkg/
 programming/bigworld/build/cmake-*/
 programming/xmldataresource.xml
 docs/.vitepress/theme/*.bak
+
+# 打包产物不再进仓库:已迁至 GitHub Release(2026-11-21,见 release bigworld-14.4.1)
+*.rpm
