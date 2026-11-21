@@ -176,8 +176,20 @@ bool DataType::createFromStream( BinaryIStream & stream, DataSink & sink,
 				subStreams.empty() ? stream : *subStreams.back();
 
 			int len = outerStream.readPackedInt();
-			subStreams.push_back(
-				new MemoryIStream( outerStream.retrieve( len ), len ) );
+			const void * pSubData = outerStream.retrieve( len );
+
+			if (pSubData == NULL)
+			{
+				// The declared length exceeds what the outer stream holds and
+				// its buffer size, so retrieve() handed NULL back. Wrapping
+				// that in a stream would have the inner destream dereference
+				// it; fail the object here instead - the outer stream has
+				// flagged its error for the caller (CR-P2-15).
+				result = false;
+				break;
+			}
+
+			subStreams.push_back( new MemoryIStream( pSubData, len ) );
 		}
 
 		BinaryIStream & curStream =
