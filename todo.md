@@ -80,7 +80,7 @@
 
 - [x] CR-P2-01 · 引用计数 · `script.cpp:107,133,192` `PyFrame_GetCode` 强引用从不 DECREF（pushStack/updateStackTop/PythonProfiler::handleStack 每事件漏 1）。**承重**：该泄漏保住交给 StackTracker 的裸指针，裸修会 UAF，须同时改为拷贝 name/filename 字符串。 — `a7268bf1`（stack_tracker StackItem 自带 char[128] 缓冲、profiler 条目/显示/层级 char[96] 缓冲、memory_debug 去 interning 块；cellapp 生产构建 + 21 模块全绿，network_test 系 sysctl 漂移已修）
 - [x] CR-P2-02 · 引用计数 · `pywatcher.cpp:1202-1233` `PyFunctionWatcher::init` 所有路径泄漏 `pName`/`pType`（PySequence_GetItem 新引用）。 — `034a9471`（`init` 的 tuple 分支用 `PyObjectPtr` STEAL 持有 `pName`/`pType`，所有退出路径释放；`CallableWatcher::addArg` 已拷贝 argName 进 `ArgDescription::BW::string`，释放安全；cellapp 生产构建 + 21 模块全绿）
-- [ ] CR-P2-03 · 引用计数 · `script.hpp:508-532` `getNestedValue` 每次 GetAttrString 泄漏、终引用未释放；EntityType 构造 ×2 → 每次热重载每类型 8 引用。
+- [x] CR-P2-03 · 引用计数 · `script.hpp:508-532` `getNestedValue` 每次 GetAttrString 泄漏、终引用未释放；EntityType 构造 ×2 → 每次热重载每类型 8 引用。 — `d7b8dd0f`（`owned` 跟踪当前 hop：每次重指前释放上一跳、终引用在所有退出路径释放；`setData` 只借不拥有，故 setData 后仍须释放；cellapp 生产构建 + 21 模块全绿）
 - [ ] CR-P2-04 · 引用计数 · `py_traceback.cpp:593-594` `PySys_SetObject` INCREF 不 steal，PyCFunction_New 一次性泄漏。
 - [ ] CR-P2-05 · 热重载 · `entity_type.cpp:381` reloadScript 在 importEntityClass 失败时仍 `setPyType(newRef())`，把活着的 pPyType_ 抹成 NULL → newEntity() 恒 NULL。应失败时保留旧类。
 - [ ] CR-P2-06 · 热重载（疑）· `entity_type.ipp:73-100` 持 PyDict_GetItemString 借用的 sys 模块跨 PyDict_Clear，理论可 DECREF 到零；`:98` 注释「steals a reference」措辞错误（SetItemString 是 INCREF，代码正确）。
