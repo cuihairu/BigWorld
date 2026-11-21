@@ -1415,7 +1415,18 @@ public:
 		// BIGWORLD_BEGIN(3.13 migration): was PyString_AS_STRING/GET_SIZE.
 		Py_ssize_t size = 0;
 		const char * pCStr = PyUnicode_AsUTF8AndSize( this->get(), &size );
-		str.assign( pCStr, size );
+		if (pCStr != NULL)
+		{
+			str.assign( pCStr, size );
+		}
+		else
+		{
+			// NULL is an unencodable string (e.g. a lone surrogate) with a
+			// pending UnicodeEncodeError: assign(NULL) would be undefined
+			// behaviour, so leave the caller's string empty and let the error
+			// stay pending. CR-P2-11.
+			str.clear();
+		}
 		// BIGWORLD_END
 	}
 
