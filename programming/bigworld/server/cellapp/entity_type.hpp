@@ -110,6 +110,15 @@ public:
 	static void cleanupAfterReload( bool isFullReload = true );
 
 	/**
+	 *	The quoted MD5 schema digest of the entity definitions loaded by the
+	 *	last init, "" before anything has loaded. Captured while the parsed
+	 *	map is in hand - before any migrate runs - so it cannot be polluted
+	 *	by the old_ rename that supersede() applies to the old descriptions.
+	 *	Non-reload reloadScript() re-imports classes only and leaves it alone.
+	 */
+	static const BW::string & schemaDigestQuote();
+
+	/**
 	 *	This static method swaps a reloaded set of Python modules into the given
 	 *	sys.modules dictionary: the dictionary is replaced by the reloaded one,
 	 *	the sys module is kept (it has remapped stdout/stderr) and BigWorld is
@@ -235,6 +244,9 @@ private:
 	static NameToIndexMap s_nameToIndexMap_;
 
 	static PyObject * s_pInitModules_, * s_pNewModules_;
+
+	/// The schema digest quote of the last init (see schemaDigestQuote()).
+	static BW::string s_schemaDigestQuote_;
 };
 
 typedef SmartPointer<EntityType> EntityTypePtr;

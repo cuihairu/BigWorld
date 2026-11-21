@@ -2450,7 +2450,8 @@ public:
 /**
  *	This method reloads the scripts.
  */
-bool CellApp::reloadScript( bool isFullReload )
+bool CellApp::reloadScript( bool isFullReload,
+		const BW::string & expectedDigest )
 {
 	SCRIPT_NOTICE_MSG( "CellApp::reloadScript: "
 				"reloadScript should be used with caution, and never in a "
@@ -2467,19 +2468,33 @@ bool CellApp::reloadScript( bool isFullReload )
 		(isFullReload) ? EntityType::init( true/*isReload*/ ) :
 						EntityType::reloadScript();
 
+	// The request's schema-digest barrier is judged straight after the defs
+	// load: an empty expectation places no constraint, and a mismatch is
+	// judged a failure right here, so the reload takes the failure path and
+	// nothing is migrated.
+	const bool digestMatched = ReloadScript::digestMatches(
+		expectedDigest.c_str(), EntityType::schemaDigestQuote().c_str() );
+	if (defsLoaded && !digestMatched)
+	{
+		ERROR_MSG( "CellApp::reloadScript: entity definitions do not match "
+			"the expected schema digest '%s', this load is '%s'\n",
+			expectedDigest.c_str(),
+			EntityType::schemaDigestQuote().c_str() );
+	}
+
 	// Load UDO modules
 	UserDataObjectTypes udoTypes;
 	UserDataObjectTypesInDifferentDomain udoTypesInDifferentDomain;
 
 	bool udoLoaded = false;
-	if (defsLoaded)
+	if (defsLoaded && digestMatched)
 	{
 		udoLoaded = UserDataObjectType::load( udoTypes,
 			udoTypesInDifferentDomain );
 	}
 
 	const ReloadScript::PlanInputs planInputs = { isFullReload, defsLoaded,
-		udoLoaded };
+		udoLoaded, digestMatched };
 	const ReloadScript::ReloadPlan plan =
 		ReloadScript::planReload( planInputs );
 
@@ -3173,17 +3188,48 @@ PY_AUTO_MODULE_FUNCTION( RETVOID, valgrindDump, END, BigWorld )
  * 	reload entity definitions as well. If this parameter is False, then
  * 	entities definitions are not reloaded. Default is True.
  *
+ *	@param expectedDigest Optional quoted schema digest to compare this load
+ * 	against, as reported by BigWorld.schemaDigest(). When supplied and this
+ * 	load's digest differs, the reload fails before anything is migrated.
+ * 	Components that all report the same digest are safe to reload together.
+ * 	Default is empty, which places no constraint.
+ *
  *  @return True if reload successful, False otherwise.
  */
 /**
  *	This method implements the Python function that reloads the scripts.
  */
-static bool reloadScript( bool isFullReload )
+static bool reloadScript( bool isFullReload, const BW::string & expectedDigest )
 {
-	return CellApp::instance().reloadScript( isFullReload );
+	return CellApp::instance().reloadScript( isFullReload, expectedDigest );
 }
-PY_AUTO_MODULE_FUNCTION( RETDATA, reloadScript, OPTARG( bool, true, END ),
-		BigWorld )
+PY_AUTO_MODULE_FUNCTION( RETDATA, reloadScript,
+	OPTARG( bool, true, OPTARG( BW::string, "", END ) ), BigWorld )
+
+
+/**
+ *	This function implements the BigWorld.schemaDigest script method.
+ */
+static PyObject * py_schemaDigest( PyObject * args )
+{
+	if (PyTuple_Size( args ) != 0)
+	{
+		PyErr_SetString( PyExc_TypeError,
+				"BigWorld.schemaDigest: Excepted no arguments." );
+		return NULL;
+	}
+
+	return Script::getData( EntityType::schemaDigestQuote() );
+}
+/*~ function BigWorld.schemaDigest
+ *  @components{ cell }
+ *	This method returns the quoted schema digest of the entity definitions
+ *	this component loaded ("" before a full reload has run), the value to pass
+ *	to BigWorld.reloadScript as its expectedDigest so that a component does
+ *	not migrate until every component has the same entity definitions.
+ *  @return The quoted digest as a string.
+ */
+PY_MODULE_FUNCTION( schemaDigest, BigWorld );
 
 
 /**

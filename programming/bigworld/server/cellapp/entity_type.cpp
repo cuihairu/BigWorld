@@ -53,6 +53,7 @@ BW_BEGIN_NAMESPACE
 PyObject * EntityType::s_pNewModules_;
 EntityTypes EntityType::s_curTypes_, EntityType::s_newTypes_;
 EntityType::NameToIndexMap EntityType::s_nameToIndexMap_;
+BW::string EntityType::s_schemaDigestQuote_;
 
 
 // -----------------------------------------------------------------------------
@@ -286,14 +287,18 @@ bool EntityType::init( bool isReload )
 		return false;
 	}
 
-	// Print out the digest
+	// Store and print out the digest. The digest is captured here, while the
+	// parsed map is in hand and before any migrate has run, so it is the
+	// versioned schema the barrier compares loads on (it is also what
+	// supersede() would later rename the old descriptions for, had it been
+	// captured after migrate).
 	{
 		MD5 md5;
 		entityDescriptionMap.addToMD5( md5 );
 		MD5::Digest digest;
 		md5.getDigest( digest );
-		BW::string quote = digest.quote();
-		INFO_MSG( "Digest = %s\n", quote.c_str() );
+		s_schemaDigestQuote_ = digest.quote();
+		INFO_MSG( "Digest = %s\n", s_schemaDigestQuote_.c_str() );
 	}
 
 	EntityTypes & types = (!isReload) ? s_curTypes_ : s_newTypes_;
@@ -537,6 +542,14 @@ EntityTypes& EntityType::getTypes()
 }
 
 /**
+ *	The schema digest of the last loaded entity definitions, quoted.
+ */
+const BW::string & EntityType::schemaDigestQuote()
+{
+	return s_schemaDigestQuote_;
+}
+
+/**
  *	Clean up static data. Used during shutdown.
  */
 void EntityType::clearStatics()
@@ -544,6 +557,7 @@ void EntityType::clearStatics()
 	s_nameToIndexMap_.clear();
 	s_curTypes_.clear();
 	s_newTypes_.clear();
+	s_schemaDigestQuote_.clear();
 }
 
 

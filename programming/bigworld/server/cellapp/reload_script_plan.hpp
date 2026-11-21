@@ -25,7 +25,11 @@
 //     dataTypesWiped so tests and future dry-run work can see it;
 //   * the batch-migration-complete hook fires after every entity has migrated
 //     and before cleanup (failure mode F6: Entity::migratedAll had no caller
-//     anywhere in the tree).
+//     anywhere in the tree);
+//   * the request's expectedDigest is judged right after the defs load: a
+//     mismatch takes the failure tail, so no migrate step runs (the
+//     versioned-schema barrier of the hot-reload productionization design,
+//     section 1).
 //
 // The head of the sequence (swap in the scratch interpreter, load entity defs,
 // load UDOs) cannot be driven from a plan that is only complete once its own
@@ -37,6 +41,8 @@
 
 #ifndef RELOAD_SCRIPT_PLAN_HPP
 #define RELOAD_SCRIPT_PLAN_HPP
+
+#include <cctype>
 
 BW_BEGIN_NAMESPACE
 
@@ -68,12 +74,50 @@ enum Action
 	ACTION_COUNT
 };
 
-/// The outcomes the plan's shape depends on.
+/// Whether an expected schema digest agrees with this load's digest. An
+/// empty expected value places no constraint (the caller asked for no
+/// barrier), so it always agrees. The comparison is case-insensitive,
+/// because the digest travels as a quoted MD5 hex string read out of a log
+/// or typed by hand.
+inline bool digestMatches( const char * pExpected, const char * pActual )
+{
+	const char * e = pExpected ? pExpected : "";
+	const char * a = pActual ? pActual : "";
+	if (!*e)
+	{
+		return true;
+	}
+	// Walk both strings until either terminator, so a shorter actual cannot
+	// be read past its end.
+	for (size_t i = 0; ; ++i)
+	{
+		const char expectedChar = e[ i ];
+		const char actualChar = a[ i ];
+		if (!expectedChar && !actualChar)
+		{
+			return true;
+		}
+		if (!expectedChar || !actualChar)
+		{
+			return false;
+		}
+		if (tolower( expectedChar ) != tolower( actualChar ))
+		{
+			return false;
+		}
+	}
+}
+
+/// The outcomes the plan's shape depends on. digestMatched: whether this
+/// load's schema digest agrees with the request's expectedDigest; it
+/// defaults to true because a request carrying no expectation places no
+/// constraint, so the pre-barrier behaviour is unchanged.
 struct PlanInputs
 {
 	bool isFullReload;
 	bool defsLoaded;
 	bool udoLoaded;
+	bool digestMatched = true;
 };
 
 /// The ordered action sequence for one reload attempt.
@@ -92,27 +136,36 @@ struct ReloadPlan
 
 /**
  *	Builds the action sequence CellApp::reloadScript performs for the given
- *	outcomes. udoLoaded is only consulted when defsLoaded is true - the UDO
- *	load is never attempted after a failed defs load.
+ *	outcomes. udoLoaded is only consulted when the defs load succeeded and
+ *	the schema digest agrees - the UDO load is never attempted after either
+ *	failure, so its result is not consulted on those paths.
  */
 inline ReloadPlan planReload( const PlanInputs & inputs )
 {
+	// A rejected schema digest is judged right after the defs load: the
+	// request carries an expectedDigest the load's digest disagrees with,
+	// so the reload takes the failure path with zero migration. Note the
+	// full-reload consequence - the defs parse already cleared the registered
+	// data types (failure mode F8), so dataTypesWiped reflects a rejected
+	// digest as well as a failed defs load.
+	const bool defsUsable = inputs.defsLoaded && inputs.digestMatched;
+
 	ReloadPlan plan;
 	plan.count = 0;
-	plan.succeeded = inputs.defsLoaded && inputs.udoLoaded;
-	plan.dataTypesWiped = inputs.isFullReload && !inputs.defsLoaded;
+	plan.succeeded = defsUsable && inputs.udoLoaded;
+	plan.dataTypesWiped = inputs.isFullReload && !defsUsable;
 
 	// Head: the scratch interpreter is swapped in and the loads run inside it.
 	plan.actions[ plan.count++ ] = SWAP_IN_INTERPRETER;
 	plan.actions[ plan.count++ ] = LOAD_ENTITY_DEFS;
-	if (inputs.defsLoaded)
+	if (defsUsable)
 	{
 		plan.actions[ plan.count++ ] = LOAD_USER_DATA_OBJECTS;
 	}
 
-	// The UDO load is skipped after a failed defs load, so its result is not
-	// consulted on that path.
-	if (inputs.defsLoaded && inputs.udoLoaded)
+	// The UDO load is skipped after a failed defs load or a rejected digest,
+	// so its result is not consulted on those paths.
+	if (defsUsable && inputs.udoLoaded)
 	{
 		// Success tail: destroy the scratch interpreter before the migrate
 		// chain, then clean up (cellapp.cpp:2350-2364).

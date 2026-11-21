@@ -167,7 +167,8 @@ public:
 	PyObject * newClassInstance( PyObject * pyClass,
 			PyObject * pDictionary );
 
-	bool reloadScript( bool isFullReload );
+	bool reloadScript( bool isFullReload,
+			const BW::string & expectedDigest = BW::string() );
 	//@}
 
 	/// @name Accessors

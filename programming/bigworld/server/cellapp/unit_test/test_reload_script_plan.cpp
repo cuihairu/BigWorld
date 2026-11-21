@@ -12,7 +12,11 @@
 //   * the old-scripts recovery happens on every failure path except a failed
 //     full reload - a full reload has no old scripts to fall back to;
 //   * a failed full reload wipes the registered data types and never reloads
-//     them (F8), which planReload() reports as dataTypesWiped.
+//     them (F8), which planReload() reports as dataTypesWiped;
+//   * a request's expectedDigest that disagrees with this load's schema
+//     digest is judged right after the defs load, so the reload takes the
+//     failure path and migrates nothing - the versioned-schema barrier,
+//     which also counts as wiping on a full reload (F8).
 
 #include "pch.hpp"
 
@@ -228,7 +232,9 @@ TEST( ReloadScriptPlan_UdoOutcomeIgnoredAfterDefsFailure )
 
 /**
  *	Every outcome combination fits the fixed plan array, and the whole matrix
- *	is one of the three shapes the sequence has.
+ *	is one of the three shapes the sequence has. The digest dimension is the
+ *	schema barrier: a mismatched digest is one of the outcomes that shapes
+ *	the plan, so it is swept with the rest.
  */
 TEST( ReloadScriptPlan_AllOutcomeCombinationsFit )
 {
@@ -238,24 +244,114 @@ TEST( ReloadScriptPlan_AllOutcomeCombinationsFit )
 		{
 			for (int udo = 0; udo <= 1; ++udo)
 			{
-				const ReloadScript::PlanInputs inputs =
-					{ full != 0, defs != 0, udo != 0 };
-				const ReloadScript::ReloadPlan plan =
-					ReloadScript::planReload( inputs );
+				for (int digest = 0; digest <= 1; ++digest)
+				{
+					const ReloadScript::PlanInputs inputs =
+						{ full != 0, defs != 0, udo != 0, digest != 0 };
+					const ReloadScript::ReloadPlan plan =
+						ReloadScript::planReload( inputs );
 
-				CHECK( plan.count <= ReloadScript::ACTION_COUNT );
-				CHECK_EQUAL( (defs && udo), plan.succeeded );
-				CHECK_EQUAL( (full && !defs), plan.dataTypesWiped );
+					const bool defsUsable = defs && digest;
 
-				// head (2 + defs load) + success tail (8, the migrate chain
-				// plus the batch-complete hook) or failure tail (3, plus the
-				// recovery on the scripts-only path).
-				CHECK_EQUAL( 2 + (defs ? 1 : 0) +
-					(plan.succeeded ? 8 : 3 + (full ? 0 : 1)),
-					plan.count );
+					CHECK( plan.count <= ReloadScript::ACTION_COUNT );
+					CHECK_EQUAL( (defs && udo && digest), plan.succeeded );
+					CHECK_EQUAL( (full && !defsUsable),
+						plan.dataTypesWiped );
+
+					// head (2 + defs load) + success tail (8, the migrate
+					// chain plus the batch-complete hook) or failure tail
+					// (3, plus the recovery on the scripts-only path).
+					CHECK_EQUAL( 2 + (defsUsable ? 1 : 0) +
+						(plan.succeeded ? 8 : 3 + (full ? 0 : 1)),
+						plan.count );
+				}
 			}
 		}
 	}
+}
+
+
+/**
+ *	The digest helper: an empty expectation places no constraint, the
+ *	comparison is case-insensitive, and a shorter actual never agrees.
+ */
+TEST( ReloadScriptPlan_DigestMatches )
+{
+	const char * quoted = "0123456789ABCDEF0123456789ABCDEF";
+
+	// No expectation agrees with anything, even with nothing loaded.
+	CHECK( ReloadScript::digestMatches( "", quoted ) );
+	CHECK( ReloadScript::digestMatches( "", "" ) );
+	CHECK( ReloadScript::digestMatches( NULL, quoted ) );
+
+	// The same digest in either case agrees.
+	CHECK( ReloadScript::digestMatches( quoted, quoted ) );
+	CHECK( ReloadScript::digestMatches(
+		"0123456789abcdef0123456789abcdef", quoted ) );
+
+	// Anything else disagrees, including a shorter or longer actual.
+	CHECK( !ReloadScript::digestMatches(
+		"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF", quoted ) );
+	CHECK( !ReloadScript::digestMatches( quoted, "" ) );
+	CHECK( !ReloadScript::digestMatches( quoted, NULL ) );
+	CHECK( !ReloadScript::digestMatches( quoted, quoted + 1 ) );
+}
+
+
+/**
+ *	A load whose schema digest disagrees with the request takes the failure
+ *	path: the UDO load is skipped, no migrate step runs, and on a full reload
+ *	the registered data types were already wiped (F8). The scripts-only case
+ *	also recovers the old scripts, because it had any.
+ */
+TEST( ReloadScriptPlan_DigestMismatchRunsNoMigrate )
+{
+	const ReloadScript::PlanInputs full = { true, true, true, false };
+	const ReloadScript::ReloadPlan fullPlan = ReloadScript::planReload( full );
+
+	CHECK_EQUAL( false, fullPlan.succeeded );
+	CHECK_EQUAL( true, fullPlan.dataTypesWiped );
+	CHECK_EQUAL( 5, fullPlan.count );
+
+	CHECK_EQUAL( -1, indexOf( fullPlan, ReloadScript::LOAD_USER_DATA_OBJECTS ) );
+	CHECK_EQUAL( -1, indexOf( fullPlan, ReloadScript::MIGRATE_ENTITY_TYPES ) );
+	CHECK_EQUAL( -1, indexOf( fullPlan, ReloadScript::MIGRATE_ENTITIES ) );
+	CHECK_EQUAL( -1, indexOf( fullPlan, ReloadScript::MIGRATED_ALL ) );
+	CHECK_EQUAL( -1, indexOf( fullPlan, ReloadScript::RECOVER_OLD_SCRIPTS ) );
+	CHECK_EQUAL( ReloadScript::CLEANUP_AFTER_RELOAD, fullPlan.actions[ 3 ] );
+	CHECK_EQUAL( ReloadScript::DESTROY_NEW_INTERPRETER,
+		fullPlan.actions[ 4 ] );
+
+	const ReloadScript::PlanInputs scriptsOnly = { false, true, true, false };
+	const ReloadScript::ReloadPlan scriptsOnlyPlan =
+		ReloadScript::planReload( scriptsOnly );
+
+	CHECK_EQUAL( false, scriptsOnlyPlan.succeeded );
+	CHECK_EQUAL( false, scriptsOnlyPlan.dataTypesWiped );
+	CHECK_EQUAL( 6, scriptsOnlyPlan.count );
+
+	CHECK_EQUAL( -1, indexOf( scriptsOnlyPlan,
+		ReloadScript::LOAD_USER_DATA_OBJECTS ) );
+	CHECK_EQUAL( -1, indexOf( scriptsOnlyPlan,
+		ReloadScript::MIGRATE_ENTITIES ) );
+	CHECK_EQUAL( ReloadScript::RECOVER_OLD_SCRIPTS,
+		scriptsOnlyPlan.actions[ 3 ] );
+}
+
+
+/**
+ *	A load whose digest agrees is judged successful: the UDO load runs and
+ *	the migrate chain follows, exactly as the pre-barrier plan.
+ */
+TEST( ReloadScriptPlan_DigestMatchKeepsTheSuccessTail )
+{
+	const ReloadScript::PlanInputs inputs = { true, true, true, true };
+	const ReloadScript::ReloadPlan plan = ReloadScript::planReload( inputs );
+
+	CHECK( plan.succeeded );
+	CHECK_EQUAL( ReloadScript::LOAD_USER_DATA_OBJECTS, plan.actions[ 2 ] );
+	CHECK_EQUAL( ReloadScript::DESTROY_NEW_INTERPRETER, plan.actions[ 4 ] );
+	CHECK_EQUAL( ReloadScript::MIGRATE_ENTITY_TYPES, plan.actions[ 5 ] );
 }
 
 
