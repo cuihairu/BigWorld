@@ -1201,6 +1201,11 @@ public:
 			{
 				PyObject * pName = PySequence_GetItem( pArg, 0 );
 				PyObject * pType = PySequence_GetItem( pArg, 1 );
+				// Both are new references: keep them alive until the end of
+				// this iteration so the borrowed argName below stays valid,
+				// then release them on every exit path.
+				PyObjectPtr nameHolder( pName, PyObjectPtr::STEAL_REFERENCE );
+				PyObjectPtr typeHolder( pType, PyObjectPtr::STEAL_REFERENCE );
 
 				if ((pName == NULL) || (pType == NULL))
 				{
