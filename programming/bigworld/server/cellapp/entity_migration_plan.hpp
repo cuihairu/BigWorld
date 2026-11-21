@@ -46,12 +46,11 @@
 // (stop stickiness, reverse-order rollback, per-pair attribution,
 // destroyed entities skipped) is assertable with fake entities while the
 // real bindings stay three thin functors in CellApp::reloadScript
-// (cellapp.cpp, Entity::migrate / Entity::rollbackMigration). The live
-// map is iterated in place like the adjacent MIGRATED_ALL loop - a script
-// hook that destroys a neighbour mid-pass keeps the pre-existing
-// population-mutation exposure (see the CR-P2-08 ledger line), which the
-// destroyed-entity check narrows for the rollback half but does not
-// close for the migration half.
+// (cellapp.cpp, Entity::migrate / Entity::rollbackMigration). rollout()
+// snapshots the population before the pass, so a script hook that
+// destroys a neighbour mid-pass cannot invalidate the loop's iteration
+// (CR-P2-08); the adjacent MIGRATED_ALL loop still iterates the live map
+// in place and keeps that exposure.
 
 #ifndef ENTITY_MIGRATION_PLAN_HPP
 #define ENTITY_MIGRATION_PLAN_HPP
@@ -315,10 +314,13 @@ inline bool vectorContains( const BW::vector< T > & vec, const T & value )
 ///                  destroy a neighbour mid-pass);
 ///   * RollbackOp - runs one entity's RollbackPlan.
 ///
-/// Iterating the live container in place mirrors the adjacent MIGRATED_ALL
-/// loop; the same script-hook-mutates-population exposure applies (see the
-/// header comment above). Rollback runs only for a stopped pass, in
-/// reverse migration order, skipping entities that died in between.
+/// The pass walks a snapshot taken before any hook runs, so a script hook
+/// that destroys a neighbour mid-pass cannot invalidate the iteration - the
+/// snapshot is what the migrate loop reads, not the live container. (The
+/// adjacent MIGRATED_ALL loop still iterates the live map in place and
+/// keeps that exposure; see the header comment above.) Rollback runs only
+/// for a stopped pass, in reverse migration order, skipping entities that
+/// died in between.
 template < typename ContT, typename GetOp, typename MigrateOp,
 	typename AliveOp, typename RollbackOp >
 inline LoopState rollout( const ContT & container, GetOp getOp, Policy policy,
@@ -335,10 +337,24 @@ inline LoopState rollout( const ContT & container, GetOp getOp, Policy policy,
 	LoopState state = initState( policy );
 	BW::vector< Record > touched;
 
+	// The pass walks a snapshot of the container, not the container itself:
+	// the migrate hook runs script code that may destroy an entity, and a
+	// destroyed entity leaves the live population in its destructor. Destroying
+	// the entity the pass is currently on would erase the element the iterator
+	// stands on, so the loop would resume on a recycled slot (CR-P2-08). The
+	// snapshot is not mutated by the hooks, and entities destroyed before
+	// their turn are still skipped by the liveness check; the ones a hook
+	// creates mid-pass stay on whatever class the creation used.
+	BW::vector< EntityPtrT > population;
 	for (typename ContT::const_iterator it = container.begin();
 			it != container.end(); ++it)
 	{
-		EntityPtrT pEntity = getOp( *it );
+		population.push_back( getOp( *it ) );
+	}
+
+	for (int i = 0; i < int( population.size() ); ++i)
+	{
+		EntityPtrT pEntity = population[ i ];
 
 		if (state.stopped)
 		{

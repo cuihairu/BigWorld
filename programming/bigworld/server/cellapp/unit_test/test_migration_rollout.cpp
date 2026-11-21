@@ -13,7 +13,9 @@
 //     not the migrated counter, decides);
 //   * a guard rejection touches nothing and rolls nothing back;
 //   * CONTINUE_ON_FAILURE completes without a rollback;
-//   * entities destroyed mid-pass are skipped by both loops.
+//   * entities destroyed mid-pass are skipped by both loops;
+//   * a hook that destroys an entity mid-pass cannot break the pass - it
+//     walks a snapshot, not the live container.
 //
 // The fake migrate op models Entity::migrate's state transitions: a full
 // migration (or a raised hook) leaves the entity on the replacement type
@@ -622,6 +624,94 @@ TEST( MigrationRollout_PairStepsRunPerPair )
 	CHECK( b2.descriptionStripped_ && b2.linkBroken_ );
 	CHECK( !b1.descriptionStripped_ && !b1.linkBroken_ );
 	CHECK( a1.descriptionStripped_ && a1.linkBroken_ );
+}
+
+
+/**
+ *	The migrate hook runs script code, so it can destroy an entity - and a
+ *	destroyed entity leaves the live population in its destructor, which this
+ *	op models by erasing the migrated entity from the container. Iterating
+ *	that container in place would resume the loop on the slot the erase
+ *	recycled and drop the entity that slid into it (CR-P2-08). The pass walks
+ *	a snapshot taken before any hook ran, so every entity after the destroyed
+ *	one still migrates.
+ */
+TEST( MigrationRollout_MidPassDestroyCannotBreakThePass )
+{
+	FakeType oldType( "old" );
+	FakeType newType( "new" );
+	FakeEntity a( "a", &oldType );
+	FakeEntity b( "b", &oldType );
+	FakeEntity c( "c", &oldType );
+	BW::vector< FakeEntity * > population;
+	population.push_back( &a );
+	population.push_back( &b );
+	population.push_back( &c );
+
+	// Migrates as usual, then destroys the entity the hook just migrated: the
+	// erasure is what Entity::~Entity's population_.remove does under the
+	// real binding.
+	class SelfDestroyingMigrateOp : public FakeMigrateOp
+	{
+	public:
+		SelfDestroyingMigrateOp( FakeTypePtr pReplacement,
+				const BW::vector< ScriptedOutcome > & script,
+				BW::vector< BW::string > & journal,
+				BW::vector< FakeEntity * > & live ):
+			FakeMigrateOp( pReplacement, script, journal ),
+			live_( live ) {}
+
+		EntityMigration::FailureClass operator()( FakeEntity * pEntity,
+			FakeTypePtr & pOldType, FakeTypePtr & pNewType )
+		{
+			const EntityMigration::FailureClass failure =
+				FakeMigrateOp::operator()( pEntity, pOldType, pNewType );
+
+			if (pEntity->label_ == BW::string( "a" ))
+			{
+				pEntity->destroyed_ = true;
+				for (size_t i = 0; i < live_.size(); ++i)
+				{
+					if (live_[ i ] == pEntity)
+					{
+						live_.erase( live_.begin() + i );
+						break;
+					}
+				}
+			}
+
+			return failure;
+		}
+
+	private:
+		BW::vector< FakeEntity * > & live_;
+	};
+
+	BW::vector< ScriptedOutcome > script;
+	script.push_back( SCRIPT_SUCCESS );
+	script.push_back( SCRIPT_SUCCESS );
+	script.push_back( SCRIPT_SUCCESS );
+	BW::vector< BW::string > journal;
+
+	const EntityMigration::LoopState state = EntityMigration::rollout(
+		population, FakeGetEntity(), EntityMigration::STOP_ON_FAILURE,
+		SelfDestroyingMigrateOp( &newType, script, journal, population ),
+		FakeAliveOp(), FakeRollbackOp( journal ) );
+
+	CHECK_EQUAL( 3, state.migrated );
+	CHECK_EQUAL( 0, state.failed );
+	CHECK( !state.stopped );
+
+	// The entities after the destroyed one still migrated: the erase could
+	// not stop the pass on the slot the erased entity stood in.
+	CHECK_EQUAL( 3, int( journal.size() ) );
+	CHECK_EQUAL( BW::string( "migrate:b:success" ), journal[ 1 ] );
+	CHECK_EQUAL( BW::string( "migrate:c:success" ), journal[ 2 ] );
+	CHECK( b.pCurrentType_ == &newType );
+	CHECK( c.pCurrentType_ == &newType );
+
+	// The live container is what the hook left it: the destroyed entity gone.
+	CHECK_EQUAL( 2, int( population.size() ) );
 }
 
 // test_migration_rollout.cpp
