@@ -102,8 +102,13 @@ include_directories("${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/include")
 find_package(ZLIB REQUIRED)
 find_package(PNG REQUIRED)
 find_package(OpenSSL REQUIRED)
+# vcpkg installs jsoncppConfig.cmake, which CMake's CONFIG search matches for
+# the all-lowercase package name; the namespaced target JsonCpp::JsonCpp is
+# defined inside it.
+find_package(jsoncpp CONFIG REQUIRED)
 
 set(BW_LIB_DIR "${CMAKE_CURRENT_LIST_DIR}/../../../lib")
+set(BW_TOOLS_DIR "${CMAKE_CURRENT_LIST_DIR}/../../../tools")
 set(BW_THIRD_PARTY_DIR "${CMAKE_CURRENT_LIST_DIR}/../../../third_party")
 include_directories("${BW_LIB_DIR}" "${BW_THIRD_PARTY_DIR}")
 
@@ -635,6 +640,103 @@ target_link_libraries(entitydef_test PRIVATE
 # (backtrace() symbol names in callstack.cpp depend on it)
 target_link_options(entitydef_test PRIVATE -rdynamic -Wl,--export-dynamic)
 
+# --- bw-lsp engine binary (programming/bigworld/tools/bw_lsp) ---------------
+# The VS Code extension's engine: the same entitydef parse/validate/digest code
+# the server runs, exposed over stdio JSON-RPC using LSP Content-Length
+# framing. jsoncpp is the only dependency beyond the entitydef_test link.
+# Make has no counterpart for this tool: it lives only on the CMake track, so
+# the source list does not need to stay in sync with a Makefile.rules.
+#
+# bw_lsp_core is the engine proper (session + transport); the bw_lsp executable
+# adds the CLI face and bw_lsp_test adds the unit-test main and cases. Both
+# link the same core so the tests exercise the very code the binary ships.
+add_library(bw_lsp_core STATIC
+	${BW_TOOLS_DIR}/bw_lsp/bw_lsp.cpp
+	${BW_TOOLS_DIR}/bw_lsp/bw_lsp_rpc.cpp
+)
+target_include_directories(bw_lsp_core PUBLIC "${BW_TOOLS_DIR}/bw_lsp")
+# PUBLIC so the include path travels with the target: the core pulls in
+# entitydef headers that include Python.h, which only BWPython knows where to
+# find, and both executables need the same answer at link time.
+target_link_libraries(bw_lsp_core PUBLIC BWPython::Python)
+target_compile_definitions(bw_lsp_core PRIVATE CSTDMF_IMPORT)
+
+add_executable(bw_lsp
+	${BW_TOOLS_DIR}/bw_lsp/bw_lsp_main.cpp
+)
+target_compile_definitions(bw_lsp PRIVATE CSTDMF_IMPORT)
+target_link_libraries(bw_lsp PRIVATE
+	-Wl,--start-group
+	bw_lsp_core
+	entitydef
+	script
+	pyscript
+	chunk
+	scene
+	terrain
+	moo
+	physics2
+	network
+	connection
+	resmgr
+	math
+	cstdmf
+	ZLIB::ZLIB
+	PNG::PNG
+	OpenSSL::SSL
+	OpenSSL::Crypto
+	JsonCpp::JsonCpp
+	-Wl,--end-group
+	BWPython::Python
+	dl
+	m
+	pthread
+	util
+)
+target_link_options(bw_lsp PRIVATE -rdynamic -Wl,--export-dynamic)
+
+# --- bw_lsp_test (programming/bigworld/tools/bw_lsp/unit_test) --------------
+# Reuses the EntityDefUnitTestHarness the entitydef tests use, so BWResource
+# and Script come up the way the engine expects. Tests the frame codec, the
+# JSON-RPC dispatch, and the three bw/* methods on the fantasydemo tree.
+add_executable(bw_lsp_test
+	${BW_TOOLS_DIR}/bw_lsp/unit_test/main.cpp
+	${BW_TOOLS_DIR}/bw_lsp/unit_test/bw_lsp_test.cpp
+)
+target_include_directories(bw_lsp_test PRIVATE "${BW_TOOLS_DIR}/bw_lsp")
+target_compile_definitions(bw_lsp_test PRIVATE CSTDMF_IMPORT)
+target_link_libraries(bw_lsp_test PRIVATE
+	-Wl,--start-group
+	unit_test_lib
+	CppUnitLite2
+	bw_lsp_core
+	entitydef
+	script
+	pyscript
+	chunk
+	scene
+	terrain
+	moo
+	physics2
+	network
+	connection
+	resmgr
+	math
+	cstdmf
+	ZLIB::ZLIB
+	PNG::PNG
+	OpenSSL::SSL
+	OpenSSL::Crypto
+	JsonCpp::JsonCpp
+	-Wl,--end-group
+	BWPython::Python
+	dl
+	m
+	pthread
+	util
+)
+target_link_options(bw_lsp_test PRIVATE -rdynamic -Wl,--export-dynamic)
+
 # The harness builds its res path from --root as
 #   <root>/programming/bigworld/lib/entitydef/unit_test/res
 #   <root>/game/res/bigworld
@@ -650,4 +752,13 @@ add_test(NAME entitydef_test
 	COMMAND entitydef_test --res
 		"${BW_LIB_DIR}/entitydef/unit_test/res:${BW_PYTHON_RES_TREE}/game/res/bigworld"
 	WORKING_DIRECTORY "${BW_LIB_DIR}/entitydef/unit_test"
+)
+
+# bw_lsp_test finds the fantasydemo tree by walking up from the working
+# directory, so it runs from the repository root; --res hands the harness a
+# real path so its own BWResource::init has something to open.
+add_test(NAME bw_lsp_test
+	COMMAND bw_lsp_test --res
+		"${CMAKE_CURRENT_LIST_DIR}/../../../../../programming/fantasydemo/res"
+	WORKING_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}/../../../../.."
 )
