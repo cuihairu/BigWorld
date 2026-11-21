@@ -27,6 +27,30 @@ TEST_F( PyScriptUnitTestHarness, Script_intConversion )
 }
 
 
+TEST_F( PyScriptUnitTestHarness, Script_boolOverflowIsReported )
+{
+	// An int too large for a C long cannot be a bool: setData must report the
+	// conversion failure (returning -1 with the exception set) instead of
+	// carrying the OverflowError past a success return (CR-P2-10).
+	bool value = true;
+
+	PyObject * pHuge = PyLong_FromString( "10000000000000000", NULL, 16 );
+	CHECK( pHuge != NULL );
+
+	CHECK_EQUAL( -1, Script::setData( pHuge, value, "b" ) );
+	CHECK( PyErr_Occurred() != NULL );
+	PyErr_Clear();
+	Py_DECREF( pHuge );
+
+	// A representable int still converts.
+	PyObject * pOne = PyLong_FromLong( 1 );
+	CHECK( pOne != NULL );
+	CHECK_EQUAL( 0, Script::setData( pOne, value, "b" ) );
+	CHECK( value );
+	Py_DECREF( pOne );
+}
+
+
 template <class TYPE>
 bool testLong( const char * asHexString, TYPE & result )
 {

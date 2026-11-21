@@ -1555,7 +1555,18 @@ int Script::setData( PyObject * pObject, bool & rBool,
 {
 	if (PyLong_Check( pObject ))
 	{
-		rBool = PyLong_AsLong( pObject ) != 0;
+		const long value = PyLong_AsLong( pObject );
+
+		// An int that does not fit a C long cannot be a bool. PyLong_AsLong
+		// has already set OverflowError, so report the failure with that
+		// exception still pending rather than carry it past a success return
+		// (CR-P2-10).
+		if (value == -1 && PyErr_Occurred())
+		{
+			return -1;
+		}
+
+		rBool = value != 0;
 		return 0;
 	}
 
