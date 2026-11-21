@@ -380,6 +380,13 @@ bool EntityType::reloadScript( bool isRecover )
 			if (!pClass)
 			{
 				isOK = false;
+
+				// A failed import must not clobber the class this type is
+				// already running with: setPyType releases the stored
+				// reference, and NULL would leave newEntity() permanently
+				// unable to create instances of this type. Keep the old
+				// class so the type keeps working until a later reload.
+				continue;
 			}
 		}
 
