@@ -533,9 +533,35 @@ protected:
 	virtual bool done() const { return this->available() == 0; }
 
 	PyObjectPtr pData_;
-	Py_ssize_t utf8Size_;
 	MemoryIStream stream_;
 };
+
+
+/**
+ *	The byte view StringDataDownload streams: a str as its UTF-8 form, a bytes
+ *	payload (the Py2 str shape, a binary load is not valid UTF-8) as its raw
+ *	bytes. Both pointers stay owned by pData_ for the download's lifetime.
+ */
+namespace
+{
+
+MemoryIStream streamForDataDownload( PyObject * pData )
+{
+	if (PyUnicode_Check( pData ))
+	{
+		Py_ssize_t size = 0;
+		const char * pUTF8 = PyUnicode_AsUTF8AndSize( pData, &size );
+		return MemoryIStream( pUTF8, ( int )size );
+	}
+
+	// PyBytes: the factory validated the type before constructing the download.
+	char * pBytes = NULL;
+	Py_ssize_t size = 0;
+	PyBytes_AsStringAndSize( pData, &pBytes, &size );
+	return MemoryIStream( pBytes, ( int )size );
+}
+
+} // anonymous namespace
 
 
 /**
@@ -545,9 +571,7 @@ StringDataDownload::StringDataDownload(
 	PyObjectPtr pData, PyObjectPtr pDesc, uint16 id, DataDownloads &dls ) :
 	DataDownload( pDesc, id, dls ),
 	pData_( pData ),
-	utf8Size_( 0 ),
-	stream_( PyUnicode_AsUTF8AndSize( pData.get(), &utf8Size_ ),
-		( int )utf8Size_ )
+	stream_( streamForDataDownload( pData.get() ) )
 {}
 
 
@@ -567,7 +591,10 @@ void StringDataDownload::read( BinaryOStream &os, int nBytes )
 DataDownload * StringDataDownloadFactory::onCreate( PyObjectPtr pDesc,
 		uint16 id, DataDownloads &dls )
 {
-	if (!PyUnicode_Check( pData_.get() ))
+	// A str is streamed as UTF-8; a bytes payload is what a Py2 str binary
+	// load arrived as, and streamStringToClient has to keep accepting it
+	// (CR-P2-13). Anything else is rejected.
+	if (!PyUnicode_Check( pData_.get() ) && !PyBytes_Check( pData_.get() ))
 	{
 		PyErr_SetString( PyExc_TypeError,
 				"Data argument must be a string." );
