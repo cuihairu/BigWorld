@@ -7,6 +7,12 @@
 
 #include "../entity.hpp"
 
+#include <atomic>
+#include <chrono>
+#include <mutex>
+#include <shared_mutex>
+#include <thread>
+
 BW_BEGIN_NAMESPACE
 
 // The harness itself never initialises Python. Py_Initialize leaves Python's
@@ -350,6 +356,117 @@ TEST( Entity_swapScriptClass_recoverAfterRejectedSwap )
 	Py_DECREF( pClassA2 );
 	Py_DECREF( pClassB );
 	Py_DECREF( pClassA );
+}
+
+
+/**
+ *	Test access to the reload seam. The migrate() mutex and the new-modules
+ *	pointer are private; the tests drive migrate() without a full script
+ *	reload, so they set the pointer and hold the mutex directly.
+ */
+struct EntityTypeTestAccess
+{
+	static void setNewModules( PyObject * pNewModules )
+	{
+		EntityType::s_pNewModules_ = pNewModules;
+	}
+
+	static std::shared_mutex & typesMutex()
+	{
+		return EntityType::s_typesMutex_;
+	}
+};
+
+
+/**
+ *	The full reload swap takes the type-table mutex exclusively, so a reader
+ *	that already holds it shared is not displaced mid-rewrite: migrate(true)
+ *	blocks until the shared holder releases. The swap itself is inert here
+ *	(the tables are empty), which is exactly the point - the test observes the
+ *	mutex, not the migration.
+ */
+TEST( EntityType_fullReloadSwapBlocksWhileReadersHold )
+{
+	initInterpreter();
+
+	// Point the new-modules seam at the running set so migrate() skips
+	// swapInModules and reaches the full-swap block untouched.
+	PyObject * pModules = PySys_GetObject( "modules" ); // borrowed
+	CHECK( pModules != NULL );
+	EntityTypeTestAccess::setNewModules( pModules );
+
+	std::atomic< bool > swapped( false );
+
+	// A reader holds the table shared for the whole attempt.
+	{
+		std::shared_lock< std::shared_mutex > readLock(
+			EntityTypeTestAccess::typesMutex() );
+
+		// migrate() touches sys.modules, so the migrator needs its own Python
+		// thread state: PyGILState_Ensure gives it one. The main thread has
+		// held the GIL since Py_Initialize, so it must release it while it
+		// waits - otherwise the migrator would block on the GIL, not on the
+		// mutex under test.
+		std::thread migrator( [ &swapped ]()
+		{
+			PyGILState_STATE gil = PyGILState_Ensure();
+			EntityType::migrate( true );
+			swapped.store( true );
+			PyGILState_Release( gil );
+		} );
+
+		// While the shared lock is held the swap cannot run. The GIL stays
+		// released for the whole wait: the migrator holds it while it is
+		// blocked on the mutex, and only joins once the lock is released.
+		// The observation is captured here (not CHECKed) so a failure cannot
+		// early-return and skip Py_END_ALLOW_THREADS.
+		bool sawSwapWhileLocked = false;
+		Py_BEGIN_ALLOW_THREADS
+		std::this_thread::sleep_for( std::chrono::milliseconds( 50 ) );
+		sawSwapWhileLocked = swapped.load();
+
+		readLock.unlock();
+		migrator.join();
+		Py_END_ALLOW_THREADS
+
+		CHECK( !sawSwapWhileLocked );
+	}
+
+	// Once the shared holder released, the swap completed.
+	CHECK( swapped.load() );
+
+	EntityTypeTestAccess::setNewModules( NULL );
+}
+
+
+/**
+ *	A lookup holds the type-table mutex shared, so the full reload's exclusive
+ *	holder blocks it: while the swap is in progress, nameToIndex cannot read
+ *	the name map. The converse of the test above, on the reader side.
+ */
+TEST( EntityType_nameToIndexBlocksWhileFullReloadSwaps )
+{
+	// No interpreter needed: nameToIndex only touches the table and the lock.
+	std::atomic< bool > lookedUp( false );
+
+	// Hold the table exclusively first, as the full reload swap does, so the
+	// searcher is guaranteed to arrive at a held lock.
+	std::unique_lock< std::shared_mutex > writeLock(
+		EntityTypeTestAccess::typesMutex() );
+
+	std::thread searcher( [ &lookedUp ]()
+	{
+		EntityType::nameToIndex( "NoSuchType" );
+		lookedUp.store( true );
+	} );
+
+	std::this_thread::sleep_for( std::chrono::milliseconds( 50 ) );
+	CHECK( !lookedUp.load() );
+
+	writeLock.unlock();
+	searcher.join();
+
+	CHECK( lookedUp.load() );
 }
 
 

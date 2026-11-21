@@ -111,4 +111,66 @@ void EntityType::swapInModules( PyObject * pModules, PyObject * pNewModules )
 	}
 }
 
+
+// -----------------------------------------------------------------------------
+// Section: Type table swap for script reload
+// -----------------------------------------------------------------------------
+
+/**
+ *	This static method migrates the collection of entity types to
+ *	their reloaded version.
+ *
+ *	Lives here (not in entity_type.cpp) for the same reason swapInModules
+ *	does: the reload semantics can be asserted without a running CellApp.
+ *	The full reload's swap takes the type-table mutex exclusively while the
+ *	lookups (getType/getDescription/nameToIndex) hold it shared, so a reader
+ *	never sees the live table mid-rewrite. CR-P2-07.
+ */
+INLINE
+void EntityType::migrate( bool isFullReload )
+{
+	PyObject * pModules = PySys_GetObject( "modules" );
+	if (pModules != s_pNewModules_)
+	{
+		swapInModules( pModules, s_pNewModules_ );
+
+		// note this migration is still a bit dodgy but a lot better than it was
+		// probably should migrate the whole interpreter state from the
+		// reloading thread... although currently it is missing some stuff done
+		// by init time jobs (e.g. stdout/stderr redirection).
+	}
+
+	if (isFullReload)
+	{
+		std::unique_lock< std::shared_mutex > lock( s_typesMutex_ );
+
+		s_curTypes_ = s_newTypes_;
+
+		s_nameToIndexMap_.clear();
+		for (uint i = 0; i < s_curTypes_.size(); i++)
+			s_nameToIndexMap_[ s_curTypes_[i]->name() ] = i;
+	}
+	// TODO: could match up all old and new types here...
+}
+
+
+/**
+ *	This static method returns the index of the type with the input name. If no
+ *	such type exists, -1 is returned.
+ *
+ *	Holds the type-table mutex shared, the counterpart of the exclusive hold
+ *	the full reload's swap takes in migrate().
+ *
+ *	@return	On success, the index of the type found, otherwise EntityType::INVALID_INDEX.
+ */
+INLINE
+EntityTypeID EntityType::nameToIndex( const char * name )
+{
+	std::shared_lock< std::shared_mutex > lock( s_typesMutex_ );
+
+	NameToIndexMap::iterator iter = s_nameToIndexMap_.find( name );
+
+	return (iter != s_nameToIndexMap_.end()) ? iter->second : INVALID_INDEX;
+}
+
 // entity_type.ipp

@@ -50,9 +50,6 @@ BW_BEGIN_NAMESPACE
 // -----------------------------------------------------------------------------
 // Section: Static initialisers
 // -----------------------------------------------------------------------------
-PyObject * EntityType::s_pNewModules_;
-EntityTypes EntityType::s_curTypes_, EntityType::s_newTypes_;
-EntityType::NameToIndexMap EntityType::s_nameToIndexMap_;
 BW::string EntityType::s_schemaDigestQuote_;
 
 
@@ -411,35 +408,6 @@ bool EntityType::reloadScript( bool isRecover )
 }
 
 /**
- *	This static method migrates the collection of entity types to
- *	their reloaded version.
- */
-void EntityType::migrate( bool isFullReload )
-{
-	PyObject * pModules = PySys_GetObject( "modules" );
-	if (pModules != s_pNewModules_)
-	{
-		swapInModules( pModules, s_pNewModules_ );
-
-		// note this migration is still a bit dodgy but a lot better than it was
-		// probably should migrate the whole interpreter state from the
-		// reloading thread... although currently it is missing some stuff done
-		// by init time jobs (e.g. stdout/stderr redirection).
-	}
-
-	if (isFullReload)
-	{
-		s_curTypes_ = s_newTypes_;
-
-		s_nameToIndexMap_.clear();
-		for (uint i = 0; i < s_curTypes_.size(); i++)
-			s_nameToIndexMap_[ s_curTypes_[i]->name() ] = i;
-	}
-	// TODO: could match up all old and new types here...
-}
-
-
-/**
  *	This static method cleans up after a reload,
  *	when the old type info is no longer needed.
  */
@@ -478,6 +446,8 @@ void EntityType::setPyType( PyTypeObject * pPyType )
  */
 EntityTypePtr EntityType::getType( EntityTypeID typeID )
 {
+	std::shared_lock< std::shared_mutex > lock( s_typesMutex_ );
+
 	if (typeID >= (int)s_curTypes_.size())
 	{
 		CRITICAL_MSG( "EntityType::getType: "
@@ -497,6 +467,8 @@ EntityTypePtr EntityType::getType( EntityTypeID typeID )
  */
 EntityTypePtr EntityType::getType( const char * className )
 {
+	std::shared_lock< std::shared_mutex > lock( s_typesMutex_ );
+
 	NameToIndexMap::iterator iter = s_nameToIndexMap_.find( className );
 
 	if (iter == s_nameToIndexMap_.end())
@@ -515,6 +487,8 @@ EntityTypePtr EntityType::getType( const char * className )
  */
 const EntityDescription * EntityType::getDescription( EntityTypeID typeID )
 {
+	std::shared_lock< std::shared_mutex > lock( s_typesMutex_ );
+
 	if (typeID >= (int)s_curTypes_.size())
 	{
 		CRITICAL_MSG( "EntityType::getType: "
@@ -528,20 +502,11 @@ const EntityDescription * EntityType::getDescription( EntityTypeID typeID )
 }
 
 /**
- *	This static method returns the index of the type with the input name. If no
- *	such type exists, -1 is returned.
- *
- *	@return	On success, the index of the type found, otherwise EntityType::INVALID_INDEX.
- */
-EntityTypeID EntityType::nameToIndex( const char * name )
-{
-	NameToIndexMap::iterator iter = s_nameToIndexMap_.find( name );
-
-	return (iter != s_nameToIndexMap_.end()) ? iter->second : INVALID_INDEX;
-}
-
-/**
  *	This static method is used to get the vector of entity types.
+ *
+ *	It hands the live vector out by reference, so no lock scoped to this
+ *	call can protect the caller's later use of it - the callers stay on
+ *	the main thread.
  */
 EntityTypes& EntityType::getTypes()
 {

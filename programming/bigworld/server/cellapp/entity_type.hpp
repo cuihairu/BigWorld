@@ -14,6 +14,9 @@
 
 #include "server/entity_type_profiler.hpp"
 
+#include <mutex>
+#include <shared_mutex>
+
 BW_BEGIN_NAMESPACE
 
 class RealEntity;
@@ -238,12 +241,24 @@ private:
 	// profiling
 	EntityTypeProfiler profiler_;
 
-	static EntityTypes s_curTypes_, s_newTypes_;
+	// Inline statics: the reload seam (migrate/nameToIndex) lives in
+	// entity_type.ipp so the swap semantics can be asserted without linking
+	// the whole cellapp component, and the test TU needs these objects
+	// without entity_type.o. See the .ipp notes.
+	inline static EntityTypes s_curTypes_, s_newTypes_;
 
 	typedef StringHashMap< EntityTypeID > NameToIndexMap;
-	static NameToIndexMap s_nameToIndexMap_;
+	inline static NameToIndexMap s_nameToIndexMap_;
 
-	static PyObject * s_pInitModules_, * s_pNewModules_;
+	/// Serialises the live type table (s_curTypes_ and s_nameToIndexMap_)
+	/// against the reload's full swap. The lookups take it shared; only the
+	/// swap in migrate() holds it exclusively. CR-P2-07.
+	inline static std::shared_mutex s_typesMutex_;
+
+	inline static PyObject * s_pInitModules_, * s_pNewModules_;
+
+	/// Test access to the reload seam (the mutex and the new-modules pointer).
+	friend struct EntityTypeTestAccess;
 
 	/// The schema digest quote of the last init (see schemaDigestQuote()).
 	static BW::string s_schemaDigestQuote_;
