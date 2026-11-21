@@ -590,8 +590,15 @@ void initExceptionHook( Mercury::EventDispatcher * pEventDispatcher )
 	};
 
 	TraceBack::setEventDispatcher( pEventDispatcher );
-	PySys_SetObject( "excepthook", 
-					 PyCFunction_New( &printTraceBackDef, NULL ) );
+	// PyCFunction_New returns a new reference. PySys_SetObject does not
+	// steal (it stores via PyDict_SetItem, which INCREFs the value), so the
+	// reference must be released here; on failure leave the hook untouched.
+	PyObject * pFunc = PyCFunction_New( &printTraceBackDef, NULL );
+	if (pFunc != NULL)
+	{
+		PySys_SetObject( "excepthook", pFunc );
+		Py_DECREF( pFunc );
+	}
 }
 
 
