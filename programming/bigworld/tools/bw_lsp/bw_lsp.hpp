@@ -124,6 +124,19 @@ public:
 		BW::string & absolutePath,
 		unsigned int & line, unsigned int & column );
 
+	/**
+	 *	Checks entities.xml against the def files on disk.
+	 *
+	 *	The check that no other surface reports: a def file in entity_defs that
+	 *	entities.xml does not declare is dead weight the server silently never
+	 *	loads (usually a typo or a def left behind by a rename). The converse,
+	 *	a declared entity type with no def file, fails the entities.xml parse
+	 *	itself and already surfaces as the unreadable finding here and as an
+	 *	empty schemaDigest. Findings carry no range, they are about the tree
+	 *	as a whole, so the editor shows them as a list instead of squiggles.
+	 */
+	BW::vector< BwLspDiagnostic > crossReference();
+
 private:
 	bool ensureResTreeFor( const BW::string & absoluteDefPath );
 	bool openEntitiesXml();

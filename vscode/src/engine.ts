@@ -170,6 +170,18 @@ export class BwLspEngine {
 		return { found: reply.found === true, uri: reply.uri, range: reply.range };
 	}
 
+	/**
+	 * Def files entities.xml does not declare, as tree-level findings. Their
+	 * ranges are all zero: the findings are about the tree, not a spot in a
+	 * file, so they are listed rather than drawn.
+	 */
+	async crossReference(): Promise<BwLspDiagnostic[]> {
+		const reply = (await this.request("bw/crossReference", {})) as {
+			findings?: BwLspDiagnostic[];
+		};
+		return reply.findings ?? [];
+	}
+
 	/** Shuts the engine down cleanly: shutdown, exit, then kill as a floor. */
 	async stop(): Promise<void> {
 		if (this.stopped) {

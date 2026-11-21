@@ -32,6 +32,7 @@ void printUsage()
 		"  bw-lsp schema-digest --res <paths>\n"
 		"  bw-lsp validate --res <paths> <def file>\n"
 		"  bw-lsp definition --res <paths> <symbol> [--from <def file>]\n"
+		"  bw-lsp cross-ref --res <paths>\n"
 		"\n"
 		"<paths> is the colon separated res root list the engine itself takes\n"
 		"(the directory that carries scripts/entities.xml).\n" );
@@ -170,6 +171,11 @@ int main( int argc, char * argv[] )
 			params[ "uri" ] = (BW::string( "file://" ) + fromPath).c_str();
 		}
 		return runOneShot( session, "bw/definition", params ) ? 0 : 1;
+	}
+
+	if (command == "cross-ref")
+	{
+		return runOneShot( session, "bw/crossReference", Json::Value() ) ? 0 : 1;
 	}
 
 	printUsage();

@@ -14,6 +14,7 @@
 
 #include "resmgr/bwresource.hpp"
 #include "resmgr/file_system.hpp"
+#include "resmgr/multi_file_system.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -257,6 +258,21 @@ bool isDirectory( const BW::string & path )
 		IFileSystem::FT_DIRECTORY;
 }
 
+
+/**
+ *	A finding about the tree as a whole rather than a spot in a file, so it
+ *	carries no range. The editor presents these as a list.
+ */
+BwLspDiagnostic makeTreeFinding( unsigned int severity,
+	const BW::string & code, const BW::string & message )
+{
+	BwLspDiagnostic d;
+	d.severity_ = severity;
+	d.code_ = code;
+	d.message_ = message;
+	return d;
+}
+
 } // end anonymous namespace
 
 
@@ -452,6 +468,14 @@ bool BwLspSession::openEntitiesXml()
 	if (entitiesXmlLoaded_)
 	{
 		return true;
+	}
+
+	if (BWResource::pInstance() == NULL)
+	{
+		// No tree was opened. BWResource::openSection would answer this with a
+		// singleton assertion that kills the process; a tool answers it as a
+		// failed open instead.
+		return false;
 	}
 
 	DataSectionPtr pEntities = BWResource::openSection(
@@ -685,6 +709,67 @@ bool BwLspSession::resolveDefinition( const BW::string & symbol,
 	}
 
 	return false;
+}
+
+
+BW::vector< BwLspDiagnostic > BwLspSession::crossReference()
+{
+	BW::vector< BwLspDiagnostic > findings;
+
+	if (BWResource::pInstance() == NULL)
+	{
+		findings.push_back( makeTreeFinding( 1, "bw-lsp/no-res-root",
+			"No res tree is open: open one with --res before "
+			"cross-referencing entities.xml against the def files." ) );
+		return findings;
+	}
+
+	if (!openEntitiesXml())
+	{
+		findings.push_back( makeTreeFinding( 1, "bw-lsp/entities-unreadable",
+			"entities.xml could not be parsed, so the def files cannot be "
+			"cross-referenced against it." ) );
+		return findings;
+	}
+
+	// The def files that exist. readDirectory walks every res root, so the
+	// check sees the whole tree even when the session was opened on one root
+	// and the defs live in another. The declared names come from the parsed
+	// description map (the same list the server builds its entity types from)
+	// rather than by walking entities.xml a second way: one implementation,
+	// one list.
+	MultiFileSystem * pFileSystem = BWResource::instance().fileSystem();
+	IFileSystem::Directory dir;
+	pFileSystem->readDirectory( dir, EntityDef::Constants::entitiesDefsPath() );
+
+	BW::vector< BW::string > defFiles;
+	for (size_t i = 0; i < dir.size(); ++i)
+	{
+		const BW::string & entry = dir[ i ];
+		if (entry.size() > 4 && entry.substr( entry.size() - 4 ) == ".def")
+		{
+			defFiles.push_back( entry );
+		}
+	}
+
+	// A def file nothing declares: the server never loads it, and it is
+	// usually a typo in entities.xml or a def left behind by a rename. The
+	// converse -- a declared entity type with no def file -- is not checked
+	// here because it fails the entities.xml parse above, which surfaces as
+	// the entities-unreadable finding (and as an empty schemaDigest); this
+	// branch is the one thing no other surface reports.
+	for (size_t i = 0; i < defFiles.size(); ++i)
+	{
+		EntityTypeID index = 0;
+		if (!map_.nameToIndex( fileStem( defFiles[ i ] ), index ))
+		{
+			findings.push_back( makeTreeFinding( 2, "bw-lsp/orphan-def",
+				"Def file '" + defFiles[ i ] + "' is not declared in "
+				"entities.xml." ) );
+		}
+	}
+
+	return findings;
 }
 
 BW_END_NAMESPACE

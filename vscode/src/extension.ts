@@ -22,6 +22,7 @@ import { BwLspEngine, BwLspDiagnostic, findResRoot } from "./engine";
 export const COMMAND_SCHEMA_DIGEST = "bigworld.schemaDigest";
 export const COMMAND_VALIDATE_DEF = "bigworld.validateDef";
 export const COMMAND_REVEAL_DEFINITION = "bigworld.revealDefinition";
+export const COMMAND_CROSS_REFERENCE = "bigworld.crossReference";
 
 /** The engine process for this session, or null until something needs it. */
 let engine: BwLspEngine | null = null;
@@ -59,6 +60,9 @@ export function activate(context: vscode.ExtensionContext): void {
 		)),
 		vscode.commands.registerCommand(COMMAND_REVEAL_DEFINITION, guarded(
 			commandRevealDefinition
+		)),
+		vscode.commands.registerCommand(COMMAND_CROSS_REFERENCE, guarded(
+			commandCrossReference
 		)),
 		vscode.languages.registerDefinitionProvider(
 			{ scheme: "file", pattern: "**/*.def" },
@@ -263,6 +267,28 @@ async function commandRevealDefinition(): Promise<void> {
 		target.range.start.character + 1
 	);
 	await shown.revealRange(target.range, 2 /* vscode.TextEditorRevealType.InCenterIfOutsideViewport */);
+}
+
+/**
+ * Cross-references entities.xml against the def files on disk. The findings
+ * are about the tree rather than a spot in a file, so they are listed in the
+ * output channel instead of being drawn under anything.
+ */
+async function commandCrossReference(): Promise<void> {
+	const running = await withEngine();
+	const findings = await running.crossReference();
+
+	for (const finding of findings) {
+		note(`${finding.code ?? "bw-lsp/cross-ref"}: ${finding.message}`);
+	}
+
+	note(`Cross-reference: ${findings.length} finding(s).`);
+
+	vscode.window.showInformationMessage(
+		findings.length === 0
+			? "BigWorld: entities.xml and the def files agree."
+			: `BigWorld: ${findings.length} cross-reference finding(s), listed in the BigWorld output.`
+	);
 }
 
 // -----------------------------------------------------------------------------

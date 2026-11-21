@@ -26,6 +26,10 @@
 
 #include <json/json.h>
 
+#include <sys/stat.h>
+#include <sys/types.h>
+
+#include <cstdlib>
 #include <cstring>
 
 BW_BEGIN_NAMESPACE
@@ -96,6 +100,100 @@ bool addFantasyDemoPath()
 	}
 	BWResource::addPath( fantasyDemoResPath().c_str() );
 	return true;
+}
+
+
+/**
+ *	Reads a whole file from disk. Returns false when it could not be opened.
+ */
+bool slurpFile( const BW::string & path, BW::string & out )
+{
+	FILE * pFile = fopen( path.c_str(), "rb" );
+	if (pFile == NULL)
+	{
+		return false;
+	}
+
+	char buffer[ 4096 ];
+	size_t n;
+	while ((n = fread( buffer, 1, sizeof( buffer ), pFile )) > 0)
+	{
+		out.append( buffer, n );
+	}
+	fclose( pFile );
+	return true;
+}
+
+
+/**
+ *	Writes text to a file, truncating any file that was there.
+ */
+bool writeFile( const BW::string & path, const BW::string & content )
+{
+	FILE * pFile = fopen( path.c_str(), "wb" );
+	if (pFile == NULL)
+	{
+		return false;
+	}
+
+	const size_t written = fwrite( content.data(), 1, content.size(), pFile );
+	fclose( pFile );
+	return written == content.size();
+}
+
+
+/**
+ *	A temporary res root carrying the fantasydemo entities.xml (so every def
+ *	the sample tree declares stays declared) plus one def file nothing
+ *	declares. Returns an empty string when it could not be written.
+ */
+BW::string makeOrphanTree()
+{
+	BW::string entitiesXml;
+	if (!slurpFile( fantasyDemoResPath() + "/scripts/entities.xml",
+			entitiesXml ))
+	{
+		return "";
+	}
+
+	char templatePath[ 64 ] = "/tmp/bw-lsp-orphan-XXXXXX";
+	const char * pRoot = mkdtemp( templatePath );
+	if (pRoot == NULL)
+	{
+		return "";
+	}
+	const BW::string root = pRoot;
+
+	if (mkdir( (root + "/scripts").c_str(), 0775 ) != 0 ||
+			mkdir( (root + "/scripts/entity_defs").c_str(), 0775 ) != 0)
+	{
+		return "";
+	}
+
+	if (!writeFile( root + "/scripts/entities.xml", entitiesXml ) ||
+			!writeFile( root + "/scripts/entity_defs/Orphan.def",
+				"<Parent>Entity</Parent>" ))
+	{
+		return "";
+	}
+
+	return root;
+}
+
+
+/**
+ *	Removes a temporary tree. The path is mkdtemp's, so it is safe on the
+ *	command line.
+ */
+void removeTree( const BW::string & root )
+{
+	if (!root.empty())
+	{
+		const BW::string command = "rm -rf '" + root + "'";
+		// Best-effort: the /tmp tree is mkdtemp's own name, and the test ends
+		// either way.
+		(void)!system( command.c_str() );
+	}
 }
 
 } // end anonymous namespace
@@ -327,6 +425,88 @@ TEST_F( EntityDefUnitTestHarness, BwLsp_DefinitionEntityType )
 		absolutePath, line, column ) );
 
 	CHECK( absolutePath.find( "entity_defs/Avatar.def" ) != BW::string::npos );
+}
+
+
+/**
+ *	A consistent tree cross-references clean: every def file is declared and
+ *	there is no def nothing declares.
+ */
+TEST_F( EntityDefUnitTestHarness, BwLsp_CrossRefCleanTree )
+{
+	CHECK( addFantasyDemoPath() );
+
+	BwLspSession session;
+	CHECK( session.openResPaths( fantasyDemoResPath() ) );
+
+	CHECK_EQUAL( (size_t)0, session.crossReference().size() );
+}
+
+
+/**
+ *	bw/crossReference is dispatched and answers with a findings array. On the
+ *	clean sample tree that array is empty.
+ */
+TEST_F( EntityDefUnitTestHarness, BwLsp_DispatchCrossReference )
+{
+	CHECK( addFantasyDemoPath() );
+
+	BwLspSession session;
+	CHECK( session.openResPaths( fantasyDemoResPath() ) );
+
+	BW::string response;
+	CHECK( bwLspHandleMessage( session,
+		"{\"jsonrpc\":\"2.0\",\"id\":7,\"method\":\"bw/crossReference\"}",
+		response ) );
+	CHECK( !response.empty() );
+
+	Json::Value parsed;
+	Json::Reader reader;
+	CHECK( reader.parse( response.c_str(), parsed ) );
+	CHECK( parsed[ "result" ][ "findings" ].isArray() );
+	CHECK_EQUAL( 0, parsed[ "result" ][ "findings" ].size() );
+}
+
+
+/**
+ *	A def file that entities.xml does not declare is reported, by name. The
+ *	temp root carries the same entities.xml as the sample tree plus an
+ *	Orphan.def, so the session sees exactly one finding.
+ */
+TEST_F( EntityDefUnitTestHarness, BwLsp_CrossRefFlagsOrphanDef )
+{
+	CHECK( addFantasyDemoPath() );
+
+	const BW::string tempRoot = makeOrphanTree();
+	CHECK( !tempRoot.empty() );
+	if (tempRoot.empty())
+	{
+		return;
+	}
+
+	const int pathNumBefore = BWResource::getPathNum();
+
+	BwLspSession session;
+	CHECK( session.openResPaths( tempRoot ) );
+
+	const BW::vector< BwLspDiagnostic > findings = session.crossReference();
+
+	CHECK_EQUAL( (size_t)1, findings.size() );
+	if (findings.size() == 1)
+	{
+		CHECK_EQUAL( BW::string( "bw-lsp/orphan-def" ),
+			findings[ 0 ].code_ );
+		CHECK( findings[ 0 ].message_.find( "Orphan.def" ) !=
+			BW::string::npos );
+	}
+
+	// Remove the temp root again so no later test sees it.
+	while (BWResource::getPathNum() > pathNumBefore)
+	{
+		BWResource::instance().delPath( BWResource::getPathNum() - 1 );
+	}
+
+	removeTree( tempRoot );
 }
 
 

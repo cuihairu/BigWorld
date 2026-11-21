@@ -12,6 +12,7 @@ import * as vscode from "vscode";
 import {
 	activate,
 	deactivate,
+	COMMAND_CROSS_REFERENCE,
 	COMMAND_REVEAL_DEFINITION,
 	COMMAND_SCHEMA_DIGEST,
 	COMMAND_VALIDATE_DEF,
@@ -76,6 +77,21 @@ const mocks = vi.hoisted(() => {
 			};
 		}
 
+		async crossReference(): Promise<BwLspDiagnostic[]> {
+			calls.push("bw/crossReference");
+			return [
+				{
+					severity: 2,
+					code: "bw-lsp/orphan-def",
+					message: "Def file 'Orphan.def' is not declared in entities.xml.",
+					range: {
+						start: { line: 0, character: 0 },
+						end: { line: 0, character: 0 },
+					},
+				},
+			];
+		}
+
 		async stop(): Promise<void> {
 			this.stopped = true;
 		}
@@ -131,12 +147,13 @@ afterEach(() => {
 });
 
 describe("activate", () => {
-	it("registers the three commands, the definition provider and diagnostics", () => {
+	it("registers the four commands, the definition provider and diagnostics", () => {
 		activate(context() as unknown as vscode.ExtensionContext);
 
 		expect(vscode.__state.commands.has(COMMAND_SCHEMA_DIGEST)).toBe(true);
 		expect(vscode.__state.commands.has(COMMAND_VALIDATE_DEF)).toBe(true);
 		expect(vscode.__state.commands.has(COMMAND_REVEAL_DEFINITION)).toBe(true);
+		expect(vscode.__state.commands.has(COMMAND_CROSS_REFERENCE)).toBe(true);
 		expect(vscode.__state.definitionProviders).toHaveLength(1);
 		expect(vscode.__state.collections).toHaveLength(1);
 	});
@@ -275,6 +292,33 @@ describe("definition provider (F12)", () => {
 		);
 
 		expect(link).toBeNull();
+	});
+});
+
+describe("cross-reference command", () => {
+	it("lists the engine's findings in the output channel", async () => {
+		activate(context() as unknown as vscode.ExtensionContext);
+		await runCommand(COMMAND_CROSS_REFERENCE);
+
+		expect(mocks.calls).toContain("bw/crossReference");
+		const channelLines = vscode.__state.channels
+			.map((channel) => channel.lines.join("\n"))
+			.join("\n");
+		expect(channelLines).toContain("bw-lsp/orphan-def");
+		expect(channelLines).toContain("Orphan.def");
+		expect(channelLines).toContain("1 finding(s)");
+	});
+
+	it("reports agreement when the tree is consistent", async () => {
+		const original = mocks.FakeEngine.prototype.crossReference;
+		mocks.FakeEngine.prototype.crossReference = async () => [];
+
+		activate(context() as unknown as vscode.ExtensionContext);
+		await runCommand(COMMAND_CROSS_REFERENCE);
+		mocks.FakeEngine.prototype.crossReference = original;
+
+		const shown = vscode.__state.messages.map((m) => m.text).join("\n");
+		expect(shown).toContain("agree");
 	});
 });
 

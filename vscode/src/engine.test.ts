@@ -1,6 +1,6 @@
 /**
  * Pins the engine process: spawn arguments, the initialize handshake, the
- * three bw/* calls and a clean shutdown. The fake process speaks the real
+ * bw/* calls and a clean shutdown. The fake process speaks the real
  * frame protocol back through the same codec the extension uses, so this
  * covers the engine and its rpc client together without a C++ binary.
  */
@@ -181,6 +181,26 @@ describe("BwLspEngine", () => {
 		await engine.start();
 
 		await expect(engine.validate("file:///tree/scripts/entity_defs/Avatar.def")).resolves.toEqual([]);
+		await engine.stop();
+	});
+
+	it("passes crossReference findings through untouched", async () => {
+		const finding = {
+			severity: 2,
+			code: "bw-lsp/orphan-def",
+			message: "Def file 'Orphan.def' is not declared in entities.xml.",
+			range: {
+				start: { line: 0, character: 0 },
+				end: { line: 0, character: 0 },
+			},
+		};
+		const { process: fake } = fakeProcess((method) =>
+			method === "bw/crossReference" ? { result: { findings: [finding] } } : { result: {} }
+		);
+		const engine = new BwLspEngine({ bwLspPath: "x", resRoot: RES_ROOT, spawnFn: spawnFor(fake).spawnFn });
+		await engine.start();
+
+		await expect(engine.crossReference()).resolves.toEqual([finding]);
 		await engine.stop();
 	});
 

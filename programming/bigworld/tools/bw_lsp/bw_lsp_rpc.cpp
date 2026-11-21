@@ -103,6 +103,31 @@ BW::string pathToUri( const BW::string & path )
 	return BW::string( "file://" ) + path;
 }
 
+
+/**
+ *	Fills an array member with the engine's findings in the shape the editor
+ *	side unpacks: a range, a severity and a code, all zero-based and in the
+ *	editor's own units.
+ */
+void diagnosticsToJson( const BW::vector< BwLspDiagnostic > & diagnostics,
+	Json::Value & out )
+{
+	out = Json::Value( Json::arrayValue );
+	for (size_t i = 0; i < diagnostics.size(); ++i)
+	{
+		const BwLspDiagnostic & d = diagnostics[ i ];
+		Json::Value j;
+		j[ "range" ][ "start" ][ "line" ] = d.line_;
+		j[ "range" ][ "start" ][ "character" ] = d.column_;
+		j[ "range" ][ "end" ][ "line" ] = d.endLine_;
+		j[ "range" ][ "end" ][ "character" ] = d.endColumn_;
+		j[ "severity" ] = d.severity_;
+		j[ "code" ] = d.code_.c_str();
+		j[ "message" ] = d.message_.c_str();
+		out.append( j );
+	}
+}
+
 } // end anonymous namespace
 
 
@@ -220,21 +245,7 @@ bool bwLspHandleMessage( BwLspSession & session, const BW::string & messageBody,
 		const BW::vector< BwLspDiagnostic > diagnostics =
 			session.validateDef( uriToPath( uri ) );
 
-		Json::Value diagList( Json::arrayValue );
-		for (size_t i = 0; i < diagnostics.size(); ++i)
-		{
-			const BwLspDiagnostic & d = diagnostics[ i ];
-			Json::Value j;
-			j[ "range" ][ "start" ][ "line" ] = d.line_;
-			j[ "range" ][ "start" ][ "character" ] = d.column_;
-			j[ "range" ][ "end" ][ "line" ] = d.endLine_;
-			j[ "range" ][ "end" ][ "character" ] = d.endColumn_;
-			j[ "severity" ] = d.severity_;
-			j[ "code" ] = d.code_.c_str();
-			j[ "message" ] = d.message_.c_str();
-			diagList.append( j );
-		}
-		result[ "diagnostics" ] = diagList;
+		diagnosticsToJson( diagnostics, result[ "diagnostics" ] );
 	}
 	else if (method == "bw/definition")
 	{
@@ -259,6 +270,13 @@ bool bwLspHandleMessage( BwLspSession & session, const BW::string & messageBody,
 		{
 			result[ "found" ] = false;
 		}
+	}
+	else if (method == "bw/crossReference")
+	{
+		const BW::vector< BwLspDiagnostic > findings =
+			session.crossReference();
+
+		diagnosticsToJson( findings, result[ "findings" ] );
 	}
 	else
 	{
