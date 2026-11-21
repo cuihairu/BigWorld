@@ -1,0 +1,29 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "scopeName": "text.bigworld-entities",
+  "injectTo": [
+    "text.xml"
+  ],
+  "patterns": [
+    {
+      "begin": "<(ClientServerEntities|ServerOnlyEntities)>",
+      "beginCaptures": {
+        "1": { "name": "entity.name.tag.bigworld-entities" }
+      },
+      "end": "</\\1>",
+      "endCaptures": {
+        "0": { "name": "entity.name.tag.bigworld-entities" }
+      },
+      "patterns": [
+        {
+          "name": "variable.other.bigworld-entity",
+          "match": "<(/?)[A-Z][A-Za-z0-9_]*\\s*/?>"
+        }
+      ]
+    },
+    {
+      "name": "entity.name.tag.bigworld-entities",
+      "match": "</?(ClientServerEntities|ServerOnlyEntities)\\b"
+    }
+  ]
+}

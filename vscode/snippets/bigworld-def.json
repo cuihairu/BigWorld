@@ -1,0 +1,97 @@
+{
+  "entity skeleton": {
+    "prefix": "bwentity",
+    "body": [
+      "<root>",
+      "\t<Volatile>",
+      "\t\t<position/>",
+      "\t\t<yaw/>",
+      "\t</Volatile>",
+      "",
+      "\t<Properties>",
+      "\t\t<${1:propName}>",
+      "\t\t\t<Type>\tSTRING\t</Type>",
+      "\t\t\t<Flags>\tALL_CLIENTS\t</Flags>",
+      "\t\t\t<Default>\t${2:value}\t</Default>",
+      "\t\t</${1:propName}>",
+      "\t</Properties>",
+      "",
+      "\t<ClientMethods>",
+      "\t</ClientMethods>",
+      "",
+      "\t<CellMethods>",
+      "\t</CellMethods>",
+      "",
+      "\t<BaseMethods>",
+      "\t</BaseMethods>",
+      "</root>"
+    ],
+    "description": "Full entity def skeleton with all four method/property sections"
+  },
+  "property": {
+    "prefix": "bwprop",
+    "body": [
+      "<${1:name}>",
+      "\t<Type>\t${2:STRING}\t</Type>",
+      "\t<Flags>\t${3:ALL_CLIENTS}\t</Flags>",
+      "\t<Default>\t${4:value}\t</Default>",
+      "\t<Persistent>\ttrue\t</Persistent>",
+      "\t<Editable>\ttrue\t</Editable>",
+      "\t<Identifier>\ttrue\t</Identifier>",
+      "</${1:name}>"
+    ],
+    "description": "Entity property with type, flags, default and persistence"
+  },
+  "client method": {
+    "prefix": "bwclientm",
+    "body": [
+      "<${1:methodName}>",
+      "\t<Arg>\t${2:STRING}\t</Arg>",
+      "</${1:methodName}>"
+    ],
+    "description": "Client method taking one argument"
+  },
+  "exposed base method": {
+    "prefix": "bwbasem",
+    "body": [
+      "<${1:methodName}>",
+      "\t<Exposed/>",
+      "</${1:methodName}>"
+    ],
+    "description": "Base method exposed to the client"
+  },
+  "cell method": {
+    "prefix": "bwcellm",
+    "body": [
+      "<${1:methodName}>",
+      "\t<Arg>\t${2:INT32}\t</Arg>",
+      "\t<Return>\t${3:void}\t</Return>",
+      "</${1:methodName}>"
+    ],
+    "description": "Cell method with one argument and a return value"
+  },
+  "volatile info": {
+    "prefix": "bwvolatile",
+    "body": [
+      "<Volatile>",
+      "\t<position/>",
+      "\t<yaw/>",
+      "\t<pitch/>\t<roll/>",
+      "</Volatile>"
+    ],
+    "description": "Volatile info block declaring the movement data to replicate"
+  },
+  "client-server entities": {
+    "prefix": "bwentities",
+    "body": [
+      "<root>",
+      "\t<ClientServerEntities>",
+      "\t\t<${1:EntityName}/>",
+      "\t</ClientServerEntities>",
+      "\t<ServerOnlyEntities>",
+      "\t</ServerOnlyEntities>",
+      "</root>"
+    ],
+    "description": "entities.xml declaring the client/server entity list"
+  }
+}

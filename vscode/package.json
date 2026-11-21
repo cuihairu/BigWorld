@@ -1,0 +1,115 @@
+{
+  "name": "bigworld-vscode",
+  "displayName": "%bigworld.displayName%",
+  "description": "%bigworld.description%",
+  "version": "0.1.0",
+  "publisher": "cuihairu",
+  "author": {
+    "name": "cuihairu",
+    "email": "cuihairu@gmail.com"
+  },
+  "license": "MIT",
+  "icon": "resources/logo.png",
+  "galleryBanner": {
+    "color": "#2E7D32",
+    "theme": "dark"
+  },
+  "packageManager": "pnpm@12.10.1+sha512.ba40a37eb1a370d60fea8c4cf1d364c13bcccef518e98ad2bcee954f539d38da37458e58261a3fa55e06523450ea0ffff9f497b135be41f2c15c1642bacace6c",
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0",
+    "vscode": "^1.82.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Snippets",
+    "Linters"
+  ],
+  "keywords": [
+    "bigworld",
+    "game-server",
+    "mmo",
+    "entity",
+    "def"
+  ],
+  "activationEvents": [
+    "onLanguage:bigworld-def",
+    "onLanguage:xml",
+    "workspaceContains:**/*.def",
+    "onCommand:bigworld.schemaDigest",
+    "onCommand:bigworld.validateDef",
+    "onCommand:bigworld.revealDefinition"
+  ],
+  "main": "./out/extension.js",
+  "l10n": "./l10n",
+  "extensionKind": [
+    "workspace"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "bigworld-def",
+        "aliases": [
+          "BigWorld Def",
+          "bigworld-def",
+          "def"
+        ],
+        "extensions": [
+          ".def"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "bigworld-def",
+        "scopeName": "source.bigworld-def",
+        "path": "./syntaxes/bigworld-def.tmLanguage.json"
+      },
+      {
+        "scopeName": "text.bigworld-entities",
+        "path": "./syntaxes/bigworld-entities-injection.json",
+        "injectTo": [
+          "text.xml"
+        ]
+      }
+    ],
+    "snippets": [
+      {
+        "language": "bigworld-def",
+        "path": "./snippets/bigworld-def.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "bigworld.schemaDigest",
+        "title": "%bigworld.command.schemaDigest.title%",
+        "category": "BigWorld"
+      },
+      {
+        "command": "bigworld.validateDef",
+        "title": "%bigworld.command.validateDef.title%",
+        "category": "BigWorld"
+      },
+      {
+        "command": "bigworld.revealDefinition",
+        "title": "%bigworld.command.revealDefinition.title%",
+        "category": "BigWorld"
+      }
+    ],
+    "configuration": {
+      "title": "BigWorld",
+      "properties": {
+        "bigworld.bwLspPath": {
+          "type": "string",
+          "default": "",
+          "description": "%bigworld.config.bwLspPath.description%"
+        },
+        "bigworld.resRoot": {
+          "type": "string",
+          "default": "",
+          "description": "%bigworld.config.resRoot.description%"
+        }
+      }
+    }
+  }
+}

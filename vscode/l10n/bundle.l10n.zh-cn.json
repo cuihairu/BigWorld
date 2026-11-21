@@ -1,0 +1,11 @@
+{
+  "bigworld.displayName": "BigWorld",
+  "bigworld.description": "BigWorld OSE 服务端的 def 文件支持：语法高亮、代码片段、校验与 schema 摘要，全部经由引擎自身的 C++ 代码完成。",
+
+  "bigworld.command.schemaDigest.title": "BigWorld：Schema 摘要",
+  "bigworld.command.validateDef.title": "BigWorld：校验 Def 文件",
+  "bigworld.command.revealDefinition.title": "BigWorld：转到定义",
+
+  "bigworld.config.bwLspPath.description": "bw-lsp 二进制的绝对路径。留空则使用随本扩展构建的那份（用 cmake 的 entitydef 样板构建）。",
+  "bigworld.config.resRoot.description": "要检查的 BigWorld 项目资源根目录（即包含 scripts/entities.xml 的目录）。留空则由打开的 def 文件自行向上查找。"
+}

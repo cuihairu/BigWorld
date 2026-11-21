@@ -1,0 +1,59 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "BigWorld Def",
+  "scopeName": "source.bigworld-def",
+  "patterns": [
+    { "include": "#comment" },
+    { "include": "#tag" },
+    { "include": "#text" }
+  ],
+  "repository": {
+    "comment": {
+      "name": "comment.block.xml",
+      "begin": "<!--",
+      "end": "-->"
+    },
+    "tag": {
+      "begin": "(</?)([\\w:.-]+)",
+      "beginCaptures": {
+        "1": { "name": "punctuation.definition.tag.begin.xml" },
+        "2": { "name": "entity.name.tag.bigworld-def" }
+      },
+      "end": "(/?>)",
+      "endCaptures": {
+        "1": { "name": "punctuation.definition.tag.end.xml" }
+      },
+      "patterns": [
+        {
+          "name": "entity.other.attribute-name.bigworld",
+          "match": "[A-Za-z_:][\\w:.-]*"
+        },
+        {
+          "name": "string.quoted.double.xml",
+          "begin": "\"",
+          "end": "\""
+        }
+      ]
+    },
+    "text": {
+      "patterns": [
+        {
+          "name": "constant.language.bigworld-type",
+          "match": "\\b(INT8|INT16|INT32|INT64|UINT8|UINT16|UINT32|UINT64|FLOAT|FLOAT32|FLOAT64|DOUBLE|BYTE|BOOL|STRING|STRINGARRAY|BYTESTRING|BYTEARRAY|UINT32ARRAY|BLOB|VECTOR|COORD|DIRECTION|PYTHON|OBJECT|DATETIME|DBID|ENTITYID|TUPLE|ARRAY|DICTIONARY|CLASS|FIXED_DICT|UDO_REF|MAILBOX)\\b"
+        },
+        {
+          "name": "keyword.other.bigworld-flags",
+          "match": "\\b(ALL_CLIENTS|OTHER_CLIENTS|OWN_CLIENT|CLIENTS|CELL_PUBLIC|BASE_AND_CLIENT|BASE_AND_CELL|CELL_AND_CLIENT|CLIENT|BASE|CELL|SERVER_ONLY)\\b"
+        },
+        {
+          "name": "constant.language.boolean.bigworld",
+          "match": "\\b(true|false)\\b"
+        },
+        {
+          "name": "constant.numeric",
+          "match": "\\b-?\\d+(\\.\\d+)?([eE][+-]?\\d+)?\\b"
+        }
+      ]
+    }
+  }
+}

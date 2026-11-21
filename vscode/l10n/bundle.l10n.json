@@ -1,0 +1,11 @@
+{
+  "bigworld.displayName": "BigWorld",
+  "bigworld.description": "Def file support for the BigWorld OSE server: syntax highlighting, snippets, validation and schema digest through the engine's own C++ code.",
+
+  "bigworld.command.schemaDigest.title": "BigWorld: Schema Digest",
+  "bigworld.command.validateDef.title": "BigWorld: Validate Def File",
+  "bigworld.command.revealDefinition.title": "BigWorld: Go to Definition",
+
+  "bigworld.config.bwLspPath.description": "Absolute path of the bw-lsp binary. Leave empty to use the one built next to this extension (build it with the cmake entitydef sample).",
+  "bigworld.config.resRoot.description": "Resource root of the BigWorld project to inspect (the directory that contains scripts/entities.xml). Leave empty to find it from the opened def file."
+}
