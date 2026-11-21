@@ -508,25 +508,37 @@ template <class TYPE>
 bool getNestedValue( PyObject * pObject, const char ** path, TYPE & value )
 {
 	const char ** currPath = path;
+	// PyObject_GetAttrString returns a new reference. The caller's pObject is
+	// borrowed, so owned tracks the current hop: release the previous hop
+	// before each reassignment and the terminal one on every exit path.
+	PyObject * owned = NULL;
 
 	while (*currPath && pObject)
 	{
-		pObject = PyObject_GetAttrString( pObject, *currPath );
+		PyObject * next = PyObject_GetAttrString( pObject, *currPath );
+
+		Py_XDECREF( owned );
+		owned = next;
+		pObject = next;
 
 		++currPath;
 	}
 
 	if (!pObject)
 	{
+		Py_XDECREF( owned );
 		PyErr_Clear();
 		return false;
 	}
 
 	if (Script::setData( pObject, value ) != 0)
 	{
+		Py_XDECREF( owned );
 		PyErr_Clear();
 		return false;
 	}
+
+	Py_XDECREF( owned );
 
 	return true;
 }
