@@ -105,3 +105,10 @@
 - [ ] CR-P2-25 · 整数溢出→分配 · `binary_stream.hpp:353,407` operator>>(BW::vector&) 与 TYPEDEF_STREAMING_VECTOR 无条件 reserve(attacker_max)。
 - [ ] CR-P3-01 · 格式串 · `log_msg.cpp:558` printf(buffer) 用报文文本当格式串——**仅 PLAYSTATION3 分支**，Linux/Windows 不可达。
 - [ ] CR-P3-02 · 覆盖面说明 · `tools/*` C++ 仍含 Py2 专属 PyString_*/PyInt_* 调用，故这些 tool 目标未对 3.13 构建（非缺陷）。
+
+## VS Code 插件（2026-11-21 用户令：类似 kode 但单版本——插件二进制直接复用 BigWorld C++，不要 kode 那种 Rust 新引擎+TS 双版本并存）
+
+- [ ] VSX-1 · P1 · 插件骨架目录 `vscode/`（package.json + l10n + syntaxes 起步）：仓根新建 `vscode/` 扩展目录，TS 侧只做编辑器集成（语言配置/补全委托/命令面板），**不做独立分析引擎**；语言基础件（语言配置、片段、基本语法高亮）直接落 VS Code 原生能力，无二进制参与。
+- [ ] VSX-2 · P1 · 复用 C++ 引擎：`lib/entitydef`（EntityDescription/DataType 解析、MD5 schema digest）与 `lib/network` 已有整树与单测（entitydef 318/network 210 用例）；插件核心命令编译为 C++ 二进制（cmake 目标），以 stdio JSON-RPC 子进程形态被 TS 侧调起——解析/校验/digest 全在 C++ 内完成，**单一实现单一版本**；验收：同一 `entities.xml`/`*.def` 输入，CLI 工具与插件输出逐字节一致。
+- [ ] VSX-3 · P1 · 门禁与打包：`vscode/` 侧单测（vitest，仅测 TS 薄壳：RPC 编解码、委托、命令注册）+ C++ 侧沿用既有 ctest；打包 vsix 时二进制随包（或首启下载）；CI 加 `vscode/` 腿；验收：`code --install-extension` 装上后 F12/补全/校验命令在 FantasyDemo `res/` def 树上真实可用。
+- [ ] VSX-4 · P2 · 首批命令面：def 文件 schema 校验（红波浪线）、entities.xml ↔ def 交叉引用检查、`BigWorld.schemaDigest()` 查询命令、跳转定义（EntityType/DataType/ClientServerProperty）；验收口径在 VSX-3 起跑后按实际用户走查补齐。
