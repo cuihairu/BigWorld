@@ -108,8 +108,11 @@ export class EntityCall {
     const bundle = new BundleWriter();
     const spec = this.isBase ? this.options.baseMessage : this.options.cellMessage;
     const writer = bundle.startMessage(spec);
-    writer.writeInt32(this.id);
+    // The message body is [entityId: int32][methodId: uint8][args...], so the
+    // body length fed to endMessage must include the entity id prefix (the
+    // server's Entity.onRemoteMethodCall reads it from the body).
     const bodyStart = writer.size;
+    writer.writeInt32(this.id);
 
     const handle: EntityCallHandle = {
       writer,
