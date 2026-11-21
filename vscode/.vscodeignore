@@ -5,4 +5,7 @@ test/**
 .gitignore
 esbuild.js
 tsconfig.json
+tsconfig.test.json
+vitest.config.ts
+pnpm-lock.yaml
 **/*.map

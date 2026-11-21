@@ -1,6 +1,6 @@
 # BigWorld for VS Code
 
-Def file support for the [BigWorld OSE](../) server: syntax highlighting,
+Def file support for the [BigWorld OSE](https://github.com/cuihairu/BigWorld) server: syntax highlighting,
 snippets, validation and the schema digest — all of them served by the
 engine's own C++ code, never by a second implementation.
 

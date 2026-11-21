@@ -1,0 +1,83 @@
+name: CI vscode extension
+
+# TypeScript leg of the VS Code extension (vscode/): typecheck, the vitest unit
+# suite and the esbuild bundle, then a vsce package produced as a workflow
+# ARTIFACT (never a release -- releases are not made from CI here).
+#
+# The C++ engine (programming/bigworld/tools/bw_lsp) is covered by the existing
+# cmake-samples entitydef job in ci.yml, which builds bw_lsp + bw_lsp_test and
+# runs them through ctest on the same pushes. This leg is the editor side, and
+# it needs no C++ toolchain: the vitest suite stands in a fake engine and tests
+# the thin TS shell (RPC codec, delegation, command registration) on its own.
+#
+# Dependency versions are pinned by vscode/pnpm-lock.yaml (installed with
+# --frozen-lockfile); build scripts are pre-approved via the committed
+# vscode/pnpm-workspace.yaml allowBuilds list.
+
+on:
+  push:
+    paths:
+      - 'vscode/**'
+      - '.github/workflows/ci-vscode.yml'
+  pull_request:
+    paths:
+      - 'vscode/**'
+      - '.github/workflows/ci-vscode.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-vscode-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  vscode:
+    name: vscode extension (linux)
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 20
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 12.10.1
+
+      - name: Install dependencies
+        working-directory: vscode
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck (extension sources)
+        working-directory: vscode
+        run: pnpm typecheck
+
+      - name: Typecheck (unit tests, against the vscode stub)
+        working-directory: vscode
+        run: pnpm typecheck:test
+
+      - name: Unit tests (vitest)
+        working-directory: vscode
+        run: pnpm test
+
+      - name: Bundle (esbuild)
+        working-directory: vscode
+        run: pnpm compile
+
+      - name: Package (vsce)
+        working-directory: vscode
+        run: pnpm package
+
+      - name: Upload the packaged extension as a workflow artifact
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: bigworld-vscode-${{ github.run_id }}
+          path: vscode/*.vsix
+          if-no-files-found: error
+          retention-days: 7

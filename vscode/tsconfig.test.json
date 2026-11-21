@@ -1,0 +1,10 @@
+{
+	"extends": "./tsconfig.json",
+	"compilerOptions": {
+		"paths": {
+			"vscode": ["./src/test/vscode-stub.ts"]
+		},
+		"types": ["node"]
+	},
+	"include": ["src/**/*.ts", "src/test/**/*.ts"]
+}
