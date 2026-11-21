@@ -78,7 +78,7 @@
 
 ## 代码深审遗留（2026-11-01 深审，P1 已全部修完并推送；总账见 docs/review/2026-11-01-code-review.md）
 
-- [ ] CR-P2-01 · 引用计数 · `script.cpp:107,133,192` `PyFrame_GetCode` 强引用从不 DECREF（pushStack/updateStackTop/PythonProfiler::handleStack 每事件漏 1）。**承重**：该泄漏保住交给 StackTracker 的裸指针，裸修会 UAF，须同时改为拷贝 name/filename 字符串。
+- [x] CR-P2-01 · 引用计数 · `script.cpp:107,133,192` `PyFrame_GetCode` 强引用从不 DECREF（pushStack/updateStackTop/PythonProfiler::handleStack 每事件漏 1）。**承重**：该泄漏保住交给 StackTracker 的裸指针，裸修会 UAF，须同时改为拷贝 name/filename 字符串。 — `a7268bf1`（stack_tracker StackItem 自带 char[128] 缓冲、profiler 条目/显示/层级 char[96] 缓冲、memory_debug 去 interning 块；cellapp 生产构建 + 21 模块全绿，network_test 系 sysctl 漂移已修）
 - [ ] CR-P2-02 · 引用计数 · `pywatcher.cpp:1202-1233` `PyFunctionWatcher::init` 所有路径泄漏 `pName`/`pType`（PySequence_GetItem 新引用）。
 - [ ] CR-P2-03 · 引用计数 · `script.hpp:508-532` `getNestedValue` 每次 GetAttrString 泄漏、终引用未释放；EntityType 构造 ×2 → 每次热重载每类型 8 引用。
 - [ ] CR-P2-04 · 引用计数 · `py_traceback.cpp:593-594` `PySys_SetObject` INCREF 不 steal，PyCFunction_New 一次性泄漏。
