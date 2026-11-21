@@ -111,7 +111,10 @@ public:
 		const int line = PyCode_Addr2Line( code, PyFrame_GetLasti( pFrame ) );
 		/* BIGWORLD_END */
 
+		// StackTracker::push copies the strings, so the strong reference
+		// PyFrame_GetCode handed us can be released here.
 		StackTracker::push( name, filename, line, true );
+		Py_DECREF( code );
 	}
 
 
@@ -133,13 +136,15 @@ public:
 			PyCodeObject * code = PyFrame_GetCode( pFrame );
 			const char * name = PyUnicode_AsUTF8( code->co_name );
 
-			if (top.name != NULL && strcmp( top.name, name ) == 0)
+			if (strcmp( top.name, name ) == 0)
 			{
 				const int line = PyCode_Addr2Line( code,
 					PyFrame_GetLasti( pFrame ) );
 				top.line = line;
 			}
 			/* BIGWORLD_END */
+
+			Py_DECREF( code );
 		}
 	}
 
@@ -219,6 +224,10 @@ public:
 			}
 			break;
 		}
+
+		// The profiler copies the name into its own storage, so the strong
+		// reference PyFrame_GetCode handed us can be released here.
+		Py_XDECREF( pCode );
 	}
 };
 #endif /* ENABLE_PROFILER */

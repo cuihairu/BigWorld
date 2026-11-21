@@ -623,13 +623,9 @@ uint MemoryDebug::recordGuardCallstack(StackTracker::StackItem* guardStack,
 		StackTracker::StackItem& stackItem = guardStack[i];
 		stackItem = StackTracker::getStackItem( i );
 
-		// make a copy of the temporary strings before generating hash for the
-		// callstack
-		if ( stackItem.temp )
-		{
-			stackItem.name = getStringTableEntry( stackItem.name );
-			stackItem.file = getStringTableEntry( stackItem.file );
-		}
+		// The name and file already live in the item itself (StackTracker
+		// copies them on push), so unlike when they were borrowed pointers no
+		// string-table interning is needed to make them comparable here.
 
 		// make a copy of the annotation
 		if ( stackItem.annotation )

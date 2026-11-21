@@ -37,7 +37,8 @@ inline void Profiler::addEntry( const char* text, EventType e, int32 value,
 		return;
 	}
 
-	newEntry->name_ = text;
+	newEntry->name_[ ENTRY_NAME_SIZE - 1 ] = '\0';
+	strncpy( newEntry->name_, (text != NULL) ? text : "", ENTRY_NAME_SIZE - 1 );
 	newEntry->event_ = e;
 	newEntry->category_ = category;
 	newEntry->time_ = timestamp();

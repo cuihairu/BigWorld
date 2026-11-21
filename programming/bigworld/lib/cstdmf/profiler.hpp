@@ -176,11 +176,16 @@ public:
 		JSON_DUMPING_FAILED
 	};
 
+	/// Fixed storage for an entry's name. The pool owns the string: callers
+	/// may pass pointers into memory that dies before the entry is consumed
+	/// (a Python frame's code object).
+	static const int ENTRY_NAME_SIZE = 96;
+
 	struct ProfileEntry
 	{
 		EventType		event_;
 		EventCategory	category_;
-		const char *	name_;
+		char			name_[ ENTRY_NAME_SIZE ];
 		uint64			time_;
 		bwThreadID		threadIdx_;
 		int32			value_;
@@ -196,7 +201,7 @@ public:
 		DisplayEntry*	parent_;
 		DisplayEntry*	sibling_;
 		DisplayEntry*	child_;
-		const char*		name_;
+		char			name_[ ENTRY_NAME_SIZE ];
 		uint64			start_;
 		uint64			numInclusiveCycles_;
 		uint64			numChildCycles_;
@@ -771,7 +776,7 @@ public:
 	HierEntry*  sibling_;
 	HierEntry*  child_;
 	Profiler::EventCategory category_;
-	const char* name_;
+	char		name_[ Profiler::ENTRY_NAME_SIZE ];
 	uint32		state_;
 	float		time_;
 	float*		timeArray_;

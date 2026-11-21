@@ -10,8 +10,17 @@ inline void StackTracker::push(const char* name, const char*file, uint line, boo
 {
 	assert( stackPos_ < THREAD_STACK_DEPTH );
 	StackItem& stackPos = stack_[stackPos_];
-	stackPos.name = name;
-	stackPos.file = file;
+	// Zero the whole item first: the raw bytes of an item are hashed and
+	// compared wholesale by the memory-tracking callstack dedup, so padding
+	// bytes must be deterministic.
+	memset( &stackPos, 0, sizeof( stackPos ) );
+	// The tracker owns these strings (the item stores copies), so the caller
+	// may pass pointers into memory it releases straight after this call.
+	// The temp flag only records where they came from.
+	strncpy( stackPos.name, (name != NULL) ? name : "",
+		ARRAY_SIZE( stackPos.name ) - 1 );
+	strncpy( stackPos.file, (file != NULL) ? file : "",
+		ARRAY_SIZE( stackPos.file ) - 1 );
 	stackPos.line = line;
 	stackPos.temp = temp;
 	stackPos.annotation = 0;

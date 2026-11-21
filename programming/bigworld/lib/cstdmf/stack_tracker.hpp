@@ -16,6 +16,8 @@
 #include "cstdmf/debug.hpp"
 #include "cstdmf/stdmf.hpp"
 
+#include <string.h>
+
 // Using a C assert here, because MF_ASSERT calls things that can cause another
 // push/pop to happen, causing this to assert again, ad infinitum.
 #include <cassert>
@@ -40,12 +42,22 @@ private:
 
 public:
 
+	enum
+	{
+		/// Fixed storage for an item's name and file. The tracker owns these
+		/// strings: a caller may pass pointers into memory it releases right
+		/// after the push (a Python frame's code object is DECREF'd as soon
+		/// as the push returns).
+		STRING_SIZE = 128
+	};
+
 	struct StackItem
 	{
-		const char*		name;		// function name
-		const char*		file;		// file name
+		char			name[ STRING_SIZE ];	// function name
+		char			file[ STRING_SIZE ];	// file name
 		uint			line:31;	// line number
-		bool			temp:1;		// flags if the name and file and temp strings
+		bool			temp:1;		// flags if the name and file came from
+									// temporary memory
 		const char*		annotation;	// This is always a temp string and must be copied
 	};
 

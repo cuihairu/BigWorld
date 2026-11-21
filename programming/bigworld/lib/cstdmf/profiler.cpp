@@ -452,7 +452,7 @@ public:
 
 		while (current)
 		{
-			if (current->name_ == pEntry)
+			if (strcmp( current->name_, pEntry ) == 0)
 			{
 				break;
 			}
@@ -542,7 +542,11 @@ HierEntry::HierEntry( HierEntry * pParent, const char * pEntry )
 	parent_ = pParent;
 	child_ = NULL;
 	sibling_ = NULL;
-	name_ = pEntry;
+	// The entry outlives the profile-entry pool's contents, so it owns a
+	// copy of the name.
+	name_[ Profiler::ENTRY_NAME_SIZE - 1 ] = '\0';
+	strncpy( name_, (pEntry != NULL) ? pEntry : "",
+		Profiler::ENTRY_NAME_SIZE - 1 );
 	state_ = 0;
 	time_ = 0;
 	timeArray_ = NULL;
@@ -1437,7 +1441,8 @@ void Profiler::writeJsonEntries()
 			{
 				eventString = "\"E\"";	
 				if (entryStack[entry->threadIdx_].size() > 0
-					&& (entryStack[entry->threadIdx_].top()->name_ == entry->name_))
+					&& strcmp( entryStack[entry->threadIdx_].top()->name_,
+						entry->name_ ) == 0)
 				{
 					entryStack[entry->threadIdx_].pop();
 				}
@@ -1579,7 +1584,11 @@ void Profiler::processEntries()
 			}
 
 			DisplayEntry * d = &displayEntryBuffer_[displayEntryCount_];
-			d->name_ = entry->name_;
+			// The display entry outlives the profile-entry pool's contents,
+			// so it owns a copy of the name (addEntry always wrote a string,
+			// possibly empty).
+			d->name_[ ENTRY_NAME_SIZE - 1 ] = '\0';
+			strncpy( d->name_, entry->name_, ENTRY_NAME_SIZE - 1 );
 			d->start_ = entry->time_;
 			d->child_ = NULL;
 			d->sibling_ = NULL;
@@ -1656,7 +1665,7 @@ void Profiler::processEntries()
 			DisplayEntry* openDisplayEntry = dStack_[threadID][stackDepth-1];
 
 			if (!openDisplayEntry ||
-				openDisplayEntry->name_ != entry->name_)
+				strcmp( openDisplayEntry->name_, entry->name_ ) != 0)
 			{
 				MF_ASSERT( displayEntryCount_ >= maxDisplayEntryCount_ );
 				continue;
@@ -1935,7 +1944,8 @@ void Profiler::updateHierarchy()
 		// space in the pool
 		while (pCurrentEntry && pHierEntry)
 		{
-			MF_ASSERT( pHierEntry->name_ == pCurrentEntry->name_ );
+			MF_ASSERT( strcmp( pHierEntry->name_,
+				pCurrentEntry->name_ ) == 0 );
 
 			if (calcExclusiveTimes_)
 			{
@@ -3051,7 +3061,8 @@ void Profiler::addGPUEntry( const char* text, int64 time,
 		return;
 	}
 
-	newEntry->name_ = text;
+	newEntry->name_[ ENTRY_NAME_SIZE - 1 ] = '\0';
+	strncpy( newEntry->name_, (text != NULL) ? text : "", ENTRY_NAME_SIZE - 1 );
 	newEntry->event_ = e;
 	newEntry->category_ = CATEGORY_GPU;
 
