@@ -29,7 +29,10 @@
 //   * the request's expectedDigest is judged right after the defs load: a
 //     mismatch takes the failure tail, so no migrate step runs (the
 //     versioned-schema barrier of the hot-reload productionization design,
-//     section 1).
+//     section 1);
+//   * a dry run stops straight after the loads: swap back and destroy the
+//     scratch interpreter, with no cleanup, no migration and no old-script
+//     recovery (the probe half of the design, section 3).
 //
 // The head of the sequence (swap in the scratch interpreter, load entity defs,
 // load UDOs) cannot be driven from a plan that is only complete once its own
@@ -111,13 +114,16 @@ inline bool digestMatches( const char * pExpected, const char * pActual )
 /// The outcomes the plan's shape depends on. digestMatched: whether this
 /// load's schema digest agrees with the request's expectedDigest; it
 /// defaults to true because a request carrying no expectation places no
-/// constraint, so the pre-barrier behaviour is unchanged.
+/// constraint, so the pre-barrier behaviour is unchanged. dryRun: a probe
+/// load that parses and reports without migrating anything; it defaults to
+/// false, so a request that does not ask for one behaves as before.
 struct PlanInputs
 {
 	bool isFullReload;
 	bool defsLoaded;
 	bool udoLoaded;
 	bool digestMatched = true;
+	bool dryRun = false;
 };
 
 /// The ordered action sequence for one reload attempt.
@@ -138,7 +144,8 @@ struct ReloadPlan
  *	Builds the action sequence CellApp::reloadScript performs for the given
  *	outcomes. udoLoaded is only consulted when the defs load succeeded and
  *	the schema digest agrees - the UDO load is never attempted after either
- *	failure, so its result is not consulted on those paths.
+ *	failure, so its result is not consulted on those paths. A dryRun load
+ *	stops after the loads and reports, whatever their result.
  */
 inline ReloadPlan planReload( const PlanInputs & inputs )
 {
@@ -153,7 +160,14 @@ inline ReloadPlan planReload( const PlanInputs & inputs )
 	ReloadPlan plan;
 	plan.count = 0;
 	plan.succeeded = defsUsable && inputs.udoLoaded;
-	plan.dataTypesWiped = inputs.isFullReload && !defsUsable;
+
+	// A dry run never migrates, and a full reload clears the registered data
+	// types before the parse result is even known (failure mode F8). So a full
+	// dry run wipes them whether the parse succeeded or not - nothing on the
+	// dry-run path reloads them, so the probe itself has to be told that a
+	// real reload must follow.
+	plan.dataTypesWiped = inputs.isFullReload &&
+		( inputs.dryRun || !defsUsable );
 
 	// Head: the scratch interpreter is swapped in and the loads run inside it.
 	plan.actions[ plan.count++ ] = SWAP_IN_INTERPRETER;
@@ -163,9 +177,19 @@ inline ReloadPlan planReload( const PlanInputs & inputs )
 		plan.actions[ plan.count++ ] = LOAD_USER_DATA_OBJECTS;
 	}
 
+	// A dry run stops after the loads: tear down the scratch interpreter and
+	// report. No CLEANUP_AFTER_RELOAD - that breaks the live old()/supersede
+	// window the running entities still depend on - no migration, and no
+	// RECOVER_OLD_SCRIPTS, because nothing was imported into the old
+	// interpreter (the probe reuses the failure path's zero-touch property).
+	if (inputs.dryRun)
+	{
+		plan.actions[ plan.count++ ] = SWAP_BACK_INTERPRETER;
+		plan.actions[ plan.count++ ] = DESTROY_NEW_INTERPRETER;
+	}
 	// The UDO load is skipped after a failed defs load or a rejected digest,
 	// so its result is not consulted on those paths.
-	if (defsUsable && inputs.udoLoaded)
+	else if (defsUsable && inputs.udoLoaded)
 	{
 		// Success tail: destroy the scratch interpreter before the migrate
 		// chain, then clean up (cellapp.cpp:2350-2364).

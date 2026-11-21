@@ -168,7 +168,8 @@ public:
 			PyObject * pDictionary );
 
 	bool reloadScript( bool isFullReload,
-			const BW::string & expectedDigest = BW::string() );
+			const BW::string & expectedDigest = BW::string(),
+			bool dryRun = false );
 	//@}
 
 	/// @name Accessors

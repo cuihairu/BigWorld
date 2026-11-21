@@ -16,7 +16,9 @@
 //   * a request's expectedDigest that disagrees with this load's schema
 //     digest is judged right after the defs load, so the reload takes the
 //     failure path and migrates nothing - the versioned-schema barrier,
-//     which also counts as wiping on a full reload (F8).
+//     which also counts as wiping on a full reload (F8);
+//   * a dry run stops after the loads: swap back and destroy the scratch
+//     interpreter, no cleanup and no recovery, whatever the loads reported.
 
 #include "pch.hpp"
 
@@ -232,9 +234,10 @@ TEST( ReloadScriptPlan_UdoOutcomeIgnoredAfterDefsFailure )
 
 /**
  *	Every outcome combination fits the fixed plan array, and the whole matrix
- *	is one of the three shapes the sequence has. The digest dimension is the
+ *	is one of the four shapes the sequence has. The digest dimension is the
  *	schema barrier: a mismatched digest is one of the outcomes that shapes
- *	the plan, so it is swept with the rest.
+ *	the plan, and the dry-run dimension is the probe mode, so both are swept
+ *	with the rest.
  */
 TEST( ReloadScriptPlan_AllOutcomeCombinationsFit )
 {
@@ -246,24 +249,31 @@ TEST( ReloadScriptPlan_AllOutcomeCombinationsFit )
 			{
 				for (int digest = 0; digest <= 1; ++digest)
 				{
-					const ReloadScript::PlanInputs inputs =
-						{ full != 0, defs != 0, udo != 0, digest != 0 };
-					const ReloadScript::ReloadPlan plan =
-						ReloadScript::planReload( inputs );
+					for (int dry = 0; dry <= 1; ++dry)
+					{
+						const ReloadScript::PlanInputs inputs =
+							{ full != 0, defs != 0, udo != 0, digest != 0,
+								dry != 0 };
+						const ReloadScript::ReloadPlan plan =
+							ReloadScript::planReload( inputs );
 
-					const bool defsUsable = defs && digest;
+						const bool defsUsable = defs && digest;
 
-					CHECK( plan.count <= ReloadScript::ACTION_COUNT );
-					CHECK_EQUAL( (defs && udo && digest), plan.succeeded );
-					CHECK_EQUAL( (full && !defsUsable),
-						plan.dataTypesWiped );
+						CHECK( plan.count <= ReloadScript::ACTION_COUNT );
+						CHECK_EQUAL( (defs && udo && digest), plan.succeeded );
+						CHECK_EQUAL( (full && (dry || !defsUsable)),
+							plan.dataTypesWiped );
 
-					// head (2 + defs load) + success tail (8, the migrate
-					// chain plus the batch-complete hook) or failure tail
-					// (3, plus the recovery on the scripts-only path).
-					CHECK_EQUAL( 2 + (defsUsable ? 1 : 0) +
-						(plan.succeeded ? 8 : 3 + (full ? 0 : 1)),
-						plan.count );
+						// head (2 + defs load) + dry-run tail (2, swap back
+						// and destroy) + success tail (8, the migrate chain
+						// plus the batch-complete hook) or failure tail (3,
+						// plus the recovery on the scripts-only path).
+						CHECK_EQUAL( 2 + (defsUsable ? 1 : 0) +
+							(dry ? 2 :
+								(plan.succeeded ? 8 :
+									3 + (full ? 0 : 1))),
+							plan.count );
+					}
 				}
 			}
 		}
@@ -352,6 +362,62 @@ TEST( ReloadScriptPlan_DigestMatchKeepsTheSuccessTail )
 	CHECK_EQUAL( ReloadScript::LOAD_USER_DATA_OBJECTS, plan.actions[ 2 ] );
 	CHECK_EQUAL( ReloadScript::DESTROY_NEW_INTERPRETER, plan.actions[ 4 ] );
 	CHECK_EQUAL( ReloadScript::MIGRATE_ENTITY_TYPES, plan.actions[ 5 ] );
+}
+
+
+/**
+ *	A full dry run stops straight after the loads: swap back and destroy the
+ *	scratch interpreter, with no cleanup (which would break the live dual-
+ *	version window), no migration and no old-script recovery. It still
+ *	repairs nothing, so the full reload's data-type wipe is reported.
+ */
+TEST( ReloadScriptPlan_DryRunStopsAfterTheLoads )
+{
+	const ReloadScript::PlanInputs inputs = { true, true, true, true, true };
+	const ReloadScript::ReloadPlan plan = ReloadScript::planReload( inputs );
+
+	CHECK( plan.succeeded );
+	CHECK_EQUAL( true, plan.dataTypesWiped );
+	CHECK_EQUAL( 5, plan.count );
+
+	CHECK_EQUAL( ReloadScript::SWAP_IN_INTERPRETER, plan.actions[ 0 ] );
+	CHECK_EQUAL( ReloadScript::LOAD_ENTITY_DEFS, plan.actions[ 1 ] );
+	CHECK_EQUAL( ReloadScript::LOAD_USER_DATA_OBJECTS, plan.actions[ 2 ] );
+	CHECK_EQUAL( ReloadScript::SWAP_BACK_INTERPRETER, plan.actions[ 3 ] );
+	CHECK_EQUAL( ReloadScript::DESTROY_NEW_INTERPRETER, plan.actions[ 4 ] );
+
+	CHECK_EQUAL( -1, indexOf( plan, ReloadScript::CLEANUP_AFTER_RELOAD ) );
+	CHECK_EQUAL( -1, indexOf( plan, ReloadScript::MIGRATE_ENTITY_TYPES ) );
+	CHECK_EQUAL( -1, indexOf( plan, ReloadScript::MIGRATE_USER_DATA_OBJECT_TYPES ) );
+	CHECK_EQUAL( -1, indexOf( plan, ReloadScript::MIGRATE_MAIL_BOXES ) );
+	CHECK_EQUAL( -1, indexOf( plan, ReloadScript::MIGRATE_ENTITIES ) );
+	CHECK_EQUAL( -1, indexOf( plan, ReloadScript::MIGRATED_ALL ) );
+	CHECK_EQUAL( -1, indexOf( plan, ReloadScript::RECOVER_OLD_SCRIPTS ) );
+}
+
+
+/**
+ *	A dry run honours the schema-digest barrier like a real reload: a rejected
+ *	digest skips the UDO load and the probe still stops after the swap back,
+ *	but without the scripts-only failure path's recovery step, because the
+ *	old interpreter was never touched.
+ */
+TEST( ReloadScriptPlan_DryRunHonoursTheDigestBarrier )
+{
+	const ReloadScript::PlanInputs inputs = { false, true, true, false, true };
+	const ReloadScript::ReloadPlan plan = ReloadScript::planReload( inputs );
+
+	CHECK_EQUAL( false, plan.succeeded );
+	CHECK_EQUAL( false, plan.dataTypesWiped );
+	CHECK_EQUAL( 4, plan.count );
+
+	CHECK_EQUAL( ReloadScript::LOAD_ENTITY_DEFS, plan.actions[ 1 ] );
+	CHECK_EQUAL( ReloadScript::SWAP_BACK_INTERPRETER, plan.actions[ 2 ] );
+	CHECK_EQUAL( ReloadScript::DESTROY_NEW_INTERPRETER, plan.actions[ 3 ] );
+
+	CHECK_EQUAL( -1, indexOf( plan, ReloadScript::LOAD_USER_DATA_OBJECTS ) );
+	CHECK_EQUAL( -1, indexOf( plan, ReloadScript::CLEANUP_AFTER_RELOAD ) );
+	CHECK_EQUAL( -1, indexOf( plan, ReloadScript::RECOVER_OLD_SCRIPTS ) );
 }
 
 

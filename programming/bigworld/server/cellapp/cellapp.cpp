@@ -2467,7 +2467,7 @@ public:
  *	This method reloads the scripts.
  */
 bool CellApp::reloadScript( bool isFullReload,
-		const BW::string & expectedDigest )
+		const BW::string & expectedDigest, bool dryRun )
 {
 	SCRIPT_NOTICE_MSG( "CellApp::reloadScript: "
 				"reloadScript should be used with caution, and never in a "
@@ -2510,9 +2510,34 @@ bool CellApp::reloadScript( bool isFullReload,
 	}
 
 	const ReloadScript::PlanInputs planInputs = { isFullReload, defsLoaded,
-		udoLoaded, digestMatched };
+		udoLoaded, digestMatched, dryRun };
 	const ReloadScript::ReloadPlan plan =
 		ReloadScript::planReload( planInputs );
+
+	// The dry run is the probe the caller runs before reloading for real:
+	// it reports what loaded and which schema digest the load is, and touches
+	// nothing else. A full dry run still cleared the registered data types,
+	// so it has to warn that only a real reload can put them back.
+	if (dryRun)
+	{
+		if (plan.succeeded)
+		{
+			INFO_MSG( "CellApp::reloadScript: dry run loaded cleanly, schema "
+				"digest '%s'%s\n",
+				EntityType::schemaDigestQuote().c_str(),
+				plan.dataTypesWiped ?
+					"(a real reload must follow: this full dry run cleared "
+					"the registered data types)" : "" );
+		}
+		else
+		{
+			WARNING_MSG( "CellApp::reloadScript: dry run loaded nothing (%s), "
+				"schema digest '%s'\n",
+				defsLoaded ? ( digestMatched ? "user data objects" :
+								"schema digest barrier" ) : "defs",
+				EntityType::schemaDigestQuote().c_str() );
+		}
+	}
 
 	// The migrate pass outcome, read back by the MIGRATED_ALL step (which
 	// only follows MIGRATE_ENTITIES in the success tail of the plan).
@@ -3210,17 +3235,28 @@ PY_AUTO_MODULE_FUNCTION( RETVOID, valgrindDump, END, BigWorld )
  * 	Components that all report the same digest are safe to reload together.
  * 	Default is empty, which places no constraint.
  *
+ *	@param dryRun Optional boolean. When True the load is only probed: the
+ * 	definitions and user data objects are parsed in the scratch interpreter,
+ * 	the result and this load's schema digest are reported, and nothing else
+ * 	happens - no entity is migrated and no cleanup runs. Use it on every
+ * 	component before reloading for real, and pass the reported digest to
+ * 	expectedDigest. Note a fullReload dry run still clears the registered data
+ * 	types, so a real reload has to follow it. Default is False.
+ *
  *  @return True if reload successful, False otherwise.
  */
 /**
  *	This method implements the Python function that reloads the scripts.
  */
-static bool reloadScript( bool isFullReload, const BW::string & expectedDigest )
+static bool reloadScript( bool isFullReload, const BW::string & expectedDigest,
+		bool dryRun )
 {
-	return CellApp::instance().reloadScript( isFullReload, expectedDigest );
+	return CellApp::instance().reloadScript( isFullReload, expectedDigest,
+		dryRun );
 }
 PY_AUTO_MODULE_FUNCTION( RETDATA, reloadScript,
-	OPTARG( bool, true, OPTARG( BW::string, "", END ) ), BigWorld )
+	OPTARG( bool, true, OPTARG( BW::string, "",
+		OPTARG( bool, false, END ) ) ), BigWorld )
 
 
 /**
