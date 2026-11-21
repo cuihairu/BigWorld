@@ -105,3 +105,9 @@
 - [ ] CR-P2-25 · 整数溢出→分配 · `binary_stream.hpp:353,407` operator>>(BW::vector&) 与 TYPEDEF_STREAMING_VECTOR 无条件 reserve(attacker_max)。
 - [ ] CR-P3-01 · 格式串 · `log_msg.cpp:558` printf(buffer) 用报文文本当格式串——**仅 PLAYSTATION3 分支**，Linux/Windows 不可达。
 - [ ] CR-P3-02 · 覆盖面说明 · `tools/*` C++ 仍含 Py2 专属 PyString_*/PyInt_* 调用，故这些 tool 目标未对 3.13 构建（非缺陷）。
+
+- [ ] CL-1 · P0 · `client_sdk/` 骨架+Unity(C#) 插件协议核心：新目录 `client_sdk/`（README 总览+引擎路线图）；`client_sdk/unity/` dotnet netstandard2.1 类库（不依赖 UnityEngine，传输接口化，TcpTransport 先行）——Bundle 语义包读写（定长头+消息 id+变长体）、基本类型定变长编解码、PacketSender/Receiver、登录→实体创建状态机（login→create→onLoginCheckStatus→实体创建）；单测=编解码往返/分帧粘包半包/登录握手 mock server；验收=`dotnet test` 绿+`client_sdk/unity/PROTOCOL.md` 逐条对照表（lib/network 源文件:行 ↔ C# 实现 ↔ 测试用例）。
+- [ ] CL-2 · P0 · TypeScript 插件骨架：`client_sdk/typescript/` npm 包，语义同 CL-1（传输接口化，Tcp-over-WS 网关后置）——Entity/EntityCall 基类+事件系统（Event fire/register 对齐 kbengine js 插件语义）；验收=`pnpm test`（vitest）绿（编解码+分帧+事件面）+README 十行接入示例。
+- [ ] CL-3 · P1 · SDK 生成器批次一（kbcmd 对等物）：`client_sdk/generator/`（Python 自包含，读 entities.xml+*.def）→ 输出 C# `{Entity}Base.cs`（属性 id 映射/类型映射/baseCall·cellCall 方法桩/onXxx 事件钩子）+TS 同构；命名规则对齐 kbcmd（`{Entity}Base` 基类/用户继承 `{Entity}`/`EntityCall{Entity}Base`）；类型映射表落 `TYPEMAP.md`；golden 测试=用 game/ 或 FantasyDemo res/ 真实 def 树断言生成物关键片段；验收=golden 绿+生成物与 CL-1/CL-2 运行时联合冒烟（生成 Account→C# 编译过→mock 登录跑通）。
+- [ ] CL-4 · P1 · CI 腿：`client-sdk.yml`（dotnet test+vitest+golden 三腿）；daily-build.yml 加 client_sdk 产物腿（nuget 包/tgz/wheel，zip 按 `dailyYYYYMMDD.<sha>` 命名）挂 artifacts；验收=PR 三腿绿+手动 dispatch daily 一次产物可见并校验字节数。
+- [ ] CL-5 · P2 · UE5(C++) 插件立项评审（不动手写 UE 代码）：`client_sdk/unreal/REVIEW.md`——UE 模块形态/CI 可测性成本/与 Unity 插件复用边界，结论给「做/缓做」建议。
