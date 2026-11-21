@@ -38,6 +38,24 @@ BW_BEGIN_NAMESPACE
 
 BW_SINGLETON_STORAGE( WatcherNub )
 
+namespace
+{
+
+/**
+ *	The length of the NUL-terminated string at p, or -1 if it is not
+ *	terminated within [p, pEnd). The watcher request packet is untrusted - its
+ *	count and the strings inside it come off the wire - so each string the
+ *	receive loops walk has to be proven terminated inside the packet before
+ *	any strlen-style code touches it. CR-P2-14.
+ */
+long terminatedStringLength( const char * p, const char * pEnd )
+{
+	const char * pTerm = (const char*)memchr( p, '\0', pEnd - p );
+	return (pTerm != NULL) ? long( pTerm - p ) : -1;
+}
+
+} // anonymous namespace
+
 /**
  *	This is the constructor.
  */
@@ -402,6 +420,10 @@ bool WatcherNub::processRequest( char * packet, int len,
 		return false;
 	}
 
+	// One past the end of the received packet: every string walk below has to
+	// stay inside it, since wdm->count and the strings are not validated.
+	const char * const pEnd = packet + len;
+
 	if (!(wdm->message == WATCHER_MSG_GET ||
 		  wdm->message == WATCHER_MSG_GET_WITH_DESC ||
 		  wdm->message == WATCHER_MSG_SET ||
@@ -447,9 +469,14 @@ bool WatcherNub::processRequest( char * packet, int len,
 			char	*astr = wdm->string;
 			for(int i=0;i<wdm->count;i++)
 			{
+				const long aLen = terminatedStringLength( astr, pEnd );
+				if (aLen < 0)
+				{
+					break;	// unterminated or past the end: do not read on
+				}
 				this->processWatcherGetRequest( *packetHandler, astr,
 						  (wdm->message == WATCHER_MSG_GET_WITH_DESC) );
-				astr += strlen(astr)+1;
+				astr += aLen + 1;
 			}
 		}
 		break;
@@ -463,10 +490,20 @@ bool WatcherNub::processRequest( char * packet, int len,
 			char	*astr = wdm->string;
 			for(int i=0;i<wdm->count;i++)
 			{
+				if (size_t( pEnd - astr ) < sizeof( unsigned int ))
+				{
+					break;	// the sequence number is not in the packet
+				}
 				unsigned int & seqNum = (unsigned int &)*astr;
-				astr += sizeof(unsigned int);
+				astr += sizeof( unsigned int );
+
+				const long aLen = terminatedStringLength( astr, pEnd );
+				if (aLen < 0)
+				{
+					break;
+				}
 				this->processWatcherGet2Request( *packetHandler, astr, seqNum );
-				astr += strlen(astr)+1;
+				astr += aLen + 1;
 			}
 		}
 		break;
@@ -481,9 +518,20 @@ bool WatcherNub::processRequest( char * packet, int len,
 			char	*astr = wdm->string;
 			for(int i=0;i<wdm->count;i++)
 			{
-				char	*bstr = astr + strlen(astr)+1;
-				this->processWatcherSetRequest( *packetHandler, astr,bstr );
-				astr = bstr + strlen(bstr)+1;
+				const long aLen = terminatedStringLength( astr, pEnd );
+				if (aLen < 0)
+				{
+					break;
+				}
+				char * bstr = astr + aLen + 1;
+
+				const long bLen = terminatedStringLength( bstr, pEnd );
+				if (bLen < 0)
+				{
+					break;	// a set request needs both name and value
+				}
+				this->processWatcherSetRequest( *packetHandler, astr, bstr );
+				astr = bstr + bLen + 1;
 			}
 		}
 		break;
@@ -498,7 +546,13 @@ bool WatcherNub::processRequest( char * packet, int len,
 			char	*astr = wdm->string;
 			for(int i=0;i<wdm->count;i++)
 			{
+				const long aLen = terminatedStringLength( astr, pEnd );
+				if (aLen < 0)
+				{
+					break;
+				}
 				this->processWatcherSet2Request( *packetHandler, astr );
+				astr += aLen + 1;
 			}
 		}
 		break;
