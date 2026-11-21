@@ -1,0 +1,12 @@
+# Build artifacts
+**/bin/
+**/obj/
+
+# Node / Python
+node_modules/
+__pycache__/
+*.pyc
+
+# Editor / IDE
+.vs/
+.idea/
