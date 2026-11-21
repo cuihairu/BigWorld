@@ -899,6 +899,17 @@ float getAndResetMaxTickPeriod()
 
 
 /**
+ *	Returns the schema digest of the loaded entity definitions for the watcher
+ *	(the accessor is copied to a by-value return so that it fits the read-only
+ *	function watcher overload).
+ */
+static BW::string schemaDigestForWatcher()
+{
+	return EntityType::schemaDigestQuote();
+}
+
+
+/**
  *	This method adds watchers to the CellApp.
  */
 void CellApp::addWatchers()
@@ -946,6 +957,11 @@ void CellApp::addWatchers()
 	watcher.addChild( "spaces", pSpaces_->pWatcher() );
 
 	watcher.addChild( "entityTypes", EntityType::pWatcher() );
+
+	MF_WATCH( "schemaDigest", &schemaDigestForWatcher,
+		"The quoted MD5 digest of the entity definitions this CellApp loaded, "
+		"as BigWorld.schemaDigest() reports it; components that agree on this "
+		"value may be reloaded together." );
 
 	this->EntityApp::addWatchers( watcher );
 
