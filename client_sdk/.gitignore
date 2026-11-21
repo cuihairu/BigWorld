@@ -1,6 +1,7 @@
 # Build artifacts
 **/bin/
 **/obj/
+**/dist/
 
 # Node / Python
 node_modules/
