@@ -547,6 +547,36 @@ const char * UDPBundleProcessor::iterator::data()
 		return dataBuffer_;
 	}
 
+	// Work out how many bytes are actually available across the packet chain
+	// from this message onwards before allocating. The declared length alone
+	// is not trusted: a message that claims to run far past the end of the
+	// chain must not be allowed to force a huge allocation (CR-P2-22).
+	int available = 0;
+	Packet * chainPack = cursor_;
+	uint16 chainOff = dataOffset_;
+	while (chainPack != NULL)
+	{
+		if (chainPack->msgEndOffset() < chainOff)
+		{
+			ERROR_MSG( "UDPBundleProcessor::iterator::data: "
+					"Invalid packet offsets (msg end %d, offset %hu)\n",
+				chainPack->msgEndOffset(), chainOff );
+			return NULL;
+		}
+		available += chainPack->msgEndOffset() - chainOff;
+		chainOff = Packet::HEADER_SIZE;
+		chainPack = chainPack->next();
+	}
+
+	if (available < dataLength_)
+	{
+		ERROR_MSG( "UDPBundleProcessor::iterator::data: "
+				"Message claims %d bytes but only %d are available across "
+				"the packet chain\n",
+			dataLength_, available );
+		return NULL;
+	}
+
 	// Buffer is destroyed in operator++() and in ~iterator().
 	dataBuffer_ = new char[dataLength_];
 	Packet *thisPack = cursor_;
