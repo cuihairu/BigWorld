@@ -1555,8 +1555,18 @@ int Script::setData( PyObject * pObject, bool & rBool,
 {
 	if (PyLong_Check( pObject ))
 	{
-		rBool = PyLong_AsLong( pObject ) != 0;
+		/* BIGWORLD_BEGIN(3.13 migration)
+		 * PyLong_AsLong() returns (long)-1 *and* sets OverflowError when the
+		 * value does not fit a C long, and the 2.7 code ("rBool = PyLong_AsLong
+		 * != 0") ignored that - leaving the error pending while reporting
+		 * success and a truthy rBool. A bool can represent any integer's
+		 * truthiness, so there is no out-of-range case: test truthiness
+		 * directly with PyObject_IsTrue(), which never overflows and leaves no
+		 * error set, for ints of any size.
+		 */
+		rBool = PyObject_IsTrue( pObject ) != 0;
 		return 0;
+		/* BIGWORLD_END */
 	}
 
 	if (PyUnicode_Check( pObject ))

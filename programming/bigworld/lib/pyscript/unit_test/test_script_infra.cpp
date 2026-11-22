@@ -510,8 +510,8 @@ TEST_F( PyScriptUnitTestHarness, ScriptRunString_evalAndStatements )
 // -----------------------------------------------------------------------------
 
 // The scalar converters pin the migration-era semantics: bools accept ints
-// and the strings true/false (case-insensitive) but nothing else; ints take
-// ints and truncating floats but nothing else.
+// (of any size, by truthiness) and the strings true/false (case-insensitive)
+// but nothing else; ints take ints and truncating floats but nothing else.
 TEST_F( PyScriptUnitTestHarness, ScriptPrimitives_setDataScalars )
 {
 	PyErr_Clear();
@@ -534,6 +534,18 @@ TEST_F( PyScriptUnitTestHarness, ScriptPrimitives_setDataScalars )
 	CHECK( boolValue );
 	CHECK_EQUAL( 0, Script::setData( pStrFalse.get(), boolValue, "b" ) );
 	CHECK( !boolValue );
+
+	// An int that does not fit a C long used to make PyLong_AsLong() return
+	// -1 and leave an OverflowError pending (which the bool overload then
+	// reported as success). The converter must accept any int by truthiness
+	// and leave no error set (CR-P2-10).
+	ScriptObject pHugePositive( evalObject( "2**200" ) );
+	ScriptObject pHugeNegative( evalObject( "-2**200" ) );
+	CHECK_EQUAL( 0, Script::setData( pHugePositive.get(), boolValue, "b" ) );
+	CHECK( boolValue );
+	CHECK_EQUAL( 0, Script::setData( pHugeNegative.get(), boolValue, "b" ) );
+	CHECK( boolValue );
+	CHECK( !PyErr_Occurred() );
 
 	CHECK_EQUAL( -1, Script::setData( pStrOther.get(), boolValue, "theBool" ) );
 	CHECK_EQUAL( BW::string( "theBool must be set to a bool" ),
