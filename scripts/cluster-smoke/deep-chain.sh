@@ -92,10 +92,13 @@ SQL
 
 ensure_user_config() {
 	# BWConfig on Linux loads server/bw_<pw_name>.xml; regenerate it from the
-	# deep overlay so config edits are picked up each run.
-	cp "$REPO_ROOT/scripts/cluster-smoke/res/server/bw_deep.xml" \
+	# deep overlay so config edits are picked up each run. BW_DEEP_OVERLAY lets
+	# the DOC-GIF evidence pipeline (scripts/config-switch-evidence.py) supply a
+	# per-switch variant without touching the committed bw_deep.xml.
+	local overlay="${BW_DEEP_OVERLAY:-$REPO_ROOT/scripts/cluster-smoke/res/server/bw_deep.xml}"
+	cp "$overlay" \
 		"$REPO_ROOT/scripts/cluster-smoke/res/server/bw_$(id -un).xml"
-	log "generated per-user config from bw_deep.xml"
+	log "generated per-user config from $(basename "$overlay")"
 }
 
 ensure_loginapp_keys() {
