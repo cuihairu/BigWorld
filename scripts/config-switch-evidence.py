@@ -144,17 +144,39 @@ def bring_up(overlay):
     proc = subprocess.Popen(
         ["bash", str(DEEP_CHAIN)], env=env,
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-    # wait for steady marker or timeout
-    deadline = time.time() + 180
     lines = []
+    deadline = time.time() + 180
+    # select() around the read: the deadline is only checked between lines, so
+    # a plain blocking readline() on a stalled deep-chain.sh (seen under heavy
+    # machine load - the script goes quiet mid bring-up) hangs the whole
+    # pipeline forever.
+    import select
+    fd = proc.stdout.fileno()
     while time.time() < deadline:
+        timeout = min(5.0, max(0.1, deadline - time.time()))
+        ready, _, _ = select.select([fd], [], [], timeout)
+        if not ready:
+            continue  # no line in the window; re-check the deadline
         line = proc.stdout.readline()
         if line:
             lines.append(line)
             if "full app set steady" in line:
+                # deep-chain.sh exits right after this marker; reap it so it
+                # cannot linger as a zombie holding the pipe open
+                try:
+                    proc.wait(timeout=30)
+                except subprocess.TimeoutExpired:
+                    pass
                 return True, "".join(lines)
         elif proc.poll() is not None:
             break
+    # bring-up never reached steady: kill the script or it leaks and fights
+    # the next bring-up over ports, the database and the log dir
+    proc.terminate()
+    try:
+        proc.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        proc.kill()
     return False, "".join(lines)
 
 
