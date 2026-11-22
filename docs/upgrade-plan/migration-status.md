@@ -207,6 +207,8 @@ conclusion summary for large 0%-coverage files:
 - `terrain/terrain2/terrain_height_map2.cpp` (2156 lines) — gcovr loses the file-name column for this record (empty-name entry); not judged arm by arm.
 - The `physics2/quad_tree.ipp` dead-function family — **structural dead code** (batch 20, three-way evidence): `QuadTree::del` (calculateQTRange called without origin_), `QuadTree::testPoint` (calls a nonexistent `QuadTree…` — never instantiated; instantiating it is immediately a compile error. On the production side, chunk's `pChunkTree_` is a HullTree and uses ObstacleTree only via addToRoot.
 
+- The `tools/` editor suite (`assetprocessor`, `tools/common`, `modeleditor_core`, `particle_editor`, `worldeditor` — 34 files, all MFC/`afx`) — **outside the 3.13 build scope**: the C++ surface still calls the Python 2-only C-API (`PyString_*` / `PyInt_*`), so no target is configured against the embedded 3.13.16 interpreter. These are the Windows-only MFC editor binaries, not built on the el7 server platform (the native-UI audit surface is tracked separately). Not a defect: the server/engine binding surface (62 files, 428 `PyString_*` + 197 `PyInt_*` sites) was fully migrated per the ledger; this is the Py2-era editor tool surface that has no Python 3 build target (CR-P3-02).
+
 Closed (removed from the register): the `entitydef/entity_description.cpp`
 MD5 family and stream/accessor/exposed-message-number surfaces (64% →
 **70%** → **89%** precise standard 424/663→468/663→591/663, closed by
