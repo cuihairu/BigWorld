@@ -55,7 +55,7 @@ public:
 	 *
 	 *	@return true if the process is running, false otherwise.
 	 */
-	virtual bool isProcessRunning( uint16 pid ) const = 0;
+	virtual bool isProcessRunning( uint32 pid ) const = 0;
 
 	/**
 	 *	This method performs an explicit update of core system information

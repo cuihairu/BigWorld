@@ -476,7 +476,7 @@ bool startProcess( const char * bwBinaryDir,
 		close( statusPipe[ 1 ] );
 		s_pendingProcesses[ statusPipe[ 0 ] ] =
 			std::make_pair( pPmwd, BW::string( binaryName ) );
-		pPmwd->pid_ = (uint16)childpid;
+		pPmwd->pid_ = childpid;
 		return false;
 	}
 }

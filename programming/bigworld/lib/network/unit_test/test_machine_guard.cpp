@@ -394,8 +394,8 @@ TEST( MGM_processMessageFullRoundTrip )
 TEST( MGM_processMessageLegacyBodyWithoutExtra )
 {
 	// [12][flags=0][seq=0x0102][param=0x20][category=0][uid=1000]
-	// [pid=2000][port=0][id=0x30][nameLen=5]["bwapp"] - 20 bytes, no extra.
-	uint8 buf[ 20 ];
+	// [pid=2000 LE32][port=0][id=0x30][nameLen=5]["bwapp"] - 22 bytes, no extra.
+	uint8 buf[ 22 ];
 	buf[ 0 ] = MachineGuardMessage::PROCESS_MESSAGE;
 	buf[ 1 ] = 0;
 	buf[ 2 ] = 0x02;
@@ -405,15 +405,17 @@ TEST( MGM_processMessageLegacyBodyWithoutExtra )
 	buf[ 6 ] = 1000 & 0xff;
 	buf[ 7 ] = 1000 >> 8;
 	buf[ 8 ] = 2000 & 0xff;
-	buf[ 9 ] = 2000 >> 8;
+	buf[ 9 ] = (2000 >> 8) & 0xff;
 	buf[ 10 ] = 0;
 	buf[ 11 ] = 0;
-	buf[ 12 ] = 0x30;
+	buf[ 12 ] = 0;
 	buf[ 13 ] = 0;
-	buf[ 14 ] = 5;
-	memcpy( buf + 15, "bwapp", 5 );
+	buf[ 14 ] = 0x30;
+	buf[ 15 ] = 0;
+	buf[ 16 ] = 5;
+	memcpy( buf + 17, "bwapp", 5 );
 
-	MachineGuardMessage * pMsg = MachineGuardMessage::create( buf, 20 );
+	MachineGuardMessage * pMsg = MachineGuardMessage::create( buf, 22 );
 	CHECK( pMsg != NULL );
 
 	ProcessMessage * pProc = dynamic_cast< ProcessMessage * >( pMsg );

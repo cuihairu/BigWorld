@@ -924,7 +924,7 @@ const char *ProcessMessage::c_str() const
 		"%s (%s) (pid:%d)",
 		name_.c_str(),
 		ProcessMessage::categoryToString( category_ ),
-		pid_ );
+		(int)pid_ );
 
 	return MachineGuardMessage::s_buf_;
 }
@@ -990,7 +990,7 @@ const char *ProcessStatsMessage::c_str() const
 	BW_GUARD;
 	bw_snprintf( MachineGuardMessage::s_buf_,
 		sizeof( MachineGuardMessage::s_buf_ ),
-		"%s (pid:%d)", name_.c_str(), pid_ );
+		"%s (pid:%d)", name_.c_str(), (int)pid_ );
 	return MachineGuardMessage::s_buf_;
 }
 
@@ -1394,7 +1394,7 @@ const char *PidMessage::c_str() const
 	BW_GUARD;
 	bw_snprintf( MachineGuardMessage::s_buf_,
 		sizeof( MachineGuardMessage::s_buf_ ),
-		"PidMessage: %d %d", pid_, running_ );
+		"PidMessage: %d %d", (int)pid_, running_ );
 	return MachineGuardMessage::s_buf_;
 }
 

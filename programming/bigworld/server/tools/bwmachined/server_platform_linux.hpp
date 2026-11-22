@@ -23,7 +23,7 @@ public:
 	bool findUserBinaryDirForConfig( const BW::string & bwRoot,
 		const BW::string & bwConfig, BW::string & binaryDir ) /* override */;
 
-	bool isProcessRunning( uint16 pid ) const /* override */;
+	bool isProcessRunning( uint32 pid ) const /* override */;
 
 	bool updateSystemInfo( SystemInfo & systemInfo,
 		ServerInfo * pServerInfo ) /* override */;

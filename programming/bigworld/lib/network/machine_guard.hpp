@@ -518,7 +518,11 @@ public:
 	uint8			param_;	//!< Bitmap for filtering
 	uint8			category_;
 	UserId			uid_;
-	uint16			pid_;
+	uint32			pid_;	//!< Process ID. uint16 in the original protocol, but
+							//!< modern kernels allocate pids far above 65535 and
+							//!< machined checks /proc/<pid> to detect dead processes;
+							//!< a truncated pid made every live process look dead and
+							//!< machined deregistered it within a second.
 	uint16			port_;
 	uint16			id_;	//!< BigWorld app ID (as in cellapp01)
 	BW::string		name_;	//!< The nub's interface, e.g. CellAppInterface
@@ -912,7 +916,7 @@ protected:
 class PidMessage : public MachineGuardMessage
 {
 public:
-	uint16 	pid_;
+	uint32 	pid_;
 	uint8	running_;
 
 	PidMessage() :

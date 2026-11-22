@@ -50,9 +50,9 @@ MSG * roundTripMessage( MSG & msg )
 uint32 processExtraDataOffset( int nameLength )
 {
 	// [message][flags][seq lo][seq hi] +
-	// [param][category][uid lo][uid hi][pid lo][pid hi][port lo][port hi]
+	// [param][category][uid lo][uid hi][pid 4 bytes][port lo][port hi]
 	// [id lo][id hi] + streamed name.
-	return 4 + 10 +
+	return 4 + 12 +
 		BinaryOStream::calculateStreamedSizeOfString( nameLength );
 }
 
@@ -352,6 +352,57 @@ TEST( MGMMSG_processRoundTripWithExtra )
 	CHECK_EQUAL( 5, int( pRoundTrip->interfaceVersion_ ) );
 	CHECK( strcmp( "cui", pRoundTrip->username_.c_str() ) == 0 );
 	CHECK( strcmp( "digest-abcd", pRoundTrip->defDigest_.c_str() ) == 0 );
+
+	delete pRoundTrip;
+}
+
+
+// A process id above 65535 must survive the wire. Modern kernels allocate pids
+// in the millions, and machined checks /proc/<pid> to detect dead processes.
+// A uint16 pid made every live process look dead: machined deregistered a
+// freshly registered app within a second, so no app could ever be found.
+TEST( MGMMSG_processRoundTripPidAbove16Bits )
+{
+	ProcessMessage msg;
+	msg.param_ = ProcessMessage::PARAM_USE_PID;
+	msg.category_ = ProcessMessage::SERVER_COMPONENT;
+	msg.uid_ = 1000;
+	msg.pid_ = 1635848;	// what a modern kernel hands out
+	msg.port_ = 20018;
+	msg.id_ = 1;
+	msg.name_ = "cellappmgr";
+
+	ProcessMessage * pRoundTrip = roundTripMessage( msg );
+
+	CHECK( pRoundTrip != NULL );
+	if (!pRoundTrip)
+	{
+		return;
+	}
+
+	CHECK_EQUAL( 1635848, int( pRoundTrip->pid_ ) );
+
+	delete pRoundTrip;
+}
+
+
+// Same for the PidMessage used to ask machined whether a pid is running.
+TEST( MGMMSG_pidMessageRoundTripPidAbove16Bits )
+{
+	PidMessage msg;
+	msg.pid_ = 1635850;
+	msg.running_ = 1;
+
+	PidMessage * pRoundTrip = roundTripMessage( msg );
+
+	CHECK( pRoundTrip != NULL );
+	if (!pRoundTrip)
+	{
+		return;
+	}
+
+	CHECK_EQUAL( 1635850, int( pRoundTrip->pid_ ) );
+	CHECK_EQUAL( 1, int( pRoundTrip->running_ ) );
 
 	delete pRoundTrip;
 }

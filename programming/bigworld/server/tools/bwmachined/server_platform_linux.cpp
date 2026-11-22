@@ -371,13 +371,13 @@ bool ServerPlatformLinux::findUserBinaryDirForConfig( const BW::string & bwRoot,
 /*
  *	Override from ServerPlatform.
  */
-bool ServerPlatformLinux::isProcessRunning( uint16 pid ) const /* override */
+bool ServerPlatformLinux::isProcessRunning( uint32 pid ) const /* override */
 {
 	char buf[32];
 	struct stat statinfo;
 	int ret;
 
-	snprintf( buf, sizeof( buf ) - 1, "/proc/%d", pid );
+	snprintf( buf, sizeof( buf ) - 1, "/proc/%d", (int)pid );
 
 	if ((ret = stat( buf, &statinfo )) == -1 && errno != ENOENT)
 	{

@@ -99,7 +99,7 @@ private:
 	LogEntryAddressReader endAddress_;
 
 	MessageLogger::IPAddress ipAddress_;
-	uint16 pid_;
+	uint32 pid_;
 	MessageLogger::AppInstanceID appid_;
 	int procs_;
 	int severities_;

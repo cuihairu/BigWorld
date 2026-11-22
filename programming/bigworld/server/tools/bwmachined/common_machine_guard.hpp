@@ -69,9 +69,13 @@
 // Version 48:Binary directory support for 'el' vs 'centos'/'rhel'
 // Version 49:New server binary location. Dropped 32 bit binary support for Linux
 // Version 50:Add PARAM_GET_VERSION to UserMessage.
+// Version 51:Process/PidMessage pid_ widened to 32 bits. Modern kernels
+//            allocate pids above 65535; the old uint16 truncated the pid and
+//            machined's /proc/<pid> liveness check deregistered every live
+//            process within a second of registration.
 
 // NOTE: This should stay in sync with the value in pycommon/messages.py
-#define BWMACHINED_VERSION 50
+#define BWMACHINED_VERSION 51
 
 
 BW_BEGIN_NAMESPACE
