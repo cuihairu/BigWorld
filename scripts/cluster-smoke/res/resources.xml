@@ -1,0 +1,5 @@
+<root>
+<!-- Minimal AutoConfig resource for the cluster smoke: every AutoConfig
+     (CellAppConfig::postInit, etc.) keeps its built-in default when its
+     path is absent from this file. -->
+</root>

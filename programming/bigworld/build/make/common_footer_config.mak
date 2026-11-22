@@ -196,7 +196,13 @@ endif
 
 ifeq ($(useMySQL),1)
 incFlags_$(bwConfBinName) += $(SYSTEM_MYSQL_INCLUDES)
-ldLibs_$(bwConfBinName)   += $(SYSTEM_MYSQL_LDLIBS)
+# The mysql client library is referenced by the statically-linked
+# db_storage_mysql archive, which appears later in the link line. On hosts
+# whose linker defaults to --as-needed (Ubuntu/Debian), a client lib placed
+# before the archive is dropped from DT_NEEDED and the mysql_* symbols stay
+# unresolved at load time. Keep the client lib explicitly linked for
+# useMySQL components regardless of link order.
+ldLibs_$(bwConfBinName)   += -Wl,--no-as-needed $(SYSTEM_MYSQL_LDLIBS) -Wl,--as-needed
 endif
 
 ifeq ($(useSDL),1)

@@ -230,8 +230,16 @@ void MySql::queryCharsetLengths()
 	while ((row = mysql_fetch_row( res )))
 	{
 		unsigned long * colLens = mysql_fetch_lengths( res );
-		// The column order is : collation name, charset, ID, default, 
+		// The column order is : collation name, charset, ID, default,
 		// compiled, sortlen.
+		// A MySQL client library reading a MariaDB server gets NULL
+		// charset/ID columns for some collations (e.g. MariaDB's UCA 14.0
+		// ones); skip them rather than dereferencing NULL, they fall back
+		// to the 1-byte default width in charsetWidth().
+		if (row[1] == NULL || row[2] == NULL)
+		{
+			continue;
+		}
 		BW::string charsetName( row[1], colLens[1] );
 		uint collationID = 0;
 		StringConv::toValue( collationID, row[2] );

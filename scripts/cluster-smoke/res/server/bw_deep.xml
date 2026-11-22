@@ -1,0 +1,68 @@
+<root>
+<!-- Deep-chain config overlay for the cluster smoke (Linux). BWConfig::init
+     builds the per-user filename bw_<pw_name>.xml on Linux, so this file is
+     copied under the running user's name by the deep-chain bootstrap. It
+     inlines the settings the client_integration/python/simple example needs
+     (its server/bw.xml pulls in server/development_defaults.xml, which is not
+     shipped in this repo) plus the DBConfigBlock from bw_cui.xml. The example
+     resource tree (defs + scripts + space + personality egclient4) is the
+     real asset source via BW_RES_PATH; only config is inlined here. -->
+<gameUpdateHertz>	10	</gameUpdateHertz>
+
+<personality>	egclient4	</personality>
+
+<baseApp>
+	<archivePeriod>	0	</archivePeriod>
+</baseApp>
+
+<billingSystem>
+	<shouldAcceptUnknownUsers>	true	</shouldAcceptUnknownUsers>
+	<entityTypeForUnknownUsers>	ClientAvatar	</entityTypeForUnknownUsers>
+</billingSystem>
+
+<!-- LoginApp::handleLogOn() rejects every login unless allowLogin is true
+     (loginapp_config.cpp BW_OPTION(allowLogin, false)); the example inherits
+     the default true from development_defaults.xml, which is not shipped. -->
+<loginApp>
+	<allowLogin>	true	</allowLogin>
+</loginApp>
+
+<!-- AoIUpdateSchemes::init() reads this section and dereferences it without a
+     null check; the example normally inherits it from development_defaults.xml.
+     An empty section leaves just the built-in "default" scheme. -->
+<cellApp>
+	<aoiUpdateSchemes />
+</cellApp>
+
+<db>
+	<type>	mysql	</type>
+	<mysql>
+		<host>	127.0.0.1	</host>
+		<port>	3306	</port>
+		<username>	bigworld	</username>
+		<password>	bigworld	</password>
+		<databaseName>	bigworld	</databaseName>
+		<syncTablesToDefs>	true	</syncTablesToDefs>
+		<numConnections>	5	</numConnections>
+		<secureAuth>	false	</secureAuth>
+		<maxSpaceDataSize>	2048	</maxSpaceDataSize>
+		<unicodeString>
+			<characterSet>	utf8mb4	</characterSet>
+			<collation>	utf8mb4_general_ci	</collation>
+		</unicodeString>
+	</mysql>
+	<xml>
+		<archivePeriod>	3600	</archivePeriod>
+		<numArchives>	5	</numArchives>
+		<savePeriod>	900	</savePeriod>
+	</xml>
+	<secondaryDB>
+		<enable>	false	</enable>
+		<maxCommitPeriod>	5	</maxCommitPeriod>
+		<directory>	server/db/secondary	</directory>
+		<consolidation>
+			<directory>	/tmp/	</directory>
+		</consolidation>
+	</secondaryDB>
+</db>
+</root>
