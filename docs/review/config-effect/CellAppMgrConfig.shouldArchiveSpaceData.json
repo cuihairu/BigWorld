@@ -1,0 +1,31 @@
+{
+  "switch": "CellAppMgrConfig.shouldArchiveSpaceData",
+  "class": "CellAppMgrConfig",
+  "name": "shouldArchiveSpaceData",
+  "xml": "cellAppMgr/shouldArchiveSpaceData",
+  "default": "true",
+  "off_diff": {
+    "cellappmgr": [
+      [
+        "INFO: [Config] cellAppMgr/shouldArchiveSpaceData = false (default: true)"
+      ],
+      [
+        "INFO: CellAppMgr::handleCellAppMgrBirth: 192.168.5.188",
+        "INFO: [Config] cellAppMgr/shouldArchiveSpaceData = true"
+      ]
+    ]
+  },
+  "on_diff": {
+    "cellappmgr": [
+      [
+        "INFO: [Config] cellAppMgr/shouldArchiveSpaceData = false (default: true)"
+      ],
+      [
+        "INFO: CellAppMgr::handleCellAppMgrBirth: 192.168.5.188",
+        "INFO: [Config] cellAppMgr/shouldArchiveSpaceData = true"
+      ]
+    ]
+  },
+  "gif": "config-effect/CellAppMgrConfig.shouldArchiveSpaceData.gif",
+  "captured": "2026-11-23T03:08:02"
+}

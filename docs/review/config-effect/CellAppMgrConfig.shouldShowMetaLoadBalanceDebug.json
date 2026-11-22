@@ -1,0 +1,57 @@
+{
+  "switch": "CellAppMgrConfig.shouldShowMetaLoadBalanceDebug",
+  "class": "CellAppMgrConfig",
+  "name": "shouldShowMetaLoadBalanceDebug",
+  "xml": "cellAppMgr/shouldShowMetaLoadBalanceDebug",
+  "default": "false",
+  "off_diff": {
+    "baseappmgr": [
+      [],
+      [
+        "INFO: [ProcessIP] BaseAppMgr::add: Not allowing BaseApp at 192.168.5.188 to register yet (No init data from DBApp Alpha)"
+      ]
+    ],
+    "cellappmgr": [
+      [
+        "INFO: [Config] cellAppMgr/shouldShowMetaLoadBalanceDebug = false",
+        "INFO: [Network] CellAppMgr::handleBaseAppMgrBirth: 192.168.5.188"
+      ],
+      [
+        "INFO: CellAppMgr::handleCellAppMgrBirth: 192.168.5.188",
+        "INFO: [Config] cellAppMgr/shouldShowMetaLoadBalanceDebug = true (default: false)"
+      ]
+    ],
+    "dbapp": [
+      [],
+      [
+        "WARNING: [Network] PacketReceiver::handleInputNotification: last received from 192.168.5.188, stopping socket processing after .047ms (processed 1 packets), receive queue at 0 bytesINFO: ChannelMap::find: Creating anonymous channel to 192.168.5.188"
+      ]
+    ]
+  },
+  "on_diff": {
+    "baseappmgr": [
+      [],
+      [
+        "INFO: [ProcessIP] BaseAppMgr::add: Not allowing BaseApp at 192.168.5.188 to register yet (No init data from DBApp Alpha)"
+      ]
+    ],
+    "cellappmgr": [
+      [
+        "INFO: [Config] cellAppMgr/shouldShowMetaLoadBalanceDebug = false",
+        "INFO: [Network] CellAppMgr::handleBaseAppMgrBirth: 192.168.5.188"
+      ],
+      [
+        "INFO: CellAppMgr::handleCellAppMgrBirth: 192.168.5.188",
+        "INFO: [Config] cellAppMgr/shouldShowMetaLoadBalanceDebug = true (default: false)"
+      ]
+    ],
+    "dbapp": [
+      [],
+      [
+        "WARNING: [Network] PacketReceiver::handleInputNotification: last received from 192.168.5.188, stopping socket processing after .047ms (processed 1 packets), receive queue at 0 bytesINFO: ChannelMap::find: Creating anonymous channel to 192.168.5.188"
+      ]
+    ]
+  },
+  "gif": "config-effect/CellAppMgrConfig.shouldShowMetaLoadBalanceDebug.gif",
+  "captured": "2026-11-23T03:13:06"
+}

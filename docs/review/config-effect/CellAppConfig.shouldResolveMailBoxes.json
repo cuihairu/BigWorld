@@ -1,0 +1,75 @@
+{
+  "switch": "CellAppConfig.shouldResolveMailBoxes",
+  "class": "CellAppConfig",
+  "name": "shouldResolveMailBoxes",
+  "xml": "cellApp/shouldResolveMailBoxes",
+  "default": "false",
+  "off_diff": {
+    "baseapp": [
+      [
+        "TRACE: BaseApp::removeProxy: Removing proxy id 1 addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id 1 has disconnected (Requested by client)"
+      ],
+      [
+        "TRACE: BaseApp::removeProxy: Removing proxy id addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id has disconnected (Requested by client)"
+      ]
+    ],
+    "cellapp": [
+      [
+        "INFO: [Config] cellApp/shouldResolveMailBoxes = false"
+      ],
+      [
+        "INFO: [Config] cellApp/shouldResolveMailBoxes = true (default: false)"
+      ]
+    ],
+    "cellappmgr": [
+      [],
+      [
+        "INFO: CellAppMgr::handleCellAppMgrBirth: 192.168.5.188",
+        "INFO: [Network] CellAppMgr::handleBaseAppMgrBirth: 192.168.5.188"
+      ]
+    ],
+    "client": [
+      [],
+      [
+        "TRACE: LoginRequest::handleMessage: Attempt #1: Received reply from 192.168.5.188 (after 0.2s)"
+      ]
+    ]
+  },
+  "on_diff": {
+    "baseapp": [
+      [
+        "TRACE: BaseApp::removeProxy: Removing proxy id 1 addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id 1 has disconnected (Requested by client)"
+      ],
+      [
+        "TRACE: BaseApp::removeProxy: Removing proxy id addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id has disconnected (Requested by client)"
+      ]
+    ],
+    "cellapp": [
+      [
+        "INFO: [Config] cellApp/shouldResolveMailBoxes = false"
+      ],
+      [
+        "INFO: [Config] cellApp/shouldResolveMailBoxes = true (default: false)"
+      ]
+    ],
+    "cellappmgr": [
+      [],
+      [
+        "INFO: CellAppMgr::handleCellAppMgrBirth: 192.168.5.188",
+        "INFO: [Network] CellAppMgr::handleBaseAppMgrBirth: 192.168.5.188"
+      ]
+    ],
+    "client": [
+      [],
+      [
+        "TRACE: LoginRequest::handleMessage: Attempt #1: Received reply from 192.168.5.188 (after 0.2s)"
+      ]
+    ]
+  },
+  "gif": "config-effect/CellAppConfig.shouldResolveMailBoxes.gif",
+  "captured": "2026-11-23T03:04:46"
+}

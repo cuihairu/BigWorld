@@ -1,0 +1,43 @@
+{
+  "switch": "CellAppConfig.treatAllOtherEntitiesAsGhosts",
+  "class": "CellAppConfig",
+  "name": "treatAllOtherEntitiesAsGhosts",
+  "xml": "cellApp/treatAllOtherEntitiesAsGhosts",
+  "default": "true",
+  "off_diff": {
+    "baseapp": [
+      [],
+      [
+        "ERROR: [Network] 1 reports of 'Exception occurred: 192.168.5.188' on 'REASON_NO_SUCH_PORT' in the last 1ms"
+      ]
+    ],
+    "cellapp": [
+      [
+        "INFO: [Config] cellApp/treatAllOtherEntitiesAsGhosts = false (default: true)"
+      ],
+      [
+        "INFO: Production Mode: Treating other entities as ghosts enabled. This may reduce your performance.",
+        "INFO: [Config] cellApp/treatAllOtherEntitiesAsGhosts = true"
+      ]
+    ]
+  },
+  "on_diff": {
+    "baseapp": [
+      [],
+      [
+        "ERROR: [Network] 1 reports of 'Exception occurred: 192.168.5.188' on 'REASON_NO_SUCH_PORT' in the last 1ms"
+      ]
+    ],
+    "cellapp": [
+      [
+        "INFO: [Config] cellApp/treatAllOtherEntitiesAsGhosts = false (default: true)"
+      ],
+      [
+        "INFO: Production Mode: Treating other entities as ghosts enabled. This may reduce your performance.",
+        "INFO: [Config] cellApp/treatAllOtherEntitiesAsGhosts = true"
+      ]
+    ]
+  },
+  "gif": "config-effect/CellAppConfig.treatAllOtherEntitiesAsGhosts.gif",
+  "captured": "2026-11-23T03:06:25"
+}

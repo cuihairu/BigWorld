@@ -1,0 +1,263 @@
+{
+  "switch": "LoginAppConfig.shouldOffsetExternalPortByUID",
+  "class": "LoginAppConfig",
+  "name": "shouldOffsetExternalPortByUID",
+  "xml": "loginApp/shouldOffsetExternalPortByUID",
+  "default": "false",
+  "off_diff": {
+    "baseapp": [
+      [
+        "DEBUG: Proxy::addCreateBasePlayerToChannelBundle: Creating player on client",
+        "DEBUG: Proxy::enableEntities",
+        "ERROR: [Network] Exception occurred: 'REASON_NO_SUCH_PORT' on '192.168.5.188'",
+        "INFO: Base::Base: ClientAvatar",
+        "INFO: Base::~Base: ClientAvatar",
+        "INFO: ClientAvatar.",
+        "INFO: ClientAvatar.__init__: {'prop1': 1} 0",
+        "INFO: LoginHandler:: from 192.168.5.188. Attempt 1",
+        "TRACE: BaseApp: at udp:192.168.5.188",
+        "TRACE: BaseApp::removeProxy: Removing proxy id 1 addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id 1 has disconnected (Requested by client)"
+      ],
+      [
+        "WARNING: BaseApp::handleTimeout: Last tick quantum took 534% of allocation (0.53 seconds)! Proxy clients may have been starved!",
+        "WARNING: BaseApp::handleTimeout: Last tick quantum took 635% of allocation (0.63 seconds)! Proxy clients may have been starved!",
+        "WARNING: [Server] ServerApp::onTickPeriod: Last game tick . Expected 0.10."
+      ]
+    ],
+    "baseappmgr": [
+      [],
+      [
+        "WARNING: [Server] ServerApp::onTickPeriod: Last game tick . Expected 0.10."
+      ]
+    ],
+    "cellapp": [
+      [
+        "INFO: Cell::createEntityInternal: New ClientAvatar",
+        "INFO: Cell::entityDestroyed: has been destroyed.",
+        "INFO: ChannelMap::find: Creating anonymous channel to 192.168.5.188",
+        "INFO: ClientAvatar.__init__: {}",
+        "WARNING: BufferedEntityMessages::playBufferedMessages: There were buffered messages. Played 1 of 1",
+        "WARNING: EntityMessageHandler::handleMessage: No time left in tick . Buffering 'createEntityNearEntity' and similar messages this tick. Num previously in buffer = 0."
+      ],
+      []
+    ],
+    "cellappmgr": [
+      [
+        "INFO: [Network] CellAppMgr::handleBaseAppMgrBirth: 192.168.5.188"
+      ],
+      [
+        "WARNING: [Server] ServerApp::onTickPeriod: Last game tick . Expected 0.10."
+      ]
+    ],
+    "client": [
+      [
+        "Connected to 192.168.5.188",
+        "DEBUG: LoginHandler::onBaseAppLoginSuccess: Got reply from BaseApp channel udp:192.168.5.188",
+        "DEBUG: LoginHandler::onLoginAppLoginSuccess: BaseApp@192.168.5.188 over UDP (# requests: 10, retry interval:1.0s, timeout interval: 8.0s)",
+        "DEBUG: LoginRequest::onTransportConnect: Attempt #1 to BaseApp 192.168.5.188; took 0.0s, time left = 8.0s",
+        "DEBUG: [Connection] ServerConnection::enableEntities: Enabling entities",
+        "DEBUG: [Connection] ServerConnection::logOn: from: 192.168.5.188",
+        "DEBUG: [Connection] ServerConnection::logOn: status==LOGGED_ON",
+        "DEBUG: [Connection] ServerConnection::logOn: to: 192.168.5.188",
+        "TRACE: LoginHandler::sendNextRequest: From 192.168.5.188, attempt #1 / 10 to BaseApp 192.168.5.188",
+        "TRACE: LoginRequest::handleMessage: Attempt #1: Received reply from 192.168.5.188 (after 0.1s)"
+      ],
+      [
+        "DEBUG: LoginRequest::onTransportConnect: Attempt #10 to LoginApp 192.168.5.188; took 0.0s, time left = 8.0s",
+        "DEBUG: LoginRequest::onTransportConnect: Attempt #2 to LoginApp 192.168.5.188; took 0.0s, time left = 8.0s",
+        "DEBUG: LoginRequest::onTransportConnect: Attempt #3 to LoginApp 192.168.5.188; took 0.0s, time left = 8.0s",
+        "DEBUG: LoginRequest::onTransportConnect: Attempt #4 to LoginApp 192.168.5.188; took 0.0s, time left = 8.0s",
+        "DEBUG: LoginRequest::onTransportConnect: Attempt #5 to LoginApp 192.168.5.188; took 0.0s, time left = 8.0s",
+        "DEBUG: LoginRequest::onTransportConnect: Attempt #6 to LoginApp 192.168.5.188; took 0.0s, time left = 8.0s",
+        "DEBUG: LoginRequest::onTransportConnect: Attempt #7 to LoginApp 192.168.5.188; took 0.0s, time left = 8.0s",
+        "DEBUG: LoginRequest::onTransportConnect: Attempt #8 to LoginApp 192.168.5.188; took 0.0s, time left = 8.0s",
+        "DEBUG: LoginRequest::onTransportConnect: Attempt #9 to LoginApp 192.168.5.188; took 0.0s, time left = 8.0s",
+        "TRACE: LoginHandler::sendNextRequest: From 192.168.5.188, attempt #10 / 10 to LoginApp 192.168.5.188",
+        "TRACE: LoginHandler::sendNextRequest: From 192.168.5.188, attempt #2 / 10 to LoginApp 192.168.5.188",
+        "TRACE: LoginHandler::sendNextRequest: From 192.168.5.188, attempt #3 / 10 to LoginApp 192.168.5.188",
+        "TRACE: LoginHandler::sendNextRequest: From 192.168.5.188, attempt #4 / 10 to LoginApp 192.168.5.188",
+        "TRACE: LoginHandler::sendNextRequest: From 192.168.5.188, attempt #5 / 10 to LoginApp 192.168.5.188",
+        "TRACE: LoginHandler::sendNextRequest: From 192.168.5.188, attempt #6 / 10 to LoginApp 192.168.5.188",
+        "TRACE: LoginHandler::sendNextRequest: From 192.168.5.188, attempt #7 / 10 to LoginApp 192.168.5.188",
+        "TRACE: LoginHandler::sendNextRequest: From 192.168.5.188, attempt #8 / 10 to LoginApp 192.168.5.188",
+        "TRACE: LoginHandler::sendNextRequest: From 192.168.5.188, attempt #9 / 10 to LoginApp 192.168.5.188",
+        "TRACE: LoginRequest::handleException: Attempt #1: (no channel): REASON_TIMER_EXPIRED (time since start = 8.0s)",
+        "TRACE: LoginRequest::handleException: Attempt #2: (no channel): REASON_TIMER_EXPIRED (time since start = 8.0s)",
+        "TRACE: LoginRequest::handleException: Attempt #3: (no channel): REASON_TIMER_EXPIRED (time since start = 8.0s)",
+        "TRACE: LoginRequest::handleException: Attempt #4: (no channel): REASON_TIMER_EXPIRED (time since start = 8.0s)",
+        "TRACE: LoginRequest::handleException: Attempt #5: (no channel): REASON_TIMER_EXPIRED (time since start = 8.0s)",
+        "TRACE: LoginRequest::handleException: Attempt #6: (no channel): REASON_TIMER_EXPIRED (time since start = 8.0s)",
+        "WARNING: LoginHandler::onRequestFailed: Request to LoginApp 192.168.5.188, attempt #1 failed: \"Failed to send request to LoginApp 192.168.5.188\" (REASON_TIMER_EXPIRED)",
+        "WARNING: LoginHandler::onRequestFailed: Request to LoginApp 192.168.5.188, attempt #2 failed: \"Failed to send request to LoginApp 192.168.5.188\" (REASON_TIMER_EXPIRED)",
+        "WARNING: LoginHandler::onRequestFailed: Request to LoginApp 192.168.5.188, attempt #3 failed: \"Failed to send request to LoginApp 192.168.5.188\" (REASON_TIMER_EXPIRED)",
+        "WARNING: LoginHandler::onRequestFailed: Request to LoginApp 192.168.5.188, attempt #4 failed: \"Failed to send request to LoginApp 192.168.5.188\" (REASON_TIMER_EXPIRED)",
+        "WARNING: LoginHandler::onRequestFailed: Request to LoginApp 192.168.5.188, attempt #5 failed: \"Failed to send request to LoginApp 192.168.5.188\" (REASON_TIMER_EXPIRED)",
+        "WARNING: LoginHandler::onRequestFailed: Request to LoginApp 192.168.5.188, attempt #6 failed: \"Failed to send request to LoginApp 192.168.5.188\" (REASON_TIMER_EXPIRED)"
+      ]
+    ],
+    "dbapp": [
+      [
+        "INFO: DBApp::logOn: cui",
+        "WARNING: [Network] PacketReceiver::handleInputNotification: last received from 192.168.5.188, stopping socket processing after .206ms (processed 1 packets), receive queue at 0 bytesINFO: ChannelMap::find: Creating anonymous channel to 192.168.5.188"
+      ],
+      [
+        "WARNING: [Network] PacketReceiver::handleInputNotification: last received from 192.168.5.188, stopping socket processing after .587ms (processed 1 packets), receive queue at 0 bytesINFO: ChannelMap::find: Creating anonymous channel to 192.168.5.188",
+        "WARNING: [Server] ServerApp::onTickPeriod: Last game tick . Expected 0.10."
+      ]
+    ],
+    "dbappmgr": [
+      [],
+      [
+        "WARNING: [Server] ServerApp::onTickPeriod: Last game tick . Expected 0.10."
+      ]
+    ],
+    "loginapp": [
+      [
+        "INFO: LoginApp::login: Attempt from 192.168.5.188",
+        "INFO: LoginApp::login: Logging in user 'cui' (192.168.5.188)",
+        "INFO: [Config] loginApp/shouldOffsetExternalPortByUID = false"
+      ],
+      [
+        "INFO: [Config] loginApp/shouldOffsetExternalPortByUID = true (default: false)",
+        "WARNING: [Server] ServerApp::onTickPeriod: Last game tick . Expected 0.10."
+      ]
+    ],
+    "serviceapp": [
+      [],
+      [
+        "WARNING: BaseApp::handleTimeout: Last tick quantum took 703% of allocation (0.70 seconds)! Proxy clients may have been starved!",
+        "WARNING: [Server] ServerApp::onTickPeriod: Last game tick . Expected 0.10."
+      ]
+    ]
+  },
+  "on_diff": {
+    "baseapp": [
+      [
+        "DEBUG: Proxy::addCreateBasePlayerToChannelBundle: Creating player on client",
+        "DEBUG: Proxy::enableEntities",
+        "ERROR: [Network] Exception occurred: 'REASON_NO_SUCH_PORT' on '192.168.5.188'",
+        "INFO: Base::Base: ClientAvatar",
+        "INFO: Base::~Base: ClientAvatar",
+        "INFO: ClientAvatar.",
+        "INFO: ClientAvatar.__init__: {'prop1': 1} 0",
+        "INFO: LoginHandler:: from 192.168.5.188. Attempt 1",
+        "TRACE: BaseApp: at udp:192.168.5.188",
+        "TRACE: BaseApp::removeProxy: Removing proxy id 1 addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id 1 has disconnected (Requested by client)"
+      ],
+      [
+        "WARNING: BaseApp::handleTimeout: Last tick quantum took 534% of allocation (0.53 seconds)! Proxy clients may have been starved!",
+        "WARNING: BaseApp::handleTimeout: Last tick quantum took 635% of allocation (0.63 seconds)! Proxy clients may have been starved!",
+        "WARNING: [Server] ServerApp::onTickPeriod: Last game tick . Expected 0.10."
+      ]
+    ],
+    "baseappmgr": [
+      [],
+      [
+        "WARNING: [Server] ServerApp::onTickPeriod: Last game tick . Expected 0.10."
+      ]
+    ],
+    "cellapp": [
+      [
+        "INFO: Cell::createEntityInternal: New ClientAvatar",
+        "INFO: Cell::entityDestroyed: has been destroyed.",
+        "INFO: ChannelMap::find: Creating anonymous channel to 192.168.5.188",
+        "INFO: ClientAvatar.__init__: {}",
+        "WARNING: BufferedEntityMessages::playBufferedMessages: There were buffered messages. Played 1 of 1",
+        "WARNING: EntityMessageHandler::handleMessage: No time left in tick . Buffering 'createEntityNearEntity' and similar messages this tick. Num previously in buffer = 0."
+      ],
+      []
+    ],
+    "cellappmgr": [
+      [
+        "INFO: [Network] CellAppMgr::handleBaseAppMgrBirth: 192.168.5.188"
+      ],
+      [
+        "WARNING: [Server] ServerApp::onTickPeriod: Last game tick . Expected 0.10."
+      ]
+    ],
+    "client": [
+      [
+        "Connected to 192.168.5.188",
+        "DEBUG: LoginHandler::onBaseAppLoginSuccess: Got reply from BaseApp channel udp:192.168.5.188",
+        "DEBUG: LoginHandler::onLoginAppLoginSuccess: BaseApp@192.168.5.188 over UDP (# requests: 10, retry interval:1.0s, timeout interval: 8.0s)",
+        "DEBUG: LoginRequest::onTransportConnect: Attempt #1 to BaseApp 192.168.5.188; took 0.0s, time left = 8.0s",
+        "DEBUG: [Connection] ServerConnection::enableEntities: Enabling entities",
+        "DEBUG: [Connection] ServerConnection::logOn: from: 192.168.5.188",
+        "DEBUG: [Connection] ServerConnection::logOn: status==LOGGED_ON",
+        "DEBUG: [Connection] ServerConnection::logOn: to: 192.168.5.188",
+        "TRACE: LoginHandler::sendNextRequest: From 192.168.5.188, attempt #1 / 10 to BaseApp 192.168.5.188",
+        "TRACE: LoginRequest::handleMessage: Attempt #1: Received reply from 192.168.5.188 (after 0.1s)"
+      ],
+      [
+        "DEBUG: LoginRequest::onTransportConnect: Attempt #10 to LoginApp 192.168.5.188; took 0.0s, time left = 8.0s",
+        "DEBUG: LoginRequest::onTransportConnect: Attempt #2 to LoginApp 192.168.5.188; took 0.0s, time left = 8.0s",
+        "DEBUG: LoginRequest::onTransportConnect: Attempt #3 to LoginApp 192.168.5.188; took 0.0s, time left = 8.0s",
+        "DEBUG: LoginRequest::onTransportConnect: Attempt #4 to LoginApp 192.168.5.188; took 0.0s, time left = 8.0s",
+        "DEBUG: LoginRequest::onTransportConnect: Attempt #5 to LoginApp 192.168.5.188; took 0.0s, time left = 8.0s",
+        "DEBUG: LoginRequest::onTransportConnect: Attempt #6 to LoginApp 192.168.5.188; took 0.0s, time left = 8.0s",
+        "DEBUG: LoginRequest::onTransportConnect: Attempt #7 to LoginApp 192.168.5.188; took 0.0s, time left = 8.0s",
+        "DEBUG: LoginRequest::onTransportConnect: Attempt #8 to LoginApp 192.168.5.188; took 0.0s, time left = 8.0s",
+        "DEBUG: LoginRequest::onTransportConnect: Attempt #9 to LoginApp 192.168.5.188; took 0.0s, time left = 8.0s",
+        "TRACE: LoginHandler::sendNextRequest: From 192.168.5.188, attempt #10 / 10 to LoginApp 192.168.5.188",
+        "TRACE: LoginHandler::sendNextRequest: From 192.168.5.188, attempt #2 / 10 to LoginApp 192.168.5.188",
+        "TRACE: LoginHandler::sendNextRequest: From 192.168.5.188, attempt #3 / 10 to LoginApp 192.168.5.188",
+        "TRACE: LoginHandler::sendNextRequest: From 192.168.5.188, attempt #4 / 10 to LoginApp 192.168.5.188",
+        "TRACE: LoginHandler::sendNextRequest: From 192.168.5.188, attempt #5 / 10 to LoginApp 192.168.5.188",
+        "TRACE: LoginHandler::sendNextRequest: From 192.168.5.188, attempt #6 / 10 to LoginApp 192.168.5.188",
+        "TRACE: LoginHandler::sendNextRequest: From 192.168.5.188, attempt #7 / 10 to LoginApp 192.168.5.188",
+        "TRACE: LoginHandler::sendNextRequest: From 192.168.5.188, attempt #8 / 10 to LoginApp 192.168.5.188",
+        "TRACE: LoginHandler::sendNextRequest: From 192.168.5.188, attempt #9 / 10 to LoginApp 192.168.5.188",
+        "TRACE: LoginRequest::handleException: Attempt #1: (no channel): REASON_TIMER_EXPIRED (time since start = 8.0s)",
+        "TRACE: LoginRequest::handleException: Attempt #2: (no channel): REASON_TIMER_EXPIRED (time since start = 8.0s)",
+        "TRACE: LoginRequest::handleException: Attempt #3: (no channel): REASON_TIMER_EXPIRED (time since start = 8.0s)",
+        "TRACE: LoginRequest::handleException: Attempt #4: (no channel): REASON_TIMER_EXPIRED (time since start = 8.0s)",
+        "TRACE: LoginRequest::handleException: Attempt #5: (no channel): REASON_TIMER_EXPIRED (time since start = 8.0s)",
+        "TRACE: LoginRequest::handleException: Attempt #6: (no channel): REASON_TIMER_EXPIRED (time since start = 8.0s)",
+        "WARNING: LoginHandler::onRequestFailed: Request to LoginApp 192.168.5.188, attempt #1 failed: \"Failed to send request to LoginApp 192.168.5.188\" (REASON_TIMER_EXPIRED)",
+        "WARNING: LoginHandler::onRequestFailed: Request to LoginApp 192.168.5.188, attempt #2 failed: \"Failed to send request to LoginApp 192.168.5.188\" (REASON_TIMER_EXPIRED)",
+        "WARNING: LoginHandler::onRequestFailed: Request to LoginApp 192.168.5.188, attempt #3 failed: \"Failed to send request to LoginApp 192.168.5.188\" (REASON_TIMER_EXPIRED)",
+        "WARNING: LoginHandler::onRequestFailed: Request to LoginApp 192.168.5.188, attempt #4 failed: \"Failed to send request to LoginApp 192.168.5.188\" (REASON_TIMER_EXPIRED)",
+        "WARNING: LoginHandler::onRequestFailed: Request to LoginApp 192.168.5.188, attempt #5 failed: \"Failed to send request to LoginApp 192.168.5.188\" (REASON_TIMER_EXPIRED)",
+        "WARNING: LoginHandler::onRequestFailed: Request to LoginApp 192.168.5.188, attempt #6 failed: \"Failed to send request to LoginApp 192.168.5.188\" (REASON_TIMER_EXPIRED)"
+      ]
+    ],
+    "dbapp": [
+      [
+        "INFO: DBApp::logOn: cui",
+        "WARNING: [Network] PacketReceiver::handleInputNotification: last received from 192.168.5.188, stopping socket processing after .206ms (processed 1 packets), receive queue at 0 bytesINFO: ChannelMap::find: Creating anonymous channel to 192.168.5.188"
+      ],
+      [
+        "WARNING: [Network] PacketReceiver::handleInputNotification: last received from 192.168.5.188, stopping socket processing after .587ms (processed 1 packets), receive queue at 0 bytesINFO: ChannelMap::find: Creating anonymous channel to 192.168.5.188",
+        "WARNING: [Server] ServerApp::onTickPeriod: Last game tick . Expected 0.10."
+      ]
+    ],
+    "dbappmgr": [
+      [],
+      [
+        "WARNING: [Server] ServerApp::onTickPeriod: Last game tick . Expected 0.10."
+      ]
+    ],
+    "loginapp": [
+      [
+        "INFO: LoginApp::login: Attempt from 192.168.5.188",
+        "INFO: LoginApp::login: Logging in user 'cui' (192.168.5.188)",
+        "INFO: [Config] loginApp/shouldOffsetExternalPortByUID = false"
+      ],
+      [
+        "INFO: [Config] loginApp/shouldOffsetExternalPortByUID = true (default: false)",
+        "WARNING: [Server] ServerApp::onTickPeriod: Last game tick . Expected 0.10."
+      ]
+    ],
+    "serviceapp": [
+      [],
+      [
+        "WARNING: BaseApp::handleTimeout: Last tick quantum took 703% of allocation (0.70 seconds)! Proxy clients may have been starved!",
+        "WARNING: [Server] ServerApp::onTickPeriod: Last game tick . Expected 0.10."
+      ]
+    ]
+  },
+  "gif": "config-effect/LoginAppConfig.shouldOffsetExternalPortByUID.gif",
+  "captured": "2026-11-23T03:28:41"
+}

@@ -1,0 +1,33 @@
+{
+  "switch": "ReviverConfig.shutDownOnRevive",
+  "class": "ReviverConfig",
+  "name": "shutDownOnRevive",
+  "xml": "reviver/shutDownOnRevive",
+  "default": "true",
+  "off_diff": {
+    "baseapp": [
+      [
+        "TRACE: BaseApp::removeProxy: Removing proxy id addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id has disconnected (Requested by client)"
+      ],
+      [
+        "TRACE: BaseApp::removeProxy: Removing proxy id 1 addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id 1 has disconnected (Requested by client)"
+      ]
+    ]
+  },
+  "on_diff": {
+    "baseapp": [
+      [
+        "TRACE: BaseApp::removeProxy: Removing proxy id addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id has disconnected (Requested by client)"
+      ],
+      [
+        "TRACE: BaseApp::removeProxy: Removing proxy id 1 addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id 1 has disconnected (Requested by client)"
+      ]
+    ]
+  },
+  "gif": "config-effect/ReviverConfig.shutDownOnRevive.gif",
+  "captured": "2026-11-23T05:01:21"
+}

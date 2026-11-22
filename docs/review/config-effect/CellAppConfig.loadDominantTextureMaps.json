@@ -1,0 +1,77 @@
+{
+  "switch": "CellAppConfig.loadDominantTextureMaps",
+  "class": "CellAppConfig",
+  "name": "loadDominantTextureMaps",
+  "xml": "cellApp/loadDominantTextureMaps",
+  "default": "false",
+  "off_diff": {
+    "baseapp": [
+      [
+        "TRACE: BaseApp::removeProxy: Removing proxy id 1 addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id 1 has disconnected (Requested by client)"
+      ],
+      [
+        "TRACE: BaseApp::removeProxy: Removing proxy id addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id has disconnected (Requested by client)"
+      ]
+    ],
+    "cellapp": [
+      [
+        "INFO: [Config] cellApp/loadDominantTextureMaps = false"
+      ],
+      [
+        "INFO: BufferedInputMessages::playBufferedMessages: Played 1 message, buffer now empty",
+        "INFO: [Config] cellApp/loadDominantTextureMaps = true (default: false)"
+      ]
+    ],
+    "client": [
+      [
+        "TRACE: LoginRequest::handleMessage: Attempt #1: Received reply from 192.168.5.188 (after 0.2s)"
+      ],
+      []
+    ],
+    "serviceapp": [
+      [
+        "WARNING: BaseApp::handleTimeout: Last tick quantum took 274% of allocation (0.27 seconds)! Proxy clients may have been starved!",
+        "WARNING: [Server] ServerApp::onTickPeriod: Last game tick . Expected 0.10."
+      ],
+      []
+    ]
+  },
+  "on_diff": {
+    "baseapp": [
+      [
+        "TRACE: BaseApp::removeProxy: Removing proxy id 1 addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id 1 has disconnected (Requested by client)"
+      ],
+      [
+        "TRACE: BaseApp::removeProxy: Removing proxy id addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id has disconnected (Requested by client)"
+      ]
+    ],
+    "cellapp": [
+      [
+        "INFO: [Config] cellApp/loadDominantTextureMaps = false"
+      ],
+      [
+        "INFO: BufferedInputMessages::playBufferedMessages: Played 1 message, buffer now empty",
+        "INFO: [Config] cellApp/loadDominantTextureMaps = true (default: false)"
+      ]
+    ],
+    "client": [
+      [
+        "TRACE: LoginRequest::handleMessage: Attempt #1: Received reply from 192.168.5.188 (after 0.2s)"
+      ],
+      []
+    ],
+    "serviceapp": [
+      [
+        "WARNING: BaseApp::handleTimeout: Last tick quantum took 274% of allocation (0.27 seconds)! Proxy clients may have been starved!",
+        "WARNING: [Server] ServerApp::onTickPeriod: Last game tick . Expected 0.10."
+      ],
+      []
+    ]
+  },
+  "gif": "config-effect/CellAppConfig.loadDominantTextureMaps.gif",
+  "captured": "2026-11-23T02:59:45"
+}

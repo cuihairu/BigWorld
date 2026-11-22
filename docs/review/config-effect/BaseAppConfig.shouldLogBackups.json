@@ -1,0 +1,47 @@
+{
+  "switch": "BaseAppConfig.shouldLogBackups",
+  "class": "BaseAppConfig",
+  "name": "shouldLogBackups",
+  "xml": "baseApp/shouldLogBackups",
+  "default": "false",
+  "off_diff": {
+    "baseapp": [
+      [
+        "INFO: [Config] baseApp/shouldLogBackups = false"
+      ],
+      [
+        "DEBUG: BackupSender::autoBackupBase: Base backed up.",
+        "INFO: [Config] baseApp/shouldLogBackups = true (default: false)"
+      ]
+    ],
+    "serviceapp": [
+      [
+        "INFO: [Config] baseApp/shouldLogBackups = false"
+      ],
+      [
+        "INFO: [Config] baseApp/shouldLogBackups = true (default: false)"
+      ]
+    ]
+  },
+  "on_diff": {
+    "baseapp": [
+      [
+        "INFO: [Config] baseApp/shouldLogBackups = false"
+      ],
+      [
+        "DEBUG: BackupSender::autoBackupBase: Base backed up.",
+        "INFO: [Config] baseApp/shouldLogBackups = true (default: false)"
+      ]
+    ],
+    "serviceapp": [
+      [
+        "INFO: [Config] baseApp/shouldLogBackups = false"
+      ],
+      [
+        "INFO: [Config] baseApp/shouldLogBackups = true (default: false)"
+      ]
+    ]
+  },
+  "gif": "config-effect/BaseAppConfig.shouldLogBackups.gif",
+  "captured": "2026-11-23T02:39:33"
+}

@@ -1,0 +1,161 @@
+{
+  "switch": "ServerAppConfig.hasHitchDetection",
+  "class": "ServerAppConfig",
+  "name": "hasHitchDetection",
+  "xml": "hitchDetection/enabled",
+  "default": "false",
+  "off_diff": {
+    "baseapp": [
+      [
+        "INFO: [Config] hitchDetection/enabled = false",
+        "TRACE: BaseApp::removeProxy: Removing proxy id 1 addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id 1 has disconnected (Requested by client)"
+      ],
+      [
+        "INFO: [Config] hitchDetection/enabled = true (default: false)",
+        "TRACE: BaseApp::removeProxy: Removing proxy id addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id has disconnected (Requested by client)"
+      ]
+    ],
+    "baseappmgr": [
+      [
+        "INFO: [Config] hitchDetection/enabled = false"
+      ],
+      [
+        "INFO: [Config] hitchDetection/enabled = true (default: false)"
+      ]
+    ],
+    "cellapp": [
+      [
+        "INFO: [Config] hitchDetection/enabled = false"
+      ],
+      [
+        "INFO: [Config] hitchDetection/enabled = true (default: false)"
+      ]
+    ],
+    "cellappmgr": [
+      [
+        "INFO: [Config] hitchDetection/enabled = false"
+      ],
+      [
+        "INFO: [Config] hitchDetection/enabled = true (default: false)"
+      ]
+    ],
+    "client": [
+      [],
+      [
+        "TRACE: LoginRequest::handleMessage: Attempt #1: Received reply from 192.168.5.188 (after 0.2s)"
+      ]
+    ],
+    "dbapp": [
+      [
+        "INFO: [Config] hitchDetection/enabled = false"
+      ],
+      [
+        "INFO: [Config] hitchDetection/enabled = true (default: false)"
+      ]
+    ],
+    "dbappmgr": [
+      [
+        "INFO: [Config] hitchDetection/enabled = false"
+      ],
+      [
+        "INFO: [Config] hitchDetection/enabled = true (default: false)"
+      ]
+    ],
+    "loginapp": [
+      [
+        "INFO: [Config] hitchDetection/enabled = false"
+      ],
+      [
+        "INFO: [Config] hitchDetection/enabled = true (default: false)"
+      ]
+    ],
+    "serviceapp": [
+      [
+        "INFO: [Config] hitchDetection/enabled = false"
+      ],
+      [
+        "INFO: [Config] hitchDetection/enabled = true (default: false)"
+      ]
+    ]
+  },
+  "on_diff": {
+    "baseapp": [
+      [
+        "INFO: [Config] hitchDetection/enabled = false",
+        "TRACE: BaseApp::removeProxy: Removing proxy id 1 addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id 1 has disconnected (Requested by client)"
+      ],
+      [
+        "INFO: [Config] hitchDetection/enabled = true (default: false)",
+        "TRACE: BaseApp::removeProxy: Removing proxy id addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id has disconnected (Requested by client)"
+      ]
+    ],
+    "baseappmgr": [
+      [
+        "INFO: [Config] hitchDetection/enabled = false"
+      ],
+      [
+        "INFO: [Config] hitchDetection/enabled = true (default: false)"
+      ]
+    ],
+    "cellapp": [
+      [
+        "INFO: [Config] hitchDetection/enabled = false"
+      ],
+      [
+        "INFO: [Config] hitchDetection/enabled = true (default: false)"
+      ]
+    ],
+    "cellappmgr": [
+      [
+        "INFO: [Config] hitchDetection/enabled = false"
+      ],
+      [
+        "INFO: [Config] hitchDetection/enabled = true (default: false)"
+      ]
+    ],
+    "client": [
+      [],
+      [
+        "TRACE: LoginRequest::handleMessage: Attempt #1: Received reply from 192.168.5.188 (after 0.2s)"
+      ]
+    ],
+    "dbapp": [
+      [
+        "INFO: [Config] hitchDetection/enabled = false"
+      ],
+      [
+        "INFO: [Config] hitchDetection/enabled = true (default: false)"
+      ]
+    ],
+    "dbappmgr": [
+      [
+        "INFO: [Config] hitchDetection/enabled = false"
+      ],
+      [
+        "INFO: [Config] hitchDetection/enabled = true (default: false)"
+      ]
+    ],
+    "loginapp": [
+      [
+        "INFO: [Config] hitchDetection/enabled = false"
+      ],
+      [
+        "INFO: [Config] hitchDetection/enabled = true (default: false)"
+      ]
+    ],
+    "serviceapp": [
+      [
+        "INFO: [Config] hitchDetection/enabled = false"
+      ],
+      [
+        "INFO: [Config] hitchDetection/enabled = true (default: false)"
+      ]
+    ]
+  },
+  "gif": "config-effect/ServerAppConfig.hasHitchDetection.gif",
+  "captured": "2026-11-23T05:04:38"
+}

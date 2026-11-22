@@ -1,0 +1,55 @@
+{
+  "switch": "DBAppConfig.shouldDelayLookUpSend",
+  "class": "DBAppConfig",
+  "name": "shouldDelayLookUpSend",
+  "xml": "dbApp/shouldDelayLookUpSend",
+  "default": "false",
+  "off_diff": {
+    "baseappmgr": [
+      [
+        "INFO: [ProcessIP] BaseAppMgr::add: Not allowing BaseApp at 192.168.5.188 to register yet (No init data from DBApp Alpha)"
+      ],
+      []
+    ],
+    "dbapp": [
+      [
+        "INFO: [Config] dbApp/shouldDelayLookUpSend = false",
+        "WARNING: [Network] PacketReceiver::handleInputNotification: last received from 192.168.5.188, stopping socket processing after .055ms (processed 1 packets), receive queue at 0 bytesINFO: ChannelMap::find: Creating anonymous channel to 192.168.5.188"
+      ],
+      [
+        "INFO: [Config] dbApp/shouldDelayLookUpSend = true (default: false)"
+      ]
+    ],
+    "dbappmgr": [
+      [
+        "WARNING: [Server] ServerApp::onTickPeriod: Last game tick . Expected 0.10."
+      ],
+      []
+    ]
+  },
+  "on_diff": {
+    "baseappmgr": [
+      [
+        "INFO: [ProcessIP] BaseAppMgr::add: Not allowing BaseApp at 192.168.5.188 to register yet (No init data from DBApp Alpha)"
+      ],
+      []
+    ],
+    "dbapp": [
+      [
+        "INFO: [Config] dbApp/shouldDelayLookUpSend = false",
+        "WARNING: [Network] PacketReceiver::handleInputNotification: last received from 192.168.5.188, stopping socket processing after .055ms (processed 1 packets), receive queue at 0 bytesINFO: ChannelMap::find: Creating anonymous channel to 192.168.5.188"
+      ],
+      [
+        "INFO: [Config] dbApp/shouldDelayLookUpSend = true (default: false)"
+      ]
+    ],
+    "dbappmgr": [
+      [
+        "WARNING: [Server] ServerApp::onTickPeriod: Last game tick . Expected 0.10."
+      ],
+      []
+    ]
+  },
+  "gif": "config-effect/DBAppConfig.shouldDelayLookUpSend.gif",
+  "captured": "2026-11-23T03:16:26"
+}

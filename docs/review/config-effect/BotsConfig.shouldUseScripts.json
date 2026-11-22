@@ -1,0 +1,47 @@
+{
+  "switch": "BotsConfig.shouldUseScripts",
+  "class": "BotsConfig",
+  "name": "shouldUseScripts",
+  "xml": "bots/shouldUseScripts",
+  "default": "true",
+  "off_diff": {
+    "baseapp": [
+      [
+        "TRACE: BaseApp::removeProxy: Removing proxy id 1 addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id 1 has disconnected (Requested by client)"
+      ],
+      [
+        "ERROR: [Network] 1 reports of 'Exception occurred: 192.168.5.188' on 'REASON_NO_SUCH_PORT' in the last 2ms",
+        "TRACE: BaseApp::removeProxy: Removing proxy id addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id has disconnected (Requested by client)"
+      ]
+    ],
+    "client": [
+      [
+        "TRACE: LoginRequest::handleMessage: Attempt #1: Received reply from 192.168.5.188 (after 0.0s)"
+      ],
+      []
+    ]
+  },
+  "on_diff": {
+    "baseapp": [
+      [
+        "TRACE: BaseApp::removeProxy: Removing proxy id 1 addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id 1 has disconnected (Requested by client)"
+      ],
+      [
+        "ERROR: [Network] 1 reports of 'Exception occurred: 192.168.5.188' on 'REASON_NO_SUCH_PORT' in the last 2ms",
+        "TRACE: BaseApp::removeProxy: Removing proxy id addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id has disconnected (Requested by client)"
+      ]
+    ],
+    "client": [
+      [
+        "TRACE: LoginRequest::handleMessage: Attempt #1: Received reply from 192.168.5.188 (after 0.0s)"
+      ],
+      []
+    ]
+  },
+  "gif": "config-effect/BotsConfig.shouldUseScripts.gif",
+  "captured": "2026-11-23T02:51:17"
+}

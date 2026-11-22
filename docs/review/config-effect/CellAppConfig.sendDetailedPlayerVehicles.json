@@ -1,0 +1,29 @@
+{
+  "switch": "CellAppConfig.sendDetailedPlayerVehicles",
+  "class": "CellAppConfig",
+  "name": "sendDetailedPlayerVehicles",
+  "xml": "cellApp/sendDetailedPlayerVehicles",
+  "default": "false",
+  "off_diff": {
+    "cellapp": [
+      [
+        "INFO: [Config] cellApp/sendDetailedPlayerVehicles = false"
+      ],
+      [
+        "INFO: [Config] cellApp/sendDetailedPlayerVehicles = true (default: false)"
+      ]
+    ]
+  },
+  "on_diff": {
+    "cellapp": [
+      [
+        "INFO: [Config] cellApp/sendDetailedPlayerVehicles = false"
+      ],
+      [
+        "INFO: [Config] cellApp/sendDetailedPlayerVehicles = true (default: false)"
+      ]
+    ]
+  },
+  "gif": "config-effect/CellAppConfig.sendDetailedPlayerVehicles.gif",
+  "captured": "2026-11-23T03:01:26"
+}

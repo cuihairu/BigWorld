@@ -1,0 +1,65 @@
+{
+  "switch": "BaseAppConfig.shouldDelayLookUpSend",
+  "class": "BaseAppConfig",
+  "name": "shouldDelayLookUpSend",
+  "xml": "baseApp/shouldDelayLookUpSend",
+  "default": "false",
+  "off_diff": {
+    "baseapp": [
+      [
+        "INFO: [Config] baseApp/shouldDelayLookUpSend = false",
+        "TRACE: BaseApp::removeProxy: Removing proxy id 2 addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id 2 has disconnected (Requested by client)"
+      ],
+      [
+        "INFO: [Config] baseApp/shouldDelayLookUpSend = true (default: false)",
+        "TRACE: BaseApp::removeProxy: Removing proxy id 1 addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id 1 has disconnected (Requested by client)"
+      ]
+    ],
+    "cellappmgr": [
+      [],
+      [
+        "INFO: [Network] CellAppMgr::handleBaseAppMgrBirth: 192.168.5.188"
+      ]
+    ],
+    "serviceapp": [
+      [
+        "INFO: [Config] baseApp/shouldDelayLookUpSend = false"
+      ],
+      [
+        "INFO: [Config] baseApp/shouldDelayLookUpSend = true (default: false)"
+      ]
+    ]
+  },
+  "on_diff": {
+    "baseapp": [
+      [
+        "INFO: [Config] baseApp/shouldDelayLookUpSend = false",
+        "TRACE: BaseApp::removeProxy: Removing proxy id 2 addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id 2 has disconnected (Requested by client)"
+      ],
+      [
+        "INFO: [Config] baseApp/shouldDelayLookUpSend = true (default: false)",
+        "TRACE: BaseApp::removeProxy: Removing proxy id 1 addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id 1 has disconnected (Requested by client)"
+      ]
+    ],
+    "cellappmgr": [
+      [],
+      [
+        "INFO: [Network] CellAppMgr::handleBaseAppMgrBirth: 192.168.5.188"
+      ]
+    ],
+    "serviceapp": [
+      [
+        "INFO: [Config] baseApp/shouldDelayLookUpSend = false"
+      ],
+      [
+        "INFO: [Config] baseApp/shouldDelayLookUpSend = true (default: false)"
+      ]
+    ]
+  },
+  "gif": "config-effect/BaseAppConfig.shouldDelayLookUpSend.gif",
+  "captured": "2026-11-23T02:37:54"
+}

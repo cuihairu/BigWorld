@@ -1,0 +1,47 @@
+{
+  "switch": "ManagerAppConfig.shutDownServerOnCellAppDeath",
+  "class": "ManagerAppConfig",
+  "name": "shutDownServerOnCellAppDeath",
+  "xml": "shutDownServerOnCellAppDeath",
+  "default": "false",
+  "off_diff": {
+    "baseappmgr": [
+      [
+        "INFO: [Config] shutDownServerOnCellAppDeath = false"
+      ],
+      [
+        "INFO: [Config] shutDownServerOnCellAppDeath = true (default: false)"
+      ]
+    ],
+    "cellappmgr": [
+      [
+        "INFO: CellAppMgr::handleCellAppMgrBirth: 192.168.5.188",
+        "INFO: [Config] shutDownServerOnCellAppDeath = false"
+      ],
+      [
+        "INFO: [Config] shutDownServerOnCellAppDeath = true (default: false)"
+      ]
+    ]
+  },
+  "on_diff": {
+    "baseappmgr": [
+      [
+        "INFO: [Config] shutDownServerOnCellAppDeath = false"
+      ],
+      [
+        "INFO: [Config] shutDownServerOnCellAppDeath = true (default: false)"
+      ]
+    ],
+    "cellappmgr": [
+      [
+        "INFO: CellAppMgr::handleCellAppMgrBirth: 192.168.5.188",
+        "INFO: [Config] shutDownServerOnCellAppDeath = false"
+      ],
+      [
+        "INFO: [Config] shutDownServerOnCellAppDeath = true (default: false)"
+      ]
+    ]
+  },
+  "gif": "config-effect/ManagerAppConfig.shutDownServerOnCellAppDeath.gif",
+  "captured": "2026-11-23T04:56:29"
+}

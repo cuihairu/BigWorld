@@ -1,0 +1,67 @@
+{
+  "switch": "BalanceConfig.demo",
+  "class": "BalanceConfig",
+  "name": "demo",
+  "xml": "balance/demo/enable",
+  "default": "false",
+  "off_diff": {
+    "baseapp": [
+      [
+        "TRACE: BaseApp::removeProxy: Removing proxy id 1 addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id 1 has disconnected (Requested by client)"
+      ],
+      [
+        "TRACE: BaseApp::removeProxy: Removing proxy id addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id has disconnected (Requested by client)"
+      ]
+    ],
+    "cellapp": [
+      [
+        "INFO: [Config] balance/demo/enable = false"
+      ],
+      [
+        "ERROR: [Config] CellApp::init: Production Mode: Demo load balancing enabled!",
+        "INFO: [Config] balance/demo/enable = true (default: false)"
+      ]
+    ],
+    "cellappmgr": [
+      [
+        "INFO: [Config] balance/demo/enable = false"
+      ],
+      [
+        "INFO: [Config] balance/demo/enable = true (default: false)"
+      ]
+    ]
+  },
+  "on_diff": {
+    "baseapp": [
+      [
+        "TRACE: BaseApp::removeProxy: Removing proxy id 1 addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id 1 has disconnected (Requested by client)"
+      ],
+      [
+        "TRACE: BaseApp::removeProxy: Removing proxy id addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id has disconnected (Requested by client)"
+      ]
+    ],
+    "cellapp": [
+      [
+        "INFO: [Config] balance/demo/enable = false"
+      ],
+      [
+        "ERROR: [Config] CellApp::init: Production Mode: Demo load balancing enabled!",
+        "INFO: [Config] balance/demo/enable = true (default: false)"
+      ]
+    ],
+    "cellappmgr": [
+      [
+        "INFO: [Config] balance/demo/enable = false"
+      ],
+      [
+        "INFO: [Config] balance/demo/enable = true (default: false)"
+      ]
+    ]
+  },
+  "gif": "config-effect/BalanceConfig.demo.gif",
+  "captured": "2026-11-23T02:32:59"
+}

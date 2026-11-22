@@ -1,0 +1,183 @@
+{
+  "switch": "LoginAppConfig.registerExternalInterface",
+  "class": "LoginAppConfig",
+  "name": "registerExternalInterface",
+  "xml": "loginApp/registerExternalInterface",
+  "default": "false",
+  "off_diff": {
+    "baseapp": [
+      [
+        "DEBUG: Proxy::addCreateBasePlayerToChannelBundle: Creating player on client",
+        "DEBUG: Proxy::enableEntities",
+        "ERROR: [Network] Exception occurred: 'REASON_NO_SUCH_PORT' on '192.168.5.188'",
+        "INFO: Base::Base: ClientAvatar",
+        "INFO: Base::~Base: ClientAvatar",
+        "INFO: ClientAvatar.",
+        "INFO: ClientAvatar.__init__: {'prop1': 1} 0",
+        "INFO: IDClient::retrieveIDsFromStream: Received from 1 to",
+        "INFO: LoginHandler:: from 192.168.5.188. Attempt 1",
+        "TRACE: BaseApp: at udp:192.168.5.188",
+        "TRACE: BaseApp::removeProxy: Removing proxy id addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id has disconnected (Requested by client)"
+      ],
+      []
+    ],
+    "baseappmgr": [
+      [
+        "DEBUG: [ProcessIP] BaseAppMgr::finishedInit: now have 1 base apps and 0 service apps ready",
+        "DEBUG: [ProcessIP] BaseAppMgr::finishedInit: now have 2 base apps and 0 service apps ready"
+      ],
+      [
+        "DEBUG: [ProcessIP] BaseAppMgr::finishedInit: now have 0 base apps and 1 service apps ready",
+        "DEBUG: [ProcessIP] BaseAppMgr::finishedInit: now have 1 base apps and 1 service apps ready",
+        "INFO: [ProcessIP] BaseAppMgr::add: Not allowing BaseApp at 192.168.5.188 to register yet (No init data from DBApp Alpha)"
+      ]
+    ],
+    "cellapp": [
+      [
+        "INFO: Cell::createEntityInternal: New ClientAvatar",
+        "INFO: Cell::entityDestroyed: has been destroyed.",
+        "INFO: ChannelMap::find: Creating anonymous channel to 192.168.5.188",
+        "INFO: ClientAvatar.__init__: {}"
+      ],
+      []
+    ],
+    "client": [
+      [
+        "Connected to 192.168.5.188",
+        "DEBUG: LoginHandler::onBaseAppLoginSuccess: Got reply from BaseApp channel udp:192.168.5.188",
+        "DEBUG: LoginHandler::onLoginAppLoginSuccess: BaseApp@192.168.5.188 over UDP (# requests: 10, retry interval:1.0s, timeout interval: 8.0s)",
+        "DEBUG: LoginRequest::onTransportConnect: Attempt #1 to BaseApp 192.168.5.188; took 0.0s, time left = 8.0s",
+        "DEBUG: [Connection] ServerConnection::enableEntities: Enabling entities",
+        "DEBUG: [Connection] ServerConnection::logOn: from: 192.168.5.188",
+        "DEBUG: [Connection] ServerConnection::logOn: status==LOGGED_ON",
+        "DEBUG: [Connection] ServerConnection::logOn: to: 192.168.5.188",
+        "TRACE: LoginHandler::sendNextRequest: From 192.168.5.188, attempt #1 / 10 to BaseApp 192.168.5.188",
+        "TRACE: LoginRequest::handleMessage: Attempt #1: Received reply from 192.168.5.188 (after 0.1s)",
+        "TRACE: LoginRequest::handleMessage: Attempt #1: Received reply from 192.168.5.188 (after 0.2s)"
+      ],
+      [
+        "INFO: LoginAppLoginRequestProtocol::onReply: Attempt #1: Server rejected our login. Reject status: 74, reject data (optional): Server not ready.",
+        "INFO: [Connection] ServerConnection::logOnComplete: Logon failed: Server not ready.",
+        "Login failed: Server not ready.",
+        "TRACE: LoginRequest::handleMessage: Attempt #1: Received reply from 192.168.5.188 (after 0.7s)",
+        "WARNING: LoginHandler::fail: status = 74, errorMessage = \"Server not ready.\""
+      ]
+    ],
+    "dbapp": [
+      [
+        "INFO: DBApp::logOn: cui"
+      ],
+      [
+        "INFO: DBApp::logOn: Login failed for cui. Server not ready.",
+        "WARNING: [Network] PacketReceiver::handleInputNotification: last received from 192.168.5.188, stopping socket processing after .480ms (processed 1 packets), receive queue at 960 bytesINFO: ChannelMap::find: Creating anonymous channel to 192.168.5.188"
+      ]
+    ],
+    "loginapp": [
+      [
+        "INFO: [Config] loginApp/registerExternalInterface = false"
+      ],
+      [
+        "INFO: [Config] loginApp/registerExternalInterface = true (default: false)",
+        "INFO: [Network] LoginApp::handleFailure: LogOn for 192.168.5.188 failed, LogOnStatus: 74, description 'Server not ready.'."
+      ]
+    ],
+    "serviceapp": [
+      [
+        "INFO: IDClient::retrieveIDsFromStream: Received from to"
+      ],
+      [
+        "INFO: IDClient::retrieveIDsFromStream: Received from 1 to"
+      ]
+    ]
+  },
+  "on_diff": {
+    "baseapp": [
+      [
+        "DEBUG: Proxy::addCreateBasePlayerToChannelBundle: Creating player on client",
+        "DEBUG: Proxy::enableEntities",
+        "ERROR: [Network] Exception occurred: 'REASON_NO_SUCH_PORT' on '192.168.5.188'",
+        "INFO: Base::Base: ClientAvatar",
+        "INFO: Base::~Base: ClientAvatar",
+        "INFO: ClientAvatar.",
+        "INFO: ClientAvatar.__init__: {'prop1': 1} 0",
+        "INFO: IDClient::retrieveIDsFromStream: Received from 1 to",
+        "INFO: LoginHandler:: from 192.168.5.188. Attempt 1",
+        "TRACE: BaseApp: at udp:192.168.5.188",
+        "TRACE: BaseApp::removeProxy: Removing proxy id addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id has disconnected (Requested by client)"
+      ],
+      []
+    ],
+    "baseappmgr": [
+      [
+        "DEBUG: [ProcessIP] BaseAppMgr::finishedInit: now have 1 base apps and 0 service apps ready",
+        "DEBUG: [ProcessIP] BaseAppMgr::finishedInit: now have 2 base apps and 0 service apps ready"
+      ],
+      [
+        "DEBUG: [ProcessIP] BaseAppMgr::finishedInit: now have 0 base apps and 1 service apps ready",
+        "DEBUG: [ProcessIP] BaseAppMgr::finishedInit: now have 1 base apps and 1 service apps ready",
+        "INFO: [ProcessIP] BaseAppMgr::add: Not allowing BaseApp at 192.168.5.188 to register yet (No init data from DBApp Alpha)"
+      ]
+    ],
+    "cellapp": [
+      [
+        "INFO: Cell::createEntityInternal: New ClientAvatar",
+        "INFO: Cell::entityDestroyed: has been destroyed.",
+        "INFO: ChannelMap::find: Creating anonymous channel to 192.168.5.188",
+        "INFO: ClientAvatar.__init__: {}"
+      ],
+      []
+    ],
+    "client": [
+      [
+        "Connected to 192.168.5.188",
+        "DEBUG: LoginHandler::onBaseAppLoginSuccess: Got reply from BaseApp channel udp:192.168.5.188",
+        "DEBUG: LoginHandler::onLoginAppLoginSuccess: BaseApp@192.168.5.188 over UDP (# requests: 10, retry interval:1.0s, timeout interval: 8.0s)",
+        "DEBUG: LoginRequest::onTransportConnect: Attempt #1 to BaseApp 192.168.5.188; took 0.0s, time left = 8.0s",
+        "DEBUG: [Connection] ServerConnection::enableEntities: Enabling entities",
+        "DEBUG: [Connection] ServerConnection::logOn: from: 192.168.5.188",
+        "DEBUG: [Connection] ServerConnection::logOn: status==LOGGED_ON",
+        "DEBUG: [Connection] ServerConnection::logOn: to: 192.168.5.188",
+        "TRACE: LoginHandler::sendNextRequest: From 192.168.5.188, attempt #1 / 10 to BaseApp 192.168.5.188",
+        "TRACE: LoginRequest::handleMessage: Attempt #1: Received reply from 192.168.5.188 (after 0.1s)",
+        "TRACE: LoginRequest::handleMessage: Attempt #1: Received reply from 192.168.5.188 (after 0.2s)"
+      ],
+      [
+        "INFO: LoginAppLoginRequestProtocol::onReply: Attempt #1: Server rejected our login. Reject status: 74, reject data (optional): Server not ready.",
+        "INFO: [Connection] ServerConnection::logOnComplete: Logon failed: Server not ready.",
+        "Login failed: Server not ready.",
+        "TRACE: LoginRequest::handleMessage: Attempt #1: Received reply from 192.168.5.188 (after 0.7s)",
+        "WARNING: LoginHandler::fail: status = 74, errorMessage = \"Server not ready.\""
+      ]
+    ],
+    "dbapp": [
+      [
+        "INFO: DBApp::logOn: cui"
+      ],
+      [
+        "INFO: DBApp::logOn: Login failed for cui. Server not ready.",
+        "WARNING: [Network] PacketReceiver::handleInputNotification: last received from 192.168.5.188, stopping socket processing after .480ms (processed 1 packets), receive queue at 960 bytesINFO: ChannelMap::find: Creating anonymous channel to 192.168.5.188"
+      ]
+    ],
+    "loginapp": [
+      [
+        "INFO: [Config] loginApp/registerExternalInterface = false"
+      ],
+      [
+        "INFO: [Config] loginApp/registerExternalInterface = true (default: false)",
+        "INFO: [Network] LoginApp::handleFailure: LogOn for 192.168.5.188 failed, LogOnStatus: 74, description 'Server not ready.'."
+      ]
+    ],
+    "serviceapp": [
+      [
+        "INFO: IDClient::retrieveIDsFromStream: Received from to"
+      ],
+      [
+        "INFO: IDClient::retrieveIDsFromStream: Received from 1 to"
+      ]
+    ]
+  },
+  "gif": "config-effect/LoginAppConfig.registerExternalInterface.gif",
+  "captured": "2026-11-23T03:26:48"
+}

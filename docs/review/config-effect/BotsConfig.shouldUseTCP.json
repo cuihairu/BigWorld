@@ -1,0 +1,59 @@
+{
+  "switch": "BotsConfig.shouldUseTCP",
+  "class": "BotsConfig",
+  "name": "shouldUseTCP",
+  "xml": "bots/shouldUseTCP",
+  "default": "false",
+  "off_diff": {
+    "baseapp": [
+      [
+        "TRACE: BaseApp::removeProxy: Removing proxy id addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id has disconnected (Requested by client)"
+      ],
+      [
+        "TRACE: BaseApp::removeProxy: Removing proxy id 1 addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id 1 has disconnected (Requested by client)"
+      ]
+    ],
+    "cellapp": [
+      [
+        "WARNING: BufferedEntityMessages::playBufferedMessages: There were buffered messages. Played 1 of 1",
+        "WARNING: EntityMessageHandler::handleMessage: No time left in tick . Buffering 'createEntityNearEntity' and similar messages this tick. Num previously in buffer = 0."
+      ],
+      []
+    ],
+    "cellappmgr": [
+      [],
+      [
+        "INFO: [Network] CellAppMgr::handleBaseAppMgrBirth: 192.168.5.188"
+      ]
+    ]
+  },
+  "on_diff": {
+    "baseapp": [
+      [
+        "TRACE: BaseApp::removeProxy: Removing proxy id addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id has disconnected (Requested by client)"
+      ],
+      [
+        "TRACE: BaseApp::removeProxy: Removing proxy id 1 addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id 1 has disconnected (Requested by client)"
+      ]
+    ],
+    "cellapp": [
+      [
+        "WARNING: BufferedEntityMessages::playBufferedMessages: There were buffered messages. Played 1 of 1",
+        "WARNING: EntityMessageHandler::handleMessage: No time left in tick . Buffering 'createEntityNearEntity' and similar messages this tick. Num previously in buffer = 0."
+      ],
+      []
+    ],
+    "cellappmgr": [
+      [],
+      [
+        "INFO: [Network] CellAppMgr::handleBaseAppMgrBirth: 192.168.5.188"
+      ]
+    ]
+  },
+  "gif": "config-effect/BotsConfig.shouldUseTCP.gif",
+  "captured": "2026-11-23T02:52:58"
+}

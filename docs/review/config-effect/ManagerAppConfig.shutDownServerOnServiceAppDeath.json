@@ -1,0 +1,69 @@
+{
+  "switch": "ManagerAppConfig.shutDownServerOnServiceAppDeath",
+  "class": "ManagerAppConfig",
+  "name": "shutDownServerOnServiceAppDeath",
+  "xml": "shutDownServerOnServiceAppDeath",
+  "default": "false",
+  "off_diff": {
+    "baseapp": [
+      [
+        "TRACE: BaseApp::removeProxy: Removing proxy id 1 addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id 1 has disconnected (Requested by client)"
+      ],
+      [
+        "TRACE: BaseApp::removeProxy: Removing proxy id addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id has disconnected (Requested by client)"
+      ]
+    ],
+    "baseappmgr": [
+      [
+        "INFO: [Config] shutDownServerOnServiceAppDeath = false"
+      ],
+      [
+        "INFO: [Config] shutDownServerOnServiceAppDeath = true (default: false)"
+      ]
+    ],
+    "cellappmgr": [
+      [
+        "INFO: [Config] shutDownServerOnServiceAppDeath = false"
+      ],
+      [
+        "INFO: CellAppMgr::handleCellAppMgrBirth: 192.168.5.188",
+        "INFO: [Config] shutDownServerOnServiceAppDeath = true (default: false)",
+        "INFO: [Network] CellAppMgr::handleBaseAppMgrBirth: 192.168.5.188"
+      ]
+    ]
+  },
+  "on_diff": {
+    "baseapp": [
+      [
+        "TRACE: BaseApp::removeProxy: Removing proxy id 1 addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id 1 has disconnected (Requested by client)"
+      ],
+      [
+        "TRACE: BaseApp::removeProxy: Removing proxy id addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id has disconnected (Requested by client)"
+      ]
+    ],
+    "baseappmgr": [
+      [
+        "INFO: [Config] shutDownServerOnServiceAppDeath = false"
+      ],
+      [
+        "INFO: [Config] shutDownServerOnServiceAppDeath = true (default: false)"
+      ]
+    ],
+    "cellappmgr": [
+      [
+        "INFO: [Config] shutDownServerOnServiceAppDeath = false"
+      ],
+      [
+        "INFO: CellAppMgr::handleCellAppMgrBirth: 192.168.5.188",
+        "INFO: [Config] shutDownServerOnServiceAppDeath = true (default: false)",
+        "INFO: [Network] CellAppMgr::handleBaseAppMgrBirth: 192.168.5.188"
+      ]
+    ]
+  },
+  "gif": "config-effect/ManagerAppConfig.shutDownServerOnServiceAppDeath.gif",
+  "captured": "2026-11-23T04:58:05"
+}

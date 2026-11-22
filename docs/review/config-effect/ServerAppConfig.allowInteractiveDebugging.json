@@ -1,0 +1,157 @@
+{
+  "switch": "ServerAppConfig.allowInteractiveDebugging",
+  "class": "ServerAppConfig",
+  "name": "allowInteractiveDebugging",
+  "xml": "allowInteractiveDebugging",
+  "default": "(getter)",
+  "off_diff": {
+    "baseapp": [
+      [
+        "INFO: [Config] allowInteractiveDebugging = false",
+        "TRACE: BaseApp::removeProxy: Removing proxy id addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id has disconnected (Requested by client)"
+      ],
+      [
+        "INFO: [Config] allowInteractiveDebugging = true (default: false)",
+        "TRACE: BaseApp::removeProxy: Removing proxy id 2 addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id 2 has disconnected (Requested by client)"
+      ]
+    ],
+    "baseappmgr": [
+      [
+        "INFO: [Config] allowInteractiveDebugging = false"
+      ],
+      [
+        "INFO: [Config] allowInteractiveDebugging = true (default: false)"
+      ]
+    ],
+    "cellapp": [
+      [
+        "INFO: [Config] allowInteractiveDebugging = false"
+      ],
+      [
+        "INFO: [Config] allowInteractiveDebugging = true (default: false)",
+        "WARNING: BufferedEntityMessages::playBufferedMessages: There were buffered messages. Played 1 of 1",
+        "WARNING: EntityMessageHandler::handleMessage: No time left in tick . Buffering 'createEntityNearEntity' and similar messages this tick. Num previously in buffer = 0."
+      ]
+    ],
+    "cellappmgr": [
+      [
+        "INFO: CellAppMgr::handleCellAppMgrBirth: 192.168.5.188",
+        "INFO: [Config] allowInteractiveDebugging = false",
+        "INFO: [Network] CellAppMgr::handleBaseAppMgrBirth: 192.168.5.188"
+      ],
+      [
+        "INFO: [Config] allowInteractiveDebugging = true (default: false)"
+      ]
+    ],
+    "dbapp": [
+      [
+        "INFO: [Config] allowInteractiveDebugging = false"
+      ],
+      [
+        "INFO: [Config] allowInteractiveDebugging = true (default: false)"
+      ]
+    ],
+    "dbappmgr": [
+      [
+        "INFO: [Config] allowInteractiveDebugging = false"
+      ],
+      [
+        "INFO: [Config] allowInteractiveDebugging = true (default: false)"
+      ]
+    ],
+    "loginapp": [
+      [
+        "INFO: [Config] allowInteractiveDebugging = false"
+      ],
+      [
+        "INFO: [Config] allowInteractiveDebugging = true (default: false)"
+      ]
+    ],
+    "serviceapp": [
+      [
+        "INFO: [Config] allowInteractiveDebugging = false"
+      ],
+      [
+        "INFO: [Config] allowInteractiveDebugging = true (default: false)"
+      ]
+    ]
+  },
+  "on_diff": {
+    "baseapp": [
+      [
+        "INFO: [Config] allowInteractiveDebugging = false",
+        "TRACE: BaseApp::removeProxy: Removing proxy id addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id has disconnected (Requested by client)"
+      ],
+      [
+        "INFO: [Config] allowInteractiveDebugging = true (default: false)",
+        "TRACE: BaseApp::removeProxy: Removing proxy id 2 addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id 2 has disconnected (Requested by client)"
+      ]
+    ],
+    "baseappmgr": [
+      [
+        "INFO: [Config] allowInteractiveDebugging = false"
+      ],
+      [
+        "INFO: [Config] allowInteractiveDebugging = true (default: false)"
+      ]
+    ],
+    "cellapp": [
+      [
+        "INFO: [Config] allowInteractiveDebugging = false"
+      ],
+      [
+        "INFO: [Config] allowInteractiveDebugging = true (default: false)",
+        "WARNING: BufferedEntityMessages::playBufferedMessages: There were buffered messages. Played 1 of 1",
+        "WARNING: EntityMessageHandler::handleMessage: No time left in tick . Buffering 'createEntityNearEntity' and similar messages this tick. Num previously in buffer = 0."
+      ]
+    ],
+    "cellappmgr": [
+      [
+        "INFO: CellAppMgr::handleCellAppMgrBirth: 192.168.5.188",
+        "INFO: [Config] allowInteractiveDebugging = false",
+        "INFO: [Network] CellAppMgr::handleBaseAppMgrBirth: 192.168.5.188"
+      ],
+      [
+        "INFO: [Config] allowInteractiveDebugging = true (default: false)"
+      ]
+    ],
+    "dbapp": [
+      [
+        "INFO: [Config] allowInteractiveDebugging = false"
+      ],
+      [
+        "INFO: [Config] allowInteractiveDebugging = true (default: false)"
+      ]
+    ],
+    "dbappmgr": [
+      [
+        "INFO: [Config] allowInteractiveDebugging = false"
+      ],
+      [
+        "INFO: [Config] allowInteractiveDebugging = true (default: false)"
+      ]
+    ],
+    "loginapp": [
+      [
+        "INFO: [Config] allowInteractiveDebugging = false"
+      ],
+      [
+        "INFO: [Config] allowInteractiveDebugging = true (default: false)"
+      ]
+    ],
+    "serviceapp": [
+      [
+        "INFO: [Config] allowInteractiveDebugging = false"
+      ],
+      [
+        "INFO: [Config] allowInteractiveDebugging = true (default: false)"
+      ]
+    ]
+  },
+  "gif": "config-effect/ServerAppConfig.allowInteractiveDebugging.gif",
+  "captured": "2026-11-23T05:03:00"
+}

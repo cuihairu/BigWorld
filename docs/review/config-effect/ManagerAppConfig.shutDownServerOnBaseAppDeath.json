@@ -1,0 +1,65 @@
+{
+  "switch": "ManagerAppConfig.shutDownServerOnBaseAppDeath",
+  "class": "ManagerAppConfig",
+  "name": "shutDownServerOnBaseAppDeath",
+  "xml": "shutDownServerOnBaseAppDeath",
+  "default": "false",
+  "off_diff": {
+    "baseapp": [
+      [
+        "TRACE: BaseApp::removeProxy: Removing proxy id addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id has disconnected (Requested by client)"
+      ],
+      [
+        "TRACE: BaseApp::removeProxy: Removing proxy id 2 addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id 2 has disconnected (Requested by client)"
+      ]
+    ],
+    "baseappmgr": [
+      [
+        "INFO: [Config] shutDownServerOnBaseAppDeath = false"
+      ],
+      [
+        "INFO: [Config] shutDownServerOnBaseAppDeath = true (default: false)"
+      ]
+    ],
+    "cellappmgr": [
+      [
+        "INFO: [Config] shutDownServerOnBaseAppDeath = false"
+      ],
+      [
+        "INFO: [Config] shutDownServerOnBaseAppDeath = true (default: false)"
+      ]
+    ]
+  },
+  "on_diff": {
+    "baseapp": [
+      [
+        "TRACE: BaseApp::removeProxy: Removing proxy id addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id has disconnected (Requested by client)"
+      ],
+      [
+        "TRACE: BaseApp::removeProxy: Removing proxy id 2 addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id 2 has disconnected (Requested by client)"
+      ]
+    ],
+    "baseappmgr": [
+      [
+        "INFO: [Config] shutDownServerOnBaseAppDeath = false"
+      ],
+      [
+        "INFO: [Config] shutDownServerOnBaseAppDeath = true (default: false)"
+      ]
+    ],
+    "cellappmgr": [
+      [
+        "INFO: [Config] shutDownServerOnBaseAppDeath = false"
+      ],
+      [
+        "INFO: [Config] shutDownServerOnBaseAppDeath = true (default: false)"
+      ]
+    ]
+  },
+  "gif": "config-effect/ManagerAppConfig.shutDownServerOnBaseAppDeath.gif",
+  "captured": "2026-11-23T04:54:50"
+}

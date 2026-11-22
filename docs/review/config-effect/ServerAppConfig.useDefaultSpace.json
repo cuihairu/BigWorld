@@ -1,0 +1,161 @@
+{
+  "switch": "ServerAppConfig.useDefaultSpace",
+  "class": "ServerAppConfig",
+  "name": "useDefaultSpace",
+  "xml": "useDefaultSpace",
+  "default": "false",
+  "off_diff": {
+    "baseapp": [
+      [
+        "INFO: [Config] useDefaultSpace = false"
+      ],
+      [
+        "INFO: [Config] useDefaultSpace = true (default: false)"
+      ]
+    ],
+    "baseappmgr": [
+      [
+        "INFO: [Config] useDefaultSpace = false"
+      ],
+      [
+        "INFO: [Config] useDefaultSpace = true (default: false)"
+      ]
+    ],
+    "cellapp": [
+      [
+        "INFO: [Config] useDefaultSpace = false"
+      ],
+      [
+        "INFO: CellApp::addCell: Space = 1",
+        "INFO: [Config] useDefaultSpace = true (default: false)"
+      ]
+    ],
+    "cellappmgr": [
+      [
+        "INFO: [Config] useDefaultSpace = false"
+      ],
+      [
+        "INFO: CellAppMgr::findSpace: Creating default space.",
+        "INFO: CellAppMgr::handleCellAppMgrBirth: 192.168.5.188",
+        "INFO: Space::addCell: Space 1. CellApp 1 (192.168.5.188)",
+        "INFO: [Config] useDefaultSpace = true (default: false)"
+      ]
+    ],
+    "client": [
+      [],
+      [
+        "TRACE: LoginRequest::handleMessage: Attempt #1: Received reply from 192.168.5.188 (after 0.2s)"
+      ]
+    ],
+    "dbapp": [
+      [
+        "INFO: [Config] useDefaultSpace = false"
+      ],
+      [
+        "INFO: [Config] useDefaultSpace = true (default: false)"
+      ]
+    ],
+    "dbappmgr": [
+      [
+        "INFO: [Config] useDefaultSpace = false"
+      ],
+      [
+        "INFO: [Config] useDefaultSpace = true (default: false)"
+      ]
+    ],
+    "loginapp": [
+      [
+        "INFO: [Config] useDefaultSpace = false"
+      ],
+      [
+        "INFO: [Config] useDefaultSpace = true (default: false)"
+      ]
+    ],
+    "serviceapp": [
+      [
+        "INFO: [Config] useDefaultSpace = false"
+      ],
+      [
+        "INFO: [Config] useDefaultSpace = true (default: false)"
+      ]
+    ]
+  },
+  "on_diff": {
+    "baseapp": [
+      [
+        "INFO: [Config] useDefaultSpace = false"
+      ],
+      [
+        "INFO: [Config] useDefaultSpace = true (default: false)"
+      ]
+    ],
+    "baseappmgr": [
+      [
+        "INFO: [Config] useDefaultSpace = false"
+      ],
+      [
+        "INFO: [Config] useDefaultSpace = true (default: false)"
+      ]
+    ],
+    "cellapp": [
+      [
+        "INFO: [Config] useDefaultSpace = false"
+      ],
+      [
+        "INFO: CellApp::addCell: Space = 1",
+        "INFO: [Config] useDefaultSpace = true (default: false)"
+      ]
+    ],
+    "cellappmgr": [
+      [
+        "INFO: [Config] useDefaultSpace = false"
+      ],
+      [
+        "INFO: CellAppMgr::findSpace: Creating default space.",
+        "INFO: CellAppMgr::handleCellAppMgrBirth: 192.168.5.188",
+        "INFO: Space::addCell: Space 1. CellApp 1 (192.168.5.188)",
+        "INFO: [Config] useDefaultSpace = true (default: false)"
+      ]
+    ],
+    "client": [
+      [],
+      [
+        "TRACE: LoginRequest::handleMessage: Attempt #1: Received reply from 192.168.5.188 (after 0.2s)"
+      ]
+    ],
+    "dbapp": [
+      [
+        "INFO: [Config] useDefaultSpace = false"
+      ],
+      [
+        "INFO: [Config] useDefaultSpace = true (default: false)"
+      ]
+    ],
+    "dbappmgr": [
+      [
+        "INFO: [Config] useDefaultSpace = false"
+      ],
+      [
+        "INFO: [Config] useDefaultSpace = true (default: false)"
+      ]
+    ],
+    "loginapp": [
+      [
+        "INFO: [Config] useDefaultSpace = false"
+      ],
+      [
+        "INFO: [Config] useDefaultSpace = true (default: false)"
+      ]
+    ],
+    "serviceapp": [
+      [
+        "INFO: [Config] useDefaultSpace = false"
+      ],
+      [
+        "INFO: [Config] useDefaultSpace = true (default: false)"
+      ]
+    ]
+  },
+  "gif": "config-effect/ServerAppConfig.useDefaultSpace.gif",
+  "captured": "2026-11-23T05:07:52"
+}

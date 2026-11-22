@@ -1,0 +1,69 @@
+{
+  "switch": "BaseAppConfig.warnOnNoDef",
+  "class": "BaseAppConfig",
+  "name": "warnOnNoDef",
+  "xml": "baseApp/warnOnNoDef",
+  "default": "true",
+  "off_diff": {
+    "baseapp": [
+      [
+        "INFO: [Config] baseApp/warnOnNoDef = false (default: true)",
+        "NOTICE: [Config] It is recommended to have baseApp/warnOnNoDef set to true and to make use of <TempProperties> section in the .def files",
+        "TRACE: BaseApp::removeProxy: Removing proxy id 1 addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id 1 has disconnected (Requested by client)"
+      ],
+      [
+        "INFO: [Config] baseApp/warnOnNoDef = true",
+        "TRACE: BaseApp::removeProxy: Removing proxy id 2 addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id 2 has disconnected (Requested by client)"
+      ]
+    ],
+    "cellappmgr": [
+      [
+        "INFO: [Network] CellAppMgr::handleBaseAppMgrBirth: 192.168.5.188"
+      ],
+      []
+    ],
+    "serviceapp": [
+      [
+        "INFO: [Config] baseApp/warnOnNoDef = false (default: true)",
+        "NOTICE: [Config] It is recommended to have baseApp/warnOnNoDef set to true and to make use of <TempProperties> section in the .def files"
+      ],
+      [
+        "INFO: [Config] baseApp/warnOnNoDef = true"
+      ]
+    ]
+  },
+  "on_diff": {
+    "baseapp": [
+      [
+        "INFO: [Config] baseApp/warnOnNoDef = false (default: true)",
+        "NOTICE: [Config] It is recommended to have baseApp/warnOnNoDef set to true and to make use of <TempProperties> section in the .def files",
+        "TRACE: BaseApp::removeProxy: Removing proxy id 1 addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id 1 has disconnected (Requested by client)"
+      ],
+      [
+        "INFO: [Config] baseApp/warnOnNoDef = true",
+        "TRACE: BaseApp::removeProxy: Removing proxy id 2 addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id 2 has disconnected (Requested by client)"
+      ]
+    ],
+    "cellappmgr": [
+      [
+        "INFO: [Network] CellAppMgr::handleBaseAppMgrBirth: 192.168.5.188"
+      ],
+      []
+    ],
+    "serviceapp": [
+      [
+        "INFO: [Config] baseApp/warnOnNoDef = false (default: true)",
+        "NOTICE: [Config] It is recommended to have baseApp/warnOnNoDef set to true and to make use of <TempProperties> section in the .def files"
+      ],
+      [
+        "INFO: [Config] baseApp/warnOnNoDef = true"
+      ]
+    ]
+  },
+  "gif": "config-effect/BaseAppConfig.warnOnNoDef.gif",
+  "captured": "2026-11-23T02:46:18"
+}

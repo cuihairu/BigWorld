@@ -1,0 +1,61 @@
+{
+  "switch": "CellAppConfig.fastShutdown",
+  "class": "CellAppConfig",
+  "name": "fastShutdown",
+  "xml": "cellApp/fastShutdown",
+  "default": "true",
+  "off_diff": {
+    "baseapp": [
+      [
+        "TRACE: BaseApp::removeProxy: Removing proxy id addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id has disconnected (Requested by client)"
+      ],
+      [
+        "TRACE: BaseApp::removeProxy: Removing proxy id 1 addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id 1 has disconnected (Requested by client)"
+      ]
+    ],
+    "cellapp": [
+      [
+        "INFO: [Config] cellApp/fastShutdown = false (default: true)"
+      ],
+      [
+        "INFO: [Config] cellApp/fastShutdown = true"
+      ]
+    ],
+    "client": [
+      [
+        "TRACE: LoginRequest::handleMessage: Attempt #1: Received reply from 192.168.5.188 (after 0.0s)"
+      ],
+      []
+    ]
+  },
+  "on_diff": {
+    "baseapp": [
+      [
+        "TRACE: BaseApp::removeProxy: Removing proxy id addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id has disconnected (Requested by client)"
+      ],
+      [
+        "TRACE: BaseApp::removeProxy: Removing proxy id 1 addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id 1 has disconnected (Requested by client)"
+      ]
+    ],
+    "cellapp": [
+      [
+        "INFO: [Config] cellApp/fastShutdown = false (default: true)"
+      ],
+      [
+        "INFO: [Config] cellApp/fastShutdown = true"
+      ]
+    ],
+    "client": [
+      [
+        "TRACE: LoginRequest::handleMessage: Attempt #1: Received reply from 192.168.5.188 (after 0.0s)"
+      ],
+      []
+    ]
+  },
+  "gif": "config-effect/CellAppConfig.fastShutdown.gif",
+  "captured": "2026-11-23T02:58:04"
+}

@@ -1,0 +1,29 @@
+{
+  "switch": "LoginAppConfig.verboseLoginFailures",
+  "class": "LoginAppConfig",
+  "name": "verboseLoginFailures",
+  "xml": "loginApp/verboseLoginFailures",
+  "default": "false",
+  "off_diff": {
+    "loginapp": [
+      [
+        "INFO: [Config] loginApp/verboseLoginFailures = false"
+      ],
+      [
+        "INFO: [Config] loginApp/verboseLoginFailures = true (default: false)"
+      ]
+    ]
+  },
+  "on_diff": {
+    "loginapp": [
+      [
+        "INFO: [Config] loginApp/verboseLoginFailures = false"
+      ],
+      [
+        "INFO: [Config] loginApp/verboseLoginFailures = true (default: false)"
+      ]
+    ]
+  },
+  "gif": "config-effect/LoginAppConfig.verboseLoginFailures.gif",
+  "captured": "2026-11-23T04:49:50"
+}

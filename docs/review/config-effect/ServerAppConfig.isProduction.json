@@ -1,0 +1,153 @@
+{
+  "switch": "ServerAppConfig.isProduction",
+  "class": "ServerAppConfig",
+  "name": "isProduction",
+  "xml": "production",
+  "default": "true",
+  "off_diff": {
+    "baseapp": [
+      [
+        "INFO: [Config] production = false (default: true)",
+        "TRACE: BaseApp::removeProxy: Removing proxy id addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id has disconnected (Requested by client)"
+      ],
+      [
+        "INFO: [Config] production = true",
+        "TRACE: BaseApp::removeProxy: Removing proxy id 1 addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id 1 has disconnected (Requested by client)"
+      ]
+    ],
+    "baseappmgr": [
+      [
+        "INFO: [Config] production = false (default: true)"
+      ],
+      [
+        "INFO: [Config] production = true"
+      ]
+    ],
+    "cellapp": [
+      [
+        "INFO: [Config] production = false (default: true)"
+      ],
+      [
+        "INFO: Production Mode: Treating other entities as ghosts enabled. This may reduce your performance.",
+        "INFO: [Config] production = true"
+      ]
+    ],
+    "cellappmgr": [
+      [
+        "INFO: [Config] production = false (default: true)"
+      ],
+      [
+        "INFO: [Config] production = true",
+        "INFO: [Network] CellAppMgr::handleBaseAppMgrBirth: 192.168.5.188"
+      ]
+    ],
+    "dbapp": [
+      [
+        "INFO: [Config] production = false (default: true)"
+      ],
+      [
+        "INFO: [Config] production = true"
+      ]
+    ],
+    "dbappmgr": [
+      [
+        "INFO: [Config] production = false (default: true)"
+      ],
+      [
+        "INFO: [Config] production = true"
+      ]
+    ],
+    "loginapp": [
+      [
+        "INFO: [Config] production = false (default: true)"
+      ],
+      [
+        "INFO: [Config] production = true"
+      ]
+    ],
+    "serviceapp": [
+      [
+        "INFO: [Config] production = false (default: true)"
+      ],
+      [
+        "INFO: [Config] production = true"
+      ]
+    ]
+  },
+  "on_diff": {
+    "baseapp": [
+      [
+        "INFO: [Config] production = false (default: true)",
+        "TRACE: BaseApp::removeProxy: Removing proxy id addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id has disconnected (Requested by client)"
+      ],
+      [
+        "INFO: [Config] production = true",
+        "TRACE: BaseApp::removeProxy: Removing proxy id 1 addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id 1 has disconnected (Requested by client)"
+      ]
+    ],
+    "baseappmgr": [
+      [
+        "INFO: [Config] production = false (default: true)"
+      ],
+      [
+        "INFO: [Config] production = true"
+      ]
+    ],
+    "cellapp": [
+      [
+        "INFO: [Config] production = false (default: true)"
+      ],
+      [
+        "INFO: Production Mode: Treating other entities as ghosts enabled. This may reduce your performance.",
+        "INFO: [Config] production = true"
+      ]
+    ],
+    "cellappmgr": [
+      [
+        "INFO: [Config] production = false (default: true)"
+      ],
+      [
+        "INFO: [Config] production = true",
+        "INFO: [Network] CellAppMgr::handleBaseAppMgrBirth: 192.168.5.188"
+      ]
+    ],
+    "dbapp": [
+      [
+        "INFO: [Config] production = false (default: true)"
+      ],
+      [
+        "INFO: [Config] production = true"
+      ]
+    ],
+    "dbappmgr": [
+      [
+        "INFO: [Config] production = false (default: true)"
+      ],
+      [
+        "INFO: [Config] production = true"
+      ]
+    ],
+    "loginapp": [
+      [
+        "INFO: [Config] production = false (default: true)"
+      ],
+      [
+        "INFO: [Config] production = true"
+      ]
+    ],
+    "serviceapp": [
+      [
+        "INFO: [Config] production = false (default: true)"
+      ],
+      [
+        "INFO: [Config] production = true"
+      ]
+    ]
+  },
+  "gif": "config-effect/ServerAppConfig.isProduction.gif",
+  "captured": "2026-11-23T05:06:16"
+}

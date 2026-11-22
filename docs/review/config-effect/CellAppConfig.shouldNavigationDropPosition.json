@@ -1,0 +1,61 @@
+{
+  "switch": "CellAppConfig.shouldNavigationDropPosition",
+  "class": "CellAppConfig",
+  "name": "shouldNavigationDropPosition",
+  "xml": "cellApp/shouldNavigationDropPosition",
+  "default": "false",
+  "off_diff": {
+    "baseapp": [
+      [
+        "TRACE: BaseApp::removeProxy: Removing proxy id addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id has disconnected (Requested by client)"
+      ],
+      [
+        "TRACE: BaseApp::removeProxy: Removing proxy id 1 addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id 1 has disconnected (Requested by client)"
+      ]
+    ],
+    "cellapp": [
+      [
+        "INFO: [Config] cellApp/shouldNavigationDropPosition = false"
+      ],
+      [
+        "INFO: [Config] cellApp/shouldNavigationDropPosition = true (default: false)"
+      ]
+    ],
+    "cellappmgr": [
+      [
+        "INFO: [Network] CellAppMgr::handleBaseAppMgrBirth: 192.168.5.188"
+      ],
+      []
+    ]
+  },
+  "on_diff": {
+    "baseapp": [
+      [
+        "TRACE: BaseApp::removeProxy: Removing proxy id addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id has disconnected (Requested by client)"
+      ],
+      [
+        "TRACE: BaseApp::removeProxy: Removing proxy id 1 addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id 1 has disconnected (Requested by client)"
+      ]
+    ],
+    "cellapp": [
+      [
+        "INFO: [Config] cellApp/shouldNavigationDropPosition = false"
+      ],
+      [
+        "INFO: [Config] cellApp/shouldNavigationDropPosition = true (default: false)"
+      ]
+    ],
+    "cellappmgr": [
+      [
+        "INFO: [Network] CellAppMgr::handleBaseAppMgrBirth: 192.168.5.188"
+      ],
+      []
+    ]
+  },
+  "gif": "config-effect/CellAppConfig.shouldNavigationDropPosition.gif",
+  "captured": "2026-11-23T03:03:06"
+}

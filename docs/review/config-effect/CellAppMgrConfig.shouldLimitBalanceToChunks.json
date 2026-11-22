@@ -1,0 +1,63 @@
+{
+  "switch": "CellAppMgrConfig.shouldLimitBalanceToChunks",
+  "class": "CellAppMgrConfig",
+  "name": "shouldLimitBalanceToChunks",
+  "xml": "cellAppMgr/shouldLimitBalanceToChunks",
+  "default": "true",
+  "off_diff": {
+    "baseapp": [
+      [
+        "TRACE: BaseApp::removeProxy: Removing proxy id 2 addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id 2 has disconnected (Requested by client)"
+      ],
+      [
+        "TRACE: BaseApp::removeProxy: Removing proxy id 1 addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id 1 has disconnected (Requested by client)"
+      ]
+    ],
+    "cellappmgr": [
+      [
+        "INFO: [Config] cellAppMgr/shouldLimitBalanceToChunks = false (default: true)",
+        "INFO: [Network] CellAppMgr::handleBaseAppMgrBirth: 192.168.5.188"
+      ],
+      [
+        "INFO: [Config] cellAppMgr/shouldLimitBalanceToChunks = true"
+      ]
+    ],
+    "client": [
+      [],
+      [
+        "TRACE: LoginRequest::handleMessage: Attempt #1: Received reply from 192.168.5.188 (after 0.2s)"
+      ]
+    ]
+  },
+  "on_diff": {
+    "baseapp": [
+      [
+        "TRACE: BaseApp::removeProxy: Removing proxy id 2 addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id 2 has disconnected (Requested by client)"
+      ],
+      [
+        "TRACE: BaseApp::removeProxy: Removing proxy id 1 addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id 1 has disconnected (Requested by client)"
+      ]
+    ],
+    "cellappmgr": [
+      [
+        "INFO: [Config] cellAppMgr/shouldLimitBalanceToChunks = false (default: true)",
+        "INFO: [Network] CellAppMgr::handleBaseAppMgrBirth: 192.168.5.188"
+      ],
+      [
+        "INFO: [Config] cellAppMgr/shouldLimitBalanceToChunks = true"
+      ]
+    ],
+    "client": [
+      [],
+      [
+        "TRACE: LoginRequest::handleMessage: Attempt #1: Received reply from 192.168.5.188 (after 0.2s)"
+      ]
+    ]
+  },
+  "gif": "config-effect/CellAppMgrConfig.shouldLimitBalanceToChunks.gif",
+  "captured": "2026-11-23T03:09:42"
+}

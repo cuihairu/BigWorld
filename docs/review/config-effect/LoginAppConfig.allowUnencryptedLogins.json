@@ -1,0 +1,127 @@
+{
+  "switch": "LoginAppConfig.allowUnencryptedLogins",
+  "class": "LoginAppConfig",
+  "name": "allowUnencryptedLogins",
+  "xml": "loginApp/allowUnencryptedLogins",
+  "default": "false",
+  "off_diff": {
+    "baseapp": [
+      [
+        "TRACE: BaseApp::removeProxy: Removing proxy id addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id has disconnected (Requested by client)"
+      ],
+      [
+        "TRACE: BaseApp::removeProxy: Removing proxy id 1 addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id 1 has disconnected (Requested by client)",
+        "WARNING: /home/cui/workspaces/BigWorld/programming/bigworld/server/baseapp/baseapp.cpp: Profile backup",
+        "WARNING: /home/cui/workspaces/BigWorld/programming/bigworld/server/baseapp/baseapp.cpp: Profile tickGameTime"
+      ]
+    ],
+    "baseappmgr": [
+      [
+        "DEBUG: [ProcessIP] BaseAppMgr::finishedInit: now have 1 base apps and 1 service apps ready"
+      ],
+      [
+        "DEBUG: [ProcessIP] BaseAppMgr::finishedInit: now have 2 base apps and 0 service apps ready",
+        "WARNING: [Server] ServerApp::onTickPeriod: Last game tick . Expected 0.10."
+      ]
+    ],
+    "cellapp": [
+      [],
+      [
+        "WARNING: /home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/cellapp.cpp: Profile backup",
+        "WARNING: /home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/cellapp.cpp: Profile gameTick"
+      ]
+    ],
+    "client": [
+      [
+        "TRACE: LoginRequest::handleMessage: Attempt #1: Received reply from 192.168.5.188 (after 0.2s)"
+      ],
+      []
+    ],
+    "dbapp": [
+      [
+        "WARNING: [Network] PacketReceiver::handleInputNotification: last received from 192.168.5.188, stopping socket processing after .525ms (processed 1 packets), receive queue at 0 bytesINFO: ChannelMap::find: Creating anonymous channel to 192.168.5.188"
+      ],
+      [
+        "WARNING: [Network] PacketReceiver::handleInputNotification: last received from 192.168.5.188, stopping socket processing after .620ms (processed 1 packets), receive queue at 0 bytesINFO: ChannelMap::find: Creating anonymous channel to 192.168.5.188"
+      ]
+    ],
+    "dbappmgr": [
+      [],
+      [
+        "WARNING: [Server] ServerApp::onTickPeriod: Last game tick . Expected 0.10."
+      ]
+    ],
+    "loginapp": [
+      [
+        "INFO: [Config] loginApp/allowUnencryptedLogins = false"
+      ],
+      [
+        "INFO: [Config] loginApp/allowUnencryptedLogins = true (default: false)",
+        "WARNING: [Server] ServerApp::onTickPeriod: Last game tick . Expected 0.10."
+      ]
+    ]
+  },
+  "on_diff": {
+    "baseapp": [
+      [
+        "TRACE: BaseApp::removeProxy: Removing proxy id addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id has disconnected (Requested by client)"
+      ],
+      [
+        "TRACE: BaseApp::removeProxy: Removing proxy id 1 addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id 1 has disconnected (Requested by client)",
+        "WARNING: /home/cui/workspaces/BigWorld/programming/bigworld/server/baseapp/baseapp.cpp: Profile backup",
+        "WARNING: /home/cui/workspaces/BigWorld/programming/bigworld/server/baseapp/baseapp.cpp: Profile tickGameTime"
+      ]
+    ],
+    "baseappmgr": [
+      [
+        "DEBUG: [ProcessIP] BaseAppMgr::finishedInit: now have 1 base apps and 1 service apps ready"
+      ],
+      [
+        "DEBUG: [ProcessIP] BaseAppMgr::finishedInit: now have 2 base apps and 0 service apps ready",
+        "WARNING: [Server] ServerApp::onTickPeriod: Last game tick . Expected 0.10."
+      ]
+    ],
+    "cellapp": [
+      [],
+      [
+        "WARNING: /home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/cellapp.cpp: Profile backup",
+        "WARNING: /home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/cellapp.cpp: Profile gameTick"
+      ]
+    ],
+    "client": [
+      [
+        "TRACE: LoginRequest::handleMessage: Attempt #1: Received reply from 192.168.5.188 (after 0.2s)"
+      ],
+      []
+    ],
+    "dbapp": [
+      [
+        "WARNING: [Network] PacketReceiver::handleInputNotification: last received from 192.168.5.188, stopping socket processing after .525ms (processed 1 packets), receive queue at 0 bytesINFO: ChannelMap::find: Creating anonymous channel to 192.168.5.188"
+      ],
+      [
+        "WARNING: [Network] PacketReceiver::handleInputNotification: last received from 192.168.5.188, stopping socket processing after .620ms (processed 1 packets), receive queue at 0 bytesINFO: ChannelMap::find: Creating anonymous channel to 192.168.5.188"
+      ]
+    ],
+    "dbappmgr": [
+      [],
+      [
+        "WARNING: [Server] ServerApp::onTickPeriod: Last game tick . Expected 0.10."
+      ]
+    ],
+    "loginapp": [
+      [
+        "INFO: [Config] loginApp/allowUnencryptedLogins = false"
+      ],
+      [
+        "INFO: [Config] loginApp/allowUnencryptedLogins = true (default: false)",
+        "WARNING: [Server] ServerApp::onTickPeriod: Last game tick . Expected 0.10."
+      ]
+    ]
+  },
+  "gif": "config-effect/LoginAppConfig.allowUnencryptedLogins.gif",
+  "captured": "2026-11-23T03:21:40"
+}

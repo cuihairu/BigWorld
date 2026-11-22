@@ -1,0 +1,87 @@
+{
+  "switch": "LoginAppConfig.verboseExternalInterface",
+  "class": "LoginAppConfig",
+  "name": "verboseExternalInterface",
+  "xml": "loginApp/verboseExternalInterface",
+  "default": "false",
+  "off_diff": {
+    "client": [
+      [],
+      [
+        "DEBUG: LoginRequest::onTransportConnect: Attempt #10 to LoginApp 192.168.5.188; took 0.0s, time left = 8.0s",
+        "DEBUG: LoginRequest::onTransportConnect: Attempt #7 to LoginApp 192.168.5.188; took 0.0s, time left = 8.0s",
+        "DEBUG: LoginRequest::onTransportConnect: Attempt #8 to LoginApp 192.168.5.188; took 0.0s, time left = 8.0s",
+        "DEBUG: LoginRequest::onTransportConnect: Attempt #9 to LoginApp 192.168.5.188; took 0.0s, time left = 8.0s",
+        "TRACE: LoginHandler::sendNextRequest: From 192.168.5.188, attempt #10 / 10 to LoginApp 192.168.5.188",
+        "TRACE: LoginHandler::sendNextRequest: From 192.168.5.188, attempt #7 / 10 to LoginApp 192.168.5.188",
+        "TRACE: LoginHandler::sendNextRequest: From 192.168.5.188, attempt #8 / 10 to LoginApp 192.168.5.188",
+        "TRACE: LoginHandler::sendNextRequest: From 192.168.5.188, attempt #9 / 10 to LoginApp 192.168.5.188",
+        "TRACE: LoginRequest::handleException: Attempt #1: (no channel): REASON_TIMER_EXPIRED (time since start = 8.0s)",
+        "TRACE: LoginRequest::handleException: Attempt #2: (no channel): REASON_TIMER_EXPIRED (time since start = 8.0s)",
+        "TRACE: LoginRequest::handleException: Attempt #3: (no channel): REASON_TIMER_EXPIRED (time since start = 8.8s)",
+        "TRACE: LoginRequest::handleException: Attempt #4: (no channel): REASON_TIMER_EXPIRED (time since start = 8.2s)",
+        "TRACE: LoginRequest::handleException: Attempt #5: (no channel): REASON_TIMER_EXPIRED (time since start = 8.5s)",
+        "WARNING: LoginHandler::onRequestFailed: Request to LoginApp 192.168.5.188, attempt #1 failed: \"Failed to send request to LoginApp 192.168.5.188\" (REASON_TIMER_EXPIRED)",
+        "WARNING: LoginHandler::onRequestFailed: Request to LoginApp 192.168.5.188, attempt #2 failed: \"Failed to send request to LoginApp 192.168.5.188\" (REASON_TIMER_EXPIRED)",
+        "WARNING: LoginHandler::onRequestFailed: Request to LoginApp 192.168.5.188, attempt #3 failed: \"Failed to send request to LoginApp 192.168.5.188\" (REASON_TIMER_EXPIRED)",
+        "WARNING: LoginHandler::onRequestFailed: Request to LoginApp 192.168.5.188, attempt #4 failed: \"Failed to send request to LoginApp 192.168.5.188\" (REASON_TIMER_EXPIRED)",
+        "WARNING: LoginHandler::onRequestFailed: Request to LoginApp 192.168.5.188, attempt #5 failed: \"Failed to send request to LoginApp 192.168.5.188\" (REASON_TIMER_EXPIRED)"
+      ]
+    ],
+    "dbapp": [
+      [],
+      [
+        "INFO: Creating table tbl_Account"
+      ]
+    ],
+    "loginapp": [
+      [
+        "INFO: [Config] loginApp/verboseExternalInterface = false"
+      ],
+      [
+        "INFO: [Config] loginApp/verboseExternalInterface = true (default: false)"
+      ]
+    ]
+  },
+  "on_diff": {
+    "client": [
+      [],
+      [
+        "DEBUG: LoginRequest::onTransportConnect: Attempt #10 to LoginApp 192.168.5.188; took 0.0s, time left = 8.0s",
+        "DEBUG: LoginRequest::onTransportConnect: Attempt #7 to LoginApp 192.168.5.188; took 0.0s, time left = 8.0s",
+        "DEBUG: LoginRequest::onTransportConnect: Attempt #8 to LoginApp 192.168.5.188; took 0.0s, time left = 8.0s",
+        "DEBUG: LoginRequest::onTransportConnect: Attempt #9 to LoginApp 192.168.5.188; took 0.0s, time left = 8.0s",
+        "TRACE: LoginHandler::sendNextRequest: From 192.168.5.188, attempt #10 / 10 to LoginApp 192.168.5.188",
+        "TRACE: LoginHandler::sendNextRequest: From 192.168.5.188, attempt #7 / 10 to LoginApp 192.168.5.188",
+        "TRACE: LoginHandler::sendNextRequest: From 192.168.5.188, attempt #8 / 10 to LoginApp 192.168.5.188",
+        "TRACE: LoginHandler::sendNextRequest: From 192.168.5.188, attempt #9 / 10 to LoginApp 192.168.5.188",
+        "TRACE: LoginRequest::handleException: Attempt #1: (no channel): REASON_TIMER_EXPIRED (time since start = 8.0s)",
+        "TRACE: LoginRequest::handleException: Attempt #2: (no channel): REASON_TIMER_EXPIRED (time since start = 8.0s)",
+        "TRACE: LoginRequest::handleException: Attempt #3: (no channel): REASON_TIMER_EXPIRED (time since start = 8.8s)",
+        "TRACE: LoginRequest::handleException: Attempt #4: (no channel): REASON_TIMER_EXPIRED (time since start = 8.2s)",
+        "TRACE: LoginRequest::handleException: Attempt #5: (no channel): REASON_TIMER_EXPIRED (time since start = 8.5s)",
+        "WARNING: LoginHandler::onRequestFailed: Request to LoginApp 192.168.5.188, attempt #1 failed: \"Failed to send request to LoginApp 192.168.5.188\" (REASON_TIMER_EXPIRED)",
+        "WARNING: LoginHandler::onRequestFailed: Request to LoginApp 192.168.5.188, attempt #2 failed: \"Failed to send request to LoginApp 192.168.5.188\" (REASON_TIMER_EXPIRED)",
+        "WARNING: LoginHandler::onRequestFailed: Request to LoginApp 192.168.5.188, attempt #3 failed: \"Failed to send request to LoginApp 192.168.5.188\" (REASON_TIMER_EXPIRED)",
+        "WARNING: LoginHandler::onRequestFailed: Request to LoginApp 192.168.5.188, attempt #4 failed: \"Failed to send request to LoginApp 192.168.5.188\" (REASON_TIMER_EXPIRED)",
+        "WARNING: LoginHandler::onRequestFailed: Request to LoginApp 192.168.5.188, attempt #5 failed: \"Failed to send request to LoginApp 192.168.5.188\" (REASON_TIMER_EXPIRED)"
+      ]
+    ],
+    "dbapp": [
+      [],
+      [
+        "INFO: Creating table tbl_Account"
+      ]
+    ],
+    "loginapp": [
+      [
+        "INFO: [Config] loginApp/verboseExternalInterface = false"
+      ],
+      [
+        "INFO: [Config] loginApp/verboseExternalInterface = true (default: false)"
+      ]
+    ]
+  },
+  "gif": "config-effect/LoginAppConfig.verboseExternalInterface.gif",
+  "captured": "2026-11-23T03:36:35"
+}

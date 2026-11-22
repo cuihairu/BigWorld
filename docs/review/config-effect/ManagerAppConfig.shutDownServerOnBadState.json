@@ -1,0 +1,45 @@
+{
+  "switch": "ManagerAppConfig.shutDownServerOnBadState",
+  "class": "ManagerAppConfig",
+  "name": "shutDownServerOnBadState",
+  "xml": "shutDownServerOnBadState",
+  "default": "true",
+  "off_diff": {
+    "baseappmgr": [
+      [
+        "INFO: [Config] shutDownServerOnBadState = false (default: true)"
+      ],
+      [
+        "INFO: [Config] shutDownServerOnBadState = true"
+      ]
+    ],
+    "cellappmgr": [
+      [
+        "INFO: [Config] shutDownServerOnBadState = false (default: true)"
+      ],
+      [
+        "INFO: [Config] shutDownServerOnBadState = true"
+      ]
+    ]
+  },
+  "on_diff": {
+    "baseappmgr": [
+      [
+        "INFO: [Config] shutDownServerOnBadState = false (default: true)"
+      ],
+      [
+        "INFO: [Config] shutDownServerOnBadState = true"
+      ]
+    ],
+    "cellappmgr": [
+      [
+        "INFO: [Config] shutDownServerOnBadState = false (default: true)"
+      ],
+      [
+        "INFO: [Config] shutDownServerOnBadState = true"
+      ]
+    ]
+  },
+  "gif": "config-effect/ManagerAppConfig.shutDownServerOnBadState.gif",
+  "captured": "2026-11-23T04:53:11"
+}

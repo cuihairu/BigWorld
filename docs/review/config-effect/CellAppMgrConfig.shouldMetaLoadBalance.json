@@ -1,0 +1,61 @@
+{
+  "switch": "CellAppMgrConfig.shouldMetaLoadBalance",
+  "class": "CellAppMgrConfig",
+  "name": "shouldMetaLoadBalance",
+  "xml": "cellAppMgr/shouldMetaLoadBalance",
+  "default": "(getter)",
+  "off_diff": {
+    "baseapp": [
+      [
+        "TRACE: BaseApp::removeProxy: Removing proxy id 1 addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id 1 has disconnected (Requested by client)"
+      ],
+      [
+        "TRACE: BaseApp::removeProxy: Removing proxy id addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id has disconnected (Requested by client)"
+      ]
+    ],
+    "cellappmgr": [
+      [
+        "INFO: [Config] cellAppMgr/shouldMetaLoadBalance = false (default: true)"
+      ],
+      [
+        "INFO: [Config] cellAppMgr/shouldMetaLoadBalance = true"
+      ]
+    ],
+    "client": [
+      [],
+      [
+        "TRACE: LoginRequest::handleMessage: Attempt #1: Received reply from 192.168.5.188 (after 0.2s)"
+      ]
+    ]
+  },
+  "on_diff": {
+    "baseapp": [
+      [
+        "TRACE: BaseApp::removeProxy: Removing proxy id 1 addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id 1 has disconnected (Requested by client)"
+      ],
+      [
+        "TRACE: BaseApp::removeProxy: Removing proxy id addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id has disconnected (Requested by client)"
+      ]
+    ],
+    "cellappmgr": [
+      [
+        "INFO: [Config] cellAppMgr/shouldMetaLoadBalance = false (default: true)"
+      ],
+      [
+        "INFO: [Config] cellAppMgr/shouldMetaLoadBalance = true"
+      ]
+    ],
+    "client": [
+      [],
+      [
+        "TRACE: LoginRequest::handleMessage: Attempt #1: Received reply from 192.168.5.188 (after 0.2s)"
+      ]
+    ]
+  },
+  "gif": "config-effect/CellAppMgrConfig.shouldMetaLoadBalance.gif",
+  "captured": "2026-11-23T03:11:24"
+}

@@ -1,0 +1,53 @@
+{
+  "switch": "BaseAppConfig.backUpUndefinedProperties",
+  "class": "BaseAppConfig",
+  "name": "backUpUndefinedProperties",
+  "xml": "baseApp/backUpUndefinedProperties",
+  "default": "false",
+  "off_diff": {
+    "baseapp": [
+      [
+        "INFO: [Config] baseApp/backUpUndefinedProperties = false",
+        "TRACE: BaseApp::removeProxy: Removing proxy id addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id has disconnected (Requested by client)"
+      ],
+      [
+        "INFO: [Config] baseApp/backUpUndefinedProperties = true (default: false)",
+        "TRACE: BaseApp::removeProxy: Removing proxy id 1 addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id 1 has disconnected (Requested by client)"
+      ]
+    ],
+    "serviceapp": [
+      [
+        "INFO: [Config] baseApp/backUpUndefinedProperties = false"
+      ],
+      [
+        "INFO: [Config] baseApp/backUpUndefinedProperties = true (default: false)"
+      ]
+    ]
+  },
+  "on_diff": {
+    "baseapp": [
+      [
+        "INFO: [Config] baseApp/backUpUndefinedProperties = false",
+        "TRACE: BaseApp::removeProxy: Removing proxy id addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id has disconnected (Requested by client)"
+      ],
+      [
+        "INFO: [Config] baseApp/backUpUndefinedProperties = true (default: false)",
+        "TRACE: BaseApp::removeProxy: Removing proxy id 1 addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id 1 has disconnected (Requested by client)"
+      ]
+    ],
+    "serviceapp": [
+      [
+        "INFO: [Config] baseApp/backUpUndefinedProperties = false"
+      ],
+      [
+        "INFO: [Config] baseApp/backUpUndefinedProperties = true (default: false)"
+      ]
+    ]
+  },
+  "gif": "config-effect/BaseAppConfig.backUpUndefinedProperties.gif",
+  "captured": "2026-11-23T02:34:37"
+}

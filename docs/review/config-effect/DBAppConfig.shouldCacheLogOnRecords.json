@@ -1,0 +1,41 @@
+{
+  "switch": "DBAppConfig.shouldCacheLogOnRecords",
+  "class": "DBAppConfig",
+  "name": "shouldCacheLogOnRecords",
+  "xml": "dbApp/shouldCacheLogOnRecords",
+  "default": "false",
+  "off_diff": {
+    "cellappmgr": [
+      [
+        "INFO: CellAppMgr::handleCellAppMgrBirth: 192.168.5.188"
+      ],
+      []
+    ],
+    "dbapp": [
+      [
+        "INFO: [Config] dbApp/shouldCacheLogOnRecords = false"
+      ],
+      [
+        "INFO: [Config] dbApp/shouldCacheLogOnRecords = true (default: false)"
+      ]
+    ]
+  },
+  "on_diff": {
+    "cellappmgr": [
+      [
+        "INFO: CellAppMgr::handleCellAppMgrBirth: 192.168.5.188"
+      ],
+      []
+    ],
+    "dbapp": [
+      [
+        "INFO: [Config] dbApp/shouldCacheLogOnRecords = false"
+      ],
+      [
+        "INFO: [Config] dbApp/shouldCacheLogOnRecords = true (default: false)"
+      ]
+    ]
+  },
+  "gif": "config-effect/DBAppConfig.shouldCacheLogOnRecords.gif",
+  "captured": "2026-11-23T03:14:46"
+}

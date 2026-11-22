@@ -1,0 +1,45 @@
+{
+  "switch": "ManagerAppConfig.isBadStateWithNoServiceApps",
+  "class": "ManagerAppConfig",
+  "name": "isBadStateWithNoServiceApps",
+  "xml": "isBadStateWithNoServiceApps",
+  "default": "false",
+  "off_diff": {
+    "baseappmgr": [
+      [
+        "INFO: [Config] isBadStateWithNoServiceApps = false"
+      ],
+      [
+        "INFO: [Config] isBadStateWithNoServiceApps = true (default: false)"
+      ]
+    ],
+    "cellappmgr": [
+      [
+        "INFO: [Config] isBadStateWithNoServiceApps = false"
+      ],
+      [
+        "INFO: [Config] isBadStateWithNoServiceApps = true (default: false)"
+      ]
+    ]
+  },
+  "on_diff": {
+    "baseappmgr": [
+      [
+        "INFO: [Config] isBadStateWithNoServiceApps = false"
+      ],
+      [
+        "INFO: [Config] isBadStateWithNoServiceApps = true (default: false)"
+      ]
+    ],
+    "cellappmgr": [
+      [
+        "INFO: [Config] isBadStateWithNoServiceApps = false"
+      ],
+      [
+        "INFO: [Config] isBadStateWithNoServiceApps = true (default: false)"
+      ]
+    ]
+  },
+  "gif": "config-effect/ManagerAppConfig.isBadStateWithNoServiceApps.gif",
+  "captured": "2026-11-23T04:51:31"
+}

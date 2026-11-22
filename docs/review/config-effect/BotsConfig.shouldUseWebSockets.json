@@ -1,0 +1,27 @@
+{
+  "switch": "BotsConfig.shouldUseWebSockets",
+  "class": "BotsConfig",
+  "name": "shouldUseWebSockets",
+  "xml": "bots/shouldUseWebSockets",
+  "default": "false",
+  "off_diff": {
+    "cellapp": [
+      [
+        "WARNING: BufferedEntityMessages::playBufferedMessages: There were buffered messages. Played 1 of 1",
+        "WARNING: EntityMessageHandler::handleMessage: No time left in tick . Buffering 'createEntityNearEntity' and similar messages this tick. Num previously in buffer = 0."
+      ],
+      []
+    ]
+  },
+  "on_diff": {
+    "cellapp": [
+      [
+        "WARNING: BufferedEntityMessages::playBufferedMessages: There were buffered messages. Played 1 of 1",
+        "WARNING: EntityMessageHandler::handleMessage: No time left in tick . Buffering 'createEntityNearEntity' and similar messages this tick. Num previously in buffer = 0."
+      ],
+      []
+    ]
+  },
+  "gif": "config-effect/BotsConfig.shouldUseWebSockets.gif",
+  "captured": "2026-11-23T02:54:44"
+}

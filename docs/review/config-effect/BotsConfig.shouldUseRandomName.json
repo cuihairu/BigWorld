@@ -1,0 +1,11 @@
+{
+  "switch": "BotsConfig.shouldUseRandomName",
+  "class": "BotsConfig",
+  "name": "shouldUseRandomName",
+  "xml": "bots/shouldUseRandomName",
+  "default": "true",
+  "off_diff": {},
+  "on_diff": {},
+  "gif": "config-effect/BotsConfig.shouldUseRandomName.gif",
+  "captured": "2026-11-23T02:49:34"
+}

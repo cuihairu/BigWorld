@@ -1,0 +1,65 @@
+{
+  "switch": "BaseAppConfig.verboseExternalInterface",
+  "class": "BaseAppConfig",
+  "name": "verboseExternalInterface",
+  "xml": "baseApp/verboseExternalInterface",
+  "default": "false",
+  "off_diff": {
+    "baseapp": [
+      [
+        "INFO: [Config] baseApp/verboseExternalInterface = false",
+        "TRACE: BaseApp::removeProxy: Removing proxy id 2 addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id 2 has disconnected (Requested by client)"
+      ],
+      [
+        "INFO: [Config] baseApp/verboseExternalInterface = true (default: false)",
+        "TRACE: BaseApp::removeProxy: Removing proxy id 1 addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id 1 has disconnected (Requested by client)"
+      ]
+    ],
+    "cellappmgr": [
+      [
+        "INFO: [Network] CellAppMgr::handleBaseAppMgrBirth: 192.168.5.188"
+      ],
+      []
+    ],
+    "serviceapp": [
+      [
+        "INFO: [Config] baseApp/verboseExternalInterface = false"
+      ],
+      [
+        "INFO: [Config] baseApp/verboseExternalInterface = true (default: false)"
+      ]
+    ]
+  },
+  "on_diff": {
+    "baseapp": [
+      [
+        "INFO: [Config] baseApp/verboseExternalInterface = false",
+        "TRACE: BaseApp::removeProxy: Removing proxy id 2 addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id 2 has disconnected (Requested by client)"
+      ],
+      [
+        "INFO: [Config] baseApp/verboseExternalInterface = true (default: false)",
+        "TRACE: BaseApp::removeProxy: Removing proxy id 1 addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id 1 has disconnected (Requested by client)"
+      ]
+    ],
+    "cellappmgr": [
+      [
+        "INFO: [Network] CellAppMgr::handleBaseAppMgrBirth: 192.168.5.188"
+      ],
+      []
+    ],
+    "serviceapp": [
+      [
+        "INFO: [Config] baseApp/verboseExternalInterface = false"
+      ],
+      [
+        "INFO: [Config] baseApp/verboseExternalInterface = true (default: false)"
+      ]
+    ]
+  },
+  "gif": "config-effect/BaseAppConfig.verboseExternalInterface.gif",
+  "captured": "2026-11-23T02:44:41"
+}

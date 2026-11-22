@@ -1,0 +1,193 @@
+{
+  "switch": "LoginAppConfig.logProbes",
+  "class": "LoginAppConfig",
+  "name": "logProbes",
+  "xml": "loginApp/logProbes",
+  "default": "true",
+  "off_diff": {
+    "baseapp": [
+      [
+        "WARNING: /home/cui/workspaces/BigWorld/programming/bigworld/server/baseapp/baseapp.cpp: Profile backup",
+        "WARNING: /home/cui/workspaces/BigWorld/programming/bigworld/server/baseapp/baseapp.cpp: Profile tickGameTime",
+        "WARNING: BaseApp::handleTimeout: Last tick quantum took 601% of allocation (0.60 seconds)! Proxy clients may have been starved!",
+        "WARNING: [Server] ServerApp::onTickPeriod: Last game tick . Expected 0.10."
+      ],
+      [
+        "DEBUG: Proxy::addCreateBasePlayerToChannelBundle: Creating player on client",
+        "DEBUG: Proxy::enableEntities",
+        "ERROR: [Network] Exception occurred: 'REASON_NO_SUCH_PORT' on '192.168.5.188'",
+        "INFO: Base::Base: ClientAvatar",
+        "INFO: Base::~Base: ClientAvatar",
+        "INFO: ClientAvatar.",
+        "INFO: ClientAvatar.__init__: {'prop1': 1} 0",
+        "INFO: LoginHandler:: from 192.168.5.188. Attempt 1",
+        "TRACE: BaseApp: at udp:192.168.5.188",
+        "TRACE: BaseApp::removeProxy: Removing proxy id addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id has disconnected (Requested by client)"
+      ]
+    ],
+    "baseappmgr": [
+      [
+        "INFO: [ProcessIP] BaseAppMgr::add: Not allowing BaseApp at 192.168.5.188 to register yet (No init data from DBApp Alpha)"
+      ],
+      []
+    ],
+    "cellapp": [
+      [
+        "WARNING: /home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/cellapp.cpp: Profile backup",
+        "WARNING: /home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/cellapp.cpp: Profile gameTick",
+        "WARNING: CellApp::checkTickWarnings: Last game tick . Persistent load time = 0.46. Spare time 0.00.",
+        "WARNING: [Server] ServerApp::onTickPeriod: Last game tick . Expected 0.10."
+      ],
+      [
+        "INFO: Cell::createEntityInternal: New ClientAvatar",
+        "INFO: Cell::entityDestroyed: has been destroyed.",
+        "INFO: ChannelMap::find: Creating anonymous channel to 192.168.5.188",
+        "INFO: ClientAvatar.__init__: {}",
+        "WARNING: BufferedEntityMessages::playBufferedMessages: There were buffered messages. Played 1 of 1",
+        "WARNING: EntityMessageHandler::handleMessage: No time left in tick . Buffering 'createEntityNearEntity' and similar messages this tick. Num previously in buffer = 0."
+      ]
+    ],
+    "cellappmgr": [
+      [],
+      [
+        "INFO: [Network] CellAppMgr::handleBaseAppMgrBirth: 192.168.5.188",
+        "WARNING: [Server] ServerApp::onTickPeriod: Last game tick . Expected 0.10."
+      ]
+    ],
+    "client": [
+      [
+        "INFO: LoginAppLoginRequestProtocol::onReply: Attempt #1: Server rejected our login. Reject status: 78, reject data (optional): At least one CellApp is overloaded.",
+        "INFO: [Connection] ServerConnection::logOnComplete: Logon failed: At least one CellApp is overloaded.",
+        "Login failed: At least one CellApp is overloaded.",
+        "WARNING: LoginHandler::fail: status = 78, errorMessage = \"At least one CellApp is overloaded.\""
+      ],
+      [
+        "Connected to 192.168.5.188",
+        "DEBUG: LoginHandler::onBaseAppLoginSuccess: Got reply from BaseApp channel udp:192.168.5.188",
+        "DEBUG: LoginHandler::onLoginAppLoginSuccess: BaseApp@192.168.5.188 over UDP (# requests: 10, retry interval:1.0s, timeout interval: 8.0s)",
+        "DEBUG: LoginRequest::onTransportConnect: Attempt #1 to BaseApp 192.168.5.188; took 0.0s, time left = 8.0s",
+        "DEBUG: [Connection] ServerConnection::enableEntities: Enabling entities",
+        "DEBUG: [Connection] ServerConnection::logOn: from: 192.168.5.188",
+        "DEBUG: [Connection] ServerConnection::logOn: status==LOGGED_ON",
+        "DEBUG: [Connection] ServerConnection::logOn: to: 192.168.5.188",
+        "TRACE: LoginHandler::sendNextRequest: From 192.168.5.188, attempt #1 / 10 to BaseApp 192.168.5.188",
+        "TRACE: LoginRequest::handleMessage: Attempt #1: Received reply from 192.168.5.188 (after 0.2s)"
+      ]
+    ],
+    "dbapp": [
+      [
+        "INFO: DBApp::logOn: Login failed for cui. At least one CellApp is overloaded.",
+        "WARNING: [Network] PacketReceiver::handleInputNotification: last received from 192.168.5.188, stopping socket processing after .308ms (processed 1 packets), receive queue at 0 bytesINFO: ChannelMap::find: Creating anonymous channel to 192.168.5.188",
+        "WARNING: [Server] ServerApp::onTickPeriod: Last game tick . Expected 0.10."
+      ],
+      [
+        "INFO: DBApp::logOn: cui"
+      ]
+    ],
+    "loginapp": [
+      [
+        "DEBUG: DatabaseReplyHandler::handleMessage(192.168.5.188): failure due to overload (status=4e)",
+        "INFO: [Config] loginApp/logProbes = false (default: true)",
+        "INFO: [Network] LoginApp::handleFailure: LogOn for 192.168.5.188 failed, LogOnStatus: 78, description 'At least one CellApp is overloaded.'."
+      ],
+      [
+        "INFO: [Config] loginApp/logProbes = true"
+      ]
+    ]
+  },
+  "on_diff": {
+    "baseapp": [
+      [
+        "WARNING: /home/cui/workspaces/BigWorld/programming/bigworld/server/baseapp/baseapp.cpp: Profile backup",
+        "WARNING: /home/cui/workspaces/BigWorld/programming/bigworld/server/baseapp/baseapp.cpp: Profile tickGameTime",
+        "WARNING: BaseApp::handleTimeout: Last tick quantum took 601% of allocation (0.60 seconds)! Proxy clients may have been starved!",
+        "WARNING: [Server] ServerApp::onTickPeriod: Last game tick . Expected 0.10."
+      ],
+      [
+        "DEBUG: Proxy::addCreateBasePlayerToChannelBundle: Creating player on client",
+        "DEBUG: Proxy::enableEntities",
+        "ERROR: [Network] Exception occurred: 'REASON_NO_SUCH_PORT' on '192.168.5.188'",
+        "INFO: Base::Base: ClientAvatar",
+        "INFO: Base::~Base: ClientAvatar",
+        "INFO: ClientAvatar.",
+        "INFO: ClientAvatar.__init__: {'prop1': 1} 0",
+        "INFO: LoginHandler:: from 192.168.5.188. Attempt 1",
+        "TRACE: BaseApp: at udp:192.168.5.188",
+        "TRACE: BaseApp::removeProxy: Removing proxy id addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id has disconnected (Requested by client)"
+      ]
+    ],
+    "baseappmgr": [
+      [
+        "INFO: [ProcessIP] BaseAppMgr::add: Not allowing BaseApp at 192.168.5.188 to register yet (No init data from DBApp Alpha)"
+      ],
+      []
+    ],
+    "cellapp": [
+      [
+        "WARNING: /home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/cellapp.cpp: Profile backup",
+        "WARNING: /home/cui/workspaces/BigWorld/programming/bigworld/server/cellapp/cellapp.cpp: Profile gameTick",
+        "WARNING: CellApp::checkTickWarnings: Last game tick . Persistent load time = 0.46. Spare time 0.00.",
+        "WARNING: [Server] ServerApp::onTickPeriod: Last game tick . Expected 0.10."
+      ],
+      [
+        "INFO: Cell::createEntityInternal: New ClientAvatar",
+        "INFO: Cell::entityDestroyed: has been destroyed.",
+        "INFO: ChannelMap::find: Creating anonymous channel to 192.168.5.188",
+        "INFO: ClientAvatar.__init__: {}",
+        "WARNING: BufferedEntityMessages::playBufferedMessages: There were buffered messages. Played 1 of 1",
+        "WARNING: EntityMessageHandler::handleMessage: No time left in tick . Buffering 'createEntityNearEntity' and similar messages this tick. Num previously in buffer = 0."
+      ]
+    ],
+    "cellappmgr": [
+      [],
+      [
+        "INFO: [Network] CellAppMgr::handleBaseAppMgrBirth: 192.168.5.188",
+        "WARNING: [Server] ServerApp::onTickPeriod: Last game tick . Expected 0.10."
+      ]
+    ],
+    "client": [
+      [
+        "INFO: LoginAppLoginRequestProtocol::onReply: Attempt #1: Server rejected our login. Reject status: 78, reject data (optional): At least one CellApp is overloaded.",
+        "INFO: [Connection] ServerConnection::logOnComplete: Logon failed: At least one CellApp is overloaded.",
+        "Login failed: At least one CellApp is overloaded.",
+        "WARNING: LoginHandler::fail: status = 78, errorMessage = \"At least one CellApp is overloaded.\""
+      ],
+      [
+        "Connected to 192.168.5.188",
+        "DEBUG: LoginHandler::onBaseAppLoginSuccess: Got reply from BaseApp channel udp:192.168.5.188",
+        "DEBUG: LoginHandler::onLoginAppLoginSuccess: BaseApp@192.168.5.188 over UDP (# requests: 10, retry interval:1.0s, timeout interval: 8.0s)",
+        "DEBUG: LoginRequest::onTransportConnect: Attempt #1 to BaseApp 192.168.5.188; took 0.0s, time left = 8.0s",
+        "DEBUG: [Connection] ServerConnection::enableEntities: Enabling entities",
+        "DEBUG: [Connection] ServerConnection::logOn: from: 192.168.5.188",
+        "DEBUG: [Connection] ServerConnection::logOn: status==LOGGED_ON",
+        "DEBUG: [Connection] ServerConnection::logOn: to: 192.168.5.188",
+        "TRACE: LoginHandler::sendNextRequest: From 192.168.5.188, attempt #1 / 10 to BaseApp 192.168.5.188",
+        "TRACE: LoginRequest::handleMessage: Attempt #1: Received reply from 192.168.5.188 (after 0.2s)"
+      ]
+    ],
+    "dbapp": [
+      [
+        "INFO: DBApp::logOn: Login failed for cui. At least one CellApp is overloaded.",
+        "WARNING: [Network] PacketReceiver::handleInputNotification: last received from 192.168.5.188, stopping socket processing after .308ms (processed 1 packets), receive queue at 0 bytesINFO: ChannelMap::find: Creating anonymous channel to 192.168.5.188",
+        "WARNING: [Server] ServerApp::onTickPeriod: Last game tick . Expected 0.10."
+      ],
+      [
+        "INFO: DBApp::logOn: cui"
+      ]
+    ],
+    "loginapp": [
+      [
+        "DEBUG: DatabaseReplyHandler::handleMessage(192.168.5.188): failure due to overload (status=4e)",
+        "INFO: [Config] loginApp/logProbes = false (default: true)",
+        "INFO: [Network] LoginApp::handleFailure: LogOn for 192.168.5.188 failed, LogOnStatus: 78, description 'At least one CellApp is overloaded.'."
+      ],
+      [
+        "INFO: [Config] loginApp/logProbes = true"
+      ]
+    ]
+  },
+  "gif": "config-effect/LoginAppConfig.logProbes.gif",
+  "captured": "2026-11-23T03:23:30"
+}

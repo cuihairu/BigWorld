@@ -1,0 +1,153 @@
+{
+  "switch": "BaseAppConfig.shouldShutDownIfPortUsed",
+  "class": "BaseAppConfig",
+  "name": "shouldShutDownIfPortUsed",
+  "xml": "baseApp/shouldShutDownIfPortUsed",
+  "default": "true",
+  "off_diff": {
+    "baseapp": [
+      [
+        "DEBUG: Proxy::addCreateBasePlayerToChannelBundle: Creating player on client",
+        "DEBUG: Proxy::enableEntities",
+        "ERROR: [Network] Exception occurred: 'REASON_NO_SUCH_PORT' on '192.168.5.188'",
+        "INFO: Base::Base: ClientAvatar",
+        "INFO: Base::~Base: ClientAvatar",
+        "INFO: ClientAvatar.",
+        "INFO: ClientAvatar.__init__: {'prop1': 1} 0",
+        "INFO: LoginHandler:: from 192.168.5.188. Attempt 1",
+        "INFO: [Config] baseApp/shouldShutDownIfPortUsed = false (default: true)",
+        "TRACE: BaseApp: at udp:192.168.5.188",
+        "TRACE: BaseApp::removeProxy: Removing proxy id 1 addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id 1 has disconnected (Requested by client)"
+      ],
+      [
+        "INFO: [Config] baseApp/shouldShutDownIfPortUsed = true"
+      ]
+    ],
+    "cellapp": [
+      [
+        "INFO: Cell::createEntityInternal: New ClientAvatar",
+        "INFO: Cell::entityDestroyed: has been destroyed.",
+        "INFO: ChannelMap::find: Creating anonymous channel to 192.168.5.188",
+        "INFO: ClientAvatar.__init__: {}"
+      ],
+      []
+    ],
+    "client": [
+      [
+        "Connected to 192.168.5.188",
+        "DEBUG: LoginHandler::onBaseAppLoginSuccess: Got reply from BaseApp channel udp:192.168.5.188",
+        "DEBUG: LoginHandler::onLoginAppLoginSuccess: BaseApp@192.168.5.188 over UDP (# requests: 10, retry interval:1.0s, timeout interval: 8.0s)",
+        "DEBUG: LoginRequest::onTransportConnect: Attempt #1 to BaseApp 192.168.5.188; took 0.0s, time left = 8.0s",
+        "DEBUG: [Connection] ServerConnection::enableEntities: Enabling entities",
+        "DEBUG: [Connection] ServerConnection::logOn: from: 192.168.5.188",
+        "DEBUG: [Connection] ServerConnection::logOn: status==LOGGED_ON",
+        "DEBUG: [Connection] ServerConnection::logOn: to: 192.168.5.188",
+        "TRACE: LoginHandler::sendNextRequest: From 192.168.5.188, attempt #1 / 10 to BaseApp 192.168.5.188"
+      ],
+      [
+        "INFO: LoginAppLoginRequestProtocol::onReply: Attempt #1: Server rejected our login. Reject status: 78, reject data (optional): At least one CellApp is overloaded.",
+        "INFO: [Connection] ServerConnection::logOnComplete: Logon failed: At least one CellApp is overloaded.",
+        "Login failed: At least one CellApp is overloaded.",
+        "WARNING: LoginHandler::fail: status = 78, errorMessage = \"At least one CellApp is overloaded.\""
+      ]
+    ],
+    "dbapp": [
+      [
+        "INFO: DBApp::logOn: cui"
+      ],
+      [
+        "INFO: DBApp::logOn: Login failed for cui. At least one CellApp is overloaded."
+      ]
+    ],
+    "loginapp": [
+      [],
+      [
+        "DEBUG: DatabaseReplyHandler::handleMessage(192.168.5.188): failure due to overload (status=4e)",
+        "INFO: [Network] LoginApp::handleFailure: LogOn for 192.168.5.188 failed, LogOnStatus: 78, description 'At least one CellApp is overloaded.'."
+      ]
+    ],
+    "serviceapp": [
+      [
+        "INFO: [Config] baseApp/shouldShutDownIfPortUsed = false (default: true)"
+      ],
+      [
+        "INFO: [Config] baseApp/shouldShutDownIfPortUsed = true"
+      ]
+    ]
+  },
+  "on_diff": {
+    "baseapp": [
+      [
+        "DEBUG: Proxy::addCreateBasePlayerToChannelBundle: Creating player on client",
+        "DEBUG: Proxy::enableEntities",
+        "ERROR: [Network] Exception occurred: 'REASON_NO_SUCH_PORT' on '192.168.5.188'",
+        "INFO: Base::Base: ClientAvatar",
+        "INFO: Base::~Base: ClientAvatar",
+        "INFO: ClientAvatar.",
+        "INFO: ClientAvatar.__init__: {'prop1': 1} 0",
+        "INFO: LoginHandler:: from 192.168.5.188. Attempt 1",
+        "INFO: [Config] baseApp/shouldShutDownIfPortUsed = false (default: true)",
+        "TRACE: BaseApp: at udp:192.168.5.188",
+        "TRACE: BaseApp::removeProxy: Removing proxy id 1 addr udp:192.168.5.188",
+        "TRACE: Proxy::onClientDeath: Client id 1 has disconnected (Requested by client)"
+      ],
+      [
+        "INFO: [Config] baseApp/shouldShutDownIfPortUsed = true"
+      ]
+    ],
+    "cellapp": [
+      [
+        "INFO: Cell::createEntityInternal: New ClientAvatar",
+        "INFO: Cell::entityDestroyed: has been destroyed.",
+        "INFO: ChannelMap::find: Creating anonymous channel to 192.168.5.188",
+        "INFO: ClientAvatar.__init__: {}"
+      ],
+      []
+    ],
+    "client": [
+      [
+        "Connected to 192.168.5.188",
+        "DEBUG: LoginHandler::onBaseAppLoginSuccess: Got reply from BaseApp channel udp:192.168.5.188",
+        "DEBUG: LoginHandler::onLoginAppLoginSuccess: BaseApp@192.168.5.188 over UDP (# requests: 10, retry interval:1.0s, timeout interval: 8.0s)",
+        "DEBUG: LoginRequest::onTransportConnect: Attempt #1 to BaseApp 192.168.5.188; took 0.0s, time left = 8.0s",
+        "DEBUG: [Connection] ServerConnection::enableEntities: Enabling entities",
+        "DEBUG: [Connection] ServerConnection::logOn: from: 192.168.5.188",
+        "DEBUG: [Connection] ServerConnection::logOn: status==LOGGED_ON",
+        "DEBUG: [Connection] ServerConnection::logOn: to: 192.168.5.188",
+        "TRACE: LoginHandler::sendNextRequest: From 192.168.5.188, attempt #1 / 10 to BaseApp 192.168.5.188"
+      ],
+      [
+        "INFO: LoginAppLoginRequestProtocol::onReply: Attempt #1: Server rejected our login. Reject status: 78, reject data (optional): At least one CellApp is overloaded.",
+        "INFO: [Connection] ServerConnection::logOnComplete: Logon failed: At least one CellApp is overloaded.",
+        "Login failed: At least one CellApp is overloaded.",
+        "WARNING: LoginHandler::fail: status = 78, errorMessage = \"At least one CellApp is overloaded.\""
+      ]
+    ],
+    "dbapp": [
+      [
+        "INFO: DBApp::logOn: cui"
+      ],
+      [
+        "INFO: DBApp::logOn: Login failed for cui. At least one CellApp is overloaded."
+      ]
+    ],
+    "loginapp": [
+      [],
+      [
+        "DEBUG: DatabaseReplyHandler::handleMessage(192.168.5.188): failure due to overload (status=4e)",
+        "INFO: [Network] LoginApp::handleFailure: LogOn for 192.168.5.188 failed, LogOnStatus: 78, description 'At least one CellApp is overloaded.'."
+      ]
+    ],
+    "serviceapp": [
+      [
+        "INFO: [Config] baseApp/shouldShutDownIfPortUsed = false (default: true)"
+      ],
+      [
+        "INFO: [Config] baseApp/shouldShutDownIfPortUsed = true"
+      ]
+    ]
+  },
+  "gif": "config-effect/BaseAppConfig.shouldShutDownIfPortUsed.gif",
+  "captured": "2026-11-23T02:43:02"
+}
