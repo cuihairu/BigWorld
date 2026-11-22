@@ -753,7 +753,7 @@ root_( other.root_ ),
 useChild_( other.useChild_ ),
 pChildIt_( other.pChildIt_.get() ? new const_iterator(*other.pChildIt_) : NULL),
 index_( other.index_ ),
-size_( other.index_ ),
+size_( other.size_ ),
 isNone_( other.isNone_ ),
 isPersistentOnly_( other.isPersistentOnly_ ),
 pCurrent_( root_.getStreamElement( index_, size_, isNone_, isPersistentOnly_ ) )
