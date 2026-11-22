@@ -1,0 +1,45 @@
+<root>
+<!-- Per-user config overlay for the cluster smoke (Linux). BWConfig::init
+     builds the filename from getpwuid()->pw_name on Linux, so this file is
+     named after the running user; bootstrap.sh regenerates it under the right
+     name. The fantasydemo server/bw.xml is pulled in via parentFile.
+
+     DBConfigBlock marks any option it cannot read as failed, so every
+     DBConfigBlock option the engine reports must be present here; the values
+     below are the block's own defaults from db_config.cpp. -->
+<parentFile>server/bw.xml</parentFile>
+
+<gameUpdateHertz>	10	</gameUpdateHertz>
+
+<db>
+	<type>	mysql	</type>
+	<mysql>
+		<host>	127.0.0.1	</host>
+		<port>	3306	</port>
+		<username>	bigworld	</username>
+		<password>	bigworld	</password>
+		<databaseName>	bigworld	</databaseName>
+		<syncTablesToDefs>	true	</syncTablesToDefs>
+		<numConnections>	5	</numConnections>
+		<secureAuth>	false	</secureAuth>
+		<maxSpaceDataSize>	2048	</maxSpaceDataSize>
+		<unicodeString>
+			<characterSet>	utf8mb4	</characterSet>
+			<collation>	utf8mb4_general_ci	</collation>
+		</unicodeString>
+	</mysql>
+	<xml>
+		<archivePeriod>	3600	</archivePeriod>
+		<numArchives>	5	</numArchives>
+		<savePeriod>	900	</savePeriod>
+	</xml>
+	<secondaryDB>
+		<enable>	false	</enable>
+		<maxCommitPeriod>	5	</maxCommitPeriod>
+		<directory>	server/db/secondary	</directory>
+		<consolidation>
+			<directory>	/tmp/	</directory>
+		</consolidation>
+	</secondaryDB>
+</db>
+</root>
