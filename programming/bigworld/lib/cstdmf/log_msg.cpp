@@ -555,7 +555,8 @@ void LogMsg::criticalMessageHelper( bool isDevAssertion,
 
 #elif defined ( PLAYSTATION3 )
 
-	printf( buffer );
+	// buffer is message text, not a format string (CR-P3-01).
+	printf( "%s", buffer );
 	printf( "\n" );
 	ENTER_DEBUGGER();
 
