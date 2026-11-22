@@ -46,12 +46,13 @@
 // (stop stickiness, reverse-order rollback, per-pair attribution,
 // destroyed entities skipped) is assertable with fake entities while the
 // real bindings stay three thin functors in CellApp::reloadScript
-// (cellapp.cpp, Entity::migrate / Entity::rollbackMigration). The live
-// map is iterated in place like the adjacent MIGRATED_ALL loop - a script
-// hook that destroys a neighbour mid-pass keeps the pre-existing
-// population-mutation exposure (see the CR-P2-08 ledger line), which the
-// destroyed-entity check narrows for the rollback half but does not
-// close for the migration half.
+// (cellapp.cpp, Entity::migrate / Entity::rollbackMigration). The caller
+// hands in a population snapshot (CellApp::MIGRATE_ENTITIES) rather than
+// the live map: the onMigrate hook can create or destroy entities
+// mid-pass, and destroying one drops its population node when the last
+// reference is released, which would invalidate an iterator over the live
+// map. The snapshot owns a reference per entity, so the loop is stable and
+// a destroyed entity's isDestroyed() stays readable to aliveOp (CR-P2-08).
 
 #ifndef ENTITY_MIGRATION_PLAN_HPP
 #define ENTITY_MIGRATION_PLAN_HPP
@@ -315,10 +316,10 @@ inline bool vectorContains( const BW::vector< T > & vec, const T & value )
 ///                  destroy a neighbour mid-pass);
 ///   * RollbackOp - runs one entity's RollbackPlan.
 ///
-/// Iterating the live container in place mirrors the adjacent MIGRATED_ALL
-/// loop; the same script-hook-mutates-population exposure applies (see the
-/// header comment above). Rollback runs only for a stopped pass, in
-/// reverse migration order, skipping entities that died in between.
+/// Iterating the container the caller hands in: at the CellApp call site
+/// this is a population snapshot, so no script hook can mutate it mid-pass
+/// (see the header comment above). Rollback runs only for a stopped pass,
+/// in reverse migration order, skipping entities that died in between.
 template < typename ContT, typename GetOp, typename MigrateOp,
 	typename AliveOp, typename RollbackOp >
 inline LoopState rollout( const ContT & container, GetOp getOp, Policy policy,
