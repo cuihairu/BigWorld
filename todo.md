@@ -103,7 +103,7 @@
 - [x] CR-P2-23 · 硬编码凭据 · `db_storage_mysql/db_config.cpp:48-49` 编译期兜底 username/password = "bigworld"。已修（`5fbaabea`）：MySQLConfigBlock 默认 username/password 改 ""（lib/db/db_config.cpp），ConnectionInfo 兜底同步改 ""（db_storage_mysql/db_config.cpp）——config 缺失时不再静默以已知默认凭据认证。回归测试 `DBConfig_missingOptionsAreAnError` 增断言 username()/password()==""。全量门禁 21/21 绿。
 - [x] CR-P2-24 · SQL 标识符拼接 · `mysql_database.cpp:568` 实体类型名裸拼进 FROM tbl_ 表名；同族 `table_meta_data.cpp:120` SHOW INDEX FROM tableName。已修（`338be301`）：table_meta_data.hpp 增白名单 `isValidSqlIdentifier`（仅 [A-Za-z0-9_]）；TableIndices 构造拒非法表名、getAutoLoadSpacesFromEntities 拒非法实体类型名（continue），均在拼接进查询前拦截。全量门禁 21/21 绿。
 - [x] CR-P2-25 · 整数溢出→分配 · `binary_stream.hpp:353,407` operator>>(BW::vector&) 与 TYPEDEF_STREAMING_VECTOR 无条件 reserve(attacker_max)。已修（`b5dae6ec`）：两处 reserve 前先按 remainingLength()/sizeof(T) 封顶（真实流数据上限），虚报声明不再驱动大分配；TYPEDEF_STREAMING_VECTOR 循环同时补 !b.error() 防越读死循环。回归测试 `BinaryStream_vectorRoundTrip`（正常往返护住反序列化不破坏——MF_USE_ASSERTS 下超读即 abort，无法构造"虚报但不过读"可区分用例）。全量门禁 21/21 绿。
-- [ ] CR-P3-01 · 格式串 · `log_msg.cpp:558` printf(buffer) 用报文文本当格式串——**仅 PLAYSTATION3 分支**，Linux/Windows 不可达。
+- [x] CR-P3-01 · 格式串 · `log_msg.cpp:558` printf(buffer) 用报文文本当格式串——**仅 PLAYSTATION3 分支**，Linux/Windows 不可达。已修（`50e6b5cd`）：改 `printf("%s", buffer)`，报文文本视为数据而非格式串（% 不再驱动格式器）。分支被 `#ifdef PLAYSTATION3` 排除，Linux 不编译该路径，故验证为编译级（log_msg.cpp 重建无 error）+ cstdmf_test 453 用例绿。
 - [ ] CR-P3-02 · 覆盖面说明 · `tools/*` C++ 仍含 Py2 专属 PyString_*/PyInt_* 调用，故这些 tool 目标未对 3.13 构建（非缺陷）。
 
 ## VS Code 插件（2026-11-21 用户令：类似 kode 但单版本——插件二进制直接复用 BigWorld C++，不要 kode 那种 Rust 新引擎+TS 双版本并存）
