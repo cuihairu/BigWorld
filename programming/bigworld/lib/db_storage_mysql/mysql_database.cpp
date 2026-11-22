@@ -14,6 +14,7 @@
 #include "table_synchroniser.hpp"
 #include "thread_data.hpp"
 #include "transaction.hpp"
+#include "utils.hpp"
 #include "wrapper.hpp"
 
 #include "mappings/entity_type_mapping.hpp"
@@ -564,7 +565,9 @@ void MySqlDatabase::getAutoLoadSpacesFromEntities( SpaceIDSet & spaceIDs )
 
 		if (entityDesc.canBeOnCell())
 		{
-			if (!isValidSqlIdentifier( typeName ))
+			// typeName comes from the database, so validate it before it is
+			// spliced into the table name in the statement (CR-P2-24).
+			if (!isValidIdentifier( typeName ))
 			{
 				ERROR_MSG( "MySqlDatabase::getAutoLoadSpacesFromEntities: "
 						"refusing invalid entity type name '%s'\n",

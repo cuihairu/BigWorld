@@ -505,12 +505,17 @@ EntityTypePtr EntityType::getType( const char * className )
 }
 
 /**
- *	This static method is used to get the description of the 
- *  entity type associated with the input. It is safe to use from
- *  a different thread, since we avoid copying the smart pointer
- *  out of s_curTypes_, and just accessing it directly
+ *	This static method is used to get the description of the
+ *	entity type associated with the input.
  *
- *	@return EntityDescription* on success, otherwise NULL.
+ *	All access to s_curTypes_ is confined to the main thread: the reload path
+ *	(BigWorld.reloadScript, invoked from Python with the GIL held) reassigns
+ *	s_curTypes_ in migrate(), and every reader (getType/getDescription/getTypes,
+ *	message handlers, cell_viewer_connection) also runs on the main thread. So
+ *	no locking is required here — but an off-thread caller WOULD race with a
+ *	full reload's migrate() swap and must not be added without synchronization.
+ *
+ *	@return const EntityDescription* on success, otherwise NULL.
  */
 const EntityDescription * EntityType::getDescription( EntityTypeID typeID )
 {
@@ -531,11 +536,11 @@ const EntityDescription * EntityType::getDescription( EntityTypeID typeID )
 /**
  *	This static method is used to get the vector of entity types.
  *
- *	It hands the live vector out by reference, so no lock scoped to this
- *	call can protect the caller's later use of it - the callers stay on
- *	the main thread.
+ *	The returned vector is read-only: a full reload reassigns s_curTypes_ in
+ *	migrate(), so callers must not mutate it. Access is main-thread only (see
+ *	getDescription).
  */
-EntityTypes& EntityType::getTypes()
+const EntityTypes& EntityType::getTypes()
 {
 	return s_curTypes_;
 }

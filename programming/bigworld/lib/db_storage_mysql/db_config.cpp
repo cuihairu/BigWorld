@@ -45,6 +45,9 @@ const ConnectionInfo & connectionInfo()
 
 		s_connectionInfo.host = "localhost";
 		s_connectionInfo.port = 0;
+		// No default credentials here: readConnectionInfo() below overwrites
+		// username/password from the config, so seeding them would only
+		// provide a hardcoded fallback that should never be used (CR-P2-23).
 		s_connectionInfo.username = "";
 		s_connectionInfo.password = "";
 		s_connectionInfo.database = "";

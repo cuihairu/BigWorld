@@ -19,32 +19,6 @@ class TableIndices;
 
 BW::string generateIndexName( const BW::string & colName );
 
-/**
- *	Server-generated MySQL identifiers (entity type names and table names) are
- *	concatenated into SQL statements. Only this character set can appear in a
- *	legitimate one, so anything else is corruption or an injection attempt and
- *	must not be spliced into a query (CR-P2-24).
- */
-inline bool isValidSqlIdentifier( const BW::string & name )
-{
-	if (name.empty())
-	{
-		return false;
-	}
-
-	for (BW::string::const_iterator it = name.begin(); it != name.end(); ++it)
-	{
-		const char c = *it;
-		if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
-				(c >= '0' && c <= '9') || (c == '_')))
-		{
-			return false;
-		}
-	}
-
-	return true;
-}
-
 namespace TableMetaData
 {
 

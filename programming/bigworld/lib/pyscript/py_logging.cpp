@@ -53,12 +53,11 @@ PyObject * py_logCommon( PyObject * args, DebugMessagePriority priority,
 	const char * pMessageString = PyUnicode_AsUTF8( objMessageString );
 	// BIGWORLD_END
 
-	// PyUnicode_AsUTF8 gives NULL with a pending UnicodeEncodeError for an
-	// unencodable string (e.g. a lone surrogate): report it to the caller
-	// rather than log it away (CR-P2-11).
 	if (pCategoryString == NULL)
 	{
-		return NULL;	// error already set
+		PyErr_Format( PyExc_ValueError,
+			"py_log%s has invalid category string.", name );
+		return NULL;
 	}
 
 	if (pMessageString == NULL)
@@ -76,12 +75,11 @@ PyObject * py_logCommon( PyObject * args, DebugMessagePriority priority,
 		const char * pMetaData = PyUnicode_AsUTF8( objLogMetaData );
 		// BIGWORLD_END
 
-		// NULL here is a pending UnicodeEncodeError, not an absent metadata
-		// string: it has to be reported like the message case above, not
-		// swallowed by logging (CR-P2-11).
 		if (pMetaData == NULL)
 		{
-			return NULL;	// error already set
+			PyErr_Format( PyExc_ValueError,
+				"py_log%s has invalid metadata string.", name );
+			return NULL;
 		}
 
 		LogMsg( priority, pCategoryString ).

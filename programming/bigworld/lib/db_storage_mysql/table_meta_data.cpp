@@ -1,7 +1,10 @@
+#include "script/first_include.hpp"
+
 #include "table_meta_data.hpp"
 
 #include "query.hpp"
 #include "result_set.hpp"
+#include "utils.hpp"
 
 #include "cstdmf/debug.hpp"
 
@@ -115,7 +118,7 @@ private:
  */
 TableIndices::TableIndices( MySql & connection, const BW::string & tableName )
 {
-	if (!isValidSqlIdentifier( tableName ))
+	if (!isValidIdentifier( tableName ))
 	{
 		ERROR_MSG( "TableIndices: refusing to query invalid table name '%s'\n",
 			tableName.c_str() );

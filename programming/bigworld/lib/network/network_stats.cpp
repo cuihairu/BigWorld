@@ -93,6 +93,17 @@ bool Updater::getQueueSizes( const Mercury::Address & addr, int & tx, int & rx )
 }
 
 /**
+ *	Returns a pointer just past the next occurrence of sep within str, or
+ *	NULL if sep is not found. Used to walk the whitespace-separated fields
+ *	of a /proc/net/udp header line.
+ */
+char * strstrPast( char * str, const char * sep )
+{
+	char * p = strstr( str, sep );
+	return (p == NULL) ? NULL : p + strlen( sep );
+}
+
+/**
  *	This method update the current size of udp transmit and receive queues
  *	for this process. This method is only implemented on Unix.
  *
@@ -146,36 +157,23 @@ bool Updater::update()
 		return false;
 	}
 
-	char * start = strstr( aline, ": " );
+	char * start = strstrPast( aline, ": " );
+	int addrOffset = (start == NULL) ? -1 : (int)( start - aline );
 
-	// None of these separators is guaranteed on the header line, and the old
-	// code chased them unchecked: a missing ": " was arithmetically walked as
-	// NULL + 2 and every offset below was computed from that wild pointer
-	// before the bounds test could run (CR-P2-18).
-	if (start == NULL)
+	for (int i = 0; (start != NULL) && (i < 3); ++i)
+	{
+		start = strstrPast( start, " " );
+	}
+
+	int txrxOffset = (start == NULL) ? -1 : (int)( start - aline );
+
+	if ((addrOffset < 0) || (txrxOffset < 0))
 	{
 		ERROR_MSG( "Updater::update: /proc/net/udp invalid format: %s\n",
 			aline );
 		fclose( f );
 		return false;
 	}
-
-	int addrOffset = ( start += 2 ) - aline;
-
-	for (int i = 0; i < 3; ++i)
-	{
-		start = strstr( start, " " );
-		if (start == NULL)
-		{
-			ERROR_MSG( "Updater::update: /proc/net/udp invalid format: %s\n",
-				aline );
-			fclose( f );
-			return false;
-		}
-		++start;
-	}
-
-	int txrxOffset = start - aline;
 
 	Mercury::Address addr;
 	StatsBlock statsBlock;

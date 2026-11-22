@@ -25,6 +25,14 @@ BW::string createSelectStatement( const BW::string & tbl,
 		const PropertyMappings & properties,
 		const BW::string & where );
 
+/**
+ *	Tests whether the given string is a valid MySQL identifier that can be
+ *	spliced directly into a query statement: letters, digits and underscores
+ *	only, starting with a letter. Used to keep table names and entity type
+ *	names that come from the database out of statement text (CR-P2-24).
+ */
+bool isValidIdentifier( const BW::string & name );
+
 BW_END_NAMESPACE
 
 // mysql_utils.hpp

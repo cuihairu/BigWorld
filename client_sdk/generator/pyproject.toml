@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bwgen"
+version = "0.0.1"
+description = "BigWorld def -> code generator for the client SDK runtimes (C# and TypeScript base classes)."
+requires-python = ">=3.9"
+
+[project.scripts]
+bwgen = "bwgen.cli:main"
+
+[tool.setuptools]
+packages = ["bwgen"]

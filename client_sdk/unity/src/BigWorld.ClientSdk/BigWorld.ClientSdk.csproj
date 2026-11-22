@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    BigWorld.ClientSdk
+    BigWorld client plugin SDK protocol core (CL-1).
+
+    Targets netstandard2.1 and deliberately has no UnityEngine reference:
+    the transport is interface driven (ITransport) so the same core embeds in
+    Unity, UE or a headless host. Wire semantics come from
+    programming/bigworld/lib/network; every mapping is tabulated in
+    client_sdk/unity/PROTOCOL.md.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <RootNamespace>BigWorld.ClientSdk</RootNamespace>
+    <AssemblyName>BigWorld.ClientSdk</AssemblyName>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <Description>BigWorld client plugin SDK protocol core (TCP bundle framing, codecs, sender/receiver, connection state machine).</Description>
+  </PropertyGroup>
+
+</Project>

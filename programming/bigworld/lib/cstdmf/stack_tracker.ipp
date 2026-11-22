@@ -17,13 +17,20 @@ inline void StackTracker::push(const char* name, const char*file, uint line, boo
 	// The tracker owns these strings (the item stores copies), so the caller
 	// may pass pointers into memory it releases straight after this call.
 	// The temp flag only records where they came from.
-	// Copy n-1 bytes at most and keep the last byte NUL: GCC flags a plain
-	// strncpy( dst, src, n-1 ) as possible truncation (-Wstringop-truncation)
-	// under -Werror even though the memset above guarantees termination.
-	strncat( stackPos.name, (name != NULL) ? name : "",
-		ARRAY_SIZE( stackPos.name ) - 1 );
-	strncat( stackPos.file, (file != NULL) ? file : "",
-		ARRAY_SIZE( stackPos.file ) - 1 );
+	// Bounded copy with explicit truncation: both strncpy and strncat trip
+	// GCC's -Wstringop-truncation under -Werror when the source can actually
+	// exceed the buffer (142-byte names vs 128). The memset above zeroed the
+	// item and guarantees termination, so copy at most size-1 bytes + NUL.
+	{
+		const size_t nameLen = (name != NULL) ? strlen( name ) : 0;
+		const size_t fileLen = (file != NULL) ? strlen( file ) : 0;
+		const size_t nameCap = ARRAY_SIZE( stackPos.name ) - 1;
+		const size_t fileCap = ARRAY_SIZE( stackPos.file ) - 1;
+		memcpy( stackPos.name, (name != NULL) ? name : "",
+			nameLen < nameCap ? nameLen : nameCap );
+		memcpy( stackPos.file, (file != NULL) ? file : "",
+			fileLen < fileCap ? fileLen : fileCap );
+	}
 	stackPos.line = line;
 	stackPos.temp = temp;
 	stackPos.annotation = 0;

@@ -71,7 +71,7 @@ int CellViewerConnection::handleInputNotification( int fd )
 		case CellViewerExport::GET_ENTITY_TYPE_NAMES:
 		{
 			//Get the entity types vector
-			EntityTypes& entityTypes = EntityType::getTypes();
+			const EntityTypes& entityTypes = EntityType::getTypes();
 
 			uint32 numTypes = entityTypes.size();
 

@@ -2413,19 +2413,45 @@ namespace
 {
 
 /**
- *	This extracts the entity from one entity-population element, which is
- *	the entity id pair: the rollout loop only needs the entity.
+ *	This extracts the entity from one population-snapshot element. The
+ *	snapshot (a BW::vector< EntityPtr >) owns a reference to each entity, so
+ *	the rollout loop only needs the entity, and a destroyed entity's
+ *	isDestroyed() stays readable to aliveOp (CR-P2-08).
  */
-class GetPopulationEntity
+class GetSnapshotEntity
 {
 public:
 	typedef Entity * EntityPtr;
 
-	Entity * operator()( const EntityPopulation::value_type & pair ) const
+	Entity * operator()( const SmartPointer<Entity> & pEntity ) const
 	{
-		return pair.second;
+		return pEntity.getObject();
 	}
 };
+
+
+/**
+ *	This snapshots the entity population into a reference-holding vector. The
+ *	migrate passes fire script hooks (onMigrate / onMigratedAll) that can
+ *	create or destroy entities; destroying one drops its population node when
+ *	the last reference is released (Entity::~Entity -> EntityPopulation::remove),
+ *	which would invalidate an iterator over the live map. The snapshot owns a
+ *	reference per entity, so the map is only read here (no hooks run) and every
+ *	entity stays alive for the duration of the pass (CR-P2-08).
+ */
+BW::vector< EntityPtr > snapshotPopulation()
+{
+	BW::vector< EntityPtr > snapshot;
+	const EntityPopulation & population = Entity::population();
+	snapshot.reserve( population.size() );
+	for (EntityPopulation::const_iterator iter = population.begin();
+			iter != population.end(); ++iter)
+	{
+		snapshot.push_back( iter->second );
+	}
+
+	return snapshot;
+}
 
 
 /**
@@ -2620,9 +2646,22 @@ bool CellApp::reloadScript( bool isFullReload,
 				// the first failure and roll the pass back, instead of the
 				// old MF_VERIFY that aborted the process on the first
 				// failure and left everything before it half-migrated.
+				//
+				// The pass iterates a population snapshot, not the live map:
+				// the onMigrate hook (fired in Entity::migrate) can create or
+				// destroy entities, and destroying one drops its population
+				// node when the last reference is released, which would
+				// invalidate the loop iterator. The snapshot owns a reference
+				// per entity, keeping it stable and destroyed entities
+				// readable to aliveOp; entities created during the pass are
+				// already on the new classes (the type swap ran in
+				// MIGRATE_ENTITY_TYPES), so leaving them out of the pass is
+				// correct (CR-P2-08).
+				const BW::vector< EntityPtr > populationSnapshot =
+					snapshotPopulation();
 				const EntityMigration::LoopState loopState =
-					EntityMigration::rollout( Entity::population(),
-						GetPopulationEntity(),
+					EntityMigration::rollout( populationSnapshot,
+						GetSnapshotEntity(),
 						EntityMigration::STOP_ON_FAILURE, EntityMigrateOp(),
 						EntityAliveOp(), EntityRollbackOp() );
 				migrateLoopState = loopState;
@@ -2651,11 +2690,16 @@ bool CellApp::reloadScript( bool isFullReload,
 				if (!migrateLoopState.stopped &&
 					migrateLoopState.failed == 0)
 				{
-					for (EntityPopulation::const_iterator iter =
-							Entity::population().begin();
-						iter != Entity::population().end(); ++iter)
+					// Same population snapshot as MIGRATE_ENTITIES:
+					// onMigratedAll is a script hook too and can mutate the
+					// population under this loop (CR-P2-08).
+					const BW::vector< EntityPtr > populationSnapshot =
+						snapshotPopulation();
+					for (BW::vector< EntityPtr >::const_iterator iter =
+							populationSnapshot.begin();
+						iter != populationSnapshot.end(); ++iter)
 					{
-						iter->second->migratedAll();
+						(*iter)->migratedAll();
 					}
 				}
 				break;

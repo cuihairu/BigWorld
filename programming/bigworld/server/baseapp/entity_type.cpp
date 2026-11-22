@@ -175,12 +175,17 @@ EntityTypePtr EntityType::getType( EntityTypeID typeID,
 }
 
 /**
- *	This static method is used to get the description of the 
- *  entity type associated with the input. It is safe to use from
- *  a different thread, since we avoid copying the smart pointer
- *  out of s_curTypes_, and just accessing it directly
+ *	This static method is used to get the description of the
+ *	entity type associated with the input.
  *
- *	@return EntityDescription* on success, otherwise NULL.
+ *	All access to s_curTypes_ is confined to the main thread: the reload path
+ *	(BigWorld.reloadScript, invoked from Python with the GIL held) reassigns
+ *	s_curTypes_ in migrate(), and every reader (getType/getDescription, message
+ *	handlers) also runs on the main thread. So no locking is required here —
+ *	but an off-thread caller WOULD race with a full reload's migrate() swap and
+ *	must not be added without synchronization.
+ *
+ *	@return const EntityDescription* on success, otherwise NULL.
  */
 const EntityDescription * EntityType::getDescription( EntityTypeID typeID,
 		bool shouldExcludeServices )
@@ -418,6 +423,13 @@ void EntityType::migrate( bool isFullReload )
 			(*i)->old( EntityType::getType( (*i)->name() ) );
 		}
 
+		// Swap the reloaded type set in. This is a single-threaded handoff: the
+		// reload path (BigWorld.reloadScript) runs on the main thread with the
+		// GIL held, and every reader of s_curTypes_ also runs on the main
+		// thread, so this assignment cannot race with a reader. Do not add a
+		// lock here "for safety" — it would guard nothing on the hot path and
+		// give false confidence against an off-thread reader, which is the real
+		// hazard.
 		s_curTypes_ = s_newTypes_;
 
 		s_nameToIndexMap_.clear();

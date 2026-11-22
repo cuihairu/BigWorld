@@ -1,0 +1,22 @@
+{
+  "name": "@bigworld/client-sdk",
+  "version": "0.0.1",
+  "description": "BigWorld Mercury TCP client plugin SDK (TypeScript): wire codecs, framing, event system, Entity/EntityCall bases",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "packageManager": "pnpm@12.10.1",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.test.json",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^20.16.10",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.8"
+  }
+}

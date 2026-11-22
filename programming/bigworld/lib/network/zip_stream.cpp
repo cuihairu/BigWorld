@@ -146,9 +146,13 @@ bool ZipIStream::init( BinaryIStream & stream, unsigned char * pBuffer,
 	// can demand a large allocation. DEFLATE's worst-case expansion is 1032:1
 	// (RFC 1951), so a declared size beyond that cannot come from a real zlib
 	// stream of this compressed length - reject it instead of allocating
-	// (CR-P2-21).
-	if (origLen > static_cast< uLongf >( compressLen ) * 1032)
+	// (CR-P2-21). The product is widened to uLong so it cannot overflow a
+	// 32-bit field.
+	if (origLen > (static_cast< uLong >( compressLen ) * 1032UL))
 	{
+		ERROR_MSG( "ZipIStream::init: impossible original length %lu "
+				"for %d compressed byte(s)\n",
+			(unsigned long)origLen, compressLen );
 		error_ = true;
 		return false;
 	}

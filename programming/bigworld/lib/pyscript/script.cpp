@@ -1565,34 +1565,39 @@ int Script::setData( PyObject * pObject, bool & rBool,
 {
 	if (PyLong_Check( pObject ))
 	{
-		const long value = PyLong_AsLong( pObject );
-
-		// An int that does not fit a C long cannot be a bool. PyLong_AsLong
-		// has already set OverflowError, so report the failure with that
-		// exception still pending rather than carry it past a success return
-		// (CR-P2-10).
-		if (value == -1 && PyErr_Occurred())
-		{
-			return -1;
-		}
-
-		rBool = value != 0;
+		/* BIGWORLD_BEGIN(3.13 migration)
+		 * PyLong_AsLong() returns (long)-1 *and* sets OverflowError when the
+		 * value does not fit a C long, and the 2.7 code ("rBool = PyLong_AsLong
+		 * != 0") ignored that - leaving the error pending while reporting
+		 * success and a truthy rBool. A bool can represent any integer's
+		 * truthiness, so there is no out-of-range case: test truthiness
+		 * directly with PyObject_IsTrue(), which never overflows and leaves no
+		 * error set, for ints of any size.
+		 */
+		rBool = PyObject_IsTrue( pObject ) != 0;
 		return 0;
+		/* BIGWORLD_END */
 	}
 
 	if (PyUnicode_Check( pObject ))
 	{
 		const char * pStr = PyUnicode_AsUTF8( pObject );
-		if (!_stricmp( pStr, "true" ))
+
+		if (pStr != NULL)
 		{
-			rBool = true;
-			return 0;
+			if (!_stricmp( pStr, "true" ))
+			{
+				rBool = true;
+				return 0;
+			}
+			else if(!_stricmp( pStr, "false" ))
+			{
+				rBool = false;
+				return 0;
+			}
 		}
-		else if(!_stricmp( pStr, "false" ))
-		{
-			rBool = false;
-			return 0;
-		}
+		// A NULL pStr means PyUnicode_AsUTF8() failed, so this falls through to
+		// the TypeError below (CR-P2-11) instead of _stricmp on a NULL pointer.
 	}
 
 	PyErr_Format( PyExc_TypeError, "%s must be set to a bool", varName );
