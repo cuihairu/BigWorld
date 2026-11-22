@@ -1,7 +1,10 @@
+#include "script/first_include.hpp"
+
 #include "table_meta_data.hpp"
 
 #include "query.hpp"
 #include "result_set.hpp"
+#include "utils.hpp"
 
 #include "cstdmf/debug.hpp"
 
@@ -115,6 +118,15 @@ private:
  */
 TableIndices::TableIndices( MySql & connection, const BW::string & tableName )
 {
+	// The table name comes from the database, so validate it before it is
+	// spliced into the statement text (CR-P2-24).
+	if (!isValidIdentifier( tableName ))
+	{
+		CRITICAL_MSG( "TableIndices::TableIndices: refusing invalid table "
+				"name '%s'\n", tableName.c_str() );
+		return;
+	}
+
 	// Get index info
 	BW::stringstream queryStr;
 	queryStr << "SHOW INDEX FROM " << tableName;

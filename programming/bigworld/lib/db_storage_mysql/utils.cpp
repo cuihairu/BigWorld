@@ -117,6 +117,38 @@ BW::string createSelectStatement( const BW::string & tbl,
 	return stmt;
 }
 
+
+bool isValidIdentifier( const BW::string & name )
+{
+	// Table names are built as "tbl_" + entity type name, so restrict the
+	// identifier to what MySQL accepts unquoted: [A-Za-z_][A-Za-z0-9_]*.
+	// Plain ASCII checks avoid isalpha()'s undefined behaviour on chars
+	// with the high bit set.
+	bool isFirst = true;
+
+	for (size_t i = 0; i < name.size(); ++i)
+	{
+		const unsigned char c = name[ i ];
+		const bool isLetter = (97 <= c && c <= 122) || (65 <= c && c <= 90);
+		const bool isDigit = (48 <= c && c <= 57);
+
+		if (isFirst)
+		{
+			if (!isLetter)
+			{
+				return false;
+			}
+			isFirst = false;
+		}
+		else if (!isLetter && !isDigit && (c != '_'))
+		{
+			return false;
+		}
+	}
+
+	return !isFirst;
+}
+
 BW_END_NAMESPACE
 
 // utils.cpp
