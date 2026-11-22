@@ -26,16 +26,21 @@ GIT_SHA="$(git rev-parse --short HEAD 2>/dev/null || echo norev)"
 TAG="daily${DATE_UTC}.${GIT_SHA}"
 
 mkdir -p "$OUT_DIR"
+# Absolute form, resolved from REPO_ROOT before any subshell cd's. Relative
+# OUT_DIR (what the CI workflow passes, e.g. `out`) must not be re-resolved
+# from inside `client_sdk/typescript` or the tarball lands there instead.
+OUT_DIR_ABS="$(cd "$OUT_DIR" && pwd)"
 
 echo "== nuget (C# protocol core) =="
 dotnet pack client_sdk/unity/src/BigWorld.ClientSdk/BigWorld.ClientSdk.csproj \
   -c Release -o "$OUT_DIR" -p:Version="$SDK_VER" --nologo
 
 echo "== npm tarball (TypeScript plugin) =="
+[ -d client_sdk/typescript/dist ] || { \
+  echo "ERROR: client_sdk/typescript/dist missing - run pnpm build first" >&2; exit 1; }
 (
   cd client_sdk/typescript
-  # pack-destination needs an absolute path.
-  pnpm pack --pack-destination "$(cd "$OUT_DIR" && pwd)"
+  pnpm pack --pack-destination "$OUT_DIR_ABS"
 )
 
 echo "== wheel (bwgen) =="
@@ -49,7 +54,7 @@ MANIFEST="$OUT_DIR/MANIFEST.txt"
   echo "build:        $TAG"
   echo "commit:       $GIT_SHA"
   echo "built:        $(date -u +"%Y-%m-%d %H:%M:%S")Z"
-  echo "toolchain:    dotnet SDK + node 22 + pnpm (corepack, packageManager) + python3"
+  echo "toolchain:    dotnet SDK + node 22 + pnpm (action-setup) + python3"
   echo ""
   find "$OUT_DIR" -maxdepth 1 -type f ! -name 'MANIFEST.txt' ! -name 'pkg-version.txt' \
     ! -name '*.zip' -printf '%f\n' | sort | while read -r f; do
