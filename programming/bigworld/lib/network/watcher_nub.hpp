@@ -162,7 +162,7 @@ private:
 			const char * path, const char * valueString );
 
 	void processWatcherSet2Request( WatcherPacketHandler & packetHandler,
-			char *& packet );
+			char *& packet, const char * end );
 
 	void notifyMachineGuard();
 

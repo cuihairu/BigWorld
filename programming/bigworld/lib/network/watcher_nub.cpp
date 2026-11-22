@@ -388,6 +388,27 @@ bool WatcherNub::receiveUDPRequest()
 }
 
 
+// CR-P2-14: returns the length of the NUL-terminated string at str without
+// reading past end (the end of the incoming packet), or -1 when there is no
+// NUL terminator before end - i.e. a malformed packet.
+static ptrdiff_t boundedStringLength( const char * str, const char * end )
+{
+	if (str >= end)
+	{
+		return -1;
+	}
+
+	const char * p = str;
+
+	while (p < end && *p != '\0')
+	{
+		++p;
+	}
+
+	return (p < end) ? (p - str) : -1;
+}
+
+
 bool WatcherNub::processRequest( char * packet, int len,
 	WatcherEndpoint & watcherEndpoint )
 {
@@ -435,6 +456,7 @@ bool WatcherNub::processRequest( char * packet, int len,
 	WatcherPacketHandler *packetHandler = NULL;
 
 	// and call back to the program
+	char * end = packet + len;
 	switch (wdm->message)
 	{
 		case WATCHER_MSG_GET:
@@ -447,9 +469,20 @@ bool WatcherNub::processRequest( char * packet, int len,
 			char	*astr = wdm->string;
 			for(int i=0;i<wdm->count;i++)
 			{
+				// CR-P2-14: count is attacker-controlled, so bound each string
+				// walk by the end of the packet; a malformed packet stops the
+				// loop instead of reading past the buffer.
+				const ptrdiff_t slen = boundedStringLength( astr, end );
+				if (slen < 0)
+				{
+					WARNING_MSG( "WatcherNub::receiveRequest: malformed "
+							"GET request from %s\n",
+							watcherEndpoint.remoteAddr().c_str() );
+					break;
+				}
 				this->processWatcherGetRequest( *packetHandler, astr,
 						  (wdm->message == WATCHER_MSG_GET_WITH_DESC) );
-				astr += strlen(astr)+1;
+				astr += slen+1;
 			}
 		}
 		break;
@@ -463,10 +496,27 @@ bool WatcherNub::processRequest( char * packet, int len,
 			char	*astr = wdm->string;
 			for(int i=0;i<wdm->count;i++)
 			{
+				// CR-P2-14: bound the 4-byte sequence number and the following
+				// NUL-terminated path by the end of the packet.
+				if ((size_t)(end - astr) < sizeof(unsigned int))
+				{
+					WARNING_MSG( "WatcherNub::receiveRequest: malformed "
+							"GET2 request from %s\n",
+							watcherEndpoint.remoteAddr().c_str() );
+					break;
+				}
 				unsigned int & seqNum = (unsigned int &)*astr;
 				astr += sizeof(unsigned int);
+				const ptrdiff_t slen = boundedStringLength( astr, end );
+				if (slen < 0)
+				{
+					WARNING_MSG( "WatcherNub::receiveRequest: malformed "
+							"GET2 request from %s\n",
+							watcherEndpoint.remoteAddr().c_str() );
+					break;
+				}
 				this->processWatcherGet2Request( *packetHandler, astr, seqNum );
-				astr += strlen(astr)+1;
+				astr += slen+1;
 			}
 		}
 		break;
@@ -481,9 +531,27 @@ bool WatcherNub::processRequest( char * packet, int len,
 			char	*astr = wdm->string;
 			for(int i=0;i<wdm->count;i++)
 			{
-				char	*bstr = astr + strlen(astr)+1;
+				// CR-P2-14: bound both NUL-terminated strings (path and value)
+				// by the end of the packet.
+				const ptrdiff_t alen = boundedStringLength( astr, end );
+				if (alen < 0)
+				{
+					WARNING_MSG( "WatcherNub::receiveRequest: malformed "
+							"SET request from %s\n",
+							watcherEndpoint.remoteAddr().c_str() );
+					break;
+				}
+				char	*bstr = astr + alen+1;
+				const ptrdiff_t blen = boundedStringLength( bstr, end );
+				if (blen < 0)
+				{
+					WARNING_MSG( "WatcherNub::receiveRequest: malformed "
+							"SET request from %s\n",
+							watcherEndpoint.remoteAddr().c_str() );
+					break;
+				}
 				this->processWatcherSetRequest( *packetHandler, astr,bstr );
-				astr = bstr + strlen(bstr)+1;
+				astr = bstr + blen+1;
 			}
 		}
 		break;
@@ -498,7 +566,8 @@ bool WatcherNub::processRequest( char * packet, int len,
 			char	*astr = wdm->string;
 			for(int i=0;i<wdm->count;i++)
 			{
-				this->processWatcherSet2Request( *packetHandler, astr );
+				// CR-P2-14: end bounds the internal string/value walks.
+				this->processWatcherSet2Request( *packetHandler, astr, end );
 			}
 		}
 		break;
@@ -637,13 +706,29 @@ void WatcherNub::processWatcherSetRequest(
  *	@see	processWatcherGet2Request
  */
 void WatcherNub::processWatcherSet2Request(
-		WatcherPacketHandler & packetHandler, char* & packet )
+		WatcherPacketHandler & packetHandler, char* & packet, const char * end )
 {
 #if ENABLE_WATCHERS
 /* TODO: cleanup the passing in of packet as a reference here */
+	// CR-P2-14: bound the sequence number, the path, and the value stream by
+	// the end of the packet (the message count is attacker-controlled).
+	if ((size_t)(end - packet) < sizeof(uint32))
+	{
+		WARNING_MSG( "WatcherNub::processWatcherSet2Request: "
+				"malformed packet, missing sequence number\n" );
+		return;
+	}
+
 	uint32 & seqNum = (uint32 &)*packet;
 	const char *path = packet + sizeof(uint32);
-	char *curr = (char *)path + strlen(path)+1;
+	const ptrdiff_t plen = boundedStringLength( path, end );
+	if (plen < 0)
+	{
+		WARNING_MSG( "WatcherNub::processWatcherSet2Request: "
+				"malformed packet, unterminated path\n" );
+		return;
+	}
+	char *curr = (char *)path + plen+1;
 
 	// Determine the size of the contained data
 	// then add the size of the prefixed information;
@@ -654,6 +739,16 @@ void WatcherNub::processWatcherSet2Request(
 	// next 3 bytes.  Otherwise, this byte is the data size.
 	// Also see pycommon/watcher_data_type.py.
 	uint32 size = 0;
+
+	// The size hint byte (and the 3-byte packed size when it is 0xff) needs
+	// up to 5 bytes from curr.
+	if ((size_t)(end - curr) < 5)
+	{
+		WARNING_MSG( "WatcherNub::processWatcherSet2Request: "
+				"malformed packet, truncated value stream\n" );
+		return;
+	}
+
 	uint8 sizeHint = (uint8)*(curr+1); // Skips "type" byte.
 	if (sizeHint == 0xff)
 	{
@@ -664,6 +759,14 @@ void WatcherNub::processWatcherSet2Request(
 	else
 	{
 		size = sizeHint + 2;
+	}
+
+	// CR-P2-14: the declared size comes from the packet and can be huge.
+	if ((size_t)(end - curr) < size)
+	{
+		WARNING_MSG( "WatcherNub::processWatcherSet2Request: "
+				"malformed packet, value stream exceeds packet\n" );
+		return;
 	}
 
 	// Construct the path request handler
