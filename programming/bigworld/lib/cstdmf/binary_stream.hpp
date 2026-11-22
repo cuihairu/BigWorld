@@ -361,7 +361,15 @@ inline BinaryIStream & operator>>( BinaryIStream & b, BW::vector<T,A> & data)
 
 	if (!b.error())
 	{
-		data.reserve( max );
+		// Only reserve what the stream can actually supply: every element
+		// streamed below consumes at least one byte, so a declared max that
+		// exceeds remainingLength() is not data and must not be allowed to
+		// allocate a gigabyte (CR-P2-25).
+		const int available = b.remainingLength();
+		const uint32 toReserve =
+			(available < 0) ? 0 :
+			((max < (uint32)available) ? max : (uint32)available);
+		data.reserve( toReserve );
 		for (uint32 i=0; i < max && !b.error(); i++)
 		{
 			b >> elt;
@@ -412,7 +420,14 @@ inline BinaryIStream & operator>>( BinaryIStream & b, name & data)             \
 	b >> max;                                                                  \
                                                                                \
 	data.clear();                                                              \
-	data.reserve(max);                                                         \
+	{                                                                          \
+		/* Bound the reserve by what the stream can supply (CR-P2-25). */       \
+		const int available = b.remainingLength();                             \
+		const unsigned int toReserve =                                         \
+			(available < 0) ? 0 :                                              \
+			((max < (unsigned int)available) ? max : (unsigned int)available); \
+		data.reserve( toReserve );                                             \
+	}                                                                          \
 	for (unsigned int i=0;i<max;i++)									\
 	{																	\
 		b >> elt;														\
