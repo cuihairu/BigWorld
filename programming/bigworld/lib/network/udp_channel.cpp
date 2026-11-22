@@ -529,6 +529,18 @@ void UDPChannel::initFromStream( BinaryIStream & data,
 
 	for (uint32 i = 1; numToReceive > 0; ++i)
 	{
+		if (data.error() || data.remainingLength() <= 0)
+		{
+			// CR-P2-16: a NULL slot (hasPacket == 0) is a legal stream marker,
+			// so the NULL return cannot end this loop on its own. Once the
+			// stream is exhausted, createFromStream returns NULL forever
+			// without consuming anything and numToReceive never reaches zero,
+			// so i runs away and wraps the buffered receive window.
+			ERROR_MSG( "UDPChannel::initFromStream: stream exhausted with %d "
+					"buffered receive(s) unread\n", numToReceive );
+			break;
+		}
+
 		PacketPtr pPacket =
 			Packet::createFromStream( data, Packet::BUFFERED_RECEIVE );
 
