@@ -53,6 +53,10 @@ NOISE = re.compile(
     r"|took [0-9.]+ seconds"  # profile timing
     r"|_\d{8}_\d{6}"          # secondary-DB prefix timestamp
     r"|= \d+/\d+"             # handleStatusCheck counts
+    r"|global base \d+|entity=\d+"  # space ids come from a second range (1)
+    r"|ClientAvatar \d+|onClientDeath: \d+|onEntitiesEnabled: \d+"
+    r"|login: \d+ attached|Adding proxy \d+"  # client proxy id in baseapp
+    r"|\b\d{4,}\b"            # entity ids, pids, ports, byte counts
 )
 # lines that are pure noise and never evidence
 DROP = re.compile(
@@ -158,6 +162,22 @@ def teardown():
     run(["bash", str(DEEP_CHAIN), "--teardown"], timeout=120)
 
 
+def reset_db():
+    """Drop and let deep-chain re-create the smoke database.
+
+    Without this, entity ids accumulate across the ~96 cluster runs, so the
+    same event logs different ids in the two states and the off/on diff fills
+    with id noise instead of the switch's effect. deep-chain.sh re-creates
+    the database (and re-syncs tables to defs) on bring-up.
+    """
+    r = subprocess.run(
+        ["sudo", "-n", "mysql", "-e",
+         "DROP DATABASE IF EXISTS bigworld;"],
+        capture_output=True, text=True, timeout=60)
+    if r.returncode != 0:
+        print(f"[warn] db reset failed: {r.stderr.strip()[:200]}")
+
+
 def exercise(scratch, tag):
     """Standard exercise: a login attempt, then a short settle."""
     out = scratch / f"client_{tag}.log"
@@ -201,14 +221,30 @@ def normalise(line):
 def evidence_of(scratch, tag):
     """Extract normalised evidence lines from captured logs."""
     by_app = {}
-    for f in scratch.glob(f"{tag}_*.log"):
-        app = f.name[len(tag) + 1:].rsplit(".", 1)[0]
+    # the client's own output is evidence too: it is the client-visible side of
+    # the effect (e.g. "Login failed" vs "LOGGED_ON")
+    files = [scratch / f"client_{tag}.log"]
+    files += sorted(scratch.glob(f"{tag}_*.log"))
+    for f in files:
+        if not f.exists():
+            continue
+        if f.name.startswith("client_"):
+            app = "client"
+        else:
+            app = f.name[len(tag) + 1:].rsplit(".", 1)[0]
+        # which of the two baseapps an entity lands on is timing dependent, not
+        # the switch's effect, so they merge into one logical app
+        if app == "baseapp2":
+            app = "baseapp"
         lines = set()
         for raw in f.read_text(errors="replace").splitlines():
             n = normalise(raw)
             if n:
                 lines.add(n)
-        by_app[app] = lines
+        if app in by_app:
+            by_app[app] |= lines
+        else:
+            by_app[app] = lines
     return by_app
 
 
@@ -272,6 +308,11 @@ def capture_switch(sw, scratch, force):
     # Capture both explicit values (false then true) so the evidence is
     # comparable across switches, regardless of each switch's default.
     for state, value in (("off", "false"), ("on", "true")):
+        # entity ids accumulate across the many cluster runs (the DB persists),
+        # so the same event logs different ids in the two states and the diff
+        # fills with id noise. Reset before each state so both start from the
+        # same id baseline and only the switch differs.
+        reset_db()
         overlay = sdir / f"bw_{state}.xml"
         overlay.write_text(apply_switch(base, sw, value))
         ok, log = bring_up(overlay)
