@@ -1,0 +1,110 @@
+name: Client SDK CI
+
+# CI for client_sdk/ on every push/PR touching it (CL-4): three legs, one per
+# SDK surface:
+#
+#   unity      — the netstandard2.1 C# protocol core, `dotnet test`
+#   typescript — the TS plugin, pnpm + vitest + typecheck
+#   generator  — the bwgen def-to-code generator, python3 -m unittest
+#                 (the golden suite also asserts the generated copies shipped
+#                 in unity/typescript match a fresh regeneration)
+#
+# The C++ server-side track stays on ci.yml / daily-build.yml; this workflow
+# only covers client_sdk/. Repo rules: no tags, no releases — the push/PR runs
+# are gates only. The daily client_sdk packaging leg is in daily-build.yml.
+
+on:
+  push:
+    paths:
+      - 'client_sdk/**'
+      - '.github/workflows/client-sdk.yml'
+  pull_request:
+    paths:
+      - 'client_sdk/**'
+      - '.github/workflows/client-sdk.yml'
+permissions:
+  contents: read
+
+concurrency:
+  group: client-sdk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unity:
+    name: C# protocol core (dotnet test)
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6.1.0
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v6.1.0
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('client_sdk/unity/**/*.csproj') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      - name: dotnet test
+        run: dotnet test client_sdk/unity/tests/BigWorld.ClientSdk.Tests/BigWorld.ClientSdk.Tests.csproj --nologo
+
+  typescript:
+    name: TypeScript plugin (vitest + typecheck)
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: client_sdk/typescript
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+
+      # pnpm first (setup-node's cache: pnpm needs it on PATH). The version
+      # matches package.json's packageManager field, which the lockfile's
+      # packageManagerDependencies records — all three must stay in sync or
+      # `pnpm install --frozen-lockfile` fails.
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6.1.1
+        with:
+          version: 12.10.1
+
+      - name: Setup Node
+        uses: actions/setup-node@v7.1.0
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: client_sdk/typescript/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Build first: `pnpm test` compiles on the fly, but the emit target
+      # (tsconfig.json -> dist/) is what the daily packager packs.
+      - name: Build (tsc)
+        run: pnpm build
+
+      - name: Test (vitest)
+        run: pnpm test
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+  generator:
+    name: bwgen generator (unittest golden)
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+
+      # Stdlib only — the runner's system python3 is enough. The suite is the
+      # golden regression plus the runtime-consistency check that the shipped
+      # generated copies equal a fresh regeneration.
+      - name: Run generator tests
+        run: python3 -m unittest discover -s client_sdk/generator/tests -v

@@ -306,3 +306,100 @@ jobs:
         if: steps.freshness.outputs.stale == 'true'
         shell: pwsh
         run: Write-Host "Windows lane skipped by the 48-hour freshness rule."
+
+  # Client SDK products lane (CL-4, 2026-11-22): package the three SDK lanes
+  # into a daily bundle — nupkg (C# protocol core), npm tarball (TypeScript
+  # plugin), wheel (bwgen) — with a per-file SHA256/byte-count manifest and a
+  # zip named bigworld-client-sdk-dailyYYYYMMDD.<sha>.zip. The same 48-hour
+  # freshness gate as the other two lanes, so all three skip together on a
+  # quiet branch and all run on workflow_dispatch. The three test suites run
+  # BEFORE packaging: a broken SDK must never ship a bundle (repo rule).
+  # Artifacts only, no tags and no releases.
+  client-sdk:
+    name: Client SDK products
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+        with:
+          # full history: the 48-hour freshness check counts commits by date
+          fetch-depth: 0
+
+      - name: Check for commits in the last 48 hours
+        id: freshness
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "stale=false" >> "$GITHUB_OUTPUT"
+            echo "Manual dispatch: build unconditionally."
+            exit 0
+          fi
+          count="$(git rev-list --count --since='48 hours ago' HEAD)"
+          echo "commits in last 48h: $count"
+          if [ "$count" -eq 0 ]; then
+            echo "stale=true" >> "$GITHUB_OUTPUT"
+            echo "No commits in the last 48 hours — skipping the client SDK lane."
+          else
+            echo "stale=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Setup .NET
+        if: steps.freshness.outputs.stale != 'true'
+        uses: actions/setup-dotnet@v6.1.0
+        with:
+          dotnet-version: 10.0.x
+
+      # pnpm first (setup-node's cache: pnpm needs it on PATH); the version
+      # matches the packageManager pin and the lockfile's
+      # packageManagerDependencies.
+      - name: Setup pnpm
+        if: steps.freshness.outputs.stale != 'true'
+        uses: pnpm/action-setup@v6.1.1
+        with:
+          version: 12.10.1
+
+      - name: Setup Node
+        if: steps.freshness.outputs.stale != 'true'
+        uses: actions/setup-node@v7.1.0
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: client_sdk/typescript/pnpm-lock.yaml
+
+      - name: Gate - C# protocol core tests
+        if: steps.freshness.outputs.stale != 'true'
+        run: dotnet test client_sdk/unity/tests/BigWorld.ClientSdk.Tests/BigWorld.ClientSdk.Tests.csproj --nologo
+
+      - name: Gate - TypeScript install + build + tests
+        if: steps.freshness.outputs.stale != 'true'
+        working-directory: client_sdk/typescript
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+          pnpm test
+          pnpm typecheck
+
+      - name: Gate - generator golden tests
+        if: steps.freshness.outputs.stale != 'true'
+        run: python3 -m unittest discover -s client_sdk/generator/tests -v
+
+      - name: Package (nupkg / tgz / wheel + manifest + zip)
+        if: steps.freshness.outputs.stale != 'true'
+        id: pkg
+        run: |
+          bash scripts/package-daily-client-sdk.sh out
+          echo "ver=$(cat out/pkg-version.txt)" >> "$GITHUB_OUTPUT"
+
+      - name: Upload client SDK products
+        if: steps.freshness.outputs.stale != 'true'
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: bigworld-client-sdk-${{ steps.pkg.outputs.ver }}
+          path: out/*
+          retention-days: 14
+          if-no-files-found: error
+
+      - name: Skip notice (no commits in 48 hours)
+        if: steps.freshness.outputs.stale == 'true'
+        run: echo "Client SDK lane skipped by the 48-hour freshness rule — nothing to do."

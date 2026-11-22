@@ -20,9 +20,21 @@ never modifies `programming/bigworld/`.
 | Engine | Status | Transport | Notes |
 |---|---|---|---|
 | Unity (C#) | CL-1 done | `ITransport` / `TcpTransport` (raw TCP; WS gateway adapter later) | The SDK core is `netstandard2.1` with **no `UnityEngine` dependency**, so it embeds in Unity, a headless host, or tests unchanged. |
-| TypeScript | CL-2 planned | interface-driven; TCP-over-WS gateway | Mirrors kbengine's `kbengine.js` plugin semantics (`Entity`/`EntityCall`, Event fire/register). |
-| Python generator | CL-3 planned | generates C# + TS | kbcmd equivalent; reads section-based `entities.xml` + `*.def`. |
+| TypeScript | CL-2 done | interface-driven; TCP-over-WS gateway | Mirrors kbengine's `kbengine.js` plugin semantics (`Entity`/`EntityCall`, Event fire/register). |
+| Python generator | CL-3 done | generates C# + TS | kbcmd equivalent; reads section-based `entities.xml` + `*.def`. |
 | UE5 (C++) | CL-5 planned | review only | No UE code written in this SDK; `unreal/REVIEW.md` gives the build/CI decision. |
+
+## CI and daily bundles
+
+* `.github/workflows/client-sdk.yml` — three legs on every push/PR touching
+  `client_sdk/`: `dotnet test` (unity), pnpm `build` + `vitest` + typecheck
+  (typescript), `python3 -m unittest` golden (generator).
+* `.github/workflows/daily-build.yml` (client-sdk job) — the same three
+  suites as a gate, then packages a daily bundle: nupkg (C# core), npm
+  tarball (TypeScript plugin), wheel (`bwgen`), with a per-file
+  SHA256/byte-count manifest, zipped as
+  `bigworld-client-sdk-dailyYYYYMMDD.<sha>.zip` and uploaded as a workflow
+  artifact (14-day retention). No tags, no releases (repo rule).
 
 ## Protocol authority
 

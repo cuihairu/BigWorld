@@ -46,3 +46,10 @@ docs/.vitepress/theme/*.bak
 
 # 打包产物不再进仓库:已迁至 GitHub Release(2026-11-21,见 release bigworld-14.4.1)
 *.rpm
+
+# client SDK daily bundle output (scripts/package-daily-client-sdk.sh writes
+# here when run in-repo; in CI the working tree is ephemeral)
+/out/
+# Python packaging artifacts from `pip wheel`/`pip install -e` on bwgen
+client_sdk/generator/build/
+client_sdk/generator/*.egg-info/

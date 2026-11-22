@@ -26,6 +26,11 @@ is the acceptance corpus: five entities (Account, ClientAvatar, ClientOnly,
 Guard, Space) covering strings, fixed-width ints, an unsupported USER_TYPE
 property and exposed base methods.
 
+The same CLI is available as a wheel (`pip install client_sdk/generator`, then
+`bwgen ...`, or `python3 -m bwgen ...`); the wheel is one of the daily client
+SDK bundles built by `.github/workflows/daily-build.yml`. The repo-root
+`bwgen.py` and the package CLI are the same `bwgen.cli.main`.
+
 ## What one generated file contains
 
 `<Entity>Base` (the class game code subclasses, kbcmd naming):
@@ -50,8 +55,11 @@ property and exposed base methods.
 
 ```
 client_sdk/generator/
-  bwgen.py              CLI entry point
+  pyproject.toml        wheel build (console script: `bwgen`)
+  bwgen.py              CLI entry point (script invocation)
   bwgen/
+    cli.py              the shared CLI (generate / main)
+    __main__.py         `python3 -m bwgen` entry
     model.py            def model (EntityDef / MethodDef / PropertyDef)
     defparse.py         entities.xml + *.def parser
     typemap.py          def type -> wire size / C# / TS mapping
