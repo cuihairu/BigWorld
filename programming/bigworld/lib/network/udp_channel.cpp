@@ -527,10 +527,23 @@ void UDPChannel::initFromStream( BinaryIStream & data,
 	data >> receiveWindowSize;
 	bufferedReceives_.inflateToAtLeast( receiveWindowSize );
 
-	for (uint32 i = 1; numToReceive > 0; ++i)
+	// numBufferedReceives_ counts real packets and receiveWindowSize is the
+	// slot count of the receive window this section holds, so i can never
+	// legitimately pass receiveWindowSize: bounding it stops a truncated or
+	// corrupt stream whose slots run out before numToReceive does from
+	// spinning forever on createFromStream() NULLs (CR-P2-16).
+	for (uint32 i = 1; (numToReceive > 0) && (i <= receiveWindowSize); ++i)
 	{
 		PacketPtr pPacket =
 			Packet::createFromStream( data, Packet::BUFFERED_RECEIVE );
+
+		if (!pPacket && data.error())
+		{
+			// A NULL packet with a clean stream is a hole in the receive
+			// window and is fine, but once the stream has run dry every
+			// createFromStream hands back NULL; stop reading it then.
+			break;
+		}
 
 		bufferedReceives_[ inSeqAt_ + i ] = pPacket;
 

@@ -210,6 +210,66 @@ TEST( Channel_stream )
 
 }
 
+
+/**
+ *	initFromStream() used to loop until numToReceive reached zero, but its
+ *	slot supply can end before that happens (a truncated or corrupt stream):
+ *	every slot that reads back as a hole left numToReceive untouched, so it
+ *	span forever on createFromStream() NULLs. The loop is now bounded by the
+ *	receive window's slot count.
+ *
+ *	The stream below declares a thousand real buffered receives but a window
+ *	of four slots and supplies exactly four hole markers; the window bound
+ *	must stop the loop there. Everything after the buffered-receive section is
+ *	normal, so no read in this test may ever run past the end of the stream -
+ *	that keeps the overread assertion out of the picture in assert builds
+ *	(CR-P2-16).
+ */
+TEST( Channel_streamWindowBoundsBufferedReceives )
+{
+	Mercury::EventDispatcher dispatcher;
+
+	Mercury::NetworkInterface interface( &dispatcher,
+		Mercury::NETWORK_INTERFACE_INTERNAL );
+
+	const Mercury::Address addr = interface.address();
+
+	Mercury::UDPChannel * pChannel =
+		new Mercury::UDPChannel( interface, addr,
+			Mercury::UDPChannel::INTERNAL, 1.f, NULL, 1 );
+
+	MemoryOStream os;
+
+	// version, smallOutSeqAt_, largeOutSeqAt_, oldestUnackedSeq_ (SEQ_NULL so
+	// the unacked pass is skipped) and the highestAck_ matching that.
+	os << uint32( 1 ) << uint32( 1 ) << uint32( 1 ) << Mercury::SEQ_NULL
+		<< uint32( 0 );
+
+	// inSeqAt_, numBufferedReceives_ declaring far more real packets than the
+	// window below has slots for, and the window size itself.
+	os << uint32( 1 ) << uint32( 1000 ) << uint32( 4 );
+
+	// The four slots of that window, all of them holes.
+	os << uint8( 0 ) << uint8( 0 ) << uint8( 0 ) << uint8( 0 );
+
+	// No chained fragments, no critical send pending, no first packet owed.
+	os << uint16( 0 ) << Mercury::SEQ_NULL << uint8( 0 );
+
+	// The trailing counters.
+	os << uint32( 0 ) << uint32( 0 ) << uint32( 0 ) << uint32( 0 )
+		<< uint32( 0 );
+
+	pChannel->initFromStream( os, addr );
+
+	// Everything the stream declared was consumed by the reads above - if the
+	// loop had run past the window it would have eaten into these bytes or
+	// overread the stream outright.
+	CHECK( os.remainingLength() == 0 );
+
+	pChannel->destroy();
+
+}
+
 BW_END_NAMESPACE
 
 // test_stream.cpp
