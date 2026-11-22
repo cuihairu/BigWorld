@@ -146,20 +146,36 @@ bool Updater::update()
 		return false;
 	}
 
-	char * start = strstr( aline, ": " ) + 2;
-	int addrOffset = start - aline;
-	start = strstr( start, " " ) + 1;
-	start = strstr( start, " " ) + 1;
-	start = strstr( start, " " ) + 1;
-	int txrxOffset = start - aline;
+	char * start = strstr( aline, ": " );
 
-	if ((addrOffset < 0) || (txrxOffset < 0))
+	// None of these separators is guaranteed on the header line, and the old
+	// code chased them unchecked: a missing ": " was arithmetically walked as
+	// NULL + 2 and every offset below was computed from that wild pointer
+	// before the bounds test could run (CR-P2-18).
+	if (start == NULL)
 	{
 		ERROR_MSG( "Updater::update: /proc/net/udp invalid format: %s\n",
 			aline );
 		fclose( f );
 		return false;
 	}
+
+	int addrOffset = ( start += 2 ) - aline;
+
+	for (int i = 0; i < 3; ++i)
+	{
+		start = strstr( start, " " );
+		if (start == NULL)
+		{
+			ERROR_MSG( "Updater::update: /proc/net/udp invalid format: %s\n",
+				aline );
+			fclose( f );
+			return false;
+		}
+		++start;
+	}
+
+	int txrxOffset = start - aline;
 
 	Mercury::Address addr;
 	StatsBlock statsBlock;
