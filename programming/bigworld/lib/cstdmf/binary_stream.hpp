@@ -361,7 +361,14 @@ inline BinaryIStream & operator>>( BinaryIStream & b, BW::vector<T,A> & data)
 
 	if (!b.error())
 	{
-		data.reserve( max );
+		// The element count is declared by the peer, so bound both the reserve
+		// and the read loop by what the stream can actually hold: a bogus
+		// declaration must not size the buffer before the reads run out
+		// (CR-P2-25).
+		const int remaining = b.remainingLength();
+		const uint32 maxElements = (remaining > 0)
+			? (static_cast< uint32 >( remaining ) / sizeof( T )) : 0;
+		data.reserve( (max < maxElements) ? max : maxElements );
 		for (uint32 i=0; i < max && !b.error(); i++)
 		{
 			b >> elt;
@@ -412,8 +419,16 @@ inline BinaryIStream & operator>>( BinaryIStream & b, name & data)             \
 	b >> max;                                                                  \
                                                                                \
 	data.clear();                                                              \
-	data.reserve(max);                                                         \
-	for (unsigned int i=0;i<max;i++)									\
+	/* The element count is declared by the peer, so bound both the reserve     \
+	 * and the read loop by what the stream can actually hold (CR-P2-25).       \
+	 */                                                                         \
+	{                                                                          \
+		const int remaining = b.remainingLength();                             \
+		const unsigned int maxElements = (remaining > 0)                       \
+			? (static_cast< unsigned int >( remaining ) / sizeof( obj )) : 0;  \
+		data.reserve((max < maxElements) ? max : maxElements);                 \
+	}                                                                          \
+	for (unsigned int i=0;i<max && !b.error();i++)							\
 	{																	\
 		b >> elt;														\
 		data.push_back(elt);											\

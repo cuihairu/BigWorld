@@ -46,6 +46,32 @@ TEST( BitReader_readBits )
 	}
 }
 
+// The vector stream operators bound their reserve by the bytes the stream
+// can actually hold (CR-P2-25), so a normal round trip must still recover
+// every element unchanged.
+TEST( BinaryStream_vectorRoundTrip )
+{
+	MemoryOStream stream;
+	BW::vector< uint32 > out;
+	out.push_back( 1 );
+	out.push_back( 2 );
+	out.push_back( 3 );
+	out.push_back( 4 );
+	out.push_back( 5 );
+	stream << out;
+
+	MemoryIStream input( stream.data(), stream.size() );
+	BW::vector< uint32 > in;
+	input >> in;
+
+	CHECK( !input.error() );
+	CHECK_EQUAL( out.size(), in.size() );
+	for (size_t i = 0; i < in.size(); ++i)
+	{
+		CHECK_EQUAL( out[i], in[i] );
+	}
+}
+
 BW_END_NAMESPACE
 
 // test_bit_reader.cpp
