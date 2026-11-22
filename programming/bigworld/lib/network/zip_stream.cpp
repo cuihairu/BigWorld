@@ -141,6 +141,19 @@ bool ZipIStream::init( BinaryIStream & stream, unsigned char * pBuffer,
 		return false;
 	}
 
+	// origLen comes from the sender, while compressLen is bounded by the data
+	// that was actually received above. Deflate can never expand by more than
+	// about 1032:1, so anything that needs a bigger buffer cannot be compressed
+	// data at all; refuse it rather than allocate on the sender's word.
+	if (origLen > ((uLongf)compressLen * 2048))
+	{
+		ERROR_MSG( "ZipIStream::init: impossible original length %lu "
+				"for %d compressed byte(s)\n",
+			(unsigned long)origLen, compressLen );
+		error_ = true;
+		return false;
+	}
+
 	if (pBuffer)
 	{
 		if (static_cast< uLongf >( bufferSize ) < origLen)
