@@ -538,6 +538,47 @@ protected:
 };
 
 
+// BIGWORLD_BEGIN(3.13 migration)
+/**
+ *	Returns the byte payload of a str or a bytes object.
+ *
+ *	In Python 2.7 this download carried a PyString, so binary payloads (a file
+ *	read in binary mode, e.g. open(f, 'rb').read()) were legal. The 3.13
+ *	migration restricted the data to str, which made those raise TypeError
+ *	(CR-P2-13). A str is handed out as its UTF-8 encoding, a bytes as its own
+ *	payload; a failed conversion returns NULL with rSize reset to zero.
+ */
+static const char * dataDownloadPayload( PyObject * pObject,
+	Py_ssize_t & rSize )
+{
+	rSize = 0;
+
+	const char * pBytes = NULL;
+
+	if (PyUnicode_Check( pObject ))
+	{
+		pBytes = PyUnicode_AsUTF8AndSize( pObject, &rSize );
+	}
+	else if (PyBytes_Check( pObject ))
+	{
+		char * pRaw = NULL;
+		if (PyBytes_AsStringAndSize( pObject, &pRaw, &rSize ) == 0)
+		{
+			pBytes = pRaw;
+		}
+	}
+
+	if (pBytes == NULL)
+	{
+		rSize = 0;
+		return NULL;
+	}
+
+	return pBytes;
+}
+// BIGWORLD_END
+
+
 /**
  *	Constructor.
  */
@@ -546,7 +587,7 @@ StringDataDownload::StringDataDownload(
 	DataDownload( pDesc, id, dls ),
 	pData_( pData ),
 	utf8Size_( 0 ),
-	stream_( PyUnicode_AsUTF8AndSize( pData.get(), &utf8Size_ ),
+	stream_( dataDownloadPayload( pData.get(), utf8Size_ ),
 		( int )utf8Size_ )
 {}
 
@@ -567,7 +608,9 @@ void StringDataDownload::read( BinaryOStream &os, int nBytes )
 DataDownload * StringDataDownloadFactory::onCreate( PyObjectPtr pDesc,
 		uint16 id, DataDownloads &dls )
 {
-	if (!PyUnicode_Check( pData_.get() ))
+	// Accept bytes as well as str: this took a PyString in 2.7, so binary
+	// payloads were legal and the str-only check broke them (CR-P2-13).
+	if (!PyUnicode_Check( pData_.get() ) && !PyBytes_Check( pData_.get() ))
 	{
 		PyErr_SetString( PyExc_TypeError,
 				"Data argument must be a string." );
