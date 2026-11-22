@@ -555,7 +555,9 @@ void LogMsg::criticalMessageHelper( bool isDevAssertion,
 
 #elif defined ( PLAYSTATION3 )
 
-	printf( buffer );
+	// The message text is data, not a format (CR-P3-01): a '%' in a critical
+	// message would otherwise drive the formatter.
+	printf( "%s", buffer );
 	printf( "\n" );
 	ENTER_DEBUGGER();
 
