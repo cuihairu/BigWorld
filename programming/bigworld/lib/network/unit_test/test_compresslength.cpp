@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <string.h>
 #include "cstdmf/memory_stream.hpp"
 #include "network/interface_element.hpp"
 #include "network/udp_bundle.hpp"
@@ -178,6 +179,92 @@ TEST( CompressLength )
 			}
 		}
 	}
+}
+
+/**
+ *	A message whose declared length spans several packets must be assembled
+ *	from the chain by iterator::data(). This pins the split-message path that
+ *	the CR-P2-22 bound guards, so that the bound is never tight enough to
+ *	refuse a legitimate spanning message.
+ */
+TEST( BundleProcessor_spanningMessageDataAssembles )
+{
+	Mercury::InterfaceElement ie( "TestSpanningElement", 1,
+		Mercury::VARIABLE_LENGTH_MESSAGE, 4 );
+
+	const int PAYLOAD = 3000;
+	const int CHUNK = 1000;
+	BW::vector<uint8> payload( PAYLOAD );
+	for (int i = 0; i < PAYLOAD; ++i)
+	{
+		payload[ i ] = (uint8)( i * 13 + 7 );
+	}
+
+	Mercury::UDPBundle bundle;
+	bundle.startMessage( ie );
+	for (int off = 0; off < PAYLOAD; off += CHUNK)
+	{
+		const int n = ((PAYLOAD - off) < CHUNK) ? (PAYLOAD - off) : CHUNK;
+		memcpy( bundle.reserve( n ), &payload[ off ], n );
+	}
+	bundle.finalise();
+
+	Mercury::UDPBundleProcessor processor( bundle.pFirstPacket() );
+	Mercury::UDPBundleProcessor::iterator iter = processor.begin();
+
+	int length = iter.unpack( ie ).length;
+	CHECK_EQUAL( PAYLOAD, length );
+
+	const char * pData = iter.data();
+	CHECK( pData != NULL );
+	if (pData)
+	{
+		CHECK( memcmp( pData, &payload[0], PAYLOAD ) == 0 );
+	}
+}
+
+
+/**
+ *	iterator::data() used to size its temporary buffer straight from the
+ *	peer-declared message length before checking the packet chain actually
+ *	holds that much, so a corrupt declaration could demand an enormous
+ *	allocation. It now sums the chain's real capacity and refuses anything
+ *	beyond it (CR-P2-22).
+ */
+TEST( BundleProcessor_overlongSpanningMessageYieldsNull )
+{
+	Mercury::InterfaceElement ie( "TestOverlongElement", 1,
+		Mercury::VARIABLE_LENGTH_MESSAGE, 4 );
+
+	const int PAYLOAD = 3000;
+	const int CHUNK = 1000;
+	BW::vector<uint8> payload( PAYLOAD, 0xAB );
+
+	Mercury::UDPBundle bundle;
+	bundle.startMessage( ie );
+	for (int off = 0; off < PAYLOAD; off += CHUNK)
+	{
+		const int n = ((PAYLOAD - off) < CHUNK) ? (PAYLOAD - off) : CHUNK;
+		memcpy( bundle.reserve( n ), &payload[ off ], n );
+	}
+	bundle.finalise();
+
+	// Rewrite the declared length to something no chain this small could hold.
+	// It must stay below the 0x80000000 overflow sentinel that unpack rejects,
+	// and below INT_MAX - offset_ so data()'s own length check does not wrap.
+	uint32 overlong = BW_HTONL( 0x100000 );
+	memcpy( bundle.pFirstPacket()->data() + Mercury::Packet::HEADER_SIZE +
+			sizeof( Mercury::MessageID ), &overlong, sizeof( overlong ) );
+
+	Mercury::UDPBundleProcessor processor( bundle.pFirstPacket() );
+	Mercury::UDPBundleProcessor::iterator iter = processor.begin();
+
+	int length = iter.unpack( ie ).length;
+	CHECK_EQUAL( 0x100000, length );
+
+	// The chain cannot hold the declared payload: data() must decline rather
+	// than size a buffer from the declaration.
+	CHECK( iter.data() == NULL );
 }
 
 BW_END_NAMESPACE

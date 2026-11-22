@@ -548,6 +548,22 @@ const char * UDPBundleProcessor::iterator::data()
 	}
 
 	// Buffer is destroyed in operator++() and in ~iterator().
+	// The declared length is attacker-influenced (CR-P2-22), so bound the
+	// allocation by the bytes the packet chain actually holds before sizing a
+	// buffer from it - otherwise a huge declaration allocates up front and only
+	// the loop below discovers the chain runs out.
+	size_t available = 0;
+	for (Packet * p = cursor_; p != NULL; p = p->next())
+	{
+		const int startOffset = (p == cursor_) ? dataOffset_ : Packet::HEADER_SIZE;
+		available += static_cast< size_t >( p->msgEndOffset() - startOffset );
+	}
+
+	if (static_cast< size_t >( dataLength_ ) > available)
+	{
+		return NULL;
+	}
+
 	dataBuffer_ = new char[dataLength_];
 	Packet *thisPack = cursor_;
 	uint16 thisOff = dataOffset_;
