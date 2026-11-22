@@ -192,6 +192,10 @@ TEST( DBConfig_missingOptionsAreAnError )
 	CHECK_EQUAL( 10u, fixture.block().updateHertz() );
 	CHECK_EQUAL( BW::string( "xml" ), fixture.db().type() );
 	CHECK_EQUAL( BW::string( "localhost" ), fixture.db().mysql.host() );
+	// No credential is embedded in the binary: a config-less run must not
+	// silently authenticate with a known default (CR-P2-23).
+	CHECK_EQUAL( BW::string( "" ), fixture.db().mysql.username() );
+	CHECK_EQUAL( BW::string( "" ), fixture.db().mysql.password() );
 	CHECK_EQUAL( BW::string( "bigworld" ), fixture.db().mysql.databaseName() );
 	CHECK_EQUAL( 5u, fixture.db().mysql.numConnections() );
 	CHECK_EQUAL( 2048u, fixture.db().mysql.maxSpaceDataSize() );

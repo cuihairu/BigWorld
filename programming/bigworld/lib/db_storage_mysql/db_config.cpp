@@ -45,8 +45,8 @@ const ConnectionInfo & connectionInfo()
 
 		s_connectionInfo.host = "localhost";
 		s_connectionInfo.port = 0;
-		s_connectionInfo.username = "bigworld";
-		s_connectionInfo.password = "bigworld";
+		s_connectionInfo.username = "";
+		s_connectionInfo.password = "";
 		s_connectionInfo.database = "";
 		s_connectionInfo.secureAuth = false;
 
