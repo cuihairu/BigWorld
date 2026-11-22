@@ -176,8 +176,30 @@ bool DataType::createFromStream( BinaryIStream & stream, DataSink & sink,
 				subStreams.empty() ? stream : *subStreams.back();
 
 			int len = outerStream.readPackedInt();
+
+			// CR-P2-15: the length field comes from the stream, so it is
+			// untrusted - retrieve() returns NULL for an oversized
+			// (len > BS_BUFF_MAX_SIZE) or truncated length, and a MemoryIStream
+			// built over NULL would be dereferenced by the next readPackedInt().
+			if (len < 0)
+			{
+				result = false;
+				ERROR_MSG( "DataType::createFromStream: negative substream "
+						"length %d\n", len );
+				break;
+			}
+
+			const void * pBuffer = outerStream.retrieve( len );
+			if (pBuffer == NULL)
+			{
+				result = false;
+				ERROR_MSG( "DataType::createFromStream: failed to retrieve a "
+						"substream of %d bytes\n", len );
+				break;
+			}
+
 			subStreams.push_back(
-				new MemoryIStream( outerStream.retrieve( len ), len ) );
+				new MemoryIStream( pBuffer, len ) );
 		}
 
 		BinaryIStream & curStream =
