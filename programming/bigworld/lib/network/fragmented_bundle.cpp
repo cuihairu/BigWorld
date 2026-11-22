@@ -162,6 +162,16 @@ FragmentedBundlePtr FragmentedBundle::createFromStream( BinaryIStream & data )
 		PacketPtr pPacket =
 			Packet::createFromStream( data, Packet::CHAINED_FRAGMENT );
 
+		if (pPacket == NULL)
+		{
+			// A chained-fragment stream has no holes - every record the
+			// write side emits is a real packet - so a NULL packet means the
+			// stream is exhausted or corrupt. The constructor and addPacket
+			// below both dereference the packet, so stop here and keep
+			// whatever the records so far built up (CR-P2-17).
+			break;
+		}
+
 		if (pFragments == NULL)
 		{
 			pFragments = new FragmentedBundle( pPacket.get() );

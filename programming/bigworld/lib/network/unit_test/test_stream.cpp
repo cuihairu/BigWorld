@@ -270,6 +270,52 @@ TEST( Channel_streamWindowBoundsBufferedReceives )
 
 }
 
+
+/**
+ *	createFromStream() of the chained-fragment section used to hand a NULL
+ *	packet straight to FragmentedBundle's constructor (or addPacket), both of
+ *	which dereference it. A corrupt stream - here a fragment record whose slot
+ *	reads back empty - now stops the loop instead of crashing (CR-P2-17).
+ */
+TEST( Channel_streamEmptyChainedFragmentStops )
+{
+	Mercury::EventDispatcher dispatcher;
+
+	Mercury::NetworkInterface interface( &dispatcher,
+		Mercury::NETWORK_INTERFACE_INTERNAL );
+
+	const Mercury::Address addr = interface.address();
+
+	Mercury::UDPChannel * pChannel =
+		new Mercury::UDPChannel( interface, addr,
+			Mercury::UDPChannel::INTERNAL, 1.f, NULL, 1 );
+
+	MemoryOStream os;
+
+	// version, smallOutSeqAt_, largeOutSeqAt_, oldestUnackedSeq_ (SEQ_NULL so
+	// the unacked pass is skipped) and the highestAck_ matching that.
+	os << uint32( 1 ) << uint32( 1 ) << uint32( 1 ) << Mercury::SEQ_NULL
+		<< uint32( 0 );
+
+	// No buffered receives at all, then one declared chained fragment whose
+	// slot reads back as empty: the packet comes back NULL.
+	os << uint32( 1 ) << uint32( 0 ) << uint32( 0 );
+	os << uint16( 1 ) << uint8( 0 );
+
+	// No critical send pending, no first packet owed, and the trailing
+	// counters.
+	os << Mercury::SEQ_NULL << uint8( 0 );
+	os << uint32( 0 ) << uint32( 0 ) << uint32( 0 ) << uint32( 0 )
+		<< uint32( 0 );
+
+	pChannel->initFromStream( os, addr );
+
+	CHECK( os.remainingLength() == 0 );
+
+	pChannel->destroy();
+
+}
+
 BW_END_NAMESPACE
 
 // test_stream.cpp
