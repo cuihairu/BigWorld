@@ -137,7 +137,7 @@ public:
 	static const EntityDescription * getDescription( EntityTypeID typeID );
 	static EntityTypeID nameToIndex( const char * name );
 
-	static EntityTypes& getTypes();
+	static const EntityTypes& getTypes();
 	//@}
 
 #if ENABLE_WATCHERS

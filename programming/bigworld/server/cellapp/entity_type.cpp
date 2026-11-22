@@ -429,6 +429,13 @@ void EntityType::migrate( bool isFullReload )
 
 	if (isFullReload)
 	{
+		// Swap the reloaded type set in. This is a single-threaded handoff: the
+		// reload path (BigWorld.reloadScript) runs on the main thread with the
+		// GIL held, and every reader of s_curTypes_ (getType/getDescription/
+		// getTypes/cleanupAfterReload) also runs on the main thread, so this
+		// assignment cannot race with a reader. Do not add a lock here "for
+		// safety" — it would guard nothing on the hot path and give false
+		// confidence against an off-thread reader, which is the real hazard.
 		s_curTypes_ = s_newTypes_;
 
 		s_nameToIndexMap_.clear();
@@ -506,12 +513,17 @@ EntityTypePtr EntityType::getType( const char * className )
 }
 
 /**
- *	This static method is used to get the description of the 
- *  entity type associated with the input. It is safe to use from
- *  a different thread, since we avoid copying the smart pointer
- *  out of s_curTypes_, and just accessing it directly
+ *	This static method is used to get the description of the
+ *	entity type associated with the input.
  *
- *	@return EntityDescription* on success, otherwise NULL.
+ *	All access to s_curTypes_ is confined to the main thread: the reload path
+ *	(BigWorld.reloadScript, invoked from Python with the GIL held) reassigns
+ *	s_curTypes_ in migrate(), and every reader (getType/getDescription/getTypes,
+ *	message handlers, cell_viewer_connection) also runs on the main thread. So
+ *	no locking is required here — but an off-thread caller WOULD race with a
+ *	full reload's migrate() swap and must not be added without synchronization.
+ *
+ *	@return const EntityDescription* on success, otherwise NULL.
  */
 const EntityDescription * EntityType::getDescription( EntityTypeID typeID )
 {
@@ -542,8 +554,12 @@ EntityTypeID EntityType::nameToIndex( const char * name )
 
 /**
  *	This static method is used to get the vector of entity types.
+ *
+ *	The returned vector is read-only: a full reload reassigns s_curTypes_ in
+ *	migrate(), so callers must not mutate it. Access is main-thread only (see
+ *	getDescription).
  */
-EntityTypes& EntityType::getTypes()
+const EntityTypes& EntityType::getTypes()
 {
 	return s_curTypes_;
 }
