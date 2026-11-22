@@ -13,7 +13,7 @@ never modifies `programming/bigworld/`.
 | `unity/PROTOCOL.md` | CL-1 | Source-mapped wire protocol table (`lib/network` file:line ↔ C# ↔ test) |
 | `typescript/` | CL-2 | TypeScript plugin skeleton (vitest) |
 | `generator/` | CL-3 | Python def → `{Entity}Base` generator (golden tests) |
-| `unreal/` | CL-5 | UE5 plugin review doc only (no C++ written) |
+| `unreal/` | CL-5 | UE5 plugin scoping review (`REVIEW.md`, no C++ written) |
 
 ## Engine roadmap
 
