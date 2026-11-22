@@ -6,6 +6,11 @@
 #   MariaDB -> bwmachined2 -> dbappmgr/cellappmgr/baseappmgr
 #            -> dbapp -> cellapp -> baseapp -> loginapp
 #
+# Requires a baseapp without the bigworld.key license check: run
+#   build_license_free_baseapp.sh
+# first (that key is not shipped and cannot be fabricated, and baseapp aborts
+# startup if it is missing - ping_manager.cpp).
+#
 # The deep chain (login -> entity create -> cell switch -> baseapp crash
 # recovery -> DB digest) is driven afterwards by simple_python_client, built
 # from the example's own sources. This script only gets the full app set up
