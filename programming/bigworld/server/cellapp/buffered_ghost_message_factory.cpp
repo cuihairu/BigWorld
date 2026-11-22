@@ -103,7 +103,16 @@ public:
 	{
 		Entity * pEntity = CellApp::instance().findEntity( entityID_ );
 
-		MF_ASSERT( pEntity );
+		if (pEntity == NULL)
+		{
+			// The ghost this message was buffered for was destroyed before the
+			// message could be replayed. A release build's MF_ASSERT is a no-op,
+			// so without this guard the call below dereferences NULL; drop the
+			// message instead (CR-P2-09).
+			WARNING_MSG( "BufferedGhostSetRealMessage::play: "
+				"Entity %u has been destroyed\n", entityID_ );
+			return;
+		}
 
 		pEntity->ghostSetReal( args_ );
 	}
