@@ -476,12 +476,22 @@ bool Script::init( const PyImportPaths & appPaths, const char * componentName )
 	BW::string commonPath( EntityDef::Constants::commonPath() );
 	sysPaths.addResPath( commonPath );
 	sysPaths.addResPath( commonPath + "/Lib" );
+	// The vendored third-party Python packages (attrs, automat, ...) are
+	// installed by build/make/third_party_python_modules.mak into the res-tree
+	// scripts/common/site-packages directory. Py_NoSiteFlag disables the
+	// standard site module (and with it .pth processing), so the engine must
+	// add this directory itself or every import of a vendored package fails.
+	sysPaths.addResPath( commonPath + "/site-packages" );
 #if defined( _WIN64 ) || defined( _WIN32 )
 	BW::string clientDLLsPath( EntityDef::Constants::entitiesClientPath() );
 	clientDLLsPath += "/DLLs/";
 	clientDLLsPath += BW::PlatformInfo::str();
 #else
 	BW::string serverCommonPath( EntityDef::Constants::serverCommonPath() );
+	// Same rationale as common/site-packages: twisted, sqlalchemy, pika,
+	// msgpack and zope.interface install into scripts/server_common/
+	// site-packages and are unreachable without this entry on sys.path.
+	sysPaths.addResPath( serverCommonPath + "/site-packages" );
 	serverCommonPath += "/lib-dynload-";
 	const BW::string shortPlatformName( BW::PlatformInfo::buildStr() );
 	serverCommonPath += shortPlatformName;

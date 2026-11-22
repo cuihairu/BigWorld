@@ -177,6 +177,61 @@ TEST_F( PyScriptUnitTestHarness, PyImportPaths_pathAsObject )
 }
 
 
+// Script::init must put both res-tree site-packages directories on sys.path.
+// The vendored third-party packages install into scripts/common/site-packages
+// and scripts/server_common/site-packages (third_party_python_modules.mak),
+// and Py_NoSiteFlag disables the standard site module - and with it .pth
+// processing - so the engine has to add them itself. Without this every
+// ScriptApp dies at startup with "No module named 'twisted'" even though the
+// package smoke-import test passes (that test inserts the directories by hand).
+TEST_F( PyScriptUnitTestHarness, Script_engineAddsSitePackagesToSysPath )
+{
+	PyObjectPtr pPath( PySys_GetObject( "path" ), PyObjectPtr::STEAL_REFERENCE );
+	CHECK( pPath.get() != NULL );
+	CHECK( PyList_Check( pPath.get() ) );
+
+	const size_t size = size_t( PyList_Size( pPath.get() ) );
+	CHECK( size > 0 );
+
+	static const char COMMON_TAIL[] = "scripts/common/site-packages";
+	static const char SERVER_COMMON_TAIL[] = "scripts/server_common/site-packages";
+
+	bool commonFound = false;
+	bool serverCommonFound = false;
+
+	for (size_t i = 0; i < size; ++i)
+	{
+		const char * pUtf8 = PyUnicode_AsUTF8( PyList_GetItem( pPath.get(), i ) );
+		if (pUtf8 == NULL)
+		{
+			continue;
+		}
+
+		const BW::string entry( pUtf8 );
+
+		const size_t commonLen = sizeof( COMMON_TAIL ) - 1;
+		if (entry.size() >= commonLen &&
+			0 == entry.compare( entry.size() - commonLen, commonLen,
+				COMMON_TAIL ))
+		{
+			commonFound = true;
+			continue;
+		}
+
+		const size_t serverCommonLen = sizeof( SERVER_COMMON_TAIL ) - 1;
+		if (entry.size() >= serverCommonLen &&
+			0 == entry.compare( entry.size() - serverCommonLen,
+				serverCommonLen, SERVER_COMMON_TAIL ))
+		{
+			serverCommonFound = true;
+		}
+	}
+
+	CHECK( commonFound );
+	CHECK( serverCommonFound );
+}
+
+
 // -----------------------------------------------------------------------------
 // Section: PythonInputSubstituter
 // -----------------------------------------------------------------------------
