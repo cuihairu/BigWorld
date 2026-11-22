@@ -162,6 +162,18 @@ FragmentedBundlePtr FragmentedBundle::createFromStream( BinaryIStream & data )
 		PacketPtr pPacket =
 			Packet::createFromStream( data, Packet::CHAINED_FRAGMENT );
 
+		// Unlike a buffered receive, a chained fragment stream never
+		// contains a legal empty slot, so a NULL packet here means the
+		// stream is truncated or malformed. The ctor and addPacket both
+		// dereference the packet, so discard the whole bundle instead.
+		if (pPacket == NULL)
+		{
+			ERROR_MSG( "FragmentedBundle::createFromStream: "
+					"failed to read fragment %u of %u\n",
+				(unsigned)(i + 1), (unsigned)numChainedFragments );
+			return NULL;
+		}
+
 		if (pFragments == NULL)
 		{
 			pFragments = new FragmentedBundle( pPacket.get() );
