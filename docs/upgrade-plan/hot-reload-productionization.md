@@ -79,6 +79,18 @@ number (do not invent a new versioning scheme):
   **index/msgID dispatch** — by-name re-resolution needs a separate design.
   On window expiry the link is broken uniformly and the residual count is
   alarmed.
+- **Landed (batch 59)**: `cleanupAfterReload` was split into
+  `EntityType::clearAfterReload` (the immediate half, drops `s_pNewModules_`)
+  and `EntityType::breakOldLinks` (the deferred half, breaks each live type's
+  `old()` link and returns the residual count); `CellApp::reloadScript` drives
+  `BREAK_OLD_LINKS` from the plan and, with a positive
+  `cellApp/reloadScriptWindowSeconds`, defers it to a one-shot
+  `reloadWindowTimer_` that fires `TIMEOUT_BREAK_OLD_LINKS` and alarms the
+  residual; the default window of zero keeps the break in the reload's own
+  tick, so the historical behaviour is preserved. The window shape is pinned
+  by `ReloadScriptPlan_PositiveWindowDefersTheOldLinkBreak` /
+  `_WindowNeverDefersWithoutMigration` / `_DryRunNeverDefersTheOldLinkBreak`
+  and the window dimension swept through the outcome matrix.
 
 ### 3. dry-run
 
@@ -114,6 +126,15 @@ In two phases:
   barrier on the caller — a cross-component orchestration script dry-runs all
   components first, collects digests, and only reloads each component for
   real once they agree. The engine provides only primitives.
+  **Landed (batch 60)**: the caller half is
+  `programming/bigworld/scripts/reload_orchestrate.py` — a pure
+  `plan_orchestration(probes)` that fails closed unless every probe loaded and
+  every digest is identical and non-empty (an empty agreed digest would pin an
+  empty `expectedDigest`, which places no barrier at all), an `orchestrate`
+  driver that probes all components then reloads each pinned to the agreed
+  digest, and `LocalComponent` for the current process. It is pinned by
+  `test_reload_orchestrate.py` (9 cases). Live fleet-wide validation still
+  needs the C-tier cluster chain.
 - **P2 (engine side)**: cellappmgr broadcasts the reload request, collects
   each component's ack (digest + readiness bit), then issues a unified
   go-ahead; this needs cellappmgr/control-plane changes and is a separate
@@ -124,9 +145,9 @@ In two phases:
 | Phase | Content | Test carrier | Status |
 |----|------|----------|------|
 | P0 | Module-window semantics testable (`swapInModules` extraction) | cellapp/unit_test (landed, 2 cases) | Done 2026-10-15 |
-| P1 | dry-run mode + queryable digest + `expectedDigest` | Queryable digest + `expectedDigest` landed 2026-11-21 (batch 56: `EntityType::schemaDigestQuote`, `BigWorld.schemaDigest`, `BigWorld.reloadScript(isFullReload, expectedDigest)`, `ReloadScript::digestMatches`; 4 cases in `test_reload_script_plan.cpp` + the digest dimension swept through the outcome matrix); the dry-run mode bit landed the same day (batch 58, see below). Only the cross-component orchestration still needs the prepare phase running `EntityType::init` (BWResource + entity defs + script import), unreachable in the current cellapp/unit_test harness; needs the C-tier item first or cluster materials | In progress: barrier parameter + queryable digest + dry-run mode done; cross-component orchestration pending (carrier gap) |
+| P1 | dry-run mode + queryable digest + `expectedDigest` + cross-component orchestration | Queryable digest + `expectedDigest` landed 2026-11-21 (batch 56: `EntityType::schemaDigestQuote`, `BigWorld.schemaDigest`, `BigWorld.reloadScript(isFullReload, expectedDigest)`, `ReloadScript::digestMatches`; 4 cases in `test_reload_script_plan.cpp` + the digest dimension swept through the outcome matrix); the dry-run mode bit landed the same day (batch 58, see below); the caller half landed 2026-11-22 (batch 60: `reload_orchestrate.py`, 9 cases in `test_reload_orchestrate.py`) | Done for the caller half: barrier parameter + queryable digest + dry-run mode + orchestration caller landed. Live fleet-wide validation of the orchestration still needs the C-tier cluster chain (the prepare phase running `EntityType::init` is unreachable in the cellapp/unit_test harness) |
 | P2 | Failure collect-decide + entity-level rollback | Decision core + outcome-class seam landed 2026-10-27 (`entity_migration_plan.hpp`; `Entity::migrate(FailureClass*)`; 7 cases in cellapp_test); all four inverse primitives landed 2026-10-29 (`EntityDescription::unsupersede`, 3 cases in entitydef_test); attribution decision modeled 2026-10-29 (`planRollback`, 3 more cases in cellapp_test); engine wiring landed 2026-11-12 (`EntityMigration::rollout` driven by `CellApp::reloadScript`, `Entity::rollbackMigration` + `EntityType::unsupersedeOldDescription`, 8 cases in `test_migration_rollout.cpp` + the touched-counter cases in `test_entity_migration_plan.cpp`) | Engine wiring done — failure stops the pass and rolls the touched entities back in reverse order; remaining: versioned-schema digest, dual-version window, dry-run, cross-process barrier (P1/P3/P4) |
-| P3 | Dual-version compatibility window | Needs a cellapp tick-level carrier | Todo |
+| P3 | Dual-version compatibility window | Landed 2026-11-22 (batch 59): `EntityType::clearAfterReload`/`breakOldLinks` split, `reloadWindowTimer_` + `TIMEOUT_BREAK_OLD_LINKS`, `cellApp/reloadScriptWindowSeconds` config (default 0 keeps the tick-local break); 3 window cases + the window dimension in the outcome matrix, plus the production cellapp binary compile-checked | Done — a positive window defers the `old()` break to a one-shot timer and alarms any residual; zero preserves the historical tick-local break |
 | P4 | Engine-side barrier (the P2 period) | Needs the cluster black-box chain (C tier) | Todo |
 
 ## Acceptance mapping (corresponds to todo L34)
