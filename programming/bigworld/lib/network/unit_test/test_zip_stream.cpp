@@ -5,6 +5,7 @@
 #include "network/zip_stream.hpp"
 
 #include <string.h>
+#include <zlib.h>
 
 BW_BEGIN_NAMESPACE
 
@@ -174,6 +175,43 @@ TEST( zip_stream_init_with_caller_supplied_buffer )
 	// into it has been destroyed (no double free, no dangling pointer).
 	bigBuffer[ 0 ] = 0xA5;
 	CHECK( bigBuffer[ 0 ] == 0xA5 );
+}
+
+/**
+ *	ZipIStream used to size the destination buffer straight from the
+ *	peer-declared decompressed size with no cap, so a tiny compressed payload
+ *	declaring an implausibly large decompressed size could demand a huge
+ *	allocation. DEFLATE's worst-case expansion is 1032:1, so such a declaration
+ *	cannot come from a real zlib stream; init() must reject it before
+ *	allocating (CR-P2-21).
+ */
+TEST( zip_stream_rejects_original_length_beyond_deflate_ratio )
+{
+	BW::vector<uint8> original;
+	fillPattern( original, 64 );
+
+	// A valid zlib blob of that small payload.
+	uLongf compressBoundLen = compressBound( original.size() );
+	BW::vector<uint8> compressed( compressBoundLen );
+	uLongf compressLen = compressBoundLen;
+	CHECK( compress2( &compressed[0], &compressLen, &original[0],
+			original.size(), Z_DEFAULT_COMPRESSION ) == Z_OK );
+
+	// A well-formed container except that the declared decompressed size is
+	// far beyond what this compressed payload could ever inflate to. Without
+	// the ratio bound init() would allocate a ~16 MB buffer and, because the
+	// blob is real, succeed; with the bound it is rejected before allocating.
+	MemoryOStream container;
+	container.writeStringLength( 0xFFFFFF );
+	container.writeStringLength( (int)compressLen );
+	container.addBlob( &compressed[0], (int)compressLen );
+
+	MemoryIStream input( (const char *)container.data(), container.size() );
+
+	ZipIStream unzipStream;
+	CHECK( !unzipStream.init( input ) );
+	CHECK( unzipStream.error() );
+	CHECK( unzipStream.remainingLength() == 0 );
 }
 
 BW_END_NAMESPACE

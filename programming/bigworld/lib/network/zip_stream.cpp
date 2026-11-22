@@ -141,6 +141,18 @@ bool ZipIStream::init( BinaryIStream & stream, unsigned char * pBuffer,
 		return false;
 	}
 
+	// The decompressed size is declared by the peer and sizes the destination
+	// buffer before uncompress has a chance to bound it, so a bogus declaration
+	// can demand a large allocation. DEFLATE's worst-case expansion is 1032:1
+	// (RFC 1951), so a declared size beyond that cannot come from a real zlib
+	// stream of this compressed length - reject it instead of allocating
+	// (CR-P2-21).
+	if (origLen > static_cast< uLongf >( compressLen ) * 1032)
+	{
+		error_ = true;
+		return false;
+	}
+
 	if (pBuffer)
 	{
 		if (static_cast< uLongf >( bufferSize ) < origLen)
