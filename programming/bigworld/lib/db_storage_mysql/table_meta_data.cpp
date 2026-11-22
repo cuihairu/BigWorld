@@ -115,6 +115,13 @@ private:
  */
 TableIndices::TableIndices( MySql & connection, const BW::string & tableName )
 {
+	if (!isValidSqlIdentifier( tableName ))
+	{
+		ERROR_MSG( "TableIndices: refusing to query invalid table name '%s'\n",
+			tableName.c_str() );
+		return;
+	}
+
 	// Get index info
 	BW::stringstream queryStr;
 	queryStr << "SHOW INDEX FROM " << tableName;

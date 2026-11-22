@@ -564,6 +564,14 @@ void MySqlDatabase::getAutoLoadSpacesFromEntities( SpaceIDSet & spaceIDs )
 
 		if (entityDesc.canBeOnCell())
 		{
+			if (!isValidSqlIdentifier( typeName ))
+			{
+				ERROR_MSG( "MySqlDatabase::getAutoLoadSpacesFromEntities: "
+						"refusing invalid entity type name '%s'\n",
+					typeName.c_str() );
+				continue;
+			}
+
 			BW::stringstream queryStr;
 			queryStr << "SELECT DISTINCT tbl.sm_spaceID "
 				"FROM tbl_" << typeName << " = tbl, bigworldLogOns "
