@@ -12,11 +12,12 @@ class IntStr( object ):
 
 class IntStrType( object ):
 	def addToStream( self, obj ):
-		return "%u||%s" % ( obj.intVal, obj.strVal )
+		# The engine crosses the User Data Type stream boundary as bytes.
+		return ( "%u||%s" % ( obj.intVal, obj.strVal ) ).encode( "utf-8" )
 
 	def createFromStream( self, stream ):
-		intVal, strVal = stream.split( "||", 1 )
-		return IntStr( intVal, strVal )
+		intVal, strVal = stream.split( b"||", 1 )
+		return IntStr( intVal, strVal.decode( "utf-8" ) )
 
 	def addToSection( self, obj, section ):
 		section.writeInt( "intVal", obj.intVal )

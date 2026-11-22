@@ -8,12 +8,14 @@ class Test( object ):
 
 
 def writePascalString( string ):
+	if isinstance( string, str ):
+		string = string.encode( "utf-8" )
 	return struct.pack( "b", len(string) ) + string
 
 
 def readPascalString( stream ):
-	(length,) = struct.unpack( "b", stream[0] )
-	string = stream[1:length+1]
+	(length,) = struct.unpack( "b", stream[0:1] )
+	string = stream[1:length+1].decode( "utf-8" )
 	stream = stream[length+1:]
 	return (string, stream)
 

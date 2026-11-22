@@ -97,20 +97,29 @@ bool UserDataType::addObjectToStream( const ScriptObject & object,
 		return false;
 	}
 
-	ScriptString resultStr = ScriptString::create( result );
-	if (!resultStr.exists())
+	// A User Data Type stream is a raw byte buffer. In Python 2 it was a str
+	// (which was bytes); mapping it to a 3.x str (the ScriptString path) is
+	// lossy for binary payloads such as struct.pack'd values, so the boundary
+	// carries bytes. addToStream() must therefore return bytes.
+	if (!PyBytes_Check( result.get() ))
 	{
 		ERROR_MSG( "UserDataType::addObjectToStream: (%s,%s) "
-				"Script call did not return a string.\n",
+				"Script call did not return bytes.\n",
 			moduleName_.c_str(), instanceName_.c_str() );
 		stream << "";
 		return false;
 	}
 
-	BW::string newString;
-	resultStr.getString( newString );
+	char * pBytes = NULL;
+	Py_ssize_t size = 0;
+	if (PyBytes_AsStringAndSize( result.get(), &pBytes, &size ) != 0)
+	{
+		PyErr_Print();
+		stream << "";
+		return false;
+	}
 
-	stream << newString;
+	stream << BW::string( pBytes, size );
 
 	return true;
 }
@@ -149,8 +158,21 @@ bool UserDataType::createObjectFromStream( ScriptObject & object,
 		return false;
 	}
 
+	// The stream buffer crosses the boundary as bytes so that binary payloads
+	// (struct.pack'd ints and the like) survive intact. See addObjectToStream.
+	ScriptObject pStreamData(
+		PyBytes_FromStringAndSize( data.data(),
+			static_cast< Py_ssize_t >( data.size() ) ),
+		ScriptObject::FROM_NEW_REFERENCE );
+
+	if (!pStreamData.exists())
+	{
+		PyErr_Print();
+		return false;
+	}
+
 	object = converter.callMethod( "createFromStream",
-		ScriptArgs::create( data ), ScriptErrorPrint() );
+		ScriptArgs::create( pStreamData ), ScriptErrorPrint() );
 
 	if (!object.exists())
 	{
@@ -377,8 +399,10 @@ bool UserDataType::fromStreamToSection( BinaryIStream & stream,
 	ScriptObject pPySection( new PyDataSection( pSection ),
 			ScriptObject::STEAL_REFERENCE );
 
+	// The stream buffer crosses the boundary as bytes; see addObjectToStream.
+	// ("s#" builds a 3.x str, which would be lossy for binary payloads.)
 	return Script::call( pMethod.newRef(),
-		Py_BuildValue( "s#O", data.data(), data.length(), pPySection.get() ),
+		Py_BuildValue( "y#O", data.data(), data.length(), pPySection.get() ),
 		"UserDataType::fromStreamToSection: " );
 }
 
@@ -412,21 +436,29 @@ bool UserDataType::fromSectionToStream( DataSectionPtr pSection,
 		return false;
 	}
 
-	if (!PyUnicode_Check( pResult ))
+	// The stream buffer crosses the boundary as bytes; see addObjectToStream.
+	if (!PyBytes_Check( pResult ))
 	{
 		ERROR_MSG( "UserDataType::fromSectionToStream: (%s.%s) "
-					"Method did not return a string.\n",
+					"Method did not return bytes.\n",
 				moduleName_.c_str(), instanceName_.c_str() );
 		Py_DECREF( pResult );
 		stream << "";	// hmmm
 		return false;
 	}
 
-	BW::string s;
-	Script::setData( pResult, s );
-	Py_DECREF( pResult );
+	char * pBytes = NULL;
+	Py_ssize_t size = 0;
+	if (PyBytes_AsStringAndSize( pResult, &pBytes, &size ) != 0)
+	{
+		PyErr_Print();
+		Py_DECREF( pResult );
+		stream << "";	// hmmm
+		return false;
+	}
 
-	stream << s;
+	stream << BW::string( pBytes, size );
+	Py_DECREF( pResult );
 	return true;
 }
 
