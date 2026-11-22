@@ -384,6 +384,7 @@ CellApp::CellApp( Mercury::EventDispatcher & mainDispatcher,
 	gameTimer_(),
 	loadingTimer_(),
 	trimHistoryTimer_(),
+	reloadWindowTimer_(),
 	reservedTickTime_( 0 ),
 	pViewerServer_( NULL ),
 	id_( -1 ),
@@ -1028,6 +1029,27 @@ void CellApp::handleTimeout( TimerHandle /*handle*/, void * arg )
 				}
 			}
 			pSpaces_->tickChunks();
+			break;
+		}
+
+		case TIMEOUT_BREAK_OLD_LINKS:
+		{
+			// The reload window has closed: break the old() links the
+			// deferred half of the cleanup left alive, and report how many
+			// were still live at expiry. That residual count measures how
+			// much in-flight old-signature dispatch the window served - a
+			// non-zero value means type pairs were still bridged to their
+			// reloaded-from types right up to the close.
+			const uint residual = EntityType::breakOldLinks();
+			if (residual > 0)
+			{
+				WARNING_MSG( "CellApp::handleTimeout: the reload window "
+					"closed with %u type pair(s) still linked to their "
+					"reloaded-from types\n", residual );
+			}
+
+			// The window is over: drop our reference to the fired timer.
+			reloadWindowTimer_.cancel();
 			break;
 		}
 	}
@@ -2473,6 +2495,16 @@ bool CellApp::reloadScript( bool isFullReload,
 				"reloadScript should be used with caution, and never in a "
 				"production environment.\n" );
 
+	// A real reload while the previous reload's compatibility window is still
+	// open closes that window first: two windows must not overlap, and the
+	// type table this reload migrates has to be the one the previous reload
+	// finished with. A dry run never migrates, so it leaves the window alone.
+	if (!dryRun && reloadWindowTimer_.isSet())
+	{
+		reloadWindowTimer_.cancel();
+		EntityType::breakOldLinks();
+	}
+
 	// Head of the sequence: the scratch interpreter is swapped in and the
 	// loads run inside it. These steps run before the plan can know their own
 	// outcomes; ReloadScript::planReload() carries them as sequence data and
@@ -2629,7 +2661,18 @@ bool CellApp::reloadScript( bool isFullReload,
 				break;
 
 			case ReloadScript::CLEANUP_AFTER_RELOAD:
-				EntityType::cleanupAfterReload( isFullReload );
+				// The immediate half of the cleanup: the reload's own tick is
+				// done with the reloaded modules and, on a full reload, the
+				// second copy of the type pointers.
+				EntityType::clearAfterReload( isFullReload );
+				break;
+
+			case ReloadScript::BREAK_OLD_LINKS:
+				// The deferred half of the cleanup, run in this same tick
+				// because the reload window is at zero - the historical
+				// behaviour (the dual-version compatibility window, design
+				// section 2).
+				EntityType::breakOldLinks();
 				break;
 
 			case ReloadScript::RECOVER_OLD_SCRIPTS:
@@ -2643,6 +2686,19 @@ bool CellApp::reloadScript( bool isFullReload,
 			default:
 				break;
 		}
+	}
+
+	// The deferred half of the cleanup (the dual-version compatibility window,
+	// design section 2): with a positive window a full reload leaves its
+	// old() links alive past this tick, so a one-shot timer breaks them when
+	// the window closes and reports how many were still live at expiry. The
+	// plan only defers on the success tail - a failed reload migrated nothing.
+	if (plan.oldLinksDeferred)
+	{
+		reloadWindowTimer_ = this->mainDispatcher().addOnceOffTimer(
+			int64( Config::reloadScriptWindowSeconds() * 1000000.0 ),
+			this, reinterpret_cast< void * >( TIMEOUT_BREAK_OLD_LINKS ),
+			"ReloadWindow" );
 	}
 
 	return plan.succeeded;

@@ -86,7 +86,8 @@ private:
 	{
 		TIMEOUT_GAME_TICK,
 		TIMEOUT_TRIM_HISTORIES,
-		TIMEOUT_LOADING_TICK
+		TIMEOUT_LOADING_TICK,
+		TIMEOUT_BREAK_OLD_LINKS
 	};
 
 public:
@@ -360,6 +361,13 @@ private:
 	TimerHandle				gameTimer_;
 	TimerHandle				loadingTimer_;
 	TimerHandle				trimHistoryTimer_;
+
+	/// The dual-version compatibility window's deferred half: the one-shot
+	/// timer that breaks a full reload's old() links when the reload window
+	/// (cellApp/reloadScriptWindowSeconds) closes. Unset (isSet() false) when
+	/// no window is open, including after a zero-length one.
+	TimerHandle				reloadWindowTimer_;
+
 	uint64					reservedTickTime_;
 
 	CellViewerServer *		pViewerServer_;

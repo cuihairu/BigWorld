@@ -28,8 +28,8 @@
 // two pointer/class restores are plain assignments, the old-type link is
 // cleared through the public setter old(NULL) (EntityType::old,
 // entity_type.hpp:87 - the early return only fires when both pOldSelf_ and
-// the argument are non-NULL, and cleanupAfterReload already uses old(NULL)
-// to break the link), and the supersede rename's inverse is
+// the argument are non-NULL, and EntityType::breakOldLinks already uses
+// old(NULL) to break the link), and the supersede rename's inverse is
 // EntityDescription::unsupersede, which strips exactly one leading old_
 // prefix per call, pairing with supersede()'s one-per-call stacking
 // (entitydef_test EntityDescription_unsupersede*; batch 53 - batch 51

@@ -32,7 +32,14 @@
 //     section 1);
 //   * a dry run stops straight after the loads: swap back and destroy the
 //     scratch interpreter, with no cleanup, no migration and no old-script
-//     recovery (the probe half of the design, section 3).
+//     recovery (the probe half of the design, section 3);
+//   * a full reload can keep its old() links alive past the reload's own tick
+//     so that in-flight messages still dispatched by msgID can reach the old
+//     types' superseded signatures: with the reload window at zero (the
+//     default) the links break in the same tick, the historical behaviour,
+//     and with a positive window they are taken out of the tick and deferred
+//     to a one-shot timer, reported as oldLinksDeferred (the dual-version
+//     compatibility window, design section 2).
 //
 // The head of the sequence (swap in the scratch interpreter, load entity defs,
 // load UDOs) cannot be driven from a plan that is only complete once its own
@@ -72,7 +79,11 @@ enum Action
 								///< mode F6: the onMigratedAll hook was
 								///< declared but never called by anything in
 								///< the tree)
-	CLEANUP_AFTER_RELOAD,		///< EntityType::cleanupAfterReload(isFullReload)
+	CLEANUP_AFTER_RELOAD,		///< EntityType::clearAfterReload(isFullReload),
+								///< the immediate half of the cleanup
+	BREAK_OLD_LINKS,			///< EntityType::breakOldLinks(), the deferred
+								///< half - present in the tick only when the
+								///< reload window is at zero
 	RECOVER_OLD_SCRIPTS,		///< EntityType::reloadScript(true), failure only
 	ACTION_COUNT
 };
@@ -124,6 +135,14 @@ struct PlanInputs
 	bool udoLoaded;
 	bool digestMatched = true;
 	bool dryRun = false;
+
+	/// The dual-version compatibility window in seconds (design section 2).
+	/// Zero - the default - preserves the historical behaviour: the old()
+	/// links break in the reload's own tick. A positive value defers the
+	/// break to a one-shot timer so that in-flight messages still dispatched
+	/// by msgID can reach the old types' superseded signatures for the
+	/// duration of the window.
+	float oldLinkWindowSeconds = 0.f;
 };
 
 /// The ordered action sequence for one reload attempt.
@@ -138,6 +157,11 @@ struct ReloadPlan
 	/// Failure mode F8: a full reload clears the registered data types before
 	/// it can fail, and nothing on the failure path reloads them.
 	bool dataTypesWiped;
+
+	/// Whether the old() link break is taken out of this tick and deferred to
+	/// the reload window timer: a full reload with a positive window. The
+	/// BREAK_OLD_LINKS action is absent from the tick in that case.
+	bool oldLinksDeferred = false;
 };
 
 /**
@@ -201,6 +225,20 @@ inline ReloadPlan planReload( const PlanInputs & inputs )
 		plan.actions[ plan.count++ ] = MIGRATE_ENTITIES;
 		plan.actions[ plan.count++ ] = MIGRATED_ALL;
 		plan.actions[ plan.count++ ] = CLEANUP_AFTER_RELOAD;
+
+		// The dual-version compatibility window: with a positive window the
+		// old() links stay up past this tick (a one-shot timer breaks them
+		// when the window closes, reported as oldLinksDeferred), and with the
+		// window at zero they break here, the historical behaviour. A
+		// scripts-only reload has no new types, so it never defers anything.
+		if (inputs.isFullReload && inputs.oldLinkWindowSeconds > 0.f)
+		{
+			plan.oldLinksDeferred = true;
+		}
+		else if (inputs.isFullReload)
+		{
+			plan.actions[ plan.count++ ] = BREAK_OLD_LINKS;
+		}
 	}
 	else
 	{

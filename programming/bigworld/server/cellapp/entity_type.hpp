@@ -110,7 +110,23 @@ public:
 	static bool init( bool isReload = false );
 	static bool reloadScript( bool isRecover = false );
 	static void migrate( bool isFullReload = true );
-	static void cleanupAfterReload( bool isFullReload = true );
+
+	/**
+	 *	The immediate half of the post-reload cleanup (the migration tick):
+	 *	drops the reloaded modules dictionary and, on a full reload, the
+	 *	second copy of the type pointers. The old() links are left alone.
+	 */
+	static void clearAfterReload( bool isFullReload );
+
+	/**
+	 *	The deferred half of the post-reload cleanup: breaks the old() links a
+	 *	full reload left alive and returns how many were still set - the
+	 *	residual count the dual-version compatibility window reports when a
+	 *	positive window closes. With the reload window at zero the engine
+	 *	calls it in the reload's own tick; with a positive window it runs from
+	 *	a one-shot timer.
+	 */
+	static uint breakOldLinks();
 
 	/**
 	 *	The quoted MD5 schema digest of the entity definitions loaded by the

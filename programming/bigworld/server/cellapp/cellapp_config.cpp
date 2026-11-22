@@ -60,6 +60,12 @@ BW_OPTION_RO( int, obstacleTreeDepth, BaseChunkSpace::obstacleTreeDepth() );
 
 BW_OPTION_RO( float, sendWindowCallbackThreshold, 0.5f );
 
+// The dual-version compatibility window a full reload keeps its old() links
+// alive for (design section 2 of the hot-reload productionization). Zero is
+// the default and preserves the historical behaviour: the links break in the
+// reload's own tick.
+BW_OPTION( float, reloadScriptWindowSeconds, 0.f );
+
 BW_OPTION( int, expectedMaxControllers, 25 );
 BW_OPTION( int, absoluteMaxControllers, 50 );
 
@@ -217,6 +223,16 @@ bool CellAppConfig::sanityCheckSettings()
 				"witnessUpdateDeltaGrowthThrottle (%.1f) must have a "
 				"value not less than 1.0\n",
 			witnessUpdateDeltaGrowthThrottle() );
+		result = false;
+	}
+
+	if (reloadScriptWindowSeconds() < 0.f)
+	{
+		ERROR_MSG( "CellAppConfig::sanityCheckSettings: "
+				"reloadScriptWindowSeconds (%.1f) must have a value not less "
+				"than zero (zero breaks the reload's old type links in its own "
+				"tick)\n",
+			reloadScriptWindowSeconds() );
 		result = false;
 	}
 

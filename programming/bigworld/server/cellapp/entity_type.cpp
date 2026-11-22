@@ -408,20 +408,18 @@ bool EntityType::reloadScript( bool isRecover )
 }
 
 /**
- *	This static method cleans up after a reload,
- *	when the old type info is no longer needed.
+ *	This static method runs the immediate half of the post-reload cleanup,
+ *	when the reload's own tick is done with the new interpreter: the reloaded
+ *	modules dictionary and, on a full reload, the second copy of the type
+ *	pointers are no longer needed. The old() links are left alone - they are
+ *	the dual-version compatibility window's, and the deferred half
+ *	(breakOldLinks) is what breaks them, either in this same tick (reload
+ *	window at zero) or from a one-shot timer when the window closes.
  */
-void EntityType::cleanupAfterReload( bool isFullReload )
+void EntityType::clearAfterReload( bool isFullReload )
 {
 	if (isFullReload)
 	{
-		// throw away the links to the old types
-		for (uint i = 0; i < s_curTypes_.size(); i++)
-		{
-			if (s_curTypes_[i])
-				s_curTypes_[i]->old( NULL );
-		}
-
 		// we don't need a second copy of these pointers
 		s_newTypes_.clear();
 	}
@@ -429,6 +427,35 @@ void EntityType::cleanupAfterReload( bool isFullReload )
 	// and we certainly don't need this modules dictionary from another context
 	Py_XDECREF( s_pNewModules_ );
 	s_pNewModules_ = NULL;
+}
+
+
+/**
+ *	This static method runs the deferred half of the post-reload cleanup: it
+ *	breaks the old() links a full reload left alive and returns how many were
+ *	still set. That count is the residual the dual-version compatibility
+ *	window alarms on when a positive window closes - how many type pairs were
+ *	still bridged to their reloaded-from types at expiry.
+ */
+uint EntityType::breakOldLinks()
+{
+	uint residual = 0;
+
+	// throw away the links to the old types
+	for (uint i = 0; i < s_curTypes_.size(); i++)
+	{
+		if (s_curTypes_[i])
+		{
+			if (s_curTypes_[i]->old())
+			{
+				++residual;
+			}
+
+			s_curTypes_[i]->old( NULL );
+		}
+	}
+
+	return residual;
 }
 
 /**

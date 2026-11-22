@@ -75,7 +75,8 @@ TEST( ReloadScriptPlan_FullReloadSucceeds )
 
 	CHECK_EQUAL( true, plan.succeeded );
 	CHECK_EQUAL( false, plan.dataTypesWiped );
-	CHECK_EQUAL( 11, plan.count );
+	CHECK_EQUAL( false, plan.oldLinksDeferred );
+	CHECK_EQUAL( 12, plan.count );
 
 	CHECK_EQUAL( ReloadScript::SWAP_IN_INTERPRETER, plan.actions[ 0 ] );
 	CHECK_EQUAL( ReloadScript::LOAD_ENTITY_DEFS, plan.actions[ 1 ] );
@@ -89,13 +90,18 @@ TEST( ReloadScriptPlan_FullReloadSucceeds )
 	CHECK_EQUAL( ReloadScript::MIGRATE_ENTITIES, plan.actions[ 8 ] );
 	CHECK_EQUAL( ReloadScript::MIGRATED_ALL, plan.actions[ 9 ] );
 	CHECK_EQUAL( ReloadScript::CLEANUP_AFTER_RELOAD, plan.actions[ 10 ] );
+	CHECK_EQUAL( ReloadScript::BREAK_OLD_LINKS, plan.actions[ 11 ] );
 
 	// The ordering asymmetry that makes the migrate chain work: the scratch
-	// interpreter is gone before anything migrates, and cleanup is last.
+	// interpreter is gone before anything migrates, and the cleanup halves
+	// come last - the immediate half first, then the old-link break (this
+	// is the window at zero: the break stays in the reload's own tick).
 	CHECK( indexOf( plan, ReloadScript::DESTROY_NEW_INTERPRETER )
 		< indexOf( plan, ReloadScript::MIGRATE_ENTITY_TYPES ) );
+	CHECK( indexOf( plan, ReloadScript::CLEANUP_AFTER_RELOAD )
+		< indexOf( plan, ReloadScript::BREAK_OLD_LINKS ) );
 	CHECK_EQUAL( plan.count - 1,
-		indexOf( plan, ReloadScript::CLEANUP_AFTER_RELOAD ) );
+		indexOf( plan, ReloadScript::BREAK_OLD_LINKS ) );
 	CHECK( indexOf( plan, ReloadScript::RECOVER_OLD_SCRIPTS ) == -1 );
 }
 
@@ -117,10 +123,19 @@ TEST( ReloadScriptPlan_ScriptsOnlyReloadSucceeds )
 	CHECK_EQUAL( true, scriptPlan.succeeded );
 	CHECK_EQUAL( 11, scriptPlan.count );
 
-	for (int i = 3; i < fullPlan.count; ++i)
+	// The migrate chain is the same either way; the full reload carries one
+	// extra step at the end, the old-link break that a window of zero keeps in
+	// its own tick, which a scripts-only reload never runs.
+	CHECK_EQUAL( fullPlan.count - 1, scriptPlan.count );
+
+	for (int i = 3; i < scriptPlan.count; ++i)
 	{
 		CHECK_EQUAL( fullPlan.actions[ i ], scriptPlan.actions[ i ] );
 	}
+
+	CHECK_EQUAL( ReloadScript::BREAK_OLD_LINKS,
+		fullPlan.actions[ fullPlan.count - 1 ] );
+	CHECK_EQUAL( -1, indexOf( scriptPlan, ReloadScript::BREAK_OLD_LINKS ) );
 }
 
 
@@ -236,8 +251,9 @@ TEST( ReloadScriptPlan_UdoOutcomeIgnoredAfterDefsFailure )
  *	Every outcome combination fits the fixed plan array, and the whole matrix
  *	is one of the four shapes the sequence has. The digest dimension is the
  *	schema barrier: a mismatched digest is one of the outcomes that shapes
- *	the plan, and the dry-run dimension is the probe mode, so both are swept
- *	with the rest.
+ *	the plan, the dry-run dimension is the probe mode, and the window
+ *	dimension is the dual-version compatibility window, so all three are
+ *	swept with the rest.
  */
 TEST( ReloadScriptPlan_AllOutcomeCombinationsFit )
 {
@@ -251,28 +267,43 @@ TEST( ReloadScriptPlan_AllOutcomeCombinationsFit )
 				{
 					for (int dry = 0; dry <= 1; ++dry)
 					{
-						const ReloadScript::PlanInputs inputs =
-							{ full != 0, defs != 0, udo != 0, digest != 0,
-								dry != 0 };
-						const ReloadScript::ReloadPlan plan =
-							ReloadScript::planReload( inputs );
+						for (int window = 0; window <= 1; ++window)
+						{
+							const ReloadScript::PlanInputs inputs =
+								{ full != 0, defs != 0, udo != 0,
+									digest != 0, dry != 0,
+									window != 0 ? 5.f : 0.f };
+							const ReloadScript::ReloadPlan plan =
+								ReloadScript::planReload( inputs );
 
-						const bool defsUsable = defs && digest;
+							const bool defsUsable = defs && digest;
 
-						CHECK( plan.count <= ReloadScript::ACTION_COUNT );
-						CHECK_EQUAL( (defs && udo && digest), plan.succeeded );
-						CHECK_EQUAL( (full && (dry || !defsUsable)),
-							plan.dataTypesWiped );
+							// Only a successful full reload can defer
+							// anything: a dry run never migrates and a
+							// failure tail has no old links to break.
+							const bool defer = full && window &&
+								defsUsable && udo && !dry;
 
-						// head (2 + defs load) + dry-run tail (2, swap back
-						// and destroy) + success tail (8, the migrate chain
-						// plus the batch-complete hook) or failure tail (3,
-						// plus the recovery on the scripts-only path).
-						CHECK_EQUAL( 2 + (defsUsable ? 1 : 0) +
-							(dry ? 2 :
-								(plan.succeeded ? 8 :
-									3 + (full ? 0 : 1))),
-							plan.count );
+							CHECK( plan.count <= ReloadScript::ACTION_COUNT );
+							CHECK_EQUAL( (defs && udo && digest),
+								plan.succeeded );
+							CHECK_EQUAL( (full && (dry || !defsUsable)),
+								plan.dataTypesWiped );
+							CHECK_EQUAL( defer, plan.oldLinksDeferred );
+
+							// head (2 + defs load) + dry-run tail (2, swap
+							// back and destroy) + success tail (8, the
+							// migrate chain plus the batch-complete hook,
+							// plus the old-link break on the full reload that
+							// did not defer it) or failure tail (3, plus the
+							// recovery on the scripts-only path).
+							CHECK_EQUAL( 2 + (defsUsable ? 1 : 0) +
+								(dry ? 2 :
+									(plan.succeeded ?
+										8 + ((full && !defer) ? 1 : 0) :
+										3 + (full ? 0 : 1))),
+									plan.count );
+						}
 					}
 				}
 			}
@@ -418,6 +449,93 @@ TEST( ReloadScriptPlan_DryRunHonoursTheDigestBarrier )
 	CHECK_EQUAL( -1, indexOf( plan, ReloadScript::LOAD_USER_DATA_OBJECTS ) );
 	CHECK_EQUAL( -1, indexOf( plan, ReloadScript::CLEANUP_AFTER_RELOAD ) );
 	CHECK_EQUAL( -1, indexOf( plan, ReloadScript::RECOVER_OLD_SCRIPTS ) );
+}
+
+
+/**
+ *	A positive reload window takes the old() link break out of the reload's
+ *	own tick: nothing in the plan breaks the links, they are deferred to a
+ *	one-shot timer instead. Everything else in the tail is unchanged, so what
+ *	is in flight during the window still sees the loaded type table.
+ */
+TEST( ReloadScriptPlan_PositiveWindowDefersTheOldLinkBreak )
+{
+	const ReloadScript::PlanInputs inputs = { true, true, true, true, false,
+		5.f };
+	const ReloadScript::ReloadPlan plan = ReloadScript::planReload( inputs );
+
+	CHECK( plan.succeeded );
+	CHECK( plan.oldLinksDeferred );
+	CHECK_EQUAL( 11, plan.count );
+
+	// Every step the deferred plan runs is the windowless plan's step in the
+	// same place, just without the trailing link break.
+	const ReloadScript::PlanInputs windowless = { true, true, true, true };
+	const ReloadScript::ReloadPlan windowlessPlan =
+		ReloadScript::planReload( windowless );
+
+	CHECK_EQUAL( windowlessPlan.count - 1, plan.count );
+	for (int i = 0; i < plan.count; ++i)
+	{
+		CHECK_EQUAL( windowlessPlan.actions[ i ], plan.actions[ i ] );
+	}
+
+	CHECK_EQUAL( -1, indexOf( plan, ReloadScript::BREAK_OLD_LINKS ) );
+	CHECK_EQUAL( ReloadScript::BREAK_OLD_LINKS,
+		windowlessPlan.actions[ windowlessPlan.count - 1 ] );
+}
+
+
+/**
+ *	Only a successful full reload can defer the link break: a scripts-only
+ *	reload has no new types to bridge, and the failure tails never migrated
+ *	anything, so both still break the links in their own tick.
+ */
+TEST( ReloadScriptPlan_WindowNeverDefersWithoutMigration )
+{
+	const ReloadScript::PlanInputs scriptsOnly = { false, true, true, true,
+		false, 5.f };
+	const ReloadScript::PlanInputs failedUdo = { true, true, false, true,
+		false, 5.f };
+	const ReloadScript::PlanInputs rejectedDigest = { true, true, true,
+		false, false, 5.f };
+
+	const ReloadScript::ReloadPlan scriptsOnlyPlan =
+		ReloadScript::planReload( scriptsOnly );
+	const ReloadScript::ReloadPlan failedUdoPlan =
+		ReloadScript::planReload( failedUdo );
+	const ReloadScript::ReloadPlan rejectedDigestPlan =
+		ReloadScript::planReload( rejectedDigest );
+
+	CHECK_EQUAL( false, scriptsOnlyPlan.oldLinksDeferred );
+	CHECK_EQUAL( false, failedUdoPlan.oldLinksDeferred );
+	CHECK_EQUAL( false, rejectedDigestPlan.oldLinksDeferred );
+
+	CHECK_EQUAL( -1,
+		indexOf( scriptsOnlyPlan, ReloadScript::BREAK_OLD_LINKS ) );
+	CHECK_EQUAL( -1,
+		indexOf( failedUdoPlan, ReloadScript::BREAK_OLD_LINKS ) );
+	CHECK_EQUAL( -1,
+		indexOf( rejectedDigestPlan, ReloadScript::BREAK_OLD_LINKS ) );
+}
+
+
+/**
+ *	A dry run never defers the link break either: the probe migrates nothing,
+ *	and the window is about in-flight dispatch during and after a real
+ *	reload, so a probe reload leaves no links up at all.
+ */
+TEST( ReloadScriptPlan_DryRunNeverDefersTheOldLinkBreak )
+{
+	const ReloadScript::PlanInputs inputs = { true, true, true, true, true,
+		5.f };
+	const ReloadScript::ReloadPlan plan = ReloadScript::planReload( inputs );
+
+	CHECK( plan.succeeded );
+	CHECK_EQUAL( false, plan.oldLinksDeferred );
+	CHECK_EQUAL( 5, plan.count );
+	CHECK_EQUAL( -1, indexOf( plan, ReloadScript::BREAK_OLD_LINKS ) );
+	CHECK_EQUAL( -1, indexOf( plan, ReloadScript::CLEANUP_AFTER_RELOAD ) );
 }
 
 

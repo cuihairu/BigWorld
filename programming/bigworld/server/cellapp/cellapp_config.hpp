@@ -42,6 +42,15 @@ public:
 	static ServerAppOption< int > obstacleTreeDepth;
 	static ServerAppOption< float > sendWindowCallbackThreshold;
 
+	/**
+	 *	The dual-version compatibility window (in seconds) a full reload keeps
+	 *	its old() links alive for, so that in-flight messages still dispatched
+	 *	by msgID can reach the old types' superseded signatures. Zero (the
+	 *	default) preserves the historical behaviour: the links break in the
+	 *	reload's own tick.
+	 */
+	static ServerAppOption< float > reloadScriptWindowSeconds;
+
 	static ServerAppOption< int > expectedMaxControllers;
 	static ServerAppOption< int > absoluteMaxControllers;
 
