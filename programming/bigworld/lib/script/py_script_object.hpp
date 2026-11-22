@@ -1415,7 +1415,18 @@ public:
 		// BIGWORLD_BEGIN(3.13 migration): was PyString_AS_STRING/GET_SIZE.
 		Py_ssize_t size = 0;
 		const char * pCStr = PyUnicode_AsUTF8AndSize( this->get(), &size );
-		str.assign( pCStr, size );
+		if (pCStr != NULL)
+		{
+			str.assign( pCStr, size );
+		}
+		else
+		{
+			// PyUnicode_AsUTF8AndSize can fail (returns NULL, size = -1); a
+			// ScriptString wraps a valid unicode, so this is only reachable on
+			// memory failure - guard it rather than assign from a NULL pointer
+			// with a huge size (CR-P2-11).
+			str.clear();
+		}
 		// BIGWORLD_END
 	}
 

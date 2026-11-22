@@ -204,8 +204,13 @@ BW::string Pickler::pickle( ScriptObject object )
 			// BIGWORLD_BEGIN(3.13 migration)
 			// Was PyUnicode_AsUTF8/PyUnicode_GET_LENGTH; the pickle protocol
 			// output is bytes now.
-			str.assign( PyBytes_AsString( pResult ),
-				PyBytes_Size( pResult ) );
+			const char * pBytes = PyBytes_AsString( pResult );
+			if (pBytes != NULL)
+			{
+				str.assign( pBytes, PyBytes_Size( pResult ) );
+			}
+			// A NULL pBytes means PyBytes_AsString() failed, leaving str empty
+			// rather than assigning from a NULL pointer (CR-P2-11).
 			// BIGWORLD_END
 			Py_DECREF( pResult );
 

@@ -1572,16 +1572,22 @@ int Script::setData( PyObject * pObject, bool & rBool,
 	if (PyUnicode_Check( pObject ))
 	{
 		const char * pStr = PyUnicode_AsUTF8( pObject );
-		if (!_stricmp( pStr, "true" ))
+
+		if (pStr != NULL)
 		{
-			rBool = true;
-			return 0;
+			if (!_stricmp( pStr, "true" ))
+			{
+				rBool = true;
+				return 0;
+			}
+			else if(!_stricmp( pStr, "false" ))
+			{
+				rBool = false;
+				return 0;
+			}
 		}
-		else if(!_stricmp( pStr, "false" ))
-		{
-			rBool = false;
-			return 0;
-		}
+		// A NULL pStr means PyUnicode_AsUTF8() failed, so this falls through to
+		// the TypeError below (CR-P2-11) instead of _stricmp on a NULL pointer.
 	}
 
 	PyErr_Format( PyExc_TypeError, "%s must be set to a bool", varName );

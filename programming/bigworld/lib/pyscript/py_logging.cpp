@@ -53,6 +53,13 @@ PyObject * py_logCommon( PyObject * args, DebugMessagePriority priority,
 	const char * pMessageString = PyUnicode_AsUTF8( objMessageString );
 	// BIGWORLD_END
 
+	if (pCategoryString == NULL)
+	{
+		PyErr_Format( PyExc_ValueError,
+			"py_log%s has invalid category string.", name );
+		return NULL;
+	}
+
 	if (pMessageString == NULL)
 	{
 		PyErr_Format( PyExc_ValueError,
@@ -67,6 +74,13 @@ PyObject * py_logCommon( PyObject * args, DebugMessagePriority priority,
 	{
 		const char * pMetaData = PyUnicode_AsUTF8( objLogMetaData );
 		// BIGWORLD_END
+
+		if (pMetaData == NULL)
+		{
+			PyErr_Format( PyExc_ValueError,
+				"py_log%s has invalid metadata string.", name );
+			return NULL;
+		}
 
 		LogMsg( priority, pCategoryString ).
 				source( MESSAGE_SOURCE_SCRIPT ).
