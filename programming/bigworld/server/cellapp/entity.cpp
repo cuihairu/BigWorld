@@ -5385,6 +5385,16 @@ void Entity::callBaseMethod( BinaryIStream & data )
 			pBOS->transfer( data, data.remainingLength() );
 			pBaseEntityMailBox->sendStream();
 		}
+		else
+		{
+			// Unknown method index: report it (as callClientMethod does for an
+			// unknown client method) and drop the rest of the message, matching
+			// the other error paths in this function (CR-P2-12).
+			ERROR_MSG( "Entity::callBaseMethod(%u): "
+						"No such base method index %hu for type %s.\n",
+						id_, methodIndex, this->pType()->name() );
+			data.finish();
+		}
 		Py_DECREF( pBaseEntityMailBox );
 	}
 	else
