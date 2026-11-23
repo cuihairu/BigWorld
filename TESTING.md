@@ -31,6 +31,13 @@ cd programming && env VCPKG_ROOT=/home/cui/vcpkg make -s python_install   # sent
 `net.core.rmem_max ≥ 16MB`（`wmem_max/wmem_default ≥ 1MB`），主机重启会回落
 4MB 并报 "Insufficient recv buffer to run tests"，用 sysctl 恢复即可（非持久）。
 
+写用例陷阱：`Script::runString( expr, false )` 编译起点是 **Py_eval_input**
+（script.cpp:1336-1338），只收表达式——`import`/`try`/`assert` 语句一律
+SyntaxError 返 NULL 且挂异常，多语句探针须走
+`PyScriptUnitTestHarness::runAndClear`（PyRun_SimpleString，批次 51 实录）。
+另：异常查看助手是 consume-once 语义（PyErr_Fetch 后即清），类型与消息不能
+分两次取，要一次取全（同批 `consumeCurrentException`）。
+
 不在构建内的测试文件（"文件存在≠参编"）：`cstdmf/unit_test/test_object_pool.cpp`
 ——object_pool.hpp:343 调 `LookUpTable::reserve()`，本树 lookup_table.hpp 无此
 成员，无法编译（`lib/cstdmf/unit_test/Makefile.rules` 内注释登记）；
@@ -1197,3 +1204,44 @@ defaultValue_），去重按值敏感——用例参数取 ARRAY size 差一档�
 **门禁**：entitydef_test 384/0；全量 `bw-run-all-unit-tests` 21 模块全
 `result 0`，**1506→1510**（合计 1510 用例逐模块累加实测），无 tag、无
 release（红线）。
+
+
+## 批次 51（2026-11-24，py313-tests-1124 巡检单）：Python 3.13 迁移面回归 TU——`pyscript/unit_test/test_py313_regressions.cpp`
+
+新 TU 7 用例（框架原样：`TEST_F(PyScriptUnitTestHarness,…)` + CppUnitLite2
+`CHECK/CHECK_EQUAL`，Makefile.rules cxxSource 挂 `test_py313_regressions`），
+每用例注明防回归的迁移改动（CR 编号见 docs/zh/python-313-migration.md）：
+
+- **`Py313_setData_intOverflowArms` / `Py313_setData_int64OverflowArms`**
+  （CR-P2-10 族）：int 重载 ±2^31 边界精确往返，2^31/−2^31−1/2^200 → 返 −1 +
+  `"theInt must be set to an int"` 且异常类型名为空（溢出的 OverflowError 必须被
+  清掉，不得留挂）；int64 重载同构（±2^63、2^200）。原批次只钉了 bool 重载
+  （`ScriptPrimitives_setDataScalars` 的 2**200），此处补齐 int/int64 两臂。
+- **`Py313_setData_stringBytesBoundaries`**（3.13 字符串模型）：非 ASCII str 以
+  UTF-8 跨界（`héllo`→`\xC3\xA9`）、bytes 直收含 NUL/`\xff`、int 报
+  TypeError、孤代理 str 失败且留挂 UnicodeEncodeError（不被吞成泛型 TypeError）。
+- **`Py313_pyLog_surrogateNullArms`**（CR-P2-11 三臂）：`PyUnicode_AsUTF8`
+  的 NULL 臂原本 OOM-only 不可测——用 **lone-surrogate str**（`\ud800`，3.13
+  拒绝 UTF-8 编码）确定性触达；category/message/metadata 三臂各断言 NULL 返回 +
+  ValueError + 精确消息（`py_logInfo has invalid … string.`）。
+- **`Py313_ScriptString_getString_surrogate`**（CR-P2-11 同族）：孤代理时
+  `getString` 清空出参并留挂 UnicodeEncodeError（不 `assign(NULL,-1)`——旧码把
+  size 写成 −1 回绕 SIZE_MAX）；普通 str 照常往返。
+- **`Py313_initExceptionHook_reinitSafe`**（CR-P2-04 面）：双次
+  `initExceptionHook` 后 `sys.excepthook` 仍为可调用的 `printTraceBack`（PySys_SetObject
+  INCREF 不 steal → 修复后局部 PyCFunction 被 DECREF，重装不悬垂）；try/except 内
+  调用 hook 后安装仍在。
+- **`Py313_strBytesIterationSemantics`**（3.13 字符串模型不变量）：str 迭代出
+  1-char str（非 BMP 码点单元素）、bytes 迭代出 int、str/bytes 拒隐式拼接、
+  无 PyInt/PyLong 分裂（`type(2**64) is int`）。
+
+门禁：改前全量 21 模块（`gate_py313_before.log` 20/21 + network_test 因 sysctl
+漂移吃失败，sysctl 修复后单独复跑 **network_test 263/263 EXIT=0** 补齐干净基线）
+→ 改后全量 **GATE_EXIT=0 21/21**；用例数 **pyscript_test 152→159（+7）**，
+其余 20 模块逐一持平（1558→1565），零回归。
+
+写用例陷阱实录（已入「测试入口」陷阱节）：`Script::runString(…, false)` 是
+Py_eval_input，语句探针（import/try）必须走
+`PyScriptUnitTestHarness::runAndClear`；异常查看是 consume-once，类型+消息一次
+取全。初版用例曾因这两点全数误红并污染后续模块（PyWatcher 导入失败级联），修正
+后全绿。

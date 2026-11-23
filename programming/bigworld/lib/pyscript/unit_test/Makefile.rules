@@ -14,6 +14,7 @@ cxxSource =							\
 	test_py_data_section			\
 	test_py_output_writer			\
 	test_py_traceback				\
+	test_py313_regressions			\
 	test_pywatcher					\
 	test_pywatcher_gaps				\
 	test_resource_table				\
