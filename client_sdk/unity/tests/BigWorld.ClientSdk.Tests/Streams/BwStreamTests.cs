@@ -130,7 +130,7 @@ namespace BigWorld.ClientSdk.Tests.Streams
         [Fact]
         public void String_MultibyteUtf8_UsesByteLength()
         {
-            // 你好 is 6 UTF-8 bytes.
+            // The CJK string below (U+4F60 U+597D) is 6 UTF-8 bytes.
             var writer = new BwWriter();
             writer.WriteString("你好");
             Assert.Equal(7, writer.Length);
