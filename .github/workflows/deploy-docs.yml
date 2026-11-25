@@ -57,7 +57,8 @@ jobs:
           path: docs/.vitepress/dist
 
   deploy:
-    # Pages 环境保护只允许 main（dev 触发只构建不部署，避免无意义红）
+    # The Pages environment protection only allows main (dev runs build the
+    # artifact but skip deployment, avoiding pointless red runs)
     if: github.ref == 'refs/heads/main'
     environment:
       name: github-pages

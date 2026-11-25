@@ -1,6 +1,6 @@
 name: CI Windows (MSVC compile gate)
 
-# First leg of the R3 Windows build gate (todo: "R3 Windows 构建" /
+# First leg of the R3 Windows build gate (todo: "R3 Windows build" /
 # "Windows CI runner" in todo.md §C).
 #
 # Goal: prove the platform-agnostic libraries (math, cstdmf) still compile
