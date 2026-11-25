@@ -1,6 +1,7 @@
 // test_virtual_clock.cpp
 //
-// Virtual clock injection for EventDispatcher (todo.md: 虚拟时钟注入).
+// Virtual clock injection for EventDispatcher (see todo.md: virtual clock
+// injection).
 //
 // The dispatcher's timers and wait computations are driven from an
 // injectable ClockFn instead of the global inline timestamp(), so timer

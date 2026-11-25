@@ -1,7 +1,7 @@
 // test_event_stall.cpp
 //
 // Event loop stall metrics and the GIL-starvation fault injection they make
-// observable (todo.md: 网络故障注入扩展 ③).
+// observable (todo.md: network fault injection extension, item 3).
 //
 // When something hogs the thread running an EventDispatcher - a long script
 // callback, a blocking I/O call, a Python thread starved of the GIL - the
@@ -14,8 +14,9 @@
 // The same loop is also measured per tick for its network cost:
 // maxNetworkTime() / numOverBudgetTicks() record what processNetwork()
 // spends handling packets and socket events, with the poller's idle select
-// wait excluded, against a configurable budget (todo.md: io_uring 评估的
-// per-tick 网络耗时指标). Those tests use real sockets and the real clock -
+// wait excluded, against a configurable budget (todo.md: the per-tick
+// network-time metric behind the io_uring review). Those tests use real
+// sockets and the real clock -
 // the measurement is deliberately wall-time and must not follow an injected
 // clock.
 //

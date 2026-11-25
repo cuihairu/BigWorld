@@ -1,7 +1,8 @@
 // manual_clock.hpp
 //
 // A scriptable stamp source for EventDispatcher's injectable clock
-// (EventDispatcher::ClockFn, see todo.md: 虚拟时钟注入). Time stands still
+// (EventDispatcher::ClockFn, see todo.md: virtual clock injection). Time
+// stands still
 // until advanceMs() is called, so a test can fire timers by advancing the
 // clock between dispatcher pumps instead of sleeping in wall time.
 

@@ -1,6 +1,7 @@
 // test_request_failure.cpp
 //
-// Fault injection for the DBApp query path (see todo.md: 网络故障注入扩展).
+// Fault injection for the DBApp query path (see todo.md: network fault
+// injection extension).
 //
 // A caller that issues a Mercury request has to survive two distinct peer
 // failures:
